@@ -4,42 +4,37 @@
 #include <boost/thread/recursive_mutex.hpp>
 
 #include <ros/ros.h>
-#include <arc_utilities/maybe.hpp>
-#include <custom_scene/custom_scene.h>
-
+#include <std_msgs/ColorRGBA.h>
 #include <image_transport/image_transport.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <cv_bridge/cv_bridge.h>
 
+#include <arc_utilities/maybe.hpp>
+
+#include <visualization_msgs/MarkerArray.h>
+
+#include <smmap_msgs/messages.h>
+
 #include "smmap/model_set.h"
+#include "smmap/task.h"
 
 namespace smmap
 {
     class Planner
     {
         public:
-            Planner( ros::NodeHandle& nh,
-                     CustomScene::TaskType task = CustomScene::TaskType::COVERAGE,
-                     const std::string& cmd_gripper_traj_topic = "cmd_gripper_traj",
-                     const std::string& simulator_fbk_topic = "simulator_fbk",
-                     const std::string& get_gripper_names_topic = "get_gripper_names",
-                     const std::string& get_cover_points_topic = "get_cover_points",
-                     const std::string& get_gripper_attached_node_indices_topic = "get_gripper_attached_node_indices",
-                     const std::string& get_gripper_pose_topic = "get_gripper_pose",
-                     const std::string& get_object_initial_configuratoin_topic = "get_object_initial_configuration",
-                     const std::string& confidence_image = "confidence",
-                     const std::string& confidence_image_topic = "confidence_image",
-                     const std::string& set_visualization_marker_topic = "set_visualization_marker");
+            Planner(ros::NodeHandle& nh,
+                     TaskType task = TaskType::COVERAGE );
 
             ////////////////////////////////////////////////////////////////////
             // Main function that makes things happen
             ////////////////////////////////////////////////////////////////////
 
-            void run( const size_t num_traj_cmds_per_loop = 10 );
+            void run( const size_t num_traj_cmds_per_loop = 1 );
 
         private:
             // TODO: Use this
-            CustomScene::TaskType task_;
+            TaskType task_;
             std::unique_ptr< ModelSet > model_set_;
             // Stores a "gripper name", {gripper_node_indices} pair for each gripper
             VectorGrippersData gripper_data_;
@@ -62,9 +57,14 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             ObjectPointSet findObjectDesiredConfiguration( const ObjectPointSet& current );
+
             void visualizeRopeObject( const std::string& marker_name,
                                       const ObjectPointSet& rope,
                                       const std_msgs::ColorRGBA& color );
+
+            void visualizeObjectDelta(const std::string& marker_name,
+                                       const ObjectPointSet& current,
+                                       const ObjectPointSet& desired );
 
             ////////////////////////////////////////////////////////////////////
             // ROS Callbacks
@@ -72,7 +72,7 @@ namespace smmap
 
             // TODO: when moving to a real robot, create a node that deals with
             // synchronization problems, and rename this function
-            void simulatorFbkCallback( const deform_simulator::SimulatorFbkStamped& fbk );
+            void simulatorFbkCallback( const smmap_msgs::SimulatorFbkStamped& fbk );
 
             ////////////////////////////////////////////////////////////////////
             // ROS Objects and Helpers
@@ -80,9 +80,9 @@ namespace smmap
 
             // Our internal version of ros::spin()
             static void spin( double loop_rate );
-            void getGrippersData(const std::string& names_topic, const std::string& indices_topic , const std::string& pose_topic );
-            void getObjectInitialConfiguration( const std::string& topic );
-            void getCoverPoints( const std::string& topic );
+            void getGrippersData();
+            void getObjectInitialConfiguration();
+            void getCoverPoints();
 
             ros::NodeHandle nh_;
 
@@ -90,7 +90,9 @@ namespace smmap
             image_transport::ImageTransport it_;
             image_transport::Publisher confidence_image_pub_;
             ros::ServiceClient cmd_gripper_traj_client_;
-            ros::ServiceClient visualization_client_;
+
+            ros::Publisher visualization_marker_pub_;
+            ros::Publisher visualization_marker_array_pub_;
 
             // global input mutex
             boost::recursive_mutex input_mtx_;

@@ -20,7 +20,7 @@ ModelSet::ModelSet( const VectorGrippersData& grippers_data,
     for ( double k = 0; k <= 10; k += 0.1 )
     {
         addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
-                        grippers_data, object_initial_configuration_, k ) ) );
+                        grippers_data, object_initial_configuration_, 0.4 ) ) );
     }
 }
 
@@ -106,12 +106,6 @@ void ModelSet::evaluateConfidence(
         const double dist = distanceRMS(  object_trajectory, model_prediction );
 
         model_confidence_[ind] = 1.0 / ( 1 + dist );
-
-        if ( ind > 0 && model_confidence_[ind] == model_confidence_[ind-1])
-        {
-            std::cout << PrettyPrint::PrettyPrint( grippers_velocities, true, "\n" ) << std::endl;
-            assert(false);
-        }
     }
 }
 
