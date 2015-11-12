@@ -1,7 +1,7 @@
 <launch>
     <include file="$(find deform_simulator)/launch/deform_simulator.launch"/>
 
-    <node name="smmap_node"
+    <node name="smmap_planner_node"
         pkg="smmap"
         type="test_node"
         output="screen"/>

@@ -16,11 +16,11 @@ namespace smmap
 
             DiminishingRigidityModel( const VectorGrippersData& grippers_data,
                     const ObjectPointSet& object_initial_configuration,
-                    double k = 0.5 );
+                    bool use_rotation, double k = 0.5 );
 
             DiminishingRigidityModel( const VectorGrippersData& grippers_data,
                     const ObjectPointSet& object_initial_configuration,
-                    double k_translation, double k_rotation );
+                    bool use_rotation, double k_translation, double k_rotation );
 
         private:
 
@@ -75,8 +75,10 @@ namespace smmap
             const ObjectPointSet object_initial_configuration_;
             double k_translation_;
             double k_rotation_;
-            Eigen::MatrixXd J_;
 
+            Eigen::MatrixXd J_;
+            bool use_rotation_;
+            const size_t cols_per_gripper_;
     };
 }
 

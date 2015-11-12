@@ -7,6 +7,7 @@ namespace smmap
 {
     typedef Eigen::Matrix3Xd ObjectPointSet;
     typedef std::vector< ObjectPointSet, Eigen::aligned_allocator< Eigen::Matrix3Xd > > ObjectTrajectory;
+    typedef std::vector< ObjectTrajectory, Eigen::aligned_allocator< ObjectTrajectory > > VectorObjectTrajectory;
 
     typedef EigenHelpers::VectorAffine3d SingleGripperTrajectory;
     typedef std::vector< SingleGripperTrajectory, Eigen::aligned_allocator< SingleGripperTrajectory > > AllGrippersTrajectory;

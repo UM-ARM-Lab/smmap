@@ -17,22 +17,30 @@ ModelSet::ModelSet( const VectorGrippersData& grippers_data,
     , rnd_generator_( std::chrono::system_clock::now().time_since_epoch().count() )
 {
     // 0 is totally rigid (weight is 1), 2 is loose (weight is e^-2*dist)
-    for ( double k = 0; k <= 10; k += 0.1 )
+//    for ( double k = 0; k <= 10; k += 0.1 )
+    double k = 0.5;
     {
         addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
-                        grippers_data, object_initial_configuration_, 0.4 ) ) );
+                        grippers_data, object_initial_configuration_, false, k, k ) ) );
     }
 }
 
 ModelSet::~ModelSet()
 {}
 
-void ModelSet::makePredictions(
+VectorObjectTrajectory ModelSet::makePredictions(
         const AllGrippersTrajectory& grippers_trajectory,
         const ObjectPointSet& object_configuration ) const
 {
-    //TODO: do
-    assert("THIS FUNCTION IS NOT YET IMPLEMENTED!" && false);
+    VectorObjectTrajectory predictions( model_list_.size() );
+    std::vector< kinematics::VectorVector6d > gripper_velocities = calculateGrippersVelocities( grippers_trajectory );
+
+    for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
+    {
+        predictions[model_ind] = model_list_[model_ind]->getPrediction( object_configuration, grippers_trajectory, gripper_velocities );
+    }
+
+    return predictions;
 }
 
 void ModelSet::updateModels(

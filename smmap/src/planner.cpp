@@ -129,9 +129,12 @@ AllGrippersTrajectory Planner::replan( size_t num_traj_cmds_per_loop )
     // here we make a better trajectory
     ObjectPointSet object_desired_config = findObjectDesiredConfiguration( fbk.first.back() );
     // Send this to the visualizer to plot
-    std_msgs::ColorRGBA color;
-    color.r = 0; color.g = 0; color.b = 1; color.a = 1;
-    visualizeRopeObject( "rope_desired_config", object_desired_config, color );
+    std_msgs::ColorRGBA rope_desired_config_color;
+    rope_desired_config_color.r = 0;
+    rope_desired_config_color.g = 0;
+    rope_desired_config_color.b = 1;
+    rope_desired_config_color.a = 1;
+    visualizeRopeObject( "rope_desired_config", object_desired_config, rope_desired_config_color );
     visualizeObjectDelta( "rope_delta", fbk.first.back(), object_desired_config );
 
     std::vector< std::pair< AllGrippersTrajectory, double > > suggested_trajectories =
@@ -153,6 +156,27 @@ AllGrippersTrajectory Planner::replan( size_t num_traj_cmds_per_loop )
     }
 
 //    std::cout << "Best trajectory:\n" << PrettyPrint::PrettyPrint( suggested_trajectories[min_weighted_cost_ind].first, true, "\n" ) << std::endl;
+
+//    for ( size_t gripper_ind = 0; gripper_ind < gripper_data_.size(); gripper_ind++ )
+//    {
+//        std_msgs::ColorRGBA color;
+//        color.r = 1;
+//        color.g = 1;
+//        color.b = 1;
+//        color.a = 1;
+//        visualizeTranslation( gripper_data_[gripper_ind].name,
+//                              fbk.second[gripper_ind].back(),
+//                              suggested_trajectories[min_weighted_cost_ind].first[gripper_ind].back(),
+//                              color );
+//    }
+
+//    VectorObjectTrajectory model_predictions = model_set_->makePredictions( suggested_trajectories[min_weighted_cost_ind].first, fbk.first.back() );
+//    std_msgs::ColorRGBA model_prediction_color;
+//    model_prediction_color.r = 1;
+//    model_prediction_color.g = 0;
+//    model_prediction_color.b = 0;
+//    model_prediction_color.a = 1;
+//    visualizeRopeObject( "rope_predicted_config", model_predictions[min_weighted_cost_ind].back(), model_prediction_color );
 
     return suggested_trajectories[min_weighted_cost_ind].first;
 }
@@ -267,21 +291,21 @@ ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& cu
                         }
                     }
 
-//                    // If this is the first time we've found this as the closest, just use it
-//                    if ( num_mapped[min_ind] == 0 )
-//                    {
-//                        desired_configuration.block< 3, 1 >( 0, min_ind ) = cover_points_.block< 3, 1 >( 0, cover_ind );
-//                    }
-//                    // Otherwise average it
-//                    else
-//                    {
-//                        desired_configuration.block< 3, 1 >( 0, min_ind ) = (
-//                                (double)num_mapped[min_ind] * desired_configuration.block< 3, 1 >( 0, min_ind )
-//                                + cover_points_.block< 3, 1 >( 0, cover_ind ) ) / (double)( num_mapped[min_ind] + 1 );
-//                    }
-//                    num_mapped[min_ind]++;
+                    // If this is the first time we've found this as the closest, just use it
+                    if ( num_mapped[min_ind] == 0 )
+                    {
+                        desired_configuration.block< 3, 1 >( 0, min_ind ) = cover_points_.block< 3, 1 >( 0, cover_ind );
+                    }
+                    // Otherwise average it
+                    else
+                    {
+                        desired_configuration.block< 3, 1 >( 0, min_ind ) = (
+                                (double)num_mapped[min_ind] * desired_configuration.block< 3, 1 >( 0, min_ind )
+                                + cover_points_.block< 3, 1 >( 0, cover_ind ) ) / (double)( num_mapped[min_ind] + 1 );
+                    }
+                    num_mapped[min_ind]++;
 
-                    desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
+//                    desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
                 }
 //            }
 //            // Otherwise align the cover points to the object
@@ -338,8 +362,8 @@ void Planner::visualizeObjectDelta( const std::string& marker_name,
     marker.colors.reserve( current.cols() * 2 );
     for ( int col = 0; col < current.cols(); col++ )
     {
-        color.r = (1.0 + std::cos( 2*M_PI*(double)col/15.0 )) / 3;
-        color.g = (1.0 + std::cos( 2*M_PI*(double)(col+5)/15.0 )) / 3;
+        color.r = 0;//(1.0 + std::cos( 2*M_PI*(double)col/15.0 )) / 3;
+        color.g = 1;//(1.0 + std::cos( 2*M_PI*(double)(col+5)/15.0 )) / 3;
         color.b = 0;//(1.0 + std::cos( 2*M_PI*double(col+10)/15.0 )) / 3;
         color.a = 1;
 
@@ -350,6 +374,47 @@ void Planner::visualizeObjectDelta( const std::string& marker_name,
     }
 
     visualization_marker_pub_.publish( marker );
+}
+
+void Planner::visualizeTranslation( const std::string& marker_name,
+                                    const geometry_msgs::Point& start,
+                                    const geometry_msgs::Point& end,
+                                    const std_msgs::ColorRGBA& color )
+{
+    visualization_msgs::Marker marker;
+
+    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    marker.ns = marker_name;
+    marker.id = 0;
+    marker.scale.x = 0.1;
+    marker.points.push_back( start );
+    marker.points.push_back( end );
+    marker.colors.push_back( color );
+    marker.colors.push_back( color );
+
+    visualization_marker_pub_.publish( marker );
+}
+
+void Planner::visualizeTranslation( const std::string& marker_name,
+                           const Eigen::Vector3d& start,
+                           const Eigen::Vector3d& end,
+                           const std_msgs::ColorRGBA& color )
+{
+    visualizeTranslation( marker_name,
+                          EigenVector3dToGeometryPoint( start ),
+                          EigenVector3dToGeometryPoint( end ),
+                          color );
+}
+
+void Planner::visualizeTranslation(const std::string& marker_name,
+                                    const Eigen::Affine3d &start,
+                                    const Eigen::Affine3d &end,
+                                    const std_msgs::ColorRGBA& color )
+{
+    visualizeTranslation( marker_name,
+                          start.translation(),
+                          end.translation(),
+                          color );
 }
 
 ////////////////////////////////////////////////////////////////////////////////

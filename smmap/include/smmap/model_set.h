@@ -24,7 +24,7 @@ namespace smmap
                     const AllGrippersTrajectory& grippers_trajectory,
                     const ObjectTrajectory& object_trajectory );
 
-            void makePredictions(
+            VectorObjectTrajectory makePredictions(
                     const AllGrippersTrajectory& grippers_trajectory,
                     const ObjectPointSet& object_configuration ) const;
 
