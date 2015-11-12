@@ -7,7 +7,7 @@ set( CATKIN_PACKAGES
     kinematics_toolbox
     image_transport
     cv_bridge
-    smmap_msgs
+    ${PROJECT_NAME}_msgs
 )
 
 ## Find catkin macros and libraries
@@ -68,14 +68,14 @@ add_dependencies( ${PROJECT_NAME}
 )
 
 ## Test files to test specific functionality
-add_executable( test_node
-    nodes/test_node.cpp
+add_executable( ${PROJECT_NAME}_test_node
+    nodes/${PROJECT_NAME}_test_node.cpp
 )
-add_dependencies( test_node
+add_dependencies( ${PROJECT_NAME}_test_node
     ${PROJECT_NAME}
     ${catkin_EXPORTED_TARGETS}
 )
-target_link_libraries( test_node
+target_link_libraries( ${PROJECT_NAME}_test_node
     ${PROJECT_NAME}
     ${catkin_LIBRARIES}
 )

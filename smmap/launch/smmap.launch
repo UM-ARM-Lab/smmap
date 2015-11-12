@@ -3,7 +3,7 @@
 
     <node name="smmap_planner_node"
         pkg="smmap"
-        type="test_node"
+        type="smmap_test_node"
         output="screen"/>
 
     <!--node name="visualizer"
