@@ -18,7 +18,7 @@ ModelSet::ModelSet( const VectorGrippersData& grippers_data,
 {
     // 0 is totally rigid (weight is 1), 2 is loose (weight is e^-2*dist)
 //    for ( double k = 0; k <= 10; k += 0.1 )
-    double k = 0.5;
+    double k = 0.5*20;
     {
         addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
                         grippers_data, object_initial_configuration_, false, k, k ) ) );

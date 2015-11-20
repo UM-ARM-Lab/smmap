@@ -128,17 +128,17 @@ AllGrippersTrajectory Planner::replan( size_t num_traj_cmds_per_loop )
 
     // here we make a better trajectory
     ObjectPointSet object_desired_config = findObjectDesiredConfiguration( fbk.first.back() );
-    // Send this to the visualizer to plot
-    std_msgs::ColorRGBA rope_desired_config_color;
-    rope_desired_config_color.r = 0;
-    rope_desired_config_color.g = 0;
-    rope_desired_config_color.b = 1;
-    rope_desired_config_color.a = 1;
-    visualizeRopeObject( "rope_desired_config", object_desired_config, rope_desired_config_color );
-    visualizeObjectDelta( "rope_delta", fbk.first.back(), object_desired_config );
+//    // Send this to the visualizer to plot
+//    std_msgs::ColorRGBA rope_desired_config_color;
+//    rope_desired_config_color.r = 0;
+//    rope_desired_config_color.g = 0;
+//    rope_desired_config_color.b = 1;
+//    rope_desired_config_color.a = 1;
+//    visualizeRopeObject( "rope_desired_config", object_desired_config, rope_desired_config_color );
+//    visualizeObjectDelta( "rope_delta", fbk.first.back(), object_desired_config );
 
     std::vector< std::pair< AllGrippersTrajectory, double > > suggested_trajectories =
-            model_set_->getDesiredGrippersTrajectories( fbk.first.back(), object_desired_config, getLastGrippersPose( fbk.second ), 0.001, num_traj_cmds_per_loop );
+            model_set_->getDesiredGrippersTrajectories( fbk.first.back(), object_desired_config, getLastGrippersPose( fbk.second ), 0.05/20, num_traj_cmds_per_loop );
 
     int min_weighted_cost_ind = -1;
     double min_weighted_cost = std::numeric_limits< double >::infinity();
@@ -262,58 +262,64 @@ ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& cu
     {
         case TaskType::COVERAGE:
         {
-            // If we have more cover points than object points, align the object
-            // to the cover points - multiple cover points per object point
-//            if ( cover_points_.cols() >= current_configuration.cols() )
-//            {
-                // We'll need to track how many cover points are mapping to a given object point
-                // in order to do the averaging.
-                std::vector< int > num_mapped( current_configuration.cols(), 0 );
+            EigenHelpers::VectorVector3d start;
+            EigenHelpers::VectorVector3d end;
 
-                // for every cover point, find the nearest deformable object point
-                for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
+            // We'll need to track how many cover points are mapping to a given object point
+            // in order to do the averaging.
+            std::vector< int > num_mapped( current_configuration.cols(), 0 );
+
+            // for every cover point, find the nearest deformable object point
+            for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
+            {
+                Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
+
+                ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
+
+                Eigen::RowVectorXd dist_sq = diff.array().square().colwise().sum();
+
+                // find the closest deformable point
+                int min_ind = -1;
+                double min_dist = std::numeric_limits< double >::infinity();
+                for ( int object_ind = 0; object_ind < dist_sq.cols(); object_ind++ )
                 {
-                    Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
-
-                    ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
-
-                    Eigen::RowVectorXd dist_sq = diff.array().square().colwise().sum();
-
-                    // find the closest deformable point
-                    int min_ind = -1;
-                    double min_dist = std::numeric_limits< double >::infinity();
-                    for ( int object_ind = 0; object_ind < dist_sq.cols(); object_ind++ )
+                    if ( dist_sq( object_ind ) < min_dist )
                     {
-                        if ( dist_sq( object_ind ) < min_dist )
-                        {
-                            min_ind = object_ind;
-                            min_dist = dist_sq( object_ind );
-                        }
+                        min_ind = object_ind;
+                        min_dist = dist_sq( object_ind );
                     }
-
-                    // If this is the first time we've found this as the closest, just use it
-                    if ( num_mapped[min_ind] == 0 )
-                    {
-                        desired_configuration.block< 3, 1 >( 0, min_ind ) = cover_points_.block< 3, 1 >( 0, cover_ind );
-                    }
-                    // Otherwise average it
-                    else
-                    {
-                        desired_configuration.block< 3, 1 >( 0, min_ind ) = (
-                                (double)num_mapped[min_ind] * desired_configuration.block< 3, 1 >( 0, min_ind )
-                                + cover_points_.block< 3, 1 >( 0, cover_ind ) ) / (double)( num_mapped[min_ind] + 1 );
-                    }
-                    num_mapped[min_ind]++;
-
-//                    desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
                 }
-//            }
-//            // Otherwise align the cover points to the object
-//            // - multiple object points per cover point?
-//            else
-//            {
-//                throw new std::invalid_argument( "Not implemented" );
-//            }
+
+//                // If this is the first time we've found this as the closest, just use it
+//                if ( num_mapped[min_ind] == 0 )
+//                {
+//                    desired_configuration.block< 3, 1 >( 0, min_ind ) = cover_points_.block< 3, 1 >( 0, cover_ind );
+//                }
+//                // Otherwise average it
+//                else
+//                {
+//                    desired_configuration.block< 3, 1 >( 0, min_ind ) = (
+//                            (double)num_mapped[min_ind] * desired_configuration.block< 3, 1 >( 0, min_ind )
+//                            + cover_points_.block< 3, 1 >( 0, cover_ind ) ) / (double)( num_mapped[min_ind] + 1 );
+//                }
+//                num_mapped[min_ind]++;
+
+                if ( min_dist > 0.01 )
+                {
+                    start.push_back( current_configuration.block< 3, 1 >( 0, min_ind ) );
+                    end.push_back( cover_point );
+
+                    desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
+                }
+            }
+
+            std_msgs::ColorRGBA corespondance_color;
+            corespondance_color.r = 0.8;
+            corespondance_color.g = 0;
+            corespondance_color.b = 0.8;
+            corespondance_color.a = 1;
+
+            visualizeLines( "correspondances", start, end, corespondance_color );
 
             break;
         }
@@ -415,6 +421,29 @@ void Planner::visualizeTranslation(const std::string& marker_name,
                           start.translation(),
                           end.translation(),
                           color );
+}
+
+void Planner::visualizeLines( const std::string& marker_name,
+                              const EigenHelpers::VectorVector3d& start,
+                              const EigenHelpers::VectorVector3d& end,
+                              const std_msgs::ColorRGBA& color )
+{
+    visualization_msgs::Marker marker;
+
+    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    marker.ns = marker_name;
+    marker.id = 0;
+    marker.scale.x = 0.1;
+
+    for ( size_t ind = 0; ind < start.size(); ind++ )
+    {
+        marker.points.push_back( EigenVector3dToGeometryPoint( start[ind] ) );
+        marker.points.push_back( EigenVector3dToGeometryPoint( end[ind] ) );
+        marker.colors.push_back( color );
+        marker.colors.push_back( color );
+    }
+
+    visualization_marker_pub_.publish( marker );
 }
 
 ////////////////////////////////////////////////////////////////////////////////

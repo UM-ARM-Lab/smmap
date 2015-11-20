@@ -62,7 +62,7 @@ namespace smmap
                                       const ObjectPointSet& rope,
                                       const std_msgs::ColorRGBA& color );
 
-            void visualizeObjectDelta(const std::string& marker_name,
+            void visualizeObjectDelta( const std::string& marker_name,
                                        const ObjectPointSet& current,
                                        const ObjectPointSet& desired );
 
@@ -80,6 +80,11 @@ namespace smmap
                                        const Eigen::Affine3d& start,
                                        const Eigen::Affine3d& end,
                                        const std_msgs::ColorRGBA& color );
+
+            void visualizeLines( const std::string& marker_name,
+                                 const EigenHelpers::VectorVector3d& start,
+                                 const EigenHelpers::VectorVector3d& end,
+                                 const std_msgs::ColorRGBA& color );
 
             ////////////////////////////////////////////////////////////////////
             // ROS Callbacks
