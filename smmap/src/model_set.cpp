@@ -16,8 +16,8 @@ ModelSet::ModelSet( const VectorGrippersData& grippers_data,
     , object_initial_configuration_( object_initial_configuration )
     , rnd_generator_( std::chrono::system_clock::now().time_since_epoch().count() )
 {
-    // 0 is totally rigid (weight is 1), 2 is loose (weight is e^-2*dist)
-//    for ( double k = 0; k <= 10; k += 0.1 )
+    // 0 is totally rigid (weight is 1), 20 is loose (weight is e^-20*dist)
+//    for ( double k = 0; k <= 20; k += 0.5 )
     double k = 0.5*20;
     {
         addModel( DeformableModel::Ptr( new DiminishingRigidityModel(

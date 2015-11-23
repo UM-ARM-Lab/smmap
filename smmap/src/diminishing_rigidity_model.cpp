@@ -112,8 +112,6 @@ void DiminishingRigidityModel::computeJacobian()
                         std::exp( -k_rotation_ * dist_to_gripper.second ) * J_rot;
             }
         }
-
-        std::cout << J_ << std::endl;
     }
 }
 

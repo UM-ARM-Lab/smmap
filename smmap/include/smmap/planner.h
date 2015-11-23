@@ -120,6 +120,7 @@ namespace smmap
             ros::Subscriber simulator_fbk_sub_;
             ObjectTrajectory object_trajectory_;
             AllGrippersTrajectory grippers_trajectory_;
+            double sim_time_;
     };
 }
 

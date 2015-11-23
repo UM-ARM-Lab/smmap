@@ -26,6 +26,7 @@ Planner::Planner(ros::NodeHandle& nh, TaskType task )
     : task_( task )
     , nh_( nh )
     , it_( nh_ )
+    , sim_time_( 0 )
 {
     // Subscribe to feedback channels
     simulator_fbk_sub_ = nh_.subscribe(
@@ -262,6 +263,12 @@ ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& cu
     {
         case TaskType::COVERAGE:
         {
+            std::cout << "Current config:\n"
+                << current_configuration.transpose()*20 << std::endl;
+
+
+
+
             EigenHelpers::VectorVector3d start;
             EigenHelpers::VectorVector3d end;
 
@@ -290,6 +297,9 @@ ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& cu
                     }
                 }
 
+
+
+
 //                // If this is the first time we've found this as the closest, just use it
 //                if ( num_mapped[min_ind] == 0 )
 //                {
@@ -304,7 +314,7 @@ ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& cu
 //                }
 //                num_mapped[min_ind]++;
 
-                if ( min_dist > 0.01 )
+                if ( min_dist >= 0.01 )
                 {
                     start.push_back( current_configuration.block< 3, 1 >( 0, min_ind ) );
                     end.push_back( cover_point );
@@ -312,6 +322,18 @@ ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& cu
                     desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
                 }
             }
+
+
+
+
+
+            std::cout << "Rope delta:\n"
+                << (desired_configuration - current_configuration).transpose() << std::endl;
+
+            //assert(false);
+
+
+
 
             std_msgs::ColorRGBA corespondance_color;
             corespondance_color.r = 0.8;
@@ -463,6 +485,8 @@ void Planner::simulatorFbkCallback(
         grippers_trajectory_[gripper_ind].push_back(
                 GeometryPoseToEigenAffine3d( fbk.gripper_poses[gripper_ind] ) );
     }
+
+    sim_time_ = fbk.sim_time;
 //    std::cout << "Post convert:\n" << PrettyPrint::PrettyPrint( grippers_trajectory_[0][ grippers_trajectory_[0].size() -1 ] ) << std::endl ;
 }
 
