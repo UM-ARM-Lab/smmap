@@ -8,12 +8,10 @@
 #include <image_transport/image_transport.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <cv_bridge/cv_bridge.h>
-
-#include <arc_utilities/maybe.hpp>
-
 #include <visualization_msgs/MarkerArray.h>
-
 #include <smmap_msgs/messages.h>
+
+#include <arc_utilities/log.hpp>
 
 #include "smmap/model_set.h"
 #include "smmap/task.h"
@@ -23,8 +21,7 @@ namespace smmap
     class Planner
     {
         public:
-            Planner(ros::NodeHandle& nh,
-                     TaskType task = TaskType::COVERAGE );
+            Planner(ros::NodeHandle& nh );
 
             ////////////////////////////////////////////////////////////////////
             // Main function that makes things happen
@@ -33,6 +30,9 @@ namespace smmap
             void run( const size_t num_traj_cmds_per_loop = 1 );
 
         private:
+            bool logging_enabled_;
+            std::map< std::string, Log::Log > loggers;
+
             // TODO: Use this
             TaskType task_;
             std::unique_ptr< ModelSet > model_set_;

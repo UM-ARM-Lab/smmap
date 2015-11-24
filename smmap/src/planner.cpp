@@ -15,26 +15,19 @@
 using namespace smmap;
 using namespace EigenHelpersConversions;
 
-const std::string get_gripper_attached_node_indices_topic = "get_gripper_attached_node_indices";
-const std::string get_gripper_pose_topic = "get_gripper_pose";
-const std::string get_object_initial_configuratoin_topic = "get_object_initial_configuration";
-const std::string confidence_topic = "confidence";
-const std::string confidence_image_topic = "confidence_image";
-const std::string visualization_marker_topic = "visualization_marker";
-
-Planner::Planner(ros::NodeHandle& nh, TaskType task )
-    : task_( task )
+Planner::Planner(ros::NodeHandle& nh )
+    : task_( GetTaskType( nh ) )
     , nh_( nh )
     , it_( nh_ )
     , sim_time_( 0 )
 {
     // Subscribe to feedback channels
     simulator_fbk_sub_ = nh_.subscribe(
-            SimulatorFeedbackTopic( nh_ ), 20, &Planner::simulatorFbkCallback, this );
+            GetSimulatorFeedbackTopic( nh_ ), 20, &Planner::simulatorFbkCallback, this );
 
     // Publish a our confidence values
-    confidence_pub_ = nh_.advertise< smmap_msgs::ConfidenceStamped >( confidence_topic, 10 );
-    confidence_image_pub_ = it_.advertise( confidence_image_topic, 10 );
+    confidence_pub_ = nh_.advertise< smmap_msgs::ConfidenceStamped >( GetConfidenceTopic( nh_ ), 10 );
+    confidence_image_pub_ = it_.advertise( GetConfidenceImageTopic( nh_ ), 10 );
 
     getGrippersData();
     getObjectInitialConfiguration();
@@ -44,14 +37,29 @@ Planner::Planner(ros::NodeHandle& nh, TaskType task )
             new ModelSet( gripper_data_, object_initial_configuration_ ) );
 
     cmd_gripper_traj_client_ =
-            nh_.serviceClient< smmap_msgs::CmdGrippersTrajectory >( CommandGripperTrajTopic( nh_ ), true );
+            nh_.serviceClient< smmap_msgs::CmdGrippersTrajectory >( GetCommandGripperTrajTopic( nh_ ), true );
     cmd_gripper_traj_client_.waitForExistence();
 
     visualization_marker_pub_ =
-            nh_.advertise< visualization_msgs::Marker >( VisualizationMarkerTopic( nh_ ), 10 );
+            nh_.advertise< visualization_msgs::Marker >( GetVisualizationMarkerTopic( nh_ ), 10 );
 
     visualization_marker_array_pub_ =
-            nh_.advertise< visualization_msgs::MarkerArray >( VisualizationMarkerArrayTopic( nh_ ), 10 );
+            nh_.advertise< visualization_msgs::MarkerArray >( GetVisualizationMarkerArrayTopic( nh_ ), 10 );
+
+    logging_enabled_ = GetLoggingEnabled( nh_ );
+
+    if ( logging_enabled_ )
+    {
+        std::string log_folder = GetLogFolder( nh_ );
+
+        loggers.insert( std::make_pair< std::string, Log::Log >(
+                            "object_configuration",
+                            Log::Log( log_folder + "object_configuration.txt" ) ) );
+
+        loggers.insert( std::make_pair< std::string, Log::Log >(
+                            "object_delta",
+                            Log::Log( log_folder + "object_delta.txt" ) ) );
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -253,6 +261,9 @@ void Planner::updateModels( const ObjectTrajectory& object_trajectory,
 
 ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& current_configuration )
 {
+    // TODO: move this from here, this is terrible
+    static const Eigen::IOFormat one_line( Eigen::FullPrecision, Eigen::DontAlignCols, " ", " ", "", "", "", ""  );
+
     ROS_INFO_NAMED( "planner" , "Finding 'best' configuration" );
 
     // point should be the same size
@@ -263,11 +274,8 @@ ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& cu
     {
         case TaskType::COVERAGE:
         {
-            std::cout << "Current config:\n"
-                << current_configuration.transpose()*20 << std::endl;
-
-
-
+            LOG_COND( loggers.at( "object_configuration" ), logging_enabled_,
+                    current_configuration.format( one_line ) );
 
             EigenHelpers::VectorVector3d start;
             EigenHelpers::VectorVector3d end;
@@ -297,9 +305,6 @@ ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& cu
                     }
                 }
 
-
-
-
 //                // If this is the first time we've found this as the closest, just use it
 //                if ( num_mapped[min_ind] == 0 )
 //                {
@@ -323,17 +328,8 @@ ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& cu
                 }
             }
 
-
-
-
-
-            std::cout << "Rope delta:\n"
-                << (desired_configuration - current_configuration).transpose() << std::endl;
-
-            //assert(false);
-
-
-
+            LOG_COND( loggers.at( "object_delta" ), logging_enabled_,
+                    (desired_configuration - current_configuration).format( one_line ) );
 
             std_msgs::ColorRGBA corespondance_color;
             corespondance_color.r = 0.8;
