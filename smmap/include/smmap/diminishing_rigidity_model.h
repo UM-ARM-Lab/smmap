@@ -16,7 +16,7 @@ namespace smmap
 
             DiminishingRigidityModel( const VectorGrippersData& grippers_data,
                     const ObjectPointSet& object_initial_configuration,
-                    bool use_rotation, double k = 0.5 );
+                    bool use_rotation, double k = 0.005 );
 
             DiminishingRigidityModel( const VectorGrippersData& grippers_data,
                     const ObjectPointSet& object_initial_configuration,

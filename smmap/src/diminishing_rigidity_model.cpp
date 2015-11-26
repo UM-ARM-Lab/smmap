@@ -89,6 +89,7 @@ void DiminishingRigidityModel::computeJacobian()
 
         for ( size_t node_ind = 0; node_ind < num_nodes; node_ind++ )
         {
+            // TODO: do I need to use the gripper_node_index that is returned by this function?
             const std::pair< size_t, double > dist_to_gripper
                 = getMinimumDistanceToGripper( gripper_node_indices, node_ind,
                         object_initial_node_distance_ );
