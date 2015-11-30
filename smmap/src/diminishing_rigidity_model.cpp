@@ -52,19 +52,7 @@ void DiminishingRigidityModel::computeObjectNodeDistanceMatrix()
     {
         ROS_INFO_NAMED( "diminishing_rigidity_model" , "Computing object initial distance matrix" );
 
-        const size_t num_nodes = object_initial_configuration_.cols();
-        object_initial_node_distance_.resize( num_nodes, num_nodes );
-        for ( size_t i = 0; i < num_nodes; i++ )
-        {
-            for ( size_t j = i; j < num_nodes; j++ )
-            {
-                object_initial_node_distance_( i, j ) =
-                    ( object_initial_configuration_.block< 3, 1>( 0, i )
-                    - object_initial_configuration_.block< 3, 1>( 0, j ) ).norm();
-
-                object_initial_node_distance_( j, i ) = object_initial_node_distance_( i, j );
-            }
-        }
+        object_initial_node_distance_ = distanceMatrix( object_initial_configuration_ );
     }
 }
 
@@ -234,8 +222,12 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
                 gripper_velocity << combined_grippers_velocity.block< 3, 1 >( gripper_ind * 6, 0 ), 0, 0, 0;
             }
 
-            traj[gripper_ind].push_back( traj[gripper_ind][traj_step - 1] *
-                    kinematics::expTwistAffine3d( gripper_velocity, 1 ) );
+            // We need to cancel out the translation that rotating around omega gives us
+            gripper_velocity.segment<3>(0) = gripper_velocity.segment<3>(0)
+                    - gripper_velocity.segment<3>(3).cross( traj[gripper_ind][traj_step - 1].translation() );
+
+            traj[gripper_ind].push_back( kinematics::expTwistAffine3d( gripper_velocity, 1 )
+                                         * traj[gripper_ind][traj_step - 1] );
         }
     }
 

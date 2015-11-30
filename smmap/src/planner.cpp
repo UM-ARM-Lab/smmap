@@ -1,4 +1,5 @@
 #include "smmap/planner.h"
+#include "smmap/ros_params.h"
 #include "smmap/trajectory.h"
 
 #include <algorithm>
@@ -25,10 +26,7 @@ Planner::Planner(ros::NodeHandle& nh )
     simulator_fbk_sub_ = nh_.subscribe(
             GetSimulatorFeedbackTopic( nh_ ), 20, &Planner::simulatorFbkCallback, this );
 
-    // Publish a our confidence values
-    confidence_pub_ = nh_.advertise< smmap_msgs::ConfidenceStamped >( GetConfidenceTopic( nh_ ), 10 );
-    confidence_image_pub_ = it_.advertise( GetConfidenceImageTopic( nh_ ), 10 );
-
+    // Get the data we need to create our model set
     getGrippersData();
     getObjectInitialConfiguration();
     getCoverPoints();
@@ -36,16 +34,27 @@ Planner::Planner(ros::NodeHandle& nh )
     model_set_ = std::unique_ptr< ModelSet >(
             new ModelSet( gripper_data_, object_initial_configuration_ ) );
 
+
+    // Connect to the robot's gripper command service
     cmd_gripper_traj_client_ =
             nh_.serviceClient< smmap_msgs::CmdGrippersTrajectory >( GetCommandGripperTrajTopic( nh_ ), true );
     cmd_gripper_traj_client_.waitForExistence();
 
+
+    // Publish visualization request markers
     visualization_marker_pub_ =
             nh_.advertise< visualization_msgs::Marker >( GetVisualizationMarkerTopic( nh_ ), 10 );
 
     visualization_marker_array_pub_ =
             nh_.advertise< visualization_msgs::MarkerArray >( GetVisualizationMarkerArrayTopic( nh_ ), 10 );
 
+
+    // Publish a our confidence values
+    confidence_pub_ = nh_.advertise< smmap_msgs::ConfidenceStamped >( GetConfidenceTopic( nh_ ), 10 );
+    confidence_image_pub_ = it_.advertise( GetConfidenceImageTopic( nh_ ), 10 );
+
+
+    // Enable logging if it is requested
     logging_enabled_ = GetLoggingEnabled( nh_ );
 
     if ( logging_enabled_ )
@@ -137,14 +146,15 @@ AllGrippersTrajectory Planner::replan( size_t num_traj_cmds_per_loop )
 
     // here we make a better trajectory
     ObjectPointSet object_desired_config = findObjectDesiredConfiguration( fbk.first.back() );
-//    // Send this to the visualizer to plot
-//    std_msgs::ColorRGBA rope_desired_config_color;
-//    rope_desired_config_color.r = 0;
-//    rope_desired_config_color.g = 0;
-//    rope_desired_config_color.b = 1;
-//    rope_desired_config_color.a = 1;
-//    visualizeRopeObject( "rope_desired_config", object_desired_config, rope_desired_config_color );
-//    visualizeObjectDelta( "rope_delta", fbk.first.back(), object_desired_config );
+    // Send this to the visualizer to plot
+/*    std_msgs::ColorRGBA rope_desired_config_color;
+    rope_desired_config_color.r = 0;
+    rope_desired_config_color.g = 0;
+    rope_desired_config_color.b = 1;
+    rope_desired_config_color.a = 1;
+    visualizeRopeObject( "rope_desired_config", object_desired_config, rope_desired_config_color );
+    visualizeObjectDelta( "rope_delta", fbk.first.back(), object_desired_config );
+*/
 
     std::vector< std::pair< AllGrippersTrajectory, double > > suggested_trajectories =
             model_set_->getDesiredGrippersTrajectories( fbk.first.back(), object_desired_config, getLastGrippersPose( fbk.second ), 0.05/20, num_traj_cmds_per_loop );
@@ -164,28 +174,30 @@ AllGrippersTrajectory Planner::replan( size_t num_traj_cmds_per_loop )
         }
     }
 
-//    std::cout << "Best trajectory:\n" << PrettyPrint::PrettyPrint( suggested_trajectories[min_weighted_cost_ind].first, true, "\n" ) << std::endl;
+/*    std::cout << "Best trajectory:\n" << PrettyPrint::PrettyPrint( suggested_trajectories[min_weighted_cost_ind].first, true, "\n" ) << std::endl;
 
-//    for ( size_t gripper_ind = 0; gripper_ind < gripper_data_.size(); gripper_ind++ )
-//    {
-//        std_msgs::ColorRGBA color;
-//        color.r = 1;
-//        color.g = 1;
-//        color.b = 1;
-//        color.a = 1;
-//        visualizeTranslation( gripper_data_[gripper_ind].name,
-//                              fbk.second[gripper_ind].back(),
-//                              suggested_trajectories[min_weighted_cost_ind].first[gripper_ind].back(),
-//                              color );
-//    }
+    for ( size_t gripper_ind = 0; gripper_ind < gripper_data_.size(); gripper_ind++ )
+    {
+        std_msgs::ColorRGBA color;
+        color.r = 1;
+        color.g = 1;
+        color.b = 1;
+        color.a = 1;
+        visualizeTranslation( gripper_data_[gripper_ind].name,
+                              fbk.second[gripper_ind].back(),
+                              suggested_trajectories[min_weighted_cost_ind].first[gripper_ind].back(),
+                              color );
+    }
+*/
 
-//    VectorObjectTrajectory model_predictions = model_set_->makePredictions( suggested_trajectories[min_weighted_cost_ind].first, fbk.first.back() );
-//    std_msgs::ColorRGBA model_prediction_color;
-//    model_prediction_color.r = 1;
-//    model_prediction_color.g = 0;
-//    model_prediction_color.b = 0;
-//    model_prediction_color.a = 1;
-//    visualizeRopeObject( "rope_predicted_config", model_predictions[min_weighted_cost_ind].back(), model_prediction_color );
+/*    VectorObjectTrajectory model_predictions = model_set_->makePredictions( suggested_trajectories[min_weighted_cost_ind].first, fbk.first.back() );
+    std_msgs::ColorRGBA model_prediction_color;
+    model_prediction_color.r = 1;
+    model_prediction_color.g = 0;
+    model_prediction_color.b = 0;
+    model_prediction_color.a = 1;
+    visualizeRopeObject( "rope_predicted_config", model_predictions[min_weighted_cost_ind].back(), model_prediction_color );
+*/
 
     return suggested_trajectories[min_weighted_cost_ind].first;
 }
@@ -227,18 +239,21 @@ void Planner::updateModels( const ObjectTrajectory& object_trajectory,
 
     if ( object_trajectory.size() >= 2 )
     {
-
         model_set_->updateModels( grippers_trajectory, object_trajectory );
-        const std::vector<double> model_confidence = model_set_->getModelConfidence();
 
-        cv::Mat image( 1, model_confidence.size(), CV_8UC3 );
+        smmap_msgs::ConfidenceStamped double_msg;
+        double_msg.confidence = model_set_->getModelConfidence();
+        double_msg.header.stamp = ros::Time::now();
+        confidence_pub_.publish( double_msg );
 
-        const double min_conf = *std::min_element( model_confidence.begin(), model_confidence.end() );
-        const double max_conf = *std::max_element( model_confidence.begin(), model_confidence.end() );
+/*        cv::Mat image( 1, model_confidence.size(), CV_8UC3 );
 
-        for ( size_t ind = 0; ind < model_confidence.size(); ind++ )
+        const double min_conf = *std::min_element( double_msg.confidence.begin(), double_msg.confidence.end() );
+        const double max_conf = *std::max_element( double_msg.confidence.begin(), double_msg.confidence.end() );
+
+        for ( size_t ind = 0; ind < double_msg.confidence.size(); ind++ )
         {
-            image.at< cv::Vec3b >( 0, ind )[0] = (model_confidence[ind] - min_conf) / ( max_conf - min_conf) * 255.0;
+            image.at< cv::Vec3b >( 0, ind )[0] = (double_msg.confidence[ind] - min_conf) / ( max_conf - min_conf) * 255.0;
             image.at< cv::Vec3b >( 0, ind )[1] = 0;
             image.at< cv::Vec3b >( 0, ind )[2] = 0;
         }
@@ -246,11 +261,7 @@ void Planner::updateModels( const ObjectTrajectory& object_trajectory,
         sensor_msgs::ImagePtr img_msg = cv_bridge::CvImage(std_msgs::Header(), sensor_msgs::image_encodings::BGR8, image).toImageMsg();
         img_msg->header.stamp = ros::Time::now();
         confidence_image_pub_.publish( img_msg );
-
-        smmap_msgs::ConfidenceStamped double_msg;
-        double_msg.confidence = model_confidence;
-        double_msg.header.stamp = img_msg->header.stamp;
-        confidence_pub_.publish( double_msg );
+        */
     }
 }
 

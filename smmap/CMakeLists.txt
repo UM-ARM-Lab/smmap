@@ -52,6 +52,7 @@ set( CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} -g -O3 -Wall -Wextra -Wpedan
 ## Library file for the whole project
 add_library( ${PROJECT_NAME}
     include/${PROJECT_NAME}/gripper_helpers.h
+    include/${PROJECT_NAME}/ros_params.h
     include/${PROJECT_NAME}/task.h
     include/${PROJECT_NAME}/trajectory.h
     include/${PROJECT_NAME}/deformable_model.h

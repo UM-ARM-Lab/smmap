@@ -36,6 +36,7 @@ namespace smmap
             // TODO: Use this
             TaskType task_;
             std::unique_ptr< ModelSet > model_set_;
+
             // Stores a "gripper name", {gripper_node_indices} pair for each gripper
             VectorGrippersData gripper_data_;
             ObjectPointSet object_initial_configuration_;
