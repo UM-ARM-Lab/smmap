@@ -30,6 +30,17 @@ namespace smmap
             void run( const size_t num_traj_cmds_per_loop = 1 );
 
         private:
+
+            ////////////////////////////////////////////////////////////////////
+            // Magic numbers
+            ////////////////////////////////////////////////////////////////////
+
+            static constexpr double MAX_GRIPPER_STEP_SIZE = 0.05/20.0;
+
+            ////////////////////////////////////////////////////////////////////
+            // Loggering functionality
+            ////////////////////////////////////////////////////////////////////
+
             bool logging_enabled_;
             std::map< std::string, Log::Log > loggers;
 
@@ -38,7 +49,7 @@ namespace smmap
             std::unique_ptr< ModelSet > model_set_;
 
             // Stores a "gripper name", {gripper_node_indices} pair for each gripper
-            VectorGrippersData gripper_data_;
+            VectorGrippersData grippers_data_;
             ObjectPointSet object_initial_configuration_;
             ObjectPointSet cover_points_;
 

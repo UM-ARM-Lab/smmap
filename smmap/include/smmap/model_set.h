@@ -21,6 +21,7 @@ namespace smmap
             ~ModelSet();
 
             void updateModels(
+                    const VectorGrippersData& grippers_data,
                     const AllGrippersTrajectory& grippers_trajectory,
                     const ObjectTrajectory& object_trajectory );
 
@@ -31,8 +32,8 @@ namespace smmap
             std::vector< std::pair< AllGrippersTrajectory, double > > getDesiredGrippersTrajectories(
                     const ObjectPointSet& object_current_configuration,
                     const ObjectPointSet& object_desired_configuration,
-                    EigenHelpers::VectorAffine3d grippers_pose,
-                    double max_step, size_t num_steps );
+                    const VectorGrippersData& grippers_data,
+                    double max_step_size, size_t num_steps );
 
             const std::vector< double >& getModelConfidence() const;
 
@@ -55,7 +56,7 @@ namespace smmap
                     const ObjectTrajectory& object_trajectory );
 
             // TODO: move this to *somewhere* else
-            const VectorGrippersData grippers_data_;
+            VectorGrippersData grippers_data_;
             const ObjectPointSet object_initial_configuration_;
             std::vector< DeformableModel::Ptr > model_list_;
             std::vector< double > model_confidence_;

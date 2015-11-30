@@ -15,30 +15,40 @@ using namespace smmap;
 ////////////////////////////////////////////////////////////////////////////////
 
 DiminishingRigidityModel::DiminishingRigidityModel( const VectorGrippersData& grippers_data,
-        const ObjectPointSet& object_initial_configuration, bool use_rotation, double k )
-    : DiminishingRigidityModel( grippers_data, object_initial_configuration, use_rotation, k, k )
+        const ObjectPointSet& object_initial_configuration,
+        double obstacle_avoidance_scale, bool use_rotation,
+        double rigidity )
+    : DiminishingRigidityModel( grippers_data, object_initial_configuration,
+                                obstacle_avoidance_scale, use_rotation, rigidity, rigidity )
 {}
 
-DiminishingRigidityModel::DiminishingRigidityModel( const VectorGrippersData& grippers_data,
-        const ObjectPointSet& object_initial_configuration, bool use_rotation, double k_translation, double k_rotation )
-    : grippers_data_( grippers_data )
-    , object_initial_configuration_( object_initial_configuration )
-    , k_translation_( k_translation )
-    , k_rotation_( k_rotation )
+DiminishingRigidityModel::DiminishingRigidityModel(
+        const VectorGrippersData& grippers_data,
+        const ObjectPointSet& object_initial_configuration,
+        double obstacle_avoidance_scale, bool use_rotation,
+        double rigidity_translation, double rotation_rigidity )
+    : object_initial_configuration_( object_initial_configuration )
+    , obstacle_avoidance_scale_( obstacle_avoidance_scale )
+    , translation_rigidity_( rigidity_translation )
+    , rotation_rigidity_( rotation_rigidity )
     , use_rotation_( use_rotation )
     , cols_per_gripper_( use_rotation_ ? 6 : 3 )
 {
-    if ( k_translation < 0 )
+    if ( obstacle_avoidance_scale <= 0 )
     {
-        throw new std::invalid_argument("k_translation must be positive");
+        throw new std::invalid_argument( "obstacle_avoidance_scale must be > 0" );
     }
-    if ( use_rotation_ && k_rotation < 0 )
+    if ( rigidity_translation < 0 )
     {
-        throw new std::invalid_argument("k_rotation must be positive");
+        throw new std::invalid_argument( "translation_rigidity must be >= 0" );
+    }
+    if ( use_rotation_ && rotation_rigidity < 0 )
+    {
+        throw new std::invalid_argument( "rotation_rigidity must be >= 0" );
     }
 
     computeObjectNodeDistanceMatrix();
-    computeJacobian();
+    computeJacobian( grippers_data );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -56,35 +66,35 @@ void DiminishingRigidityModel::computeObjectNodeDistanceMatrix()
     }
 }
 
-void DiminishingRigidityModel::computeJacobian()
+void DiminishingRigidityModel::computeJacobian( const VectorGrippersData& grippers_data )
 {
-    ROS_DEBUG_NAMED( "diminishing_rigidity_model" , "Computing object Jacobian: Diminishing rigidity k_trans: %f k_rot: %f", k_translation_, k_rotation_ );
+    ROS_DEBUG_NAMED( "diminishing_rigidity_model" , "Computing object Jacobian: Diminishing rigidity k_trans: %f k_rot: %f", translation_rigidity_, rotation_rigidity_ );
 
-    const size_t num_grippers = grippers_data_.size();
-    const size_t num_Jcols = cols_per_gripper_ * num_grippers;
+    const long num_grippers = (long)grippers_data.size();
+    const long num_Jcols = cols_per_gripper_ * num_grippers;
 
-    const size_t num_nodes = object_initial_configuration_.cols();
-    const size_t num_Jrows = 3*object_initial_configuration_.cols();
+    const long num_nodes = object_initial_configuration_.cols();
+    const long num_Jrows = 3*object_initial_configuration_.cols();
 
     J_.resize( num_Jrows, num_Jcols );
 
     // for each gripper
-    for ( size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++ )
+    for ( long gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++ )
     {
         // Get all the data we need for a given gripper
-        const std::vector< size_t >& gripper_node_indices = grippers_data_[gripper_ind].node_indices;
-        const Eigen::Matrix3d gripper_rot = grippers_data_[gripper_ind].pose.rotation();
+        const std::vector< long >& gripper_node_indices = grippers_data[(size_t)gripper_ind].node_indices;
+        const Eigen::Matrix3d gripper_rot = grippers_data[(size_t)gripper_ind].pose.rotation();
 
-        for ( size_t node_ind = 0; node_ind < num_nodes; node_ind++ )
+        for ( long node_ind = 0; node_ind < num_nodes; node_ind++ )
         {
             // TODO: do I need to use the gripper_node_index that is returned by this function?
-            const std::pair< size_t, double > dist_to_gripper
+            const std::pair< long, double > dist_to_gripper
                 = getMinimumDistanceToGripper( gripper_node_indices, node_ind,
                         object_initial_node_distance_ );
 
             Eigen::Matrix3d J_trans = Eigen::Matrix3d::Identity();
             J_.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ ) =
-                    std::exp( -k_translation_ * dist_to_gripper.second ) * J_trans;
+                    std::exp( -translation_rigidity_ * dist_to_gripper.second ) * J_trans;
 
             if ( use_rotation_ )
             {
@@ -92,13 +102,13 @@ void DiminishingRigidityModel::computeJacobian()
                 // Vector from gripper to node
                 const Eigen::Vector3d gripper_to_node =
                         object_initial_configuration_.block< 3, 1 >( 0, node_ind ) -
-                        grippers_data_[gripper_ind].pose.translation();
+                        grippers_data[(size_t)gripper_ind].pose.translation();
                 J_rot.block< 3, 1 >( 0, 0 ) = gripper_rot.block< 3, 1 >( 0, 0 ).cross( gripper_to_node );
                 J_rot.block< 3, 1 >( 0, 1 ) = gripper_rot.block< 3, 1 >( 0, 1 ).cross( gripper_to_node );
                 J_rot.block< 3, 1 >( 0, 2 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_node );
 
                 J_.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ + 3 ) =
-                        std::exp( -k_rotation_ * dist_to_gripper.second ) * J_rot;
+                        std::exp( -rotation_rigidity_ * dist_to_gripper.second ) * J_rot;
             }
         }
     }
@@ -140,18 +150,18 @@ ObjectTrajectory DiminishingRigidityModel::doGetPrediction(
     for ( size_t vel_ind = 0; vel_ind < grippers_velocities[0].size(); vel_ind++ )
     {
         // create a cols_per_gripper_*num_gripprs by 1 vector that contains all the gripper velocities at this time step
-        Eigen::MatrixXd combined_gripper_vel( grippers_velocities.size()*cols_per_gripper_, 1 );
-        for ( size_t gripper_ind = 0; gripper_ind < grippers_velocities.size(); gripper_ind++ )
+        Eigen::VectorXd combined_gripper_vel( (long)grippers_velocities.size()*cols_per_gripper_ );
+        for ( long gripper_ind = 0; gripper_ind < (long)grippers_velocities.size(); gripper_ind++ )
         {
             if ( use_rotation_ )
             {
-                combined_gripper_vel.block< 6, 1 >( gripper_ind * 6, 0 ) =
-                    grippers_velocities[gripper_ind][vel_ind];
+                combined_gripper_vel.segment< 6 >( gripper_ind * 6 ) =
+                    grippers_velocities[(size_t)gripper_ind][vel_ind];
             }
             else
             {
-                combined_gripper_vel.block< 3, 1 >( gripper_ind * 3, 0 ) =
-                    grippers_velocities[gripper_ind][vel_ind].segment< 3 >( 0 );
+                combined_gripper_vel.segment< 3 >( gripper_ind * 3 ) =
+                    grippers_velocities[(size_t)gripper_ind][vel_ind].segment< 3 >( 0 );
             }
         }
 
@@ -179,23 +189,22 @@ ObjectTrajectory DiminishingRigidityModel::doGetPrediction(
 AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
         const ObjectPointSet& object_current_configuration,
         const ObjectPointSet& object_desired_configuration,
-        EigenHelpers::VectorAffine3d grippers_pose,
-        double max_step, size_t num_steps ) const
+        const VectorGrippersData& grippers_data,
+        double max_step_size, size_t num_steps ) const
 {
-    assert( grippers_pose.size() == grippers_data_.size() );
-    // Initialize the starting point of the trajectory with the current gripper
-    // poses
-    AllGrippersTrajectory traj( grippers_pose.size() );
-    for ( size_t gripper_ind = 0; gripper_ind < grippers_pose.size(); gripper_ind++ )
+    assert( grippers_data.size() == grippers_data.size() );
+    // Initialize the starting point of the trajectory with the current gripper poses
+    AllGrippersTrajectory traj( grippers_data.size() );
+    for ( size_t gripper_ind = 0; gripper_ind < grippers_data.size(); gripper_ind++ )
     {
-        traj[gripper_ind].push_back( grippers_pose[gripper_ind] );
+        traj[gripper_ind].push_back( grippers_data[gripper_ind].pose );
     }
 
     // TODO: get rid of this uglyness
     Eigen::MatrixXd tmp_current = object_current_configuration;
     Eigen::MatrixXd tmp_desired = object_desired_configuration;
-    const Eigen::VectorXd desired = Eigen::Map< Eigen::VectorXd >( tmp_current.data(), object_desired_configuration.cols() * object_desired_configuration.rows() );
-    const Eigen::VectorXd current = Eigen::Map< Eigen::VectorXd >( tmp_desired.data(), object_current_configuration.cols() * object_current_configuration.rows() );
+    const Eigen::VectorXd desired = Eigen::Map< Eigen::VectorXd, Eigen::Aligned >( tmp_current.data(), object_desired_configuration.cols() * object_desired_configuration.rows() );
+    Eigen::VectorXd current = Eigen::Map< Eigen::VectorXd, Eigen::Aligned >( tmp_desired.data(), object_current_configuration.cols() * object_current_configuration.rows() );
 
     const Eigen::MatrixXd J_inv = EigenHelpers::Pinv( J_, EigenHelpers::SuggestedRcond() );
 
@@ -203,31 +212,36 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
     {
         // TODO: why does this need to be current - desired?
         const Eigen::VectorXd object_delta = current - desired;
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wconversion"
         Eigen::VectorXd combined_grippers_velocity = J_inv * object_delta;
+        #pragma GCC diagnostic pop
 
-        if ( combined_grippers_velocity.norm() > max_step )
+        if ( combined_grippers_velocity.norm() > max_step_size )
         {
-            combined_grippers_velocity = combined_grippers_velocity / combined_grippers_velocity.norm() * max_step;
+            combined_grippers_velocity = combined_grippers_velocity / combined_grippers_velocity.norm() * max_step_size;
         }
+        // Assume that our Jacobian is correct, and predict where we will end up
+        current += J_*combined_grippers_velocity;
 
-        for ( size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++ )
+        for ( long gripper_ind = 0; gripper_ind < (long)grippers_data.size(); gripper_ind++ )
         {
             kinematics::Vector6d gripper_velocity;
             if ( use_rotation_ )
             {
-               gripper_velocity = combined_grippers_velocity.block< 6, 1 >( gripper_ind * 6, 0 );
+               gripper_velocity = combined_grippers_velocity.segment< 6 >( gripper_ind * 6 );
             }
             else
             {
-                gripper_velocity << combined_grippers_velocity.block< 3, 1 >( gripper_ind * 6, 0 ), 0, 0, 0;
+                gripper_velocity << combined_grippers_velocity.segment< 3 >( gripper_ind * 6 ), 0, 0, 0;
             }
 
             // We need to cancel out the translation that rotating around omega gives us
             gripper_velocity.segment<3>(0) = gripper_velocity.segment<3>(0)
-                    - gripper_velocity.segment<3>(3).cross( traj[gripper_ind][traj_step - 1].translation() );
+                    - gripper_velocity.segment<3>(3).cross( traj[(size_t)gripper_ind][traj_step - 1].translation() );
 
-            traj[gripper_ind].push_back( kinematics::expTwistAffine3d( gripper_velocity, 1 )
-                                         * traj[gripper_ind][traj_step - 1] );
+            traj[(size_t)gripper_ind].push_back( kinematics::expTwistAffine3d( gripper_velocity, 1 )
+                                         * traj[(size_t)gripper_ind][traj_step - 1] );
         }
     }
 
@@ -236,16 +250,16 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
 
 void DiminishingRigidityModel::doPerturbModel( std::mt19937_64& generator )
 {
-    k_translation_ += perturbation_distribution( generator );
-    k_rotation_ += perturbation_distribution( generator );
+    translation_rigidity_ += perturbation_distribution( generator );
+    rotation_rigidity_ += perturbation_distribution( generator );
 
-    if ( k_translation_ < 0 )
+    if ( translation_rigidity_ < 0 )
     {
-        k_translation_ = 0;
+        translation_rigidity_ = 0;
     }
-    if ( k_rotation_ < 0 )
+    if ( rotation_rigidity_ < 0 )
     {
-        k_rotation_ = 0;
+        rotation_rigidity_ = 0;
     }
 }
 

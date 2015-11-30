@@ -10,8 +10,11 @@ namespace smmap
 {
     struct GripperData
     {
-        GripperData( const Eigen::Affine3d& pose, const std::vector< size_t >& node_indices, const std::string& name )
+        GripperData( const Eigen::Affine3d& pose, const std::vector< long >& node_indices, const std::string& name )
             : pose( pose )
+            , nearest_point_on_gripper ( Eigen::Vector3d::Zero() )
+            , nearest_point_on_obstacle ( Eigen::Vector3d::Zero() )
+            , distance_to_obstacle( std::numeric_limits< double >::infinity() )
             , node_indices( node_indices )
             , name( name )
         {}
@@ -24,20 +27,24 @@ namespace smmap
         }
 
         Eigen::Affine3d pose;
-        std::vector< size_t > node_indices;
+        Eigen::Vector3d nearest_point_on_gripper;  // closest point on the gripper to the obstacle
+        Eigen::Vector3d nearest_point_on_obstacle; // closest point on the obstacle to the gripper
+        double distance_to_obstacle;
+
+        std::vector< long > node_indices;
         std::string name;
     };
-    typedef std::vector< GripperData, Eigen::aligned_allocator<Eigen::Matrix4d> > VectorGrippersData;
+    typedef std::vector< GripperData, Eigen::aligned_allocator<Eigen::Affine3d> > VectorGrippersData;
 
 
-    inline std::pair< size_t, double >getMinimumDistanceToGripper(
-            const std::vector< size_t >& gripper_indices, size_t node_index,
+    inline std::pair< long, double > getMinimumDistanceToGripper(
+            const std::vector< long >& gripper_indices, long node_index,
             const Eigen::MatrixXd& object_initial_node_distance )
     {
         double min_dist = std::numeric_limits< double >::infinity();
-        size_t min_ind = 0;
+        long min_ind = -1;
 
-        for ( size_t ind: gripper_indices )
+        for ( long ind: gripper_indices )
         {
             if ( object_initial_node_distance( ind, node_index ) < min_dist )
             {
@@ -46,7 +53,7 @@ namespace smmap
             }
         }
 
-        return std::pair< size_t, double>( min_ind, min_dist );
+        return std::pair< long, double>( min_ind, min_dist );
     }
 
 }

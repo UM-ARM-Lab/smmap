@@ -77,7 +77,7 @@ namespace smmap
             dist_squared += distanceSquared( traj1[ind], traj2[ind]);
         }
 
-        return std::sqrt( dist_squared / traj1.size() );
+        return std::sqrt( dist_squared / (double)traj1.size() );
     }
 
     /**
@@ -89,12 +89,12 @@ namespace smmap
      */
     inline Eigen::MatrixXd distanceMatrix( const ObjectPointSet& obj )
     {
-        const size_t num_nodes = obj.cols();
+        const long num_nodes = obj.cols();
         Eigen::MatrixXd dist( num_nodes, num_nodes );
 
-        for ( size_t i = 0; i < num_nodes; i++ )
+        for ( long i = 0; i < num_nodes; i++ )
         {
-            for ( size_t j = i; j < num_nodes; j++ )
+            for ( long j = i; j < num_nodes; j++ )
             {
                 dist( i, j ) =
                     ( obj.block< 3, 1>( 0, i ) - obj.block< 3, 1>( 0, j ) ).norm();

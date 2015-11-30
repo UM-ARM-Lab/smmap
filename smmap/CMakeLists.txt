@@ -47,7 +47,7 @@ include_directories( include
     ${catkin_INCLUDE_DIRS}
 )
 
-set( CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} -g -O3 -Wall -Wextra -Wpedantic" )
+set( CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} -g -O3 -Wall -Wextra -Wpedantic -Wconversion" )
 
 ## Library file for the whole project
 add_library( ${PROJECT_NAME}

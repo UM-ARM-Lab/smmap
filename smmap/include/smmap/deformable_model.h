@@ -21,13 +21,13 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             void updateModel(
-                    const VectorGrippersData& gripper_data,
+                    const VectorGrippersData& grippers_data,
                     const AllGrippersTrajectory& grippers_trajectory,
                     const std::vector< kinematics::VectorVector6d >& grippers_velocities,
                     const ObjectTrajectory& object_trajectory,
                     const kinematics::VectorMatrix3Xd& object_velocities )
             {
-                doUpdateModel( gripper_data, grippers_trajectory,
+                doUpdateModel( grippers_data, grippers_trajectory,
                         grippers_velocities, object_trajectory, object_velocities );
             }
 
@@ -42,11 +42,11 @@ namespace smmap
             AllGrippersTrajectory getDesiredGrippersTrajectory(
                     const ObjectPointSet& object_current_configuration,
                     const ObjectPointSet& object_desired_configuration,
-                    EigenHelpers::VectorAffine3d grippers_pose,
-                    double max_step, size_t num_steps ) const
+                    const VectorGrippersData& grippers_data,
+                    double max_step_size, size_t num_steps ) const
             {
                 return doGetDesiredGrippersTrajectory( object_current_configuration,
-                        object_desired_configuration, grippers_pose, max_step, num_steps );
+                        object_desired_configuration, grippers_data, max_step_size, num_steps );
             }
 
             void perturbModel( std::mt19937_64& generator )
@@ -69,7 +69,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             virtual void doUpdateModel(
-                    const VectorGrippersData& gripper_data,
+                    const VectorGrippersData& grippers_data,
                     const AllGrippersTrajectory& grippers_trajectory,
                     const std::vector< kinematics::VectorVector6d >& grippers_velocities,
                     const ObjectTrajectory& object_trajectory,
@@ -83,8 +83,8 @@ namespace smmap
             virtual AllGrippersTrajectory doGetDesiredGrippersTrajectory(
                     const ObjectPointSet& object_current_configuration,
                     const ObjectPointSet& object_desired_configuration,
-                    EigenHelpers::VectorAffine3d grippers_pose,
-                    double max_step, size_t num_steps ) const = 0;
+                    const VectorGrippersData& gripper_data,
+                    double max_step_size, size_t num_steps ) const = 0;
 
             virtual void doPerturbModel( std::mt19937_64& generator ) = 0;
     };

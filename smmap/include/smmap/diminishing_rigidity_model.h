@@ -14,13 +14,17 @@ namespace smmap
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
-            DiminishingRigidityModel( const VectorGrippersData& grippers_data,
+            DiminishingRigidityModel(
+                    const VectorGrippersData& grippers_data,
                     const ObjectPointSet& object_initial_configuration,
-                    bool use_rotation, double k = 0.005 );
+                    double obstacle_avoidance_scale, bool use_rotation,
+                    double rigidity = 0.005 );
 
-            DiminishingRigidityModel( const VectorGrippersData& grippers_data,
+            DiminishingRigidityModel(
+                    const VectorGrippersData& grippers_data,
                     const ObjectPointSet& object_initial_configuration,
-                    bool use_rotation, double k_translation, double k_rotation );
+                    double obstacle_avoidance_scale, bool use_rotation,
+                    double translation_rigidity, double rotation_rigidity );
 
         private:
 
@@ -35,7 +39,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             void doUpdateModel(
-                    const VectorGrippersData& gripper_data,
+                    const VectorGrippersData& grippers_data,
                     const AllGrippersTrajectory& grippers_trajectory,
                     const std::vector< kinematics::VectorVector6d >& grippers_velocities,
                     const ObjectTrajectory& object_trajectory,
@@ -44,13 +48,13 @@ namespace smmap
             ObjectTrajectory doGetPrediction(
                     const ObjectPointSet& object_configuration,
                     const AllGrippersTrajectory& grippers_trajectory,
-                    const std::vector< kinematics::VectorVector6d >& gripper_velocities ) const;
+                    const std::vector< kinematics::VectorVector6d >& grippers_velocities ) const;
 
             AllGrippersTrajectory doGetDesiredGrippersTrajectory(
-                    const ObjectPointSet &object_current_configuration,
-                    const ObjectPointSet &object_desired_configuration,
-                    EigenHelpers::VectorAffine3d grippers_pose,
-                    double max_step, size_t num_steps ) const;
+                    const ObjectPointSet& object_current_configuration,
+                    const ObjectPointSet& object_desired_configuration,
+                    const VectorGrippersData& grippers_data,
+                    double max_step_size, size_t num_steps ) const;
 
             void doPerturbModel( std::mt19937_64& generator );
 
@@ -58,7 +62,7 @@ namespace smmap
             // Model update parameters
             ////////////////////////////////////////////////////////////////////
 
-            void computeJacobian();
+            void computeJacobian( const VectorGrippersData& grippers_data );
 
             ////////////////////////////////////////////////////////////////////
             // Static members
@@ -71,14 +75,14 @@ namespace smmap
             // Private members
             ////////////////////////////////////////////////////////////////////
 
-            const VectorGrippersData grippers_data_;
             const ObjectPointSet object_initial_configuration_;
-            double k_translation_;
-            double k_rotation_;
+            const double obstacle_avoidance_scale_;
+            double translation_rigidity_;
+            double rotation_rigidity_;
 
-            Eigen::MatrixXd J_;
             bool use_rotation_;
-            const size_t cols_per_gripper_;
+            const long cols_per_gripper_;
+            Eigen::MatrixXd J_;
     };
 }
 

@@ -12,16 +12,19 @@ using namespace smmap;
 
 ModelSet::ModelSet( const VectorGrippersData& grippers_data,
         const ObjectPointSet& object_initial_configuration )
-    : grippers_data_( grippers_data )
-    , object_initial_configuration_( object_initial_configuration )
-    , rnd_generator_( std::chrono::system_clock::now().time_since_epoch().count() )
+    : object_initial_configuration_( object_initial_configuration )
+    , rnd_generator_( (unsigned long)std::chrono::system_clock::now().time_since_epoch().count() )
 {
+    const double obstacle_avoidance_scale = 10*20;
+    const bool use_rotation = false;
+
     // 0 is totally rigid (weight is 1), 20 is loose (weight is e^-20*dist)
-//    for ( double k = 0; k <= 20; k += 0.5 )
-    double k = 0.5*20;
+//    for ( double rigidity = 0; rigidity <= 20; rigidity += 0.5 )
+    double rigidity = 0.5*20;
     {
         addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
-                        grippers_data, object_initial_configuration_, false, k, k ) ) );
+                        grippers_data, object_initial_configuration_,
+                        obstacle_avoidance_scale, use_rotation, rigidity ) ) );
     }
 }
 
@@ -44,6 +47,7 @@ VectorObjectTrajectory ModelSet::makePredictions(
 }
 
 void ModelSet::updateModels(
+        const VectorGrippersData& grippers_data,
         const AllGrippersTrajectory& grippers_trajectory,
         const ObjectTrajectory& object_trajectory )
 {
@@ -63,7 +67,7 @@ void ModelSet::updateModels(
     // Allow each model to update itself based on the new data
     for ( auto& model: model_list_ )
     {
-        model->updateModel( grippers_data_,
+        model->updateModel( grippers_data,
                 grippers_trajectory,
                 grippers_velocities,
                 object_trajectory,
@@ -74,16 +78,19 @@ void ModelSet::updateModels(
 std::vector< std::pair< AllGrippersTrajectory, double > > ModelSet::getDesiredGrippersTrajectories(
         const ObjectPointSet& object_current_configuration,
         const ObjectPointSet& object_desired_configuration,
-        EigenHelpers::VectorAffine3d grippers_pose,
-        double max_step, size_t num_steps )
+        const VectorGrippersData& grippers_data,
+        double max_step_size, size_t num_steps )
 {
     std::vector< std::pair< AllGrippersTrajectory, double > > grippers_trajectories;
 
     for ( size_t ind = 0; ind < model_list_.size(); ind++ )
     {
         AllGrippersTrajectory grippers_trajectory = model_list_[ind]->getDesiredGrippersTrajectory(
-                    object_current_configuration, object_desired_configuration,
-                    grippers_pose, max_step, num_steps );
+                    object_current_configuration,
+                    object_desired_configuration,
+                    grippers_data,
+                    max_step_size,
+                    num_steps );
 
         grippers_trajectories.push_back( std::pair< AllGrippersTrajectory, double >( grippers_trajectory, model_confidence_[ind] ) );
     }
