@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <algorithm>
 
 #include <ros/ros.h>
 
@@ -48,7 +49,7 @@ DiminishingRigidityModel::DiminishingRigidityModel(
     }
 
     computeObjectNodeDistanceMatrix();
-    computeJacobian( grippers_data );
+    computeObjectToGripperJacobian( grippers_data );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -66,7 +67,7 @@ void DiminishingRigidityModel::computeObjectNodeDistanceMatrix()
     }
 }
 
-void DiminishingRigidityModel::computeJacobian( const VectorGrippersData& grippers_data )
+void DiminishingRigidityModel::computeObjectToGripperJacobian( const VectorGrippersData& grippers_data )
 {
     ROS_DEBUG_NAMED( "diminishing_rigidity_model" , "Computing object Jacobian: Diminishing rigidity k_trans: %f k_rot: %f", translation_rigidity_, rotation_rigidity_ );
 
@@ -112,6 +113,27 @@ void DiminishingRigidityModel::computeJacobian( const VectorGrippersData& grippe
             }
         }
     }
+}
+
+Eigen::MatrixXd DiminishingRigidityModel::computeCollisionToGripperJacobian( const VectorGrippersData &grippers_data ) const
+{
+    Eigen::MatrixXd J_collision = Eigen::MatrixXd::Zero( 3, cols_per_gripper_ );
+
+    // Translation
+    J_collision.block< 3, 3>( 0, 0 ) = Eigen::Matrix3d::Identity();
+
+    // TODO find out of these are at all correct
+//    else if(i == 3)
+//        transvec =  (gripper->getWorldTransform()*btVector4(1,0,0,0)).cross(
+//                    points_in_world_frame[k] - gripper->getWorldTransform().getOrigin());
+//    else if(i == 4)
+//        transvec =  (gripper->getWorldTransform()*btVector4(0,1,0,0)).cross(
+//                    points_in_world_frame[k] - gripper->getWorldTransform().getOrigin());
+//    else if(i == 5)
+//        transvec =  (gripper->getWorldTransform()*btVector4(0,0,1,0)).cross(
+//                    points_in_world_frame[k] - gripper->getWorldTransform().getOrigin());
+
+    return J_collision;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -200,49 +222,122 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
         traj[gripper_ind].push_back( grippers_data[gripper_ind].pose );
     }
 
-    // TODO: get rid of this uglyness
+    // TODO: get rid of this uglyness, needed for a reshape
     Eigen::MatrixXd tmp_current = object_current_configuration;
     Eigen::MatrixXd tmp_desired = object_desired_configuration;
     const Eigen::VectorXd desired = Eigen::Map< Eigen::VectorXd, Eigen::Aligned >( tmp_current.data(), object_desired_configuration.cols() * object_desired_configuration.rows() );
     Eigen::VectorXd current = Eigen::Map< Eigen::VectorXd, Eigen::Aligned >( tmp_desired.data(), object_current_configuration.cols() * object_current_configuration.rows() );
 
+    // We only need to calculate this once, so do so outside the loop
     const Eigen::MatrixXd J_inv = EigenHelpers::Pinv( J_, EigenHelpers::SuggestedRcond() );
 
     for ( size_t traj_step = 1; traj_step <= num_steps; traj_step++ )
     {
-        // TODO: why does this need to be current - desired?
-        const Eigen::VectorXd object_delta = current - desired;
+        Eigen::VectorXd avoid_object_collision_delta = Eigen::VectorXd::Zero( 3*(long)grippers_data.size() );
+        Eigen::MatrixXd J_collision( 3*(long)grippers_data.size(), cols_per_gripper_ );
+
+        // TODO: deal with multiple traj_steps, multiple avoids?
+        // Object avoidance block
+        for ( long gripper_ind = 0; gripper_ind < (long)grippers_data.size(); gripper_ind++ )
+        {
+            // Create the collision Jacobian
+            J_collision.block( 3*gripper_ind, 0, 3, cols_per_gripper_ )
+                    = computeCollisionToGripperJacobian( grippers_data );
+
+            // TODO: this is checking vs infinity, but bullet is returning BT_LARGE_FLOAT. Fix this.
+            // If we have a collision to avoid, then find the vector
+            if ( !std::isinf( grippers_data[(size_t)gripper_ind].distance_to_obstacle ) )
+            {
+                // Create the collision avoidance vector to follow
+                Eigen::Vector3d avoid_collision_delta =
+                        grippers_data[(size_t)gripper_ind].nearest_point_on_gripper
+                        - grippers_data[(size_t)gripper_ind].nearest_point_on_obstacle;
+
+                // If we are already inside the obstacle, then we need to invert the
+                // direction of movement
+                if ( grippers_data[(size_t)gripper_ind].distance_to_obstacle < 0 )
+                {
+                    avoid_collision_delta = -avoid_collision_delta;
+                }
+
+                // Normalize the step size to avoid the obstacle to avoid potential over/underflow
+                avoid_object_collision_delta.segment< 3 >( gripper_ind * 3 ) =
+                        avoid_collision_delta / avoid_collision_delta.norm();
+            }
+            // Otherwise, leave that part of avoid_object_collision_delta at zero
+            else {}
+        }
+
+        Eigen::MatrixXd J_collision_pinv = EigenHelpers::Pinv( J_collision, EigenHelpers::SuggestedRcond() );
+        // pragmas are here to supress some warnings from GCC
         #pragma GCC diagnostic push
         #pragma GCC diagnostic ignored "-Wconversion"
-        Eigen::VectorXd combined_grippers_velocity = J_inv * object_delta;
+        // Apply the collision Jacobian pseudo-inverse - will normalize later
+        Eigen::VectorXd grippers_velocity_avoid_collision = J_collision_pinv * avoid_object_collision_delta;
+        // Apply the desired object delta Jacobian pseudo-inverse - will normalize later
+        Eigen::VectorXd grippers_velocity_achieve_goal = J_inv * (current - desired);
         #pragma GCC diagnostic pop
 
-        if ( combined_grippers_velocity.norm() > max_step_size )
+        // Then normalize each individual gripper velocity, and combine into a single unified instruction
+        Eigen::VectorXd actual_gripper_velocity( cols_per_gripper_ * (long)grippers_data.size() );
+        for ( long gripper_ind = 0; gripper_ind < (long)grippers_data.size(); gripper_ind++ )
         {
-            combined_grippers_velocity = combined_grippers_velocity / combined_grippers_velocity.norm() * max_step_size;
-        }
-        // Assume that our Jacobian is correct, and predict where we will end up
-        current += J_*combined_grippers_velocity;
+            // TODO: this is checking vs infinity, but bullet is returning BT_LARGE_FLOAT. Fix this.
+            // normalize the avoidance velocity
+            if ( !std::isinf( grippers_data[(size_t)gripper_ind].distance_to_obstacle ) )
+            {
+                grippers_velocity_avoid_collision.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ) =
+                        grippers_velocity_avoid_collision.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ )
+                        / grippers_velocity_avoid_collision.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ).norm()
+                        * max_step_size;
+            }
 
+            // normalize the achive goal velocity
+            if ( grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ).norm() > max_step_size )
+            {
+                grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ) =
+                        grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ )
+                        / grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ).norm()
+                        * max_step_size;
+            }
+
+            // Last, we combine the gripper velocities
+            const double collision_severity = std::min( 1.0,
+                        std::exp( -obstacle_avoidance_scale_* grippers_data[(size_t)gripper_ind].distance_to_obstacle ) );
+
+            actual_gripper_velocity.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ) =
+                    collision_severity * ( grippers_velocity_avoid_collision.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ) +
+                                           ( Eigen::MatrixXd::Identity( cols_per_gripper_, cols_per_gripper_ ) - J_collision_pinv * J_collision ) *
+                                           grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ) )
+                    + (1 - collision_severity) * grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ );
+        }
+
+        // Apply the velocity to each gripper
         for ( long gripper_ind = 0; gripper_ind < (long)grippers_data.size(); gripper_ind++ )
         {
             kinematics::Vector6d gripper_velocity;
             if ( use_rotation_ )
             {
-               gripper_velocity = combined_grippers_velocity.segment< 6 >( gripper_ind * 6 );
+               gripper_velocity = actual_gripper_velocity.segment< 6 >( gripper_ind * 6 );
             }
             else
             {
-                gripper_velocity << combined_grippers_velocity.segment< 3 >( gripper_ind * 6 ), 0, 0, 0;
+                gripper_velocity << actual_gripper_velocity.segment< 3 >( gripper_ind * 6 ), 0, 0, 0;
             }
 
+            // TODO: is this correct?
             // We need to cancel out the translation that rotating around omega gives us
             gripper_velocity.segment<3>(0) = gripper_velocity.segment<3>(0)
                     - gripper_velocity.segment<3>(3).cross( traj[(size_t)gripper_ind][traj_step - 1].translation() );
 
             traj[(size_t)gripper_ind].push_back( kinematics::expTwistAffine3d( gripper_velocity, 1 )
                                          * traj[(size_t)gripper_ind][traj_step - 1] );
+
         }
+
+        // TODO: do we need to worry about the "rotation vs. translation cancling" above?
+        // Assume that our Jacobian is correct, and predict where we will end up
+        current += J_ * actual_gripper_velocity;
     }
 
     return traj;
