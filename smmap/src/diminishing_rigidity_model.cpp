@@ -109,10 +109,13 @@ void DiminishingRigidityModel::computeObjectToGripperJacobian( const VectorGripp
                 J_rot.block< 3, 1 >( 0, 2 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_node );
 
                 J_.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ + 3 ) =
-                        std::exp( -rotation_rigidity_ * dist_to_gripper.second ) * J_rot;
+                        std::exp( -rotation_rigidity_ * dist_to_gripper.second ) * J_rot/78.886009230675;
             }
         }
     }
+
+    std::cout << "Jacobian: translation_rigidity: " << translation_rigidity_ << " rotation_rigidity: " << rotation_rigidity_ << std::endl;
+    std::cout << J_ << std::endl;
 }
 
 Eigen::MatrixXd DiminishingRigidityModel::computeCollisionToGripperJacobian( const VectorGrippersData &grippers_data ) const
@@ -164,8 +167,6 @@ ObjectTrajectory DiminishingRigidityModel::doGetPrediction(
     assert( grippers_trajectory.size() > 0 );
     assert( grippers_velocities.size() == grippers_trajectory.size() );
 
-//    std::cout << PrettyPrint::PrettyPrint( grippers_velocities, true, "\n\n" ) << std::endl;
-
     ObjectTrajectory object_traj( grippers_trajectory[0].size() );
     object_traj[0] = object_configuration;
 
@@ -189,18 +190,7 @@ ObjectTrajectory DiminishingRigidityModel::doGetPrediction(
 
         // calculate the velocity of the object given the gripper velocity
         Eigen::MatrixXd delta_obj = J_*combined_gripper_vel;
-
-//        std::cout << "\nJ_\n" << J_.block<9, 3>(0,0) << "\n\n"
-//            << "combined_gripper_vel:\n" << combined_gripper_vel << "\n\n"
-//            << "delta_obj:\n" << delta_obj.block<9,1>(0,0) << "\n\n";
-
-//        std::cout << delta_obj.rows() << " " << delta_obj.cols() << "\n";
         delta_obj.resize( 3, object_configuration.cols() );
-//        std::cout << delta_obj.rows() << " " << delta_obj.cols() << "\n";
-//        delta_obj.conservativeResize( 3, object_configuration.cols() );
-//        std::cout << delta_obj.rows() << " " << delta_obj.cols() << "\n";
-
-//        std::cout << "delta_obj:\n" << delta_obj.block<3,3>(0,0) << "\n\n";
 
         object_traj[vel_ind + 1] = object_traj[vel_ind] + delta_obj;
     }
@@ -305,6 +295,8 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
             const double collision_severity = std::min( 1.0,
                         std::exp( -obstacle_avoidance_scale_* grippers_data[(size_t)gripper_ind].distance_to_obstacle ) );
 
+            std::cout << "collision severity: " << collision_severity << std::endl;
+
             actual_gripper_velocity.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ) =
                     collision_severity * ( grippers_velocity_avoid_collision.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ) +
                                            ( Eigen::MatrixXd::Identity( cols_per_gripper_, cols_per_gripper_ ) - J_collision_pinv * J_collision ) *
@@ -318,20 +310,22 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
             kinematics::Vector6d gripper_velocity;
             if ( use_rotation_ )
             {
-               gripper_velocity = actual_gripper_velocity.segment< 6 >( gripper_ind * 6 );
+                // First move the translational velocity into the gripper frame
+                actual_gripper_velocity.segment< 3 >( gripper_ind * 6 ) =
+                        traj[(size_t)gripper_ind][traj_step - 1].rotation().transpose()
+                        * actual_gripper_velocity.segment< 3 >( gripper_ind * 6 );
+
+                // then use the translated velocity
+                gripper_velocity = actual_gripper_velocity.segment< 6 >( gripper_ind * 6 );
             }
             else
             {
                 gripper_velocity << actual_gripper_velocity.segment< 3 >( gripper_ind * 6 ), 0, 0, 0;
             }
 
-            // TODO: is this correct?
-            // We need to cancel out the translation that rotating around omega gives us
-            gripper_velocity.segment<3>(0) = gripper_velocity.segment<3>(0)
-                    - gripper_velocity.segment<3>(3).cross( traj[(size_t)gripper_ind][traj_step - 1].translation() );
-
-            traj[(size_t)gripper_ind].push_back( kinematics::expTwistAffine3d( gripper_velocity, 1 )
-                                         * traj[(size_t)gripper_ind][traj_step - 1] );
+            traj[(size_t)gripper_ind].push_back(
+                        traj[(size_t)gripper_ind][traj_step - 1] *
+                        kinematics::expTwistAffine3d( gripper_velocity, 1 ) );
 
         }
 

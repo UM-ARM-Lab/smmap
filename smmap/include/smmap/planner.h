@@ -27,7 +27,7 @@ namespace smmap
             // Main function that makes things happen
             ////////////////////////////////////////////////////////////////////
 
-            void run( const size_t num_traj_cmds_per_loop = 1 );
+            void run( const size_t num_traj_cmds_per_loop = 10 );
 
         private:
 
@@ -41,14 +41,29 @@ namespace smmap
             // Loggering functionality
             ////////////////////////////////////////////////////////////////////
 
+            // TODO: move this from here, this is terrible
+            static const Eigen::IOFormat eigen_io_one_line_;
+
             bool logging_enabled_;
             std::map< std::string, Log::Log > loggers;
+
+            ////////////////////////////////////////////////////////////////////
+            // Visualization flags
+            ////////////////////////////////////////////////////////////////////
+
+            bool visualize_object_desired_config_;
+            bool visualize_object_predicted_config_;
+            bool visualize_gripper_translation_;
+            bool visualize_correspondances_;
+
+            ////////////////////////////////////////////////////////////////////
+            // Task parameters
+            ////////////////////////////////////////////////////////////////////
 
             // TODO: Use this
             TaskType task_;
             std::unique_ptr< ModelSet > model_set_;
 
-            // Stores a "gripper name", {gripper_node_indices} pair for each gripper
             VectorGrippersData grippers_data_;
             ObjectPointSet object_initial_configuration_;
             ObjectPointSet cover_points_;

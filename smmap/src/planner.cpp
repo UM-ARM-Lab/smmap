@@ -16,8 +16,15 @@
 using namespace smmap;
 using namespace EigenHelpersConversions;
 
+// TODO: move this from here, this is terrible
+const Eigen::IOFormat Planner::eigen_io_one_line_( Eigen::FullPrecision, Eigen::DontAlignCols, " ", " ", "", "", "", ""  );
+
 Planner::Planner(ros::NodeHandle& nh )
-    : task_( GetTaskType( nh ) )
+    : visualize_object_desired_config_( false )
+    , visualize_object_predicted_config_( true )
+    , visualize_gripper_translation_( false )
+    , visualize_correspondances_( true )
+    , task_( GetTaskType( nh ) )
     , nh_( nh )
     , it_( nh_ )
     , sim_time_( 0 )
@@ -62,12 +69,16 @@ Planner::Planner(ros::NodeHandle& nh )
         std::string log_folder = GetLogFolder( nh_ );
 
         loggers.insert( std::make_pair< std::string, Log::Log >(
-                            "object_configuration",
-                            Log::Log( log_folder + "object_configuration.txt" ) ) );
+                            "object_current_configuration",
+                            Log::Log( log_folder + "object_current_configuration.txt" ) ) );
 
         loggers.insert( std::make_pair< std::string, Log::Log >(
-                            "object_delta",
-                            Log::Log( log_folder + "object_delta.txt" ) ) );
+                            "object_desired_configuration",
+                            Log::Log( log_folder + "object_desired_configuration.txt" ) ) );
+
+        loggers.insert( std::make_pair< std::string, Log::Log > (
+                            "object_predicted_configuration",
+                            Log::Log( log_folder + "object_predicted_configuration.txt" ) ) ) ;
     }
 }
 
@@ -158,15 +169,18 @@ AllGrippersTrajectory Planner::replan( size_t num_traj_cmds_per_loop )
     // here we find the desired configuration of the object given the current config
     ObjectPointSet object_desired_config = findObjectDesiredConfiguration( object_current_config );
 
-    // Send this to the visualizer to plot
-/*    std_msgs::ColorRGBA rope_desired_config_color;
-    rope_desired_config_color.r = 0;
-    rope_desired_config_color.g = 0;
-    rope_desired_config_color.b = 1;
-    rope_desired_config_color.a = 1;
-    visualizeRopeObject( "rope_desired_config", object_desired_config, rope_desired_config_color );
-    visualizeObjectDelta( "rope_delta", fbk.first.back(), object_desired_config );
-*/
+    // Send the desired config to the visualizer to plot
+    if ( visualize_object_desired_config_ )
+    {
+        std_msgs::ColorRGBA object_desired_config_color;
+        object_desired_config_color.r = 0;
+        object_desired_config_color.g = 0;
+        object_desired_config_color.b = 1;
+        object_desired_config_color.a = 1;
+        // TODO: make this work for non-ropes
+        visualizeRopeObject( "object_desired_config", object_desired_config, object_desired_config_color );
+        visualizeObjectDelta( "object_delta", fbk.first.back(), object_desired_config );
+    }
 
     // Querry each model for it's best trajectory
     std::vector< std::pair< AllGrippersTrajectory, double > > suggested_trajectories =
@@ -192,30 +206,39 @@ AllGrippersTrajectory Planner::replan( size_t num_traj_cmds_per_loop )
         }
     }
 
-/*    std::cout << "Best trajectory:\n" << PrettyPrint::PrettyPrint( suggested_trajectories[min_weighted_cost_ind].first, true, "\n" ) << std::endl;
-
-    for ( size_t gripper_ind = 0; gripper_ind < gripper_data_.size(); gripper_ind++ )
+    // Send the desired "best" gripper translation to the visualizer to plot
+    if ( visualize_gripper_translation_ )
     {
-        std_msgs::ColorRGBA color;
-        color.r = 1;
-        color.g = 1;
-        color.b = 1;
-        color.a = 1;
-        visualizeTranslation( gripper_data_[gripper_ind].name,
-                              fbk.second[gripper_ind].back(),
-                              suggested_trajectories[min_weighted_cost_ind].first[gripper_ind].back(),
-                              color );
+        for ( size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++ )
+        {
+            std_msgs::ColorRGBA color;
+            color.r = 1;
+            color.g = 1;
+            color.b = 1;
+            color.a = 1;
+            visualizeTranslation( grippers_data_[gripper_ind].name,
+                                  fbk.second[gripper_ind].back(),
+                                  suggested_trajectories[min_weighted_cost_ind].first[gripper_ind].back(),
+                                  color );
+        }
     }
-*/
 
-/*    VectorObjectTrajectory model_predictions = model_set_->makePredictions( suggested_trajectories[min_weighted_cost_ind].first, fbk.first.back() );
-    std_msgs::ColorRGBA model_prediction_color;
-    model_prediction_color.r = 1;
-    model_prediction_color.g = 0;
-    model_prediction_color.b = 0;
-    model_prediction_color.a = 1;
-    visualizeRopeObject( "rope_predicted_config", model_predictions[min_weighted_cost_ind].back(), model_prediction_color );
-*/
+    // TODO: deal with multiple predictions, which one is the best?
+    VectorObjectTrajectory model_predictions = model_set_->makePredictions( suggested_trajectories[min_weighted_cost_ind].first, fbk.first.back() );
+    // Send the predicted object config to the visualizer to plot
+    if ( visualize_object_predicted_config_ )
+    {
+        std_msgs::ColorRGBA model_prediction_color;
+        model_prediction_color.r = 1;
+        model_prediction_color.g = 0;
+        model_prediction_color.b = 0;
+        model_prediction_color.a = 1;
+        // TODO: make this work for non-ropes
+        visualizeRopeObject( "rope_predicted_config", model_predictions[min_weighted_cost_ind].back(), model_prediction_color );
+    }
+
+    LOG_COND( loggers.at( "object_predicted_configuration" ) , logging_enabled_,
+              (model_predictions[min_weighted_cost_ind].back()).format( eigen_io_one_line_ ) );
 
     return suggested_trajectories[min_weighted_cost_ind].first;
 }
@@ -244,9 +267,6 @@ std::pair< ObjectTrajectory, AllGrippersTrajectory > Planner::readSimulatorFeedb
         grippers_trajectory_[gripper_ind].clear();
 //        grippers_trajectory_[gripper_ind].push_back( fbk.second[gripper_ind][0] );
     }
-
-//    std::cout << "Amount of data: " << fbk.second[0].size() << std::endl;
-//    std::cout << PrettyPrint::PrettyPrint( fbk.second[0], true, "\n" ) << std::endl;
 
     return fbk;
 }
@@ -300,22 +320,19 @@ void Planner::updateModels( const ObjectTrajectory& object_trajectory,
 
 ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& current_configuration )
 {
-    // TODO: move this from here, this is terrible
-    static const Eigen::IOFormat one_line( Eigen::FullPrecision, Eigen::DontAlignCols, " ", " ", "", "", "", ""  );
-
     ROS_INFO_NAMED( "planner" , "Finding 'best' configuration" );
 
     // point should be the same size
     assert( current_configuration.rows() == cover_points_.rows() );
+
+    LOG_COND( loggers.at( "object_current_configuration" ), logging_enabled_,
+            current_configuration.format( eigen_io_one_line_ ) );
 
     ObjectPointSet desired_configuration = current_configuration;
     switch ( task_ )
     {
         case TaskType::COVERAGE:
         {
-            LOG_COND( loggers.at( "object_configuration" ), logging_enabled_,
-                    current_configuration.format( one_line ) );
-
             EigenHelpers::VectorVector3d start;
             EigenHelpers::VectorVector3d end;
 
@@ -344,39 +361,45 @@ ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& cu
                     }
                 }
 
+                assert( min_ind >= 0 );
 //                // If this is the first time we've found this as the closest, just use it
-//                if ( num_mapped[min_ind] == 0 )
+//                num_mapped[(size_t)min_ind]++;
+//                if ( num_mapped[(size_t)min_ind] == 1 )
 //                {
 //                    desired_configuration.block< 3, 1 >( 0, min_ind ) = cover_points_.block< 3, 1 >( 0, cover_ind );
 //                }
 //                // Otherwise average it
 //                else
 //                {
-//                    desired_configuration.block< 3, 1 >( 0, min_ind ) = (
-//                            (double)num_mapped[min_ind] * desired_configuration.block< 3, 1 >( 0, min_ind )
-//                            + cover_points_.block< 3, 1 >( 0, cover_ind ) ) / (double)( num_mapped[min_ind] + 1 );
+//                    // Averaging method:
+//                    // http://jvminside.blogspot.com/2010/01/incremental-average-calculation.html
+//                    desired_configuration.block< 3, 1 >( 0, min_ind ) =
+//                            desired_configuration.block< 3, 1 >( 0, min_ind ) +
+//                            (cover_points_.block< 3, 1 >( 0, cover_ind ) - desired_configuration.block< 3, 1 >( 0, min_ind ))
+//                            / num_mapped[(size_t)min_ind];
 //                }
-//                num_mapped[min_ind]++;
 
                 if ( min_dist >= 0.01 )
                 {
+                    desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
+                }
+
+                if ( visualize_correspondances_ )
+                {
                     start.push_back( current_configuration.block< 3, 1 >( 0, min_ind ) );
                     end.push_back( cover_point );
-
-                    desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
                 }
             }
 
-            LOG_COND( loggers.at( "object_delta" ), logging_enabled_,
-                    (desired_configuration - current_configuration).format( one_line ) );
-
-            std_msgs::ColorRGBA corespondance_color;
-            corespondance_color.r = 0.8f;
-            corespondance_color.g = 0.f;
-            corespondance_color.b = 0.8f;
-            corespondance_color.a = 1.f;
-
-            visualizeLines( "correspondances", start, end, corespondance_color );
+            if ( visualize_correspondances_ )
+            {
+                std_msgs::ColorRGBA corespondance_color;
+                corespondance_color.r = 0.8f;
+                corespondance_color.g = 0.f;
+                corespondance_color.b = 0.8f;
+                corespondance_color.a = 1.f;
+                visualizeLines( "correspondances", start, end, corespondance_color );
+            }
 
             break;
         }
@@ -385,7 +408,8 @@ ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& cu
             throw new std::invalid_argument( "Unknown task type" );
     }
 
-//    std::cout << desired_configuration.transpose() << std::endl;
+    LOG_COND( loggers.at( "object_desired_configuration" ), logging_enabled_,
+            desired_configuration.format( eigen_io_one_line_ ) );
 
     return desired_configuration;
 }
