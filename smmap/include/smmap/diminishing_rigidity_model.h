@@ -53,7 +53,7 @@ namespace smmap
             AllGrippersTrajectory doGetDesiredGrippersTrajectory(
                     const ObjectPointSet& object_current_configuration,
                     const ObjectPointSet& object_desired_configuration,
-                    const VectorGrippersData& grippers_data,
+                    VectorGrippersData grippers_data,
                     double max_step_size, size_t num_steps ) const;
 
             void doPerturbModel( std::mt19937_64& generator );
@@ -62,7 +62,7 @@ namespace smmap
             // Model update parameters
             ////////////////////////////////////////////////////////////////////
 
-            void computeObjectToGripperJacobian( const VectorGrippersData& grippers_data );
+            Eigen::MatrixXd computeObjectToGripperJacobian( const VectorGrippersData& grippers_data ) const;
             Eigen::MatrixXd computeCollisionToGripperJacobian( const VectorGrippersData& grippers_data ) const;
 
             ////////////////////////////////////////////////////////////////////
@@ -83,7 +83,6 @@ namespace smmap
 
             bool use_rotation_;
             const long cols_per_gripper_;
-            Eigen::MatrixXd J_;
     };
 }
 

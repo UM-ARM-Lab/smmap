@@ -21,7 +21,7 @@ const Eigen::IOFormat Planner::eigen_io_one_line_( Eigen::FullPrecision, Eigen::
 
 Planner::Planner(ros::NodeHandle& nh )
     : visualize_object_desired_config_( false )
-    , visualize_object_predicted_config_( true )
+    , visualize_object_predicted_config_( false )
     , visualize_gripper_translation_( false )
     , visualize_correspondances_( true )
     , task_( GetTaskType( nh ) )

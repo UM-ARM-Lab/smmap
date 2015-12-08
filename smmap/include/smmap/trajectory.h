@@ -11,6 +11,7 @@ namespace smmap
     typedef std::vector< ObjectTrajectory, Eigen::aligned_allocator< ObjectTrajectory > > VectorObjectTrajectory;
 
     typedef EigenHelpers::VectorAffine3d SingleGripperTrajectory;
+    typedef EigenHelpers::VectorAffine3d MultipleGripperPoses;
     typedef std::vector< SingleGripperTrajectory, Eigen::aligned_allocator< SingleGripperTrajectory > > AllGrippersTrajectory;
 
     /**

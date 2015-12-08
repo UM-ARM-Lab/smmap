@@ -42,7 +42,7 @@ namespace smmap
             AllGrippersTrajectory getDesiredGrippersTrajectory(
                     const ObjectPointSet& object_current_configuration,
                     const ObjectPointSet& object_desired_configuration,
-                    const VectorGrippersData& grippers_data,
+                    VectorGrippersData grippers_data,
                     double max_step_size, size_t num_steps ) const
             {
                 return doGetDesiredGrippersTrajectory( object_current_configuration,
@@ -83,7 +83,7 @@ namespace smmap
             virtual AllGrippersTrajectory doGetDesiredGrippersTrajectory(
                     const ObjectPointSet& object_current_configuration,
                     const ObjectPointSet& object_desired_configuration,
-                    const VectorGrippersData& gripper_data,
+                    VectorGrippersData gripper_data,
                     double max_step_size, size_t num_steps ) const = 0;
 
             virtual void doPerturbModel( std::mt19937_64& generator ) = 0;
