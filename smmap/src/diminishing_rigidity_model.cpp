@@ -121,8 +121,8 @@ Eigen::MatrixXd DiminishingRigidityModel::computeObjectToGripperJacobian( const 
         }
     }
 
-    std::cout << "Jacobian: translation_rigidity: " << translation_rigidity_ << " rotation_rigidity: " << rotation_rigidity_ << std::endl;
-    std::cout << J << std::endl;
+//    std::cout << "Jacobian: translation_rigidity: " << translation_rigidity_ << " rotation_rigidity: " << rotation_rigidity_ << std::endl;
+//    std::cout << J << std::endl;
 
     return J;
 }

@@ -2,7 +2,7 @@
     <param name="logging_enabled" value="true"/>
     <param name="log_folder" value="$(find smmap)/../logs/"/>
 
-    <param name="deformable_type" value="rope"/>
+    <param name="deformable_type" value="cloth"/>
     <param name="task_type" value="coverage"/>
 
     <include file="$(find deform_simulator)/launch/deform_simulator.launch"/>
