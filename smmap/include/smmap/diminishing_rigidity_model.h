@@ -62,8 +62,13 @@ namespace smmap
             // Model update parameters
             ////////////////////////////////////////////////////////////////////
 
-            Eigen::MatrixXd computeObjectToGripperJacobian( const VectorGrippersData& grippers_data ) const;
-            Eigen::MatrixXd computeCollisionToGripperJacobian( const VectorGrippersData& grippers_data ) const;
+            Eigen::MatrixXd computeGrippersToObjectJacobian(
+                    const VectorGrippersData& grippers_data ) const;
+            std::vector< CollisionAvoidanceResult > computeGrippersObjectAvoidance(
+                    const VectorGrippersData& grippers_data,
+                    double max_step_size) const;
+            Eigen::MatrixXd computeCollisionToGripperJacobian(
+                    const GripperData& gripper_data ) const;
 
             ////////////////////////////////////////////////////////////////////
             // Static members

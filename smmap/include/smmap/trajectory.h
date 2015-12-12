@@ -11,8 +11,21 @@ namespace smmap
     typedef std::vector< ObjectTrajectory, Eigen::aligned_allocator< ObjectTrajectory > > VectorObjectTrajectory;
 
     typedef EigenHelpers::VectorAffine3d SingleGripperTrajectory;
-    typedef EigenHelpers::VectorAffine3d MultipleGripperPoses;
     typedef std::vector< SingleGripperTrajectory, Eigen::aligned_allocator< SingleGripperTrajectory > > AllGrippersTrajectory;
+
+    struct CollisionAvoidanceResult
+    {
+        CollisionAvoidanceResult( long cols_per_gripper )
+            : nullspace( Eigen::MatrixXd::Identity( cols_per_gripper, cols_per_gripper ) )
+            , velocity( Eigen::VectorXd::Zero( cols_per_gripper ) )
+            , distance( std::numeric_limits< double >::infinity() )
+        {}
+        Eigen::MatrixXd nullspace;
+        Eigen::VectorXd velocity;
+        double distance;
+
+        CollisionAvoidanceResult() = delete;
+    };
 
     /**
      * @brief Given a set of grippers and the trajectory that each follows,

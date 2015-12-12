@@ -23,8 +23,7 @@ Planner::Planner(ros::NodeHandle& nh )
     : visualize_object_desired_config_( false )
     , visualize_object_predicted_config_( false )
     , visualize_gripper_translation_( false )
-    , visualize_correspondances_( true )
-    , task_( GetTaskType( nh ) )
+    , visualize_correspondances_( false )
     , nh_( nh )
     , it_( nh_ )
     , sim_time_( 0 )
@@ -33,10 +32,12 @@ Planner::Planner(ros::NodeHandle& nh )
     simulator_fbk_sub_ = nh_.subscribe(
             GetSimulatorFeedbackTopic( nh_ ), 20, &Planner::simulatorFbkCallback, this );
 
+    // Initialize our task object with whatever it needs
+    initializeTask();
+
     // Get the data we need to create our model set
     getGrippersData();
     getObjectInitialConfiguration();
-    getCoverPoints();
 
     model_set_ = std::unique_ptr< ModelSet >(
             new ModelSet( grippers_data_, object_initial_configuration_ ) );
@@ -167,7 +168,7 @@ AllGrippersTrajectory Planner::replan( size_t num_traj_cmds_per_loop )
     lock.unlock();
 
     // here we find the desired configuration of the object given the current config
-    ObjectPointSet object_desired_config = findObjectDesiredConfiguration( object_current_config );
+    ObjectPointSet object_desired_config = task_->findObjectDesiredConfiguration( object_current_config );
 
     // Send the desired config to the visualizer to plot
     if ( visualize_object_desired_config_ )
@@ -318,100 +319,17 @@ void Planner::updateModels( const ObjectTrajectory& object_trajectory,
 // Task specific functionality
 ////////////////////////////////////////////////////////////////////////////////
 
-ObjectPointSet Planner::findObjectDesiredConfiguration( const ObjectPointSet& current_configuration )
+void Planner::initializeTask()
 {
-    ROS_INFO_NAMED( "planner" , "Finding 'best' configuration" );
+    TaskType task_type = GetTaskType( nh_ );
+    DeformableType deformable_type = GetDeformableType( nh_ );
 
-    // point should be the same size
-    assert( current_configuration.rows() == cover_points_.rows() );
-
-    LOG_COND( loggers.at( "object_current_configuration" ), logging_enabled_,
-            current_configuration.format( eigen_io_one_line_ ) );
-
-    ObjectPointSet desired_configuration = current_configuration;
-    switch ( task_ )
+    if ( deformable_type == DeformableType::ROPE && task_type == TaskType::COVERAGE )
     {
-        case TaskType::COVERAGE:
-        {
-            EigenHelpers::VectorVector3d start;
-            EigenHelpers::VectorVector3d end;
-
-            // We'll need to track how many cover points are mapping to a given object point
-            // in order to do the averaging.
-            std::vector< int > num_mapped( (size_t)current_configuration.cols(), 0 );
-
-            // for every cover point, find the nearest deformable object point
-            for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
-            {
-                Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
-
-                ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
-
-                Eigen::RowVectorXd dist_sq = diff.array().square().colwise().sum();
-
-                // find the closest deformable point
-                int min_ind = -1;
-                double min_dist = std::numeric_limits< double >::infinity();
-                for ( int object_ind = 0; object_ind < dist_sq.cols(); object_ind++ )
-                {
-                    if ( dist_sq( object_ind ) < min_dist )
-                    {
-                        min_ind = object_ind;
-                        min_dist = dist_sq( object_ind );
-                    }
-                }
-
-                assert( min_ind >= 0 );
-//                // If this is the first time we've found this as the closest, just use it
-//                num_mapped[(size_t)min_ind]++;
-//                if ( num_mapped[(size_t)min_ind] == 1 )
-//                {
-//                    desired_configuration.block< 3, 1 >( 0, min_ind ) = cover_points_.block< 3, 1 >( 0, cover_ind );
-//                }
-//                // Otherwise average it
-//                else
-//                {
-//                    // Averaging method:
-//                    // http://jvminside.blogspot.com/2010/01/incremental-average-calculation.html
-//                    desired_configuration.block< 3, 1 >( 0, min_ind ) =
-//                            desired_configuration.block< 3, 1 >( 0, min_ind ) +
-//                            (cover_points_.block< 3, 1 >( 0, cover_ind ) - desired_configuration.block< 3, 1 >( 0, min_ind ))
-//                            / num_mapped[(size_t)min_ind];
-//                }
-
-                if ( min_dist >= 0.01 )
-                {
-                    desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
-                }
-
-                if ( visualize_correspondances_ )
-                {
-                    start.push_back( current_configuration.block< 3, 1 >( 0, min_ind ) );
-                    end.push_back( cover_point );
-                }
-            }
-
-            if ( visualize_correspondances_ )
-            {
-                std_msgs::ColorRGBA corespondance_color;
-                corespondance_color.r = 0.8f;
-                corespondance_color.g = 0.f;
-                corespondance_color.b = 0.8f;
-                corespondance_color.a = 1.f;
-                visualizeLines( "correspondances", start, end, corespondance_color );
-            }
-
-            break;
-        }
-
-        default:
-            throw new std::invalid_argument( "Unknown task type" );
+        task_.reset( new RopeCoverage( nh_ ) );
     }
 
-    LOG_COND( loggers.at( "object_desired_configuration" ), logging_enabled_,
-            desired_configuration.format( eigen_io_one_line_ ) );
-
-    return desired_configuration;
+    // TODO: the rest
 }
 
 void Planner::visualizeRopeObject( const std::string& marker_name,
@@ -534,7 +452,7 @@ void Planner::visualizeLines( const std::string& marker_name,
 void Planner::simulatorFbkCallback(
         const smmap_msgs::SimulatorFbkStamped& fbk )
 {
-    // TODO: confirmt that this locking is correct
+    // TODO: confirm that this locking is correct
     boost::recursive_mutex::scoped_lock lock( input_mtx_ );
 
     // TODO: if this data arrived out of order, do something smart
@@ -549,8 +467,8 @@ void Planner::simulatorFbkCallback(
         // Collect the collision data
         grippers_data_[gripper_ind].nearest_point_on_gripper =
                 GeometryPointToEigenVector3d( fbk.gripper_nearest_point_to_obstacle[gripper_ind] );
-        grippers_data_[gripper_ind].nearest_point_on_obstacle =
-                GeometryPointToEigenVector3d( fbk.obstacle_nearest_point_to_gripper[gripper_ind] );
+        grippers_data_[gripper_ind].obstacle_surface_normal =
+                GeometryVector3ToEigenVector3d( fbk.obstacle_surface_normal[gripper_ind] );
 
         grippers_data_[gripper_ind].distance_to_obstacle = fbk.gripper_distance_to_obstacle[gripper_ind];
     }
@@ -640,22 +558,4 @@ void Planner::getObjectInitialConfiguration()
     object_trajectory_.push_back( object_initial_configuration_ );
 
     ROS_INFO_NAMED( "planner" , "Number of points on object: %zu", srv_data.response.points.size() );
-}
-
-void Planner::getCoverPoints()
-{
-    ROS_INFO_NAMED( "planner" , "Getting cover points" );
-
-    // Get the initial configuration of the object
-    ros::ServiceClient cover_points_client =
-        nh_.serviceClient< smmap_msgs::GetPointSet >( GetCoverPointsTopic( nh_ ) );
-
-    cover_points_client.waitForExistence();
-
-    smmap_msgs::GetPointSet srv_data;
-    cover_points_client.call( srv_data );
-    cover_points_ =
-        VectorGeometryPointToEigenMatrix3Xd( srv_data.response.points );
-
-    ROS_INFO_NAMED( "planner" , "Number of cover points: %zu", srv_data.response.points.size() );
 }

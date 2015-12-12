@@ -13,7 +13,7 @@ namespace smmap
         GripperData( const Eigen::Affine3d& pose, const std::vector< long >& node_indices, const std::string& name )
             : pose( pose )
             , nearest_point_on_gripper ( Eigen::Vector3d::Zero() )
-            , nearest_point_on_obstacle ( Eigen::Vector3d::Zero() )
+            , obstacle_surface_normal ( 0, 0, 1 )
             , distance_to_obstacle( std::numeric_limits< double >::infinity() )
             , node_indices( node_indices )
             , name( name )
@@ -28,7 +28,7 @@ namespace smmap
 
         Eigen::Affine3d pose;
         Eigen::Vector3d nearest_point_on_gripper;  // closest point on the gripper to the obstacle
-        Eigen::Vector3d nearest_point_on_obstacle; // closest point on the obstacle to the gripper
+        Eigen::Vector3d obstacle_surface_normal;   // vector pointing away from the obstace
         double distance_to_obstacle;
 
         std::vector< long > node_indices;

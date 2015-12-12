@@ -27,7 +27,7 @@ namespace smmap
             // Main function that makes things happen
             ////////////////////////////////////////////////////////////////////
 
-            void run( const size_t num_traj_cmds_per_loop = 10 );
+            void run( const size_t num_traj_cmds_per_loop = 1 );
 
         private:
 
@@ -60,13 +60,13 @@ namespace smmap
             // Task parameters
             ////////////////////////////////////////////////////////////////////
 
-            // TODO: Use this
-            TaskType task_;
+            std::unique_ptr< Task > task_;
+            void initializeTask();
+
             std::unique_ptr< ModelSet > model_set_;
 
             VectorGrippersData grippers_data_;
             ObjectPointSet object_initial_configuration_;
-            ObjectPointSet cover_points_;
 
             ////////////////////////////////////////////////////////////////////
             // Internal helpers for the run() function
@@ -82,8 +82,6 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
             // Task specific functionality
             ////////////////////////////////////////////////////////////////////
-
-            ObjectPointSet findObjectDesiredConfiguration( const ObjectPointSet& current );
 
             void visualizeRopeObject( const std::string& marker_name,
                                       const ObjectPointSet& rope,
@@ -129,7 +127,6 @@ namespace smmap
             static void spin( double loop_rate );
             void getGrippersData();
             void getObjectInitialConfiguration();
-            void getCoverPoints();
 
             ros::NodeHandle nh_;
 

@@ -49,7 +49,7 @@ DiminishingRigidityModel::DiminishingRigidityModel(
     }
 
     computeObjectNodeDistanceMatrix();
-    computeObjectToGripperJacobian( grippers_data );
+    computeGrippersToObjectJacobian( grippers_data );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -69,11 +69,11 @@ void DiminishingRigidityModel::computeObjectNodeDistanceMatrix()
 
 /**
  * @brief DiminishingRigidityModel::computeObjectToGripperJacobian
- * Computes a Jacobian that takes object velocities in the world frame, and computes
- * gripper velocities in the gripper frame
+ * Computes a Jacobian that converts gripper velocities in the individual
+ * gripper frames into object velocities in the world frame
  * @param grippers_data
  */
-Eigen::MatrixXd DiminishingRigidityModel::computeObjectToGripperJacobian( const VectorGrippersData& grippers_data ) const
+Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian( const VectorGrippersData& grippers_data ) const
 {
     ROS_DEBUG_NAMED( "diminishing_rigidity_model" , "Computing object Jacobian: Diminishing rigidity k_trans: %f k_rot: %f", translation_rigidity_, rotation_rigidity_ );
 
@@ -116,7 +116,7 @@ Eigen::MatrixXd DiminishingRigidityModel::computeObjectToGripperJacobian( const 
                 J_rot.block< 3, 1 >( 0, 2 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_node );
 
                 J.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ + 3 ) =
-                        std::exp( -rotation_rigidity_ * dist_to_gripper.second ) * J_rot*50;///78.9;///78.886009230677;
+                        std::exp( -rotation_rigidity_ * dist_to_gripper.second ) * J_rot*20/20/78.9;
             }
         }
     }
@@ -127,12 +127,55 @@ Eigen::MatrixXd DiminishingRigidityModel::computeObjectToGripperJacobian( const 
     return J;
 }
 
-Eigen::MatrixXd DiminishingRigidityModel::computeCollisionToGripperJacobian( const VectorGrippersData &grippers_data ) const
+std::vector< CollisionAvoidanceResult > DiminishingRigidityModel::computeGrippersObjectAvoidance(
+        const VectorGrippersData& grippers_data, double max_step_size ) const
+{
+    std::vector< CollisionAvoidanceResult > collision_avoidance_results( grippers_data.size(), CollisionAvoidanceResult( cols_per_gripper_ ) );
+
+    // TODO: deal with multiple traj_steps, multiple avoids?
+    // TODO: deal with not having an object to avoid
+    for ( size_t gripper_ind = 0; gripper_ind < grippers_data.size(); gripper_ind++ )
+    {
+        collision_avoidance_results[gripper_ind].distance = grippers_data[(size_t)gripper_ind].distance_to_obstacle;
+        std::cout << "collision dist: " << grippers_data[(size_t)gripper_ind].distance_to_obstacle << std::endl;
+
+        // If we have a collision to avoid, then find the vector
+        if ( !std::isinf( grippers_data[(size_t)gripper_ind].distance_to_obstacle ) )
+        {
+            // Create the collision Jacobian
+            const Eigen::MatrixXd J_collision = computeCollisionToGripperJacobian( grippers_data[gripper_ind] );
+            const Eigen::MatrixXd J_collision_inv = EigenHelpers::Pinv( J_collision, EigenHelpers::SuggestedRcond() );
+
+            // Create the collision avoidance vector to follow
+            const Eigen::Vector3d& avoid_collision_delta = grippers_data[gripper_ind].obstacle_surface_normal;
+
+            collision_avoidance_results[gripper_ind].velocity =  J_collision_inv * avoid_collision_delta;
+            collision_avoidance_results[gripper_ind].velocity /= collision_avoidance_results[gripper_ind].velocity.norm();
+            collision_avoidance_results[gripper_ind].velocity *= max_step_size;
+
+            collision_avoidance_results[gripper_ind].nullspace =
+                    Eigen::MatrixXd::Identity( cols_per_gripper_, cols_per_gripper_) - J_collision_inv * J_collision;
+        }
+        // Otherwise, leave the collision result as the default "no collision" state
+        else {}
+    }
+
+    return collision_avoidance_results;
+}
+
+/**
+ * @brief DiminishingRigidityModel::computeCollisionToGripperJacobian
+ * Computes a  Jacobian that converts a gripper velocitie in the individual
+ * gripper frame into a point velocity in the world frame
+ * @param gripper_data
+ * @return
+ */
+Eigen::MatrixXd DiminishingRigidityModel::computeCollisionToGripperJacobian( const GripperData &gripper_data ) const
 {
     Eigen::MatrixXd J_collision = Eigen::MatrixXd::Zero( 3, cols_per_gripper_ );
 
-    // Translation
-    J_collision.block< 3, 3>( 0, 0 ) = Eigen::Matrix3d::Identity();
+    // Translation - if I move the gripper in x,y,z, what happens to the given point?
+    J_collision.block< 3, 3>( 0, 0 ) = gripper_data.pose.rotation();
 
     // TODO find out of these are at all correct
 //    else if(i == 3)
@@ -230,109 +273,68 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
 
     for ( size_t traj_step = 1; traj_step <= num_steps; traj_step++ )
     {
+        ////////////////////////////////////////////////////////////////////////
+        // Find the velocities of each part of the algorithm
+        ////////////////////////////////////////////////////////////////////////
+
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
-        const Eigen::MatrixXd J = computeObjectToGripperJacobian( grippers_data );
+        const Eigen::MatrixXd J = computeGrippersToObjectJacobian( grippers_data );
         const Eigen::MatrixXd J_inv = EigenHelpers::Pinv( J, EigenHelpers::SuggestedRcond() );
 
-        Eigen::VectorXd avoid_object_collision_delta = Eigen::VectorXd::Zero( 3*(long)grippers_data.size() );
-        Eigen::MatrixXd J_collision( 3*(long)grippers_data.size(), cols_per_gripper_ );
-
-        // TODO: deal with multiple traj_steps, multiple avoids?
-        // Object avoidance block
-        for ( long gripper_ind = 0; gripper_ind < (long)grippers_data.size(); gripper_ind++ )
-        {
-            // Create the collision Jacobian
-            J_collision.block( 3*gripper_ind, 0, 3, cols_per_gripper_ )
-                    = computeCollisionToGripperJacobian( grippers_data );
-
-            // TODO: this is checking vs infinity, but bullet is returning BT_LARGE_FLOAT. Fix this.
-            // If we have a collision to avoid, then find the vector
-            if ( !std::isinf( grippers_data[(size_t)gripper_ind].distance_to_obstacle ) )
-            {
-                // Create the collision avoidance vector to follow
-                Eigen::Vector3d avoid_collision_delta =
-                        grippers_data[(size_t)gripper_ind].nearest_point_on_gripper
-                        - grippers_data[(size_t)gripper_ind].nearest_point_on_obstacle;
-
-                // If we are already inside the obstacle, then we need to invert the
-                // direction of movement
-                if ( grippers_data[(size_t)gripper_ind].distance_to_obstacle < 0 )
-                {
-                    avoid_collision_delta = -avoid_collision_delta;
-                }
-
-                // Normalize the step size to avoid the obstacle to avoid potential over/underflow
-                avoid_object_collision_delta.segment< 3 >( gripper_ind * 3 ) =
-                        avoid_collision_delta / avoid_collision_delta.norm();
-            }
-            // Otherwise, leave that part of avoid_object_collision_delta at zero
-            else {}
-        }
-
-        Eigen::MatrixXd J_collision_pinv = EigenHelpers::Pinv( J_collision, EigenHelpers::SuggestedRcond() );
         // pragmas are here to supress some warnings from GCC
         #pragma GCC diagnostic push
         #pragma GCC diagnostic ignored "-Wconversion"
-        // Apply the collision Jacobian pseudo-inverse - will normalize later
-        Eigen::VectorXd grippers_velocity_avoid_collision = J_collision_pinv * avoid_object_collision_delta;
         // Apply the desired object delta Jacobian pseudo-inverse - will normalize later
         Eigen::VectorXd grippers_velocity_achieve_goal = J_inv * (current - desired);
         #pragma GCC diagnostic pop
 
-        // Then normalize each individual gripper velocity, and combine into a single unified instruction
-        Eigen::VectorXd actual_gripper_velocity( cols_per_gripper_ * (long)grippers_data.size() );
+        // Find the collision avoidance data that we'll need
+        std::vector< CollisionAvoidanceResult > grippers_collision_avoidance_result
+                = computeGrippersObjectAvoidance( grippers_data, max_step_size );
+
+
+        ////////////////////////////////////////////////////////////////////////
+        // Combine the velocities into a single command velocity
+        ////////////////////////////////////////////////////////////////////////
+
         for ( long gripper_ind = 0; gripper_ind < (long)grippers_data.size(); gripper_ind++ )
         {
-            // TODO: this is checking vs infinity, but bullet is returning BT_LARGE_FLOAT. Fix this.
-            // normalize the avoidance velocity
-            if ( !std::isinf( grippers_data[(size_t)gripper_ind].distance_to_obstacle ) )
-            {
-                grippers_velocity_avoid_collision.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ) =
-                        grippers_velocity_avoid_collision.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ )
-                        / grippers_velocity_avoid_collision.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ).norm()
-                        * max_step_size;
-            }
+            Eigen::VectorXd actual_gripper_velocity( cols_per_gripper_ );
+            Eigen::VectorXd desired_gripper_vel = grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ );
 
             // normalize the achive goal velocity
-            if ( grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ).norm() > max_step_size )
+            if ( desired_gripper_vel.norm() > max_step_size )
             {
-                grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ) =
-                        grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ )
-                        / grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ).norm()
-                        * max_step_size;
+                desired_gripper_vel = desired_gripper_vel / desired_gripper_vel.norm() * max_step_size;
             }
 
-            // Last, we combine the gripper velocities
-            const double collision_severity = std::min( 1.0,
-                        std::exp( -obstacle_avoidance_scale_* grippers_data[(size_t)gripper_ind].distance_to_obstacle ) );
+            // If we need to avoid an obstacle, then use the sliding scale
+            const CollisionAvoidanceResult& collision_result = grippers_collision_avoidance_result[(size_t)gripper_ind];
+            if ( !std::isinf( collision_result.distance ) )
+            {
+                 const double collision_severity = std::min( 1.0, std::exp( -obstacle_avoidance_scale_* collision_result.distance ) );
 
-            std::cout << "collision severity: " << collision_severity << std::endl;
+                 std::cout << "collision severity: " << collision_severity << std::endl;
 
-            actual_gripper_velocity.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ) =
-                    collision_severity * ( grippers_velocity_avoid_collision.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ) +
-                                           ( Eigen::MatrixXd::Identity( cols_per_gripper_, cols_per_gripper_ ) - J_collision_pinv * J_collision ) *
-                                           grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ ) )
-                    + (1 - collision_severity) * grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ );
-        }
+                 actual_gripper_velocity =
+                         collision_severity * ( collision_result.velocity + collision_result.nullspace * desired_gripper_vel ) +
+                         (1 - collision_severity) * desired_gripper_vel;
+            }
+            // Otherwise use our desired velocity directly
+            else
+            {
+                 actual_gripper_velocity = desired_gripper_vel;
+            }
 
-        // Apply the velocity to each gripper
-        for ( long gripper_ind = 0; gripper_ind < (long)grippers_data.size(); gripper_ind++ )
-        {
+            // Then apply the velocity to the gripper
             kinematics::Vector6d gripper_velocity;
             if ( use_rotation_ )
             {
-                // TODO: confirm that this is not needed with the new J_
-                // First move the translational velocity into the gripper frame
-//                actual_gripper_velocity.segment< 3 >( gripper_ind * 6 ) =
-//                        traj[(size_t)gripper_ind][traj_step - 1].rotation().transpose()
-//                        * actual_gripper_velocity.segment< 3 >( gripper_ind * 6 );
-
-                // then use the translated velocity
-                gripper_velocity = actual_gripper_velocity.segment< 6 >( gripper_ind * 6 );
+                gripper_velocity = actual_gripper_velocity;
             }
             else
             {
-                gripper_velocity << actual_gripper_velocity.segment< 3 >( gripper_ind * 6 ), 0, 0, 0;
+                gripper_velocity << actual_gripper_velocity, 0, 0, 0;
             }
 
             traj[(size_t)gripper_ind].push_back(
@@ -341,11 +343,9 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
 
             grippers_data[(size_t)gripper_ind].pose = traj[(size_t)gripper_ind].back();
 
+            // Assume that our Jacobian is correct, and predict where we will end up
+            current += J.block( 0, cols_per_gripper_*gripper_ind, J.rows(), cols_per_gripper_ ) * actual_gripper_velocity;
         }
-
-        // TODO: do we need to worry about the "rotation vs. translation cancling" above?
-        // Assume that our Jacobian is correct, and predict where we will end up
-        current += J * actual_gripper_velocity;
     }
 
     return traj;
