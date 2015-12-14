@@ -54,7 +54,7 @@ namespace smmap
             bool visualize_object_desired_config_;
             bool visualize_object_predicted_config_;
             bool visualize_gripper_translation_;
-            bool visualize_correspondances_;
+//            bool visualize_correspondances_;
 
             ////////////////////////////////////////////////////////////////////
             // Task parameters

@@ -119,6 +119,46 @@ namespace smmap
 
         return dist;
     }
+
+    // TODO: vectorize this
+    inline long closestPointInSet( const ObjectPointSet& obj, const Eigen::Vector3d& point )
+    {
+        assert ( obj.cols() > 0 );
+        long min_ind = 0;
+        double min_dist = (obj.block< 3, 1 >( 0, 0 ) - point).norm();
+
+        for ( long ind = 1; ind < obj.cols(); ind++ )
+        {
+            double dist = (obj.block< 3, 1 >( 0, ind ) - point).norm();
+            if ( dist < min_dist )
+            {
+                min_ind = ind;
+                min_dist = dist;
+            }
+        }
+
+        return min_ind;
+    }
+
+    // TODO: vectorize this
+    inline long closestPointInSet( const ObjectPointSet& obj, Eigen::Vector3d&& point )
+    {
+        assert ( obj.cols() > 0 );
+        long min_ind = 0;
+        double min_dist = (obj.block< 3, 1 >( 0, 0 ) - point).norm();
+
+        for ( long ind = 1; ind < obj.cols(); ind++ )
+        {
+            double dist = (obj.block< 3, 1 >( 0, ind ) - point).norm();
+            if ( dist < min_dist )
+            {
+                min_ind = ind;
+                min_dist = dist;
+            }
+        }
+
+        return min_ind;
+    }
 }
 
 #endif // trajectory_h

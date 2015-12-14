@@ -23,7 +23,7 @@ Planner::Planner(ros::NodeHandle& nh )
     : visualize_object_desired_config_( false )
     , visualize_object_predicted_config_( false )
     , visualize_gripper_translation_( false )
-    , visualize_correspondances_( false )
+//    , visualize_correspondances_( false )
     , nh_( nh )
     , it_( nh_ )
     , sim_time_( 0 )
@@ -290,6 +290,7 @@ void Planner::updateModels( const ObjectTrajectory& object_trajectory,
     {
         model_set_->updateModels( grippers_data_, grippers_trajectory, object_trajectory );
 
+        ROS_INFO_NAMED( "planner", "Evaluating confidence" );
         smmap_msgs::ConfidenceStamped double_msg;
         double_msg.confidence = model_set_->getModelConfidence();
         double_msg.header.stamp = ros::Time::now();
@@ -327,6 +328,14 @@ void Planner::initializeTask()
     if ( deformable_type == DeformableType::ROPE && task_type == TaskType::COVERAGE )
     {
         task_.reset( new RopeCoverage( nh_ ) );
+    }
+    else if ( deformable_type == DeformableType::CLOTH && task_type == TaskType::COLAB_FOLDING )
+    {
+        task_.reset( new ClothColabFolding( nh_ ) );
+    }
+    else
+    {
+        assert( false && "THIS PAIR OF DEFORMALBE AND TASK IS NOT YET IMPLEMENTED" );
     }
 
     // TODO: the rest

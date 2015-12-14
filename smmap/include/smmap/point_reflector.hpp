@@ -32,6 +32,21 @@ namespace smmap
                 return out;
             }
 
+            double get_mid_x()
+            {
+                return mid_x_;
+            }
+
+            double get_min_y()
+            {
+                return min_y_;
+            }
+
+            double get_max_y()
+            {
+                return max_y_;
+            }
+
         private:
             double mid_x_, min_y_, max_y_;
     };

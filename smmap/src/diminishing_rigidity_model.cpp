@@ -116,7 +116,7 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian( const
                 J_rot.block< 3, 1 >( 0, 2 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_node );
 
                 J.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ + 3 ) =
-                        std::exp( -rotation_rigidity_ * dist_to_gripper.second ) * J_rot*20/20/78.9;
+                        std::exp( -rotation_rigidity_ * dist_to_gripper.second ) * J_rot*50*20;
             }
         }
     }
@@ -257,6 +257,11 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
         VectorGrippersData grippers_data,
         double max_step_size, size_t num_steps ) const
 {
+    ROS_INFO_STREAM_NAMED( "diminishing_rigidity_model",
+                           "Creating suggested trajectory: " <<
+                           " translational_rigidity: " << translation_rigidity_ <<
+                           " rotational_rigidity: " << rotation_rigidity_ );
+
     assert( grippers_data.size() == grippers_data.size() );
     // Initialize the starting point of the trajectory with the current gripper poses
     AllGrippersTrajectory traj( grippers_data.size() );

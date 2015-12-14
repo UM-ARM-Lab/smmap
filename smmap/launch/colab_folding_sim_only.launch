@@ -1,16 +1,16 @@
 <launch>
-    <param name="logging_enabled" value="true"/>
+    <param name="logging_enabled" value="false"/>
     <param name="log_folder" value="$(find smmap)/../logs/"/>
 
-    <param name="deformable_type" value="rope"/>
-    <param name="task_type" value="coverage"/>
+    <param name="deformable_type" value="cloth"/>
+    <param name="task_type" value="colab_folding"/>
 
     <include file="$(find deform_simulator)/launch/deform_simulator.launch"/>
 
-    <node name="smmap_planner_node"
+    <!--node name="smmap_planner_node"
         pkg="smmap"
         type="smmap_test_node"
-        output="screen"/>
+        output="screen"/-->
 
     <!--node name="visualizer"
         pkg="matplotlib_wrapper"

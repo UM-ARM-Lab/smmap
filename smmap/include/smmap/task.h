@@ -118,6 +118,8 @@ namespace smmap
 
             double doCalculateError( const ObjectPointSet &current )
             {
+                //TODO: do
+                (void)current;
                 return -1;
             }
 
@@ -129,6 +131,19 @@ namespace smmap
         public:
             ClothColabFolding( ros::NodeHandle& nh )
             {
+                ROS_INFO_NAMED( "cloth_colab_folding_task" , "Getting object initial configuration" );
+
+                // Get the initial configuration of the object
+                ros::ServiceClient object_initial_configuration_client =
+                    nh.serviceClient< smmap_msgs::GetPointSet >( GetObjectInitialConfigurationTopic( nh ) );
+
+                object_initial_configuration_client.waitForExistence();
+
+                smmap_msgs::GetPointSet initial_point_set_data;
+                object_initial_configuration_client.call( initial_point_set_data );
+                ObjectPointSet object_initial_configuration =
+                    EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd( initial_point_set_data.response.points );
+
                 ROS_INFO_NAMED( "cloth_colab_folding_task" , "Getting mirror line" );
 
                 // Get the initial configuration of the object
@@ -137,27 +152,51 @@ namespace smmap
 
                 mirror_line_client.waitForExistence();
 
-                smmap_msgs::GetMirrorLine srv_data;
-                mirror_line_client.call( srv_data );
+                smmap_msgs::GetMirrorLine mirror_line_data;
+                mirror_line_client.call( mirror_line_data );
 
-                point_reflector_ = PointReflector( srv_data.response.mid_x,
-                                                   srv_data.response.min_y,
-                                                   srv_data.response.max_y );
+                point_reflector_ = PointReflector( mirror_line_data.response.mid_x,
+                                                   mirror_line_data.response.min_y,
+                                                   mirror_line_data.response.max_y );
+
+                ROS_INFO_NAMED( "cloth_colab_folding_task", "Finding point correspondences" );
+
+                for ( long node_ind = 0; node_ind < object_initial_configuration.cols(); node_ind++ )
+                {
+                    // for every node on one side of the mirror line, find the closest match on the other side
+                    if ( object_initial_configuration( 0, node_ind ) < mirror_line_data.response.mid_x )
+                    {
+                        long mirror_ind = closestPointInSet( object_initial_configuration,
+                                point_reflector_.reflect(object_initial_configuration.block< 3, 1 >( 0, node_ind ) ) );
+
+                        mirror_map_[ node_ind ] = mirror_ind;
+                    }
+                }
             }
 
         private:
             ObjectPointSet doFindObjectDesiredConfiguration( const ObjectPointSet& current_configuration )
             {
+                ObjectPointSet desired_configuration = current_configuration;
 
+                for ( std::map< long, long >::iterator ittr = mirror_map_.begin(); ittr != mirror_map_.end(); ittr++ )
+                {
+                    desired_configuration.block< 3, 1 >( 0, ittr->second ) =
+                            point_reflector_.reflect( current_configuration.block< 3, 1 >( 0, ittr->first ) );
+                }
+
+                return desired_configuration;
             }
 
             double doCalculateError( const ObjectPointSet &current )
             {
+                //TODO: do
+                (void)current;
                 return -1;
             }
 
+            std::map< long, long > mirror_map_;
             PointReflector point_reflector_;
-
     };
 }
 

@@ -20,7 +20,8 @@ ModelSet::ModelSet( const VectorGrippersData& grippers_data,
 
     // 0 is totally rigid (weight is 1), 20 is loose (weight is e^-20*dist)
 //    for ( double rigidity = 0; rigidity <= 20; rigidity += 0.5 )
-    double rigidity = 0.5*20;
+//    double rigidity = 0.5*20; // ROPE
+    double rigidity = 0.7*20; // CLOTH
     {
         addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
                         grippers_data, object_initial_configuration_,
