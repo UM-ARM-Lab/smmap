@@ -6,6 +6,7 @@
 #include <random>
 
 #include "smmap/deformable_model.h"
+#include "smmap/task.h"
 
 namespace smmap
 {
@@ -17,7 +18,8 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             ModelSet( const VectorGrippersData& grippers_data,
-                    const ObjectPointSet& object_initial_configuration );
+                      const ObjectPointSet& object_initial_configuration,
+                      const Task& task );
             ~ModelSet();
 
             void updateModels(
@@ -56,6 +58,7 @@ namespace smmap
                     const ObjectTrajectory& object_trajectory );
 
             // TODO: move this to *somewhere* else
+            const Task& task_;
             VectorGrippersData grippers_data_;
             const ObjectPointSet object_initial_configuration_;
             std::vector< DeformableModel::Ptr > model_list_;

@@ -23,7 +23,6 @@ Planner::Planner(ros::NodeHandle& nh )
     : visualize_object_desired_config_( false )
     , visualize_object_predicted_config_( false )
     , visualize_gripper_translation_( false )
-//    , visualize_correspondances_( false )
     , nh_( nh )
     , it_( nh_ )
     , sim_time_( 0 )
@@ -40,7 +39,7 @@ Planner::Planner(ros::NodeHandle& nh )
     getObjectInitialConfiguration();
 
     model_set_ = std::unique_ptr< ModelSet >(
-            new ModelSet( grippers_data_, object_initial_configuration_ ) );
+            new ModelSet( grippers_data_, object_initial_configuration_, *task_ ) );
 
 
     // Connect to the robot's gripper command service
@@ -237,6 +236,8 @@ AllGrippersTrajectory Planner::replan( size_t num_traj_cmds_per_loop )
         // TODO: make this work for non-ropes
         visualizeRopeObject( "rope_predicted_config", model_predictions[min_weighted_cost_ind].back(), model_prediction_color );
     }
+
+    task_->visualize();
 
     LOG_COND( loggers.at( "object_predicted_configuration" ) , logging_enabled_,
               (model_predictions[min_weighted_cost_ind].back()).format( eigen_io_one_line_ ) );

@@ -15,25 +15,28 @@ using namespace smmap;
 // Constructors and Destructor
 ////////////////////////////////////////////////////////////////////////////////
 
-DiminishingRigidityModel::DiminishingRigidityModel( const VectorGrippersData& grippers_data,
+DiminishingRigidityModel::DiminishingRigidityModel(
+        const VectorGrippersData& grippers_data,
         const ObjectPointSet& object_initial_configuration,
-        double obstacle_avoidance_scale, bool use_rotation,
-        double rigidity )
+        double rigidity, bool use_rotation,
+        double obstacle_avoidance_scale, double strechting_correction_threshold )
     : DiminishingRigidityModel( grippers_data, object_initial_configuration,
-                                obstacle_avoidance_scale, use_rotation, rigidity, rigidity )
+                                rigidity, rigidity, use_rotation,
+                                obstacle_avoidance_scale, strechting_correction_threshold )
 {}
 
 DiminishingRigidityModel::DiminishingRigidityModel(
         const VectorGrippersData& grippers_data,
         const ObjectPointSet& object_initial_configuration,
-        double obstacle_avoidance_scale, bool use_rotation,
-        double rigidity_translation, double rotation_rigidity )
+        double rigidity_translation, double rotation_rigidity, bool use_rotation,
+        double obstacle_avoidance_scale, double strechting_correction_threshold )
     : object_initial_configuration_( object_initial_configuration )
-    , obstacle_avoidance_scale_( obstacle_avoidance_scale )
     , translation_rigidity_( rigidity_translation )
     , rotation_rigidity_( rotation_rigidity )
     , use_rotation_( use_rotation )
     , cols_per_gripper_( use_rotation_ ? 6 : 3 )
+    , obstacle_avoidance_scale_( obstacle_avoidance_scale )
+    , stretching_correction_threshold_( strechting_correction_threshold )
 {
     if ( obstacle_avoidance_scale <= 0 )
     {
@@ -65,130 +68,6 @@ void DiminishingRigidityModel::computeObjectNodeDistanceMatrix()
 
         object_initial_node_distance_ = distanceMatrix( object_initial_configuration_ );
     }
-}
-
-/**
- * @brief DiminishingRigidityModel::computeObjectToGripperJacobian
- * Computes a Jacobian that converts gripper velocities in the individual
- * gripper frames into object velocities in the world frame
- * @param grippers_data
- */
-Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian( const VectorGrippersData& grippers_data ) const
-{
-    ROS_DEBUG_NAMED( "diminishing_rigidity_model" , "Computing object Jacobian: Diminishing rigidity k_trans: %f k_rot: %f", translation_rigidity_, rotation_rigidity_ );
-
-    const long num_grippers = (long)grippers_data.size();
-    const long num_Jcols = cols_per_gripper_ * num_grippers;
-
-    const long num_nodes = object_initial_configuration_.cols();
-    const long num_Jrows = 3*object_initial_configuration_.cols();
-
-    Eigen::MatrixXd J( num_Jrows, num_Jcols );
-
-    // for each gripper
-    for ( long gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++ )
-    {
-        // Get all the data we need for a given gripper
-        const std::vector< long >& gripper_node_indices = grippers_data[(size_t)gripper_ind].node_indices;
-        const Eigen::Matrix3d gripper_rot = grippers_data[(size_t)gripper_ind].pose.rotation();
-
-        for ( long node_ind = 0; node_ind < num_nodes; node_ind++ )
-        {
-            // TODO: do I need to use the gripper_node_index that is returned by this function?
-            const std::pair< long, double > dist_to_gripper
-                = getMinimumDistanceToGripper( gripper_node_indices, node_ind,
-                        object_initial_node_distance_ );
-
-            //const Eigen::Matrix3d J_trans = Eigen::Matrix3d::Identity();
-            const Eigen::Matrix3d J_trans = gripper_rot;
-            J.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ ) =
-                    std::exp( -translation_rigidity_ * dist_to_gripper.second ) * J_trans;
-
-            if ( use_rotation_ )
-            {
-                Eigen::Matrix3d J_rot = Eigen::Matrix3d::Zero();
-                // Vector from gripper to node
-                const Eigen::Vector3d gripper_to_node =
-                        object_initial_configuration_.block< 3, 1 >( 0, node_ind ) -
-                        grippers_data[(size_t)gripper_ind].pose.translation();
-                J_rot.block< 3, 1 >( 0, 0 ) = gripper_rot.block< 3, 1 >( 0, 0 ).cross( gripper_to_node );
-                J_rot.block< 3, 1 >( 0, 1 ) = gripper_rot.block< 3, 1 >( 0, 1 ).cross( gripper_to_node );
-                J_rot.block< 3, 1 >( 0, 2 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_node );
-
-                J.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ + 3 ) =
-                        std::exp( -rotation_rigidity_ * dist_to_gripper.second ) * J_rot*50*20;
-            }
-        }
-    }
-
-//    std::cout << "Jacobian: translation_rigidity: " << translation_rigidity_ << " rotation_rigidity: " << rotation_rigidity_ << std::endl;
-//    std::cout << J << std::endl;
-
-    return J;
-}
-
-std::vector< CollisionAvoidanceResult > DiminishingRigidityModel::computeGrippersObjectAvoidance(
-        const VectorGrippersData& grippers_data, double max_step_size ) const
-{
-    std::vector< CollisionAvoidanceResult > collision_avoidance_results( grippers_data.size(), CollisionAvoidanceResult( cols_per_gripper_ ) );
-
-    // TODO: deal with multiple traj_steps, multiple avoids?
-    // TODO: deal with not having an object to avoid
-    for ( size_t gripper_ind = 0; gripper_ind < grippers_data.size(); gripper_ind++ )
-    {
-        collision_avoidance_results[gripper_ind].distance = grippers_data[(size_t)gripper_ind].distance_to_obstacle;
-        std::cout << "collision dist: " << grippers_data[(size_t)gripper_ind].distance_to_obstacle << std::endl;
-
-        // If we have a collision to avoid, then find the vector
-        if ( !std::isinf( grippers_data[(size_t)gripper_ind].distance_to_obstacle ) )
-        {
-            // Create the collision Jacobian
-            const Eigen::MatrixXd J_collision = computeCollisionToGripperJacobian( grippers_data[gripper_ind] );
-            const Eigen::MatrixXd J_collision_inv = EigenHelpers::Pinv( J_collision, EigenHelpers::SuggestedRcond() );
-
-            // Create the collision avoidance vector to follow
-            const Eigen::Vector3d& avoid_collision_delta = grippers_data[gripper_ind].obstacle_surface_normal;
-
-            collision_avoidance_results[gripper_ind].velocity =  J_collision_inv * avoid_collision_delta;
-            collision_avoidance_results[gripper_ind].velocity /= collision_avoidance_results[gripper_ind].velocity.norm();
-            collision_avoidance_results[gripper_ind].velocity *= max_step_size;
-
-            collision_avoidance_results[gripper_ind].nullspace =
-                    Eigen::MatrixXd::Identity( cols_per_gripper_, cols_per_gripper_) - J_collision_inv * J_collision;
-        }
-        // Otherwise, leave the collision result as the default "no collision" state
-        else {}
-    }
-
-    return collision_avoidance_results;
-}
-
-/**
- * @brief DiminishingRigidityModel::computeCollisionToGripperJacobian
- * Computes a  Jacobian that converts a gripper velocitie in the individual
- * gripper frame into a point velocity in the world frame
- * @param gripper_data
- * @return
- */
-Eigen::MatrixXd DiminishingRigidityModel::computeCollisionToGripperJacobian( const GripperData &gripper_data ) const
-{
-    Eigen::MatrixXd J_collision = Eigen::MatrixXd::Zero( 3, cols_per_gripper_ );
-
-    // Translation - if I move the gripper in x,y,z, what happens to the given point?
-    J_collision.block< 3, 3>( 0, 0 ) = gripper_data.pose.rotation();
-
-    // TODO find out of these are at all correct
-//    else if(i == 3)
-//        transvec =  (gripper->getWorldTransform()*btVector4(1,0,0,0)).cross(
-//                    points_in_world_frame[k] - gripper->getWorldTransform().getOrigin());
-//    else if(i == 4)
-//        transvec =  (gripper->getWorldTransform()*btVector4(0,1,0,0)).cross(
-//                    points_in_world_frame[k] - gripper->getWorldTransform().getOrigin());
-//    else if(i == 5)
-//        transvec =  (gripper->getWorldTransform()*btVector4(0,0,1,0)).cross(
-//                    points_in_world_frame[k] - gripper->getWorldTransform().getOrigin());
-
-    return J_collision;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -284,13 +163,14 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
 
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
         const Eigen::MatrixXd J = computeGrippersToObjectJacobian( grippers_data );
-        const Eigen::MatrixXd J_inv = EigenHelpers::Pinv( J, EigenHelpers::SuggestedRcond() );
+        const Eigen::MatrixXd J_inv = EigenHelpers::Pinv( J.transpose() * J, EigenHelpers::SuggestedRcond() ) * J.transpose();
 
         // pragmas are here to supress some warnings from GCC
         #pragma GCC diagnostic push
         #pragma GCC diagnostic ignored "-Wconversion"
         // Apply the desired object delta Jacobian pseudo-inverse - will normalize later
-        Eigen::VectorXd grippers_velocity_achieve_goal = J_inv * (current - desired);
+        Eigen::VectorXd grippers_velocity_achieve_goal = J_inv *
+                ( (current - desired) + computeStretchingCorrection( object_current_configuration ) );
         #pragma GCC diagnostic pop
 
         // Find the collision avoidance data that we'll need
@@ -371,6 +251,162 @@ void DiminishingRigidityModel::doPerturbModel( std::mt19937_64& generator )
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Computation helpers
+////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * @brief DiminishingRigidityModel::computeObjectToGripperJacobian
+ * Computes a Jacobian that converts gripper velocities in the individual
+ * gripper frames into object velocities in the world frame
+ * @param grippers_data
+ */
+Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian( const VectorGrippersData& grippers_data ) const
+{
+    ROS_DEBUG_NAMED( "diminishing_rigidity_model" , "Computing object Jacobian: Diminishing rigidity k_trans: %f k_rot: %f", translation_rigidity_, rotation_rigidity_ );
+
+    const long num_grippers = (long)grippers_data.size();
+    const long num_Jcols = cols_per_gripper_ * num_grippers;
+
+    const long num_nodes = object_initial_configuration_.cols();
+    const long num_Jrows = 3*object_initial_configuration_.cols();
+
+    Eigen::MatrixXd J( num_Jrows, num_Jcols );
+
+    // for each gripper
+    for ( long gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++ )
+    {
+        // Get all the data we need for a given gripper
+        const std::vector< long >& gripper_node_indices = grippers_data[(size_t)gripper_ind].node_indices;
+        const Eigen::Matrix3d gripper_rot = grippers_data[(size_t)gripper_ind].pose.rotation();
+
+        for ( long node_ind = 0; node_ind < num_nodes; node_ind++ )
+        {
+            // TODO: do I need to use the gripper_node_index that is returned by this function?
+            const std::pair< long, double > dist_to_gripper
+                = getMinimumDistanceToGripper( gripper_node_indices, node_ind,
+                        object_initial_node_distance_ );
+
+            //const Eigen::Matrix3d J_trans = Eigen::Matrix3d::Identity();
+            const Eigen::Matrix3d J_trans = gripper_rot;
+            J.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ ) =
+                    std::exp( -translation_rigidity_ * dist_to_gripper.second ) * J_trans;
+
+            if ( use_rotation_ )
+            {
+                Eigen::Matrix3d J_rot = Eigen::Matrix3d::Zero();
+                // Vector from gripper to node
+                const Eigen::Vector3d gripper_to_node =
+                        object_initial_configuration_.block< 3, 1 >( 0, node_ind ) -
+                        grippers_data[(size_t)gripper_ind].pose.translation();
+                J_rot.block< 3, 1 >( 0, 0 ) = gripper_rot.block< 3, 1 >( 0, 0 ).cross( gripper_to_node );
+                J_rot.block< 3, 1 >( 0, 1 ) = gripper_rot.block< 3, 1 >( 0, 1 ).cross( gripper_to_node );
+                J_rot.block< 3, 1 >( 0, 2 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_node );
+
+                J.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ + 3 ) =
+                        std::exp( -rotation_rigidity_ * dist_to_gripper.second ) * J_rot*20;
+            }
+        }
+    }
+
+//    std::cout << "Jacobian: translation_rigidity: " << translation_rigidity_ << " rotation_rigidity: " << rotation_rigidity_ << std::endl;
+//    std::cout << J << std::endl;
+
+    return J;
+}
+
+std::vector< CollisionAvoidanceResult > DiminishingRigidityModel::computeGrippersObjectAvoidance(
+        const VectorGrippersData& grippers_data, double max_step_size ) const
+{
+    std::vector< CollisionAvoidanceResult > collision_avoidance_results( grippers_data.size(), CollisionAvoidanceResult( cols_per_gripper_ ) );
+
+    // TODO: deal with multiple traj_steps, multiple avoids?
+    // TODO: deal with not having an object to avoid
+    for ( size_t gripper_ind = 0; gripper_ind < grippers_data.size(); gripper_ind++ )
+    {
+        collision_avoidance_results[gripper_ind].distance = grippers_data[(size_t)gripper_ind].distance_to_obstacle;
+        std::cout << "collision dist: " << grippers_data[(size_t)gripper_ind].distance_to_obstacle << std::endl;
+
+        // If we have a collision to avoid, then find the vector
+        if ( !std::isinf( grippers_data[(size_t)gripper_ind].distance_to_obstacle ) )
+        {
+            // Create the collision Jacobian
+            const Eigen::MatrixXd J_collision = computeCollisionToGripperJacobian( grippers_data[gripper_ind] );
+            const Eigen::MatrixXd J_collision_inv = EigenHelpers::Pinv( J_collision, EigenHelpers::SuggestedRcond() );
+
+            // Create the collision avoidance vector to follow
+            const Eigen::Vector3d& avoid_collision_delta = grippers_data[gripper_ind].obstacle_surface_normal;
+
+            collision_avoidance_results[gripper_ind].velocity =  J_collision_inv * avoid_collision_delta;
+            collision_avoidance_results[gripper_ind].velocity /= collision_avoidance_results[gripper_ind].velocity.norm();
+            collision_avoidance_results[gripper_ind].velocity *= max_step_size;
+
+            collision_avoidance_results[gripper_ind].nullspace =
+                    Eigen::MatrixXd::Identity( cols_per_gripper_, cols_per_gripper_) - J_collision_inv * J_collision;
+        }
+        // Otherwise, leave the collision result as the default "no collision" state
+        else {}
+    }
+
+    return collision_avoidance_results;
+}
+
+/**
+ * @brief DiminishingRigidityModel::computeCollisionToGripperJacobian
+ * Computes a  Jacobian that converts a gripper velocitie in the individual
+ * gripper frame into a point velocity in the world frame
+ * @param gripper_data
+ * @return
+ */
+Eigen::MatrixXd DiminishingRigidityModel::computeCollisionToGripperJacobian( const GripperData &gripper_data ) const
+{
+    Eigen::MatrixXd J_collision = Eigen::MatrixXd::Zero( 3, cols_per_gripper_ );
+
+    // Translation - if I move the gripper in x,y,z, what happens to the given point?
+    J_collision.block< 3, 3>( 0, 0 ) = gripper_data.pose.rotation();
+
+    // TODO find out of these are at all correct
+//    else if(i == 3)
+//        transvec =  (gripper->getWorldTransform()*btVector4(1,0,0,0)).cross(
+//                    points_in_world_frame[k] - gripper->getWorldTransform().getOrigin());
+//    else if(i == 4)
+//        transvec =  (gripper->getWorldTransform()*btVector4(0,1,0,0)).cross(
+//                    points_in_world_frame[k] - gripper->getWorldTransform().getOrigin());
+//    else if(i == 5)
+//        transvec =  (gripper->getWorldTransform()*btVector4(0,0,1,0)).cross(
+//                    points_in_world_frame[k] - gripper->getWorldTransform().getOrigin());
+
+    return J_collision;
+}
+
+Eigen::VectorXd DiminishingRigidityModel::computeStretchingCorrection(
+        const ObjectPointSet& object_current_configuration ) const
+{
+    Eigen::VectorXd stretching_correction = Eigen::VectorXd::Zero( object_current_configuration.cols() * 3 );
+
+    Eigen::MatrixXd node_distance_delta =
+            distanceMatrix( object_current_configuration )
+            - object_initial_node_distance_;
+
+    for ( long first_node = 0; first_node < node_distance_delta.rows(); first_node++)
+    {
+        for ( long second_node = first_node + 1; second_node < node_distance_delta.cols(); second_node++)
+        {
+            if ( node_distance_delta( first_node, second_node ) - stretching_correction_threshold_ < 0 )
+            {
+                Eigen::Vector3d correction_vector = 0.5 * node_distance_delta( first_node, second_node )
+                        * ( object_current_configuration.block< 3, 1 >( 0, second_node ) - object_current_configuration.block< 3, 1 >( 0, first_node ) );
+
+                stretching_correction.segment< 3 >( 3 * first_node ) += correction_vector;
+                stretching_correction.segment< 3 >( 3 * second_node ) -= correction_vector;
+            }
+        }
+    }
+
+    return stretching_correction;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Static member initialization
 ////////////////////////////////////////////////////////////////////////////////
 

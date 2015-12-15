@@ -3,6 +3,7 @@
 
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <ros/ros.h>
+#include <visualization_msgs/MarkerArray.h>
 #include <smmap_msgs/messages.h>
 
 #include "smmap/point_reflector.hpp"
@@ -17,6 +18,18 @@ namespace smmap
         public:
             typedef std::shared_ptr< Task > Ptr;
 
+            Task( ros::NodeHandle& nh )
+            {
+                // Publish visualization request markers
+                visualization_marker_pub_ =
+                        nh.advertise< visualization_msgs::Marker >( GetVisualizationMarkerTopic( nh ), 10 );
+
+                visualization_marker_array_pub_ =
+                        nh.advertise< visualization_msgs::MarkerArray >( GetVisualizationMarkerArrayTopic( nh), 10 );
+            }
+
+            virtual void visualize() {}
+
             ObjectPointSet findObjectDesiredConfiguration( const ObjectPointSet& current_configuration )
             {
                 return doFindObjectDesiredConfiguration( current_configuration );
@@ -27,16 +40,25 @@ namespace smmap
                 return doCalculateError( current_configuration );
             }
 
+            virtual double getRigidity() const = 0;                     // k
+            virtual double getCollisionScalingFactor() const = 0;       // beta (or k2)
+            virtual double getStretchingScalingThreshold() const = 0;   // lambda
+            virtual bool getUseRotation() const = 0;
+
         private:
             virtual ObjectPointSet doFindObjectDesiredConfiguration( const ObjectPointSet& current_configuration ) = 0;
             virtual double doCalculateError( const ObjectPointSet& current_configuration ) = 0;
 
+            // TODO: this is now a bastardized abstract class. This is bad.
+            ros::Publisher visualization_marker_pub_;
+            ros::Publisher visualization_marker_array_pub_;
     };
 
     class RopeCoverage : public Task
     {
         public:
             RopeCoverage( ros::NodeHandle& nh )
+                : Task( nh )
             {
                 ROS_INFO_NAMED( "rope_coverage_task" , "Getting cover points" );
 
@@ -52,6 +74,26 @@ namespace smmap
                     EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd( srv_data.response.points );
 
                 ROS_INFO_NAMED( "rope_coverage_task" , "Number of cover points: %zu", srv_data.response.points.size() );
+            }
+
+            double getRigidity() const
+            {
+                return 0.5*20; // k
+            }
+
+            double getCollisionScalingFactor() const
+            {
+                return  10*20; // beta
+            }
+
+            double getStretchingScalingThreshold() const
+            {
+                return 0.1*20; // lambda
+            }
+
+            bool getUseRotation() const
+            {
+                return false;
             }
 
         private:
@@ -130,6 +172,7 @@ namespace smmap
     {
         public:
             ClothColabFolding( ros::NodeHandle& nh )
+                : Task( nh )
             {
                 ROS_INFO_NAMED( "cloth_colab_folding_task" , "Getting object initial configuration" );
 
@@ -172,6 +215,31 @@ namespace smmap
                         mirror_map_[ node_ind ] = mirror_ind;
                     }
                 }
+            }
+
+            void visualize()
+            {
+
+            }
+
+            double getRigidity() const
+            {
+                return 0.7*20; // k
+            }
+
+            double getCollisionScalingFactor() const
+            {
+                return  100*20; // beta
+            }
+
+            double getStretchingScalingThreshold() const
+            {
+                return 0.1*20; // lambda
+            }
+
+            bool getUseRotation() const
+            {
+                return false;
             }
 
         private:

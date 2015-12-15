@@ -11,21 +11,18 @@
 using namespace smmap;
 
 ModelSet::ModelSet( const VectorGrippersData& grippers_data,
-        const ObjectPointSet& object_initial_configuration )
-    : object_initial_configuration_( object_initial_configuration )
+        const ObjectPointSet& object_initial_configuration,
+        const Task& task )
+    : task_( task )
+    , object_initial_configuration_( object_initial_configuration )
     , rnd_generator_( (unsigned long)std::chrono::system_clock::now().time_since_epoch().count() )
 {
-    const double obstacle_avoidance_scale = 10*20;
-    const bool use_rotation = true;
-
-    // 0 is totally rigid (weight is 1), 20 is loose (weight is e^-20*dist)
 //    for ( double rigidity = 0; rigidity <= 20; rigidity += 0.5 )
-//    double rigidity = 0.5*20; // ROPE
-    double rigidity = 0.7*20; // CLOTH
     {
         addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
                         grippers_data, object_initial_configuration_,
-                        obstacle_avoidance_scale, use_rotation, rigidity ) ) );
+                        task_.getRigidity(), task_.getUseRotation(),
+                        task_.getCollisionScalingFactor(), task_.getStretchingScalingThreshold() ) ) );
     }
 }
 

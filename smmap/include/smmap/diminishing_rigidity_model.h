@@ -17,14 +17,14 @@ namespace smmap
             DiminishingRigidityModel(
                     const VectorGrippersData& grippers_data,
                     const ObjectPointSet& object_initial_configuration,
-                    double obstacle_avoidance_scale, bool use_rotation,
-                    double rigidity = 0.005 );
+                    double rigidity, bool use_rotation,
+                    double obstacle_avoidance_scale, double strechting_correction_threshold );
 
             DiminishingRigidityModel(
                     const VectorGrippersData& grippers_data,
                     const ObjectPointSet& object_initial_configuration,
-                    double obstacle_avoidance_scale, bool use_rotation,
-                    double translation_rigidity, double rotation_rigidity );
+                    double rigidity_translation, double rotation_rigidity, bool use_rotation,
+                    double obstacle_avoidance_scale, double strechting_correction_threshold );
 
         private:
 
@@ -59,16 +59,21 @@ namespace smmap
             void doPerturbModel( std::mt19937_64& generator );
 
             ////////////////////////////////////////////////////////////////////
-            // Model update parameters
+            // Computation helpers
             ////////////////////////////////////////////////////////////////////
 
             Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const VectorGrippersData& grippers_data ) const;
+
             std::vector< CollisionAvoidanceResult > computeGrippersObjectAvoidance(
                     const VectorGrippersData& grippers_data,
                     double max_step_size) const;
+
             Eigen::MatrixXd computeCollisionToGripperJacobian(
                     const GripperData& gripper_data ) const;
+
+            Eigen::VectorXd computeStretchingCorrection(
+                    const ObjectPointSet& object_current_configuration ) const ;
 
             ////////////////////////////////////////////////////////////////////
             // Static members
@@ -82,12 +87,14 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             const ObjectPointSet object_initial_configuration_;
-            const double obstacle_avoidance_scale_;
+
             double translation_rigidity_;
             double rotation_rigidity_;
-
             bool use_rotation_;
             const long cols_per_gripper_;
+
+            const double obstacle_avoidance_scale_;
+            const double stretching_correction_threshold_;
     };
 }
 
