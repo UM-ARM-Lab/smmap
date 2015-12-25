@@ -163,7 +163,11 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
 
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
         const Eigen::MatrixXd J = computeGrippersToObjectJacobian( grippers_data );
+        // Yes, this is ugly. This is to suppress a warning on type conversion related to Eigen operations
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wconversion"
         const Eigen::MatrixXd J_inv = EigenHelpers::Pinv( J.transpose() * J, EigenHelpers::SuggestedRcond() ) * J.transpose();
+        #pragma GCC diagnostic pop
 
         // pragmas are here to supress some warnings from GCC
         #pragma GCC diagnostic push
