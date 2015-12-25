@@ -45,13 +45,14 @@ namespace smmap
             virtual double getStretchingScalingThreshold() const = 0;   // lambda
             virtual bool getUseRotation() const = 0;
 
-        private:
-            virtual ObjectPointSet doFindObjectDesiredConfiguration( const ObjectPointSet& current_configuration ) = 0;
-            virtual double doCalculateError( const ObjectPointSet& current_configuration ) = 0;
-
+        protected:
             // TODO: this is now a bastardized abstract class. This is bad.
             ros::Publisher visualization_marker_pub_;
             ros::Publisher visualization_marker_array_pub_;
+
+        private:
+            virtual ObjectPointSet doFindObjectDesiredConfiguration( const ObjectPointSet& current_configuration ) = 0;
+            virtual double doCalculateError( const ObjectPointSet& current_configuration ) = 0;
     };
 
     class RopeCoverage : public Task
@@ -207,7 +208,8 @@ namespace smmap
                 for ( long node_ind = 0; node_ind < object_initial_configuration.cols(); node_ind++ )
                 {
                     // for every node on one side of the mirror line, find the closest match on the other side
-                    if ( object_initial_configuration( 0, node_ind ) < mirror_line_data.response.mid_x )
+                    // Note that nodes that have an x value > than mid_x are on the manual gripper side
+                    if ( object_initial_configuration( 0, node_ind ) > mirror_line_data.response.mid_x )
                     {
                         long mirror_ind = closestPointInSet( object_initial_configuration,
                                 point_reflector_.reflect(object_initial_configuration.block< 3, 1 >( 0, node_ind ) ) );
@@ -217,9 +219,24 @@ namespace smmap
                 }
             }
 
-            void visualize()
+            void visualizeCloth( const ObjectPointSet& cloth )
             {
+                visualization_msgs::Marker marker;
+                std_msgs::ColorRGBA color;
 
+                color.r = 1;//(1.0 + std::cos( 2*M_PI*(double)col/15.0 )) / 3;
+                color.g = 0;//(1.0 + std::cos( 2*M_PI*(double)(col+5)/15.0 )) / 3;
+                color.b = 0;//(1.0 + std::cos( 2*M_PI*double(col+10)/15.0 )) / 3;
+                color.a = 1;
+
+                marker.type = visualization_msgs::Marker::SPHERE;
+                marker.ns = "cloth_desired";
+                marker.id = 0;
+                marker.scale.x = 0.002;
+                marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( cloth );
+                marker.colors = std::vector< std_msgs::ColorRGBA >( (size_t)cloth.cols(), color );
+
+                visualization_marker_pub_.publish( marker );
             }
 
             double getRigidity() const
@@ -247,11 +264,20 @@ namespace smmap
             {
                 ObjectPointSet desired_configuration = current_configuration;
 
+                ObjectPointSet robot_cloth_points( 3, (long)mirror_map_.size() );
+
+                long robot_cloth_points_ind = 0;
                 for ( std::map< long, long >::iterator ittr = mirror_map_.begin(); ittr != mirror_map_.end(); ittr++ )
                 {
                     desired_configuration.block< 3, 1 >( 0, ittr->second ) =
                             point_reflector_.reflect( current_configuration.block< 3, 1 >( 0, ittr->first ) );
+
+                    robot_cloth_points.block< 3, 1 >( 0, robot_cloth_points_ind ) = desired_configuration.block< 3, 1 >( 0, ittr->second );
+
+                    robot_cloth_points_ind++;
                 }
+
+                visualizeCloth( robot_cloth_points );
 
                 return desired_configuration;
             }
