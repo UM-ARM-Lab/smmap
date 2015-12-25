@@ -16,11 +16,11 @@ namespace smmap
     struct CollisionAvoidanceResult
     {
         CollisionAvoidanceResult( long cols_per_gripper )
-            : nullspace( Eigen::MatrixXd::Identity( cols_per_gripper, cols_per_gripper ) )
+            : nullspace_projector( Eigen::MatrixXd::Identity( cols_per_gripper, cols_per_gripper ) )
             , velocity( Eigen::VectorXd::Zero( cols_per_gripper ) )
             , distance( std::numeric_limits< double >::infinity() )
         {}
-        Eigen::MatrixXd nullspace;
+        Eigen::MatrixXd nullspace_projector;
         Eigen::VectorXd velocity;
         double distance;
 

@@ -21,7 +21,7 @@ namespace smmap
     class Planner
     {
         public:
-            Planner(ros::NodeHandle& nh );
+            Planner( ros::NodeHandle& nh );
 
             ////////////////////////////////////////////////////////////////////
             // Main function that makes things happen
@@ -51,8 +51,6 @@ namespace smmap
             // Visualization flags
             ////////////////////////////////////////////////////////////////////
 
-            bool visualize_object_desired_config_;
-            bool visualize_object_predicted_config_;
             bool visualize_gripper_translation_;
 
             ////////////////////////////////////////////////////////////////////
@@ -81,10 +79,6 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
             // Task specific functionality
             ////////////////////////////////////////////////////////////////////
-
-            void visualizeRopeObject( const std::string& marker_name,
-                                      const ObjectPointSet& rope,
-                                      const std_msgs::ColorRGBA& color );
 
             void visualizeObjectDelta( const std::string& marker_name,
                                        const ObjectPointSet& current,

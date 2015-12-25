@@ -28,7 +28,11 @@ namespace smmap
                         nh.advertise< visualization_msgs::MarkerArray >( GetVisualizationMarkerArrayTopic( nh), 10 );
             }
 
-            virtual void visualize() {}
+            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj )
+            {
+                (void)model_predictions;
+                (void)best_traj;
+            }
 
             ObjectPointSet findObjectDesiredConfiguration( const ObjectPointSet& current_configuration )
             {
@@ -75,6 +79,35 @@ namespace smmap
                     EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd( srv_data.response.points );
 
                 ROS_INFO_NAMED( "rope_coverage_task" , "Number of cover points: %zu", srv_data.response.points.size() );
+            }
+
+            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj )
+            {
+                std_msgs::ColorRGBA color;
+                color.r = 1;
+                color.g = 1;
+                color.b = 0;
+                color.a = 1;
+
+                visualizeRope( model_predictions[best_traj].back(), color, "rope_predicted" );
+            }
+
+            void visualizeRope( const ObjectPointSet& rope, const std_msgs::ColorRGBA& color, const std::string& name )
+            {
+                visualization_msgs::Marker marker;
+
+                marker.type = visualization_msgs::Marker::LINE_STRIP;
+                marker.ns = name;
+                marker.id = 0;
+                marker.scale.x = 0.1;
+                marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( rope );
+                marker.colors = std::vector< std_msgs::ColorRGBA >( (size_t)rope.cols(), color );
+                visualization_marker_pub_.publish( marker );
+
+                marker.type = visualization_msgs::Marker::SPHERE;
+                marker.id = 1;
+                marker.scale.x = 0.01;
+                visualization_marker_pub_.publish( marker );
             }
 
             double getRigidity() const
@@ -145,7 +178,7 @@ namespace smmap
     //                    // Averaging method:
     //                    // http://jvminside.blogspot.com/2010/01/incremental-average-calculation.html
     //                    desired_configuration.block< 3, 1 >( 0, min_ind ) =
-    //                            desired_configuration.block< 3, 1 >( 0, min_ind ) +
+    //                            desired_configuration.block< 3, 1 >( 0, min_ind ) +virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions )
     //                            (cover_points_.block< 3, 1 >( 0, cover_ind ) - desired_configuration.block< 3, 1 >( 0, min_ind ))
     //                            / num_mapped[(size_t)min_ind];
     //                }
@@ -219,20 +252,26 @@ namespace smmap
                 }
             }
 
-            void visualizeCloth( const ObjectPointSet& cloth )
+            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj )
             {
-                visualization_msgs::Marker marker;
                 std_msgs::ColorRGBA color;
-
-                color.r = 1;//(1.0 + std::cos( 2*M_PI*(double)col/15.0 )) / 3;
-                color.g = 0;//(1.0 + std::cos( 2*M_PI*(double)(col+5)/15.0 )) / 3;
-                color.b = 0;//(1.0 + std::cos( 2*M_PI*double(col+10)/15.0 )) / 3;
+                color.r = 1;
+                color.g = 1;
+                color.b = 0;
                 color.a = 1;
 
-                marker.type = visualization_msgs::Marker::SPHERE;
-                marker.ns = "cloth_desired";
+                //visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
+            }
+
+            void visualizeCloth( const ObjectPointSet& cloth, const std_msgs::ColorRGBA color, const std::string& name  )
+            {
+                visualization_msgs::Marker marker;
+
+                marker.type = visualization_msgs::Marker::POINTS;
+                marker.ns = name;
                 marker.id = 0;
                 marker.scale.x = 0.002;
+                marker.scale.y = 0.002;
                 marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( cloth );
                 marker.colors = std::vector< std_msgs::ColorRGBA >( (size_t)cloth.cols(), color );
 
@@ -256,7 +295,7 @@ namespace smmap
 
             bool getUseRotation() const
             {
-                return false;
+                return true;
             }
 
         private:
@@ -277,7 +316,14 @@ namespace smmap
                     robot_cloth_points_ind++;
                 }
 
-                visualizeCloth( robot_cloth_points );
+                std_msgs::ColorRGBA color;
+
+                color.r = 1;
+                color.g = 0;
+                color.b = 0;
+                color.a = 1;
+
+                visualizeCloth( robot_cloth_points, color, "cloth_desired" );
 
                 return desired_configuration;
             }

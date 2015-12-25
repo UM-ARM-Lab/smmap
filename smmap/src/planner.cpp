@@ -20,9 +20,7 @@ using namespace EigenHelpersConversions;
 const Eigen::IOFormat Planner::eigen_io_one_line_( Eigen::FullPrecision, Eigen::DontAlignCols, " ", " ", "", "", "", ""  );
 
 Planner::Planner(ros::NodeHandle& nh )
-    : visualize_object_desired_config_( false )
-    , visualize_object_predicted_config_( false )
-    , visualize_gripper_translation_( false )
+    : visualize_gripper_translation_( false )
     , nh_( nh )
     , it_( nh_ )
     , sim_time_( 0 )
@@ -169,19 +167,6 @@ AllGrippersTrajectory Planner::replan( size_t num_traj_cmds_per_loop )
     // here we find the desired configuration of the object given the current config
     ObjectPointSet object_desired_config = task_->findObjectDesiredConfiguration( object_current_config );
 
-    // Send the desired config to the visualizer to plot
-    if ( visualize_object_desired_config_ )
-    {
-        std_msgs::ColorRGBA object_desired_config_color;
-        object_desired_config_color.r = 0;
-        object_desired_config_color.g = 0;
-        object_desired_config_color.b = 1;
-        object_desired_config_color.a = 1;
-        // TODO: make this work for non-ropes
-        visualizeRopeObject( "object_desired_config", object_desired_config, object_desired_config_color );
-        visualizeObjectDelta( "object_delta", fbk.first.back(), object_desired_config );
-    }
-
     // Querry each model for it's best trajectory
     std::vector< std::pair< AllGrippersTrajectory, double > > suggested_trajectories =
             model_set_->getDesiredGrippersTrajectories(
@@ -224,20 +209,9 @@ AllGrippersTrajectory Planner::replan( size_t num_traj_cmds_per_loop )
     }
 
     // TODO: deal with multiple predictions, which one is the best?
-    VectorObjectTrajectory model_predictions = model_set_->makePredictions( suggested_trajectories[min_weighted_cost_ind].first, fbk.first.back() );
-    // Send the predicted object config to the visualizer to plot
-    if ( visualize_object_predicted_config_ )
-    {
-        std_msgs::ColorRGBA model_prediction_color;
-        model_prediction_color.r = 1;
-        model_prediction_color.g = 0;
-        model_prediction_color.b = 0;
-        model_prediction_color.a = 1;
-        // TODO: make this work for non-ropes
-        visualizeRopeObject( "rope_predicted_config", model_predictions[min_weighted_cost_ind].back(), model_prediction_color );
-    }
+    VectorObjectTrajectory model_predictions = model_set_->makePredictions( grippers_data_, suggested_trajectories[min_weighted_cost_ind].first, fbk.first.back() );
 
-    task_->visualize();
+    task_->visualizePredictions( model_predictions, min_weighted_cost_ind );
 
     LOG_COND( loggers.at( "object_predicted_configuration" ) , logging_enabled_,
               (model_predictions[min_weighted_cost_ind].back()).format( eigen_io_one_line_ ) );
@@ -340,26 +314,6 @@ void Planner::initializeTask()
     }
 
     // TODO: the rest
-}
-
-void Planner::visualizeRopeObject( const std::string& marker_name,
-                                   const ObjectPointSet& rope,
-                                   const std_msgs::ColorRGBA& color )
-{
-    visualization_msgs::Marker marker;
-
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.ns = marker_name;
-    marker.id = 0;
-    marker.scale.x = 0.1;
-    marker.points = EigenMatrix3XdToVectorGeometryPoint( rope );
-    marker.colors = std::vector< std_msgs::ColorRGBA >( (size_t)rope.cols(), color );
-    visualization_marker_pub_.publish( marker );
-
-    marker.type = visualization_msgs::Marker::SPHERE;
-    marker.id = 1;
-    marker.scale.x = 0.01;
-    visualization_marker_pub_.publish( marker );
 }
 
 void Planner::visualizeObjectDelta( const std::string& marker_name,

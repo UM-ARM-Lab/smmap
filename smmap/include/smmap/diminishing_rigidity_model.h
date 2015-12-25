@@ -47,6 +47,7 @@ namespace smmap
 
             ObjectTrajectory doGetPrediction(
                     const ObjectPointSet& object_configuration,
+                    VectorGrippersData grippers_data,
                     const AllGrippersTrajectory& grippers_trajectory,
                     const std::vector< kinematics::VectorVector6d >& grippers_velocities ) const;
 

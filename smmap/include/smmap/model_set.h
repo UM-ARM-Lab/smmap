@@ -28,6 +28,7 @@ namespace smmap
                     const ObjectTrajectory& object_trajectory );
 
             VectorObjectTrajectory makePredictions(
+                    VectorGrippersData grippers_data,
                     const AllGrippersTrajectory& grippers_trajectory,
                     const ObjectPointSet& object_configuration ) const;
 
@@ -53,6 +54,7 @@ namespace smmap
                     const ObjectTrajectory& object_trajectory ) const;
 
             void evaluateConfidence(
+                    VectorGrippersData grippers_data,
                     const AllGrippersTrajectory& grippers_trajectory,
                     const std::vector< kinematics::VectorVector6d >& grippers_velocities,
                     const ObjectTrajectory& object_trajectory );

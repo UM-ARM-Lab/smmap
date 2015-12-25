@@ -30,6 +30,7 @@ ModelSet::~ModelSet()
 {}
 
 VectorObjectTrajectory ModelSet::makePredictions(
+        VectorGrippersData grippers_data,
         const AllGrippersTrajectory& grippers_trajectory,
         const ObjectPointSet& object_configuration ) const
 {
@@ -38,7 +39,7 @@ VectorObjectTrajectory ModelSet::makePredictions(
 
     for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
     {
-        predictions[model_ind] = model_list_[model_ind]->getPrediction( object_configuration, grippers_trajectory, gripper_velocities );
+        predictions[model_ind] = model_list_[model_ind]->getPrediction( object_configuration, grippers_data, grippers_trajectory, gripper_velocities );
     }
 
     return predictions;
@@ -60,7 +61,7 @@ void ModelSet::updateModels(
             calculateObjectVelocities( object_trajectory );
 
     // Evaluate our confidence in each model
-    evaluateConfidence( grippers_trajectory, grippers_velocities, object_trajectory );
+    evaluateConfidence( grippers_data, grippers_trajectory, grippers_velocities, object_trajectory );
 
     // Allow each model to update itself based on the new data
     for ( auto& model: model_list_ )
@@ -106,6 +107,7 @@ const std::vector< double >& ModelSet::getModelConfidence() const
 ////////////////////////////////////////////////////////////////////////////////
 
 void ModelSet::evaluateConfidence(
+        VectorGrippersData grippers_data,
         const AllGrippersTrajectory& grippers_trajectory,
         const std::vector< kinematics::VectorVector6d >& grippers_velocities,
         const ObjectTrajectory& object_trajectory )
@@ -114,7 +116,7 @@ void ModelSet::evaluateConfidence(
     for ( size_t ind = 0; ind < model_list_.size(); ind++ )
     {
         const ObjectTrajectory model_prediction = model_list_[ind]->getPrediction(
-                object_trajectory[0], grippers_trajectory, grippers_velocities );
+                object_trajectory[0], grippers_data, grippers_trajectory, grippers_velocities );
 
         const double dist = distanceRMS(  object_trajectory, model_prediction );
 
