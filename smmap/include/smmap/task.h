@@ -19,6 +19,7 @@ namespace smmap
             typedef std::shared_ptr< Task > Ptr;
 
             Task( ros::NodeHandle& nh )
+                : visualize_prediction_( true )
             {
                 // Publish visualization request markers
                 visualization_marker_pub_ =
@@ -49,10 +50,12 @@ namespace smmap
             virtual double getStretchingScalingThreshold() const = 0;   // lambda
             virtual bool getUseRotation() const = 0;
 
+        // TODO: this is now a bastardized abstract class. This is bad.
         protected:
-            // TODO: this is now a bastardized abstract class. This is bad.
             ros::Publisher visualization_marker_pub_;
             ros::Publisher visualization_marker_array_pub_;
+
+            bool visualize_prediction_;
 
         private:
             virtual ObjectPointSet doFindObjectDesiredConfiguration( const ObjectPointSet& current_configuration ) = 0;
@@ -122,7 +125,7 @@ namespace smmap
 
             double getStretchingScalingThreshold() const
             {
-                return 0.1*20; // lambda
+                return 0.1/20; // lambda
             }
 
             bool getUseRotation() const
@@ -208,6 +211,8 @@ namespace smmap
             ClothColabFolding( ros::NodeHandle& nh )
                 : Task( nh )
             {
+                visualize_prediction_ = false;
+
                 ROS_INFO_NAMED( "cloth_colab_folding_task" , "Getting object initial configuration" );
 
                 // Get the initial configuration of the object
@@ -245,7 +250,7 @@ namespace smmap
                     if ( object_initial_configuration( 0, node_ind ) > mirror_line_data.response.mid_x )
                     {
                         long mirror_ind = closestPointInSet( object_initial_configuration,
-                                point_reflector_.reflect(object_initial_configuration.block< 3, 1 >( 0, node_ind ) ) );
+                                point_reflector_.reflect( object_initial_configuration.block< 3, 1 >( 0, node_ind ) ) );
 
                         mirror_map_[ node_ind ] = mirror_ind;
                     }
@@ -254,16 +259,26 @@ namespace smmap
 
             virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj )
             {
-                std_msgs::ColorRGBA color;
-                color.r = 1;
-                color.g = 1;
-                color.b = 0;
-                color.a = 1;
+                if ( visualize_prediction_ )
+                {
+                    std_msgs::ColorRGBA color;
+                    color.r = 1;
+                    color.g = 1;
+                    color.b = 0;
+                    color.a = 1;
 
-                //visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
+                    visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
+                }
             }
 
             void visualizeCloth( const ObjectPointSet& cloth, const std_msgs::ColorRGBA color, const std::string& name  )
+            {
+                std::vector< std_msgs::ColorRGBA > colors( (size_t)cloth.cols(), color );
+
+                visualizeCloth( cloth, colors, name );
+            }
+
+            void visualizeCloth( const ObjectPointSet& cloth, std::vector< std_msgs::ColorRGBA > colors, const std::string& name  )
             {
                 visualization_msgs::Marker marker;
 
@@ -273,7 +288,7 @@ namespace smmap
                 marker.scale.x = 0.002;
                 marker.scale.y = 0.002;
                 marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( cloth );
-                marker.colors = std::vector< std_msgs::ColorRGBA >( (size_t)cloth.cols(), color );
+                marker.colors = colors;
 
                 visualization_marker_pub_.publish( marker );
             }
@@ -303,7 +318,9 @@ namespace smmap
             {
                 ObjectPointSet desired_configuration = current_configuration;
 
-                ObjectPointSet robot_cloth_points( 3, (long)mirror_map_.size() );
+                ObjectPointSet robot_cloth_points_desired( 3, (long)mirror_map_.size() );
+                ObjectPointSet robot_cloth_points_current( 3, (long)mirror_map_.size() );
+                std::vector< std_msgs::ColorRGBA > robot_cloth_points_current_colors( mirror_map_.size() );
 
                 long robot_cloth_points_ind = 0;
                 for ( std::map< long, long >::iterator ittr = mirror_map_.begin(); ittr != mirror_map_.end(); ittr++ )
@@ -311,7 +328,18 @@ namespace smmap
                     desired_configuration.block< 3, 1 >( 0, ittr->second ) =
                             point_reflector_.reflect( current_configuration.block< 3, 1 >( 0, ittr->first ) );
 
-                    robot_cloth_points.block< 3, 1 >( 0, robot_cloth_points_ind ) = desired_configuration.block< 3, 1 >( 0, ittr->second );
+                    robot_cloth_points_desired.block< 3, 1 >( 0, robot_cloth_points_ind ) = desired_configuration.block< 3, 1 >( 0, ittr->second );
+                    robot_cloth_points_current.block< 3, 1 >( 0, robot_cloth_points_ind ) = current_configuration.block< 3, 1 >( 0, ittr->second );
+
+                    std_msgs::ColorRGBA color;
+
+                    color.r = 0;
+                    color.g = (float)( robot_cloth_points_desired.block< 3, 1 >( 0, robot_cloth_points_ind )
+                               - robot_cloth_points_current.block< 3, 1 >( 0, robot_cloth_points_ind ) ).norm() * 20;
+                    color.b = 0;
+                    color.a = 1;
+
+                    robot_cloth_points_current_colors[(size_t)robot_cloth_points_ind] = color;
 
                     robot_cloth_points_ind++;
                 }
@@ -323,7 +351,8 @@ namespace smmap
                 color.b = 0;
                 color.a = 1;
 
-                visualizeCloth( robot_cloth_points, color, "cloth_desired" );
+                visualizeCloth( robot_cloth_points_desired, color, "cloth_desired" );
+                visualizeCloth( robot_cloth_points_current, robot_cloth_points_current_colors, "cloth_current" );
 
                 return desired_configuration;
             }

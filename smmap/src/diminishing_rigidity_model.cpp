@@ -52,7 +52,8 @@ DiminishingRigidityModel::DiminishingRigidityModel(
     }
 
     computeObjectNodeDistanceMatrix();
-    computeGrippersToObjectJacobian( grippers_data );
+    //computeGrippersToObjectJacobian( grippers_data );
+    (void)grippers_data;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -90,6 +91,7 @@ void DiminishingRigidityModel::doUpdateModel(
     (void)object_velocities;
 }
 
+// TODO: the next TODO might be done (sort of)
 // TODO: update this for the new way of recalculating J.
 ObjectTrajectory DiminishingRigidityModel::doGetPrediction(
         const ObjectPointSet& object_configuration,
@@ -106,7 +108,7 @@ ObjectTrajectory DiminishingRigidityModel::doGetPrediction(
     for ( size_t vel_ind = 0; vel_ind < grippers_velocities[0].size(); vel_ind++ )
     {
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
-        const Eigen::MatrixXd J = computeGrippersToObjectJacobian( grippers_data );
+        const Eigen::MatrixXd J = computeGrippersToObjectJacobian( grippers_data, object_configuration );
 
         // We start from where we were last
         object_traj[vel_ind + 1] = object_traj[vel_ind];
@@ -159,8 +161,8 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
     // TODO: get rid of this uglyness, needed for a reshape
     Eigen::MatrixXd tmp_current = object_current_configuration;
     Eigen::MatrixXd tmp_desired = object_desired_configuration;
-    const Eigen::VectorXd desired = Eigen::Map< Eigen::VectorXd, Eigen::Aligned >( tmp_current.data(), object_desired_configuration.cols() * object_desired_configuration.rows() );
-    Eigen::VectorXd current = Eigen::Map< Eigen::VectorXd, Eigen::Aligned >( tmp_desired.data(), object_current_configuration.cols() * object_current_configuration.rows() );
+    const Eigen::VectorXd desired = Eigen::Map< Eigen::VectorXd, Eigen::Aligned >( tmp_current.data(), object_desired_configuration.rows() * object_desired_configuration.cols() );
+    Eigen::VectorXd current = Eigen::Map< Eigen::VectorXd, Eigen::Aligned >( tmp_desired.data(), object_current_configuration.rows() * object_current_configuration.cols() );
 
     for ( size_t traj_step = 1; traj_step <= num_steps; traj_step++ )
     {
@@ -169,7 +171,14 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
         ////////////////////////////////////////////////////////////////////////
 
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
-        const Eigen::MatrixXd J = computeGrippersToObjectJacobian( grippers_data );
+        const Eigen::MatrixXd J = computeGrippersToObjectJacobian( grippers_data,
+                Eigen::Map< Eigen::MatrixXd, Eigen::Aligned >( current.data(), object_current_configuration.rows(), object_current_configuration.cols() ) );
+
+
+//        std::cout << J.block(0, 0, 3, J.cols() ) << std::endl;
+//        exit(-1);
+
+
         // Yes, this is ugly. This is to suppress a warning on type conversion related to Eigen operations
         #pragma GCC diagnostic push
         #pragma GCC diagnostic ignored "-Wconversion"
@@ -233,9 +242,16 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
             }
 
             traj[(size_t)gripper_ind].push_back(
+                    traj[(size_t)gripper_ind][traj_step - 1] *
+                    Eigen::AngleAxisd( gripper_velocity(5), Eigen::Vector3d( 0, 0, 1 ) ) *
+                    Eigen::AngleAxisd( gripper_velocity(4), Eigen::Vector3d( 0, 1, 0 ) ) *
+                    Eigen::AngleAxisd( gripper_velocity(3), Eigen::Vector3d( 1, 0, 0 ) ) *
+                    Eigen::Translation3d( gripper_velocity.segment< 3 >( 0 ) ) );
+
+/*            traj[(size_t)gripper_ind].push_back(
                         traj[(size_t)gripper_ind][traj_step - 1] *
                         kinematics::expTwistAffine3d( gripper_velocity, 1 ) );
-
+*/
             grippers_data[(size_t)gripper_ind].pose = traj[(size_t)gripper_ind].back();
 
             // Assume that our Jacobian is correct, and predict where we will end up
@@ -271,7 +287,9 @@ void DiminishingRigidityModel::doPerturbModel( std::mt19937_64& generator )
  * gripper frames into object velocities in the world frame
  * @param grippers_data
  */
-Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian( const VectorGrippersData& grippers_data ) const
+Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(
+        const VectorGrippersData& grippers_data,
+        const ObjectPointSet& current_configuration ) const
 {
     ROS_DEBUG_NAMED( "diminishing_rigidity_model" , "Computing object Jacobian: Diminishing rigidity k_trans: %f k_rot: %f", translation_rigidity_, rotation_rigidity_ );
 
@@ -297,14 +315,36 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian( const
                 = getMinimumDistanceToGripper( gripper_node_indices, node_ind,
                         object_initial_node_distance_ );
 
-            //const Eigen::Matrix3d J_trans = Eigen::Matrix3d::Identity();
-            const Eigen::Matrix3d J_trans = gripper_rot;
+            const Eigen::Matrix3d J_trans = Eigen::Matrix3d::Identity();
+            //const Eigen::Matrix3d J_trans = gripper_rot;
             J.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ ) =
                     std::exp( -translation_rigidity_ * dist_to_gripper.second ) * J_trans;
 
             if ( use_rotation_ )
             {
                 Eigen::Matrix3d J_rot = Eigen::Matrix3d::Zero();
+
+                const double rot_angle = 0.2;
+
+                EigenHelpers::VectorAffine3d perts(3);
+                perts[0] = Eigen::AngleAxisd( rot_angle, Eigen::Vector3d( 1, 0, 0 ) );
+                perts[1] = Eigen::AngleAxisd( rot_angle, Eigen::Vector3d( 0, 1, 0 ) );
+                perts[2] = Eigen::AngleAxisd( rot_angle, Eigen::Vector3d( 0, 0, 1 ) );
+
+                for ( size_t pert_ind = 0; pert_ind < perts.size(); pert_ind++ )
+                {
+                    //get the vector of translation induced at closest attached point by the rotation about the center of the gripper
+                    Eigen::Affine3d T0_attached; T0_attached = Eigen::Translation3d( current_configuration.block< 3, 1 >( 0, dist_to_gripper.first ) );
+                    Eigen::Affine3d T0_center = grippers_data[(size_t)gripper_ind].pose;
+                    Eigen::Affine3d Tcenter_attached = T0_center.inverse()*T0_attached;
+                    Eigen::Affine3d T0_newattached =  T0_center*perts[pert_ind]*Tcenter_attached;
+                    Eigen::Vector3d transvec = (T0_attached.inverse()*T0_newattached).translation()/rot_angle;
+
+                    J_rot.block< 3, 1 >( 0, (long)pert_ind ) = transvec;
+                }
+
+
+/*
                 // Vector from gripper to node
                 const Eigen::Vector3d gripper_to_node =
                         object_initial_configuration_.block< 3, 1 >( 0, node_ind ) -
@@ -312,10 +352,13 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian( const
                 J_rot.block< 3, 1 >( 0, 0 ) = gripper_rot.block< 3, 1 >( 0, 0 ).cross( gripper_to_node );
                 J_rot.block< 3, 1 >( 0, 1 ) = gripper_rot.block< 3, 1 >( 0, 1 ).cross( gripper_to_node );
                 J_rot.block< 3, 1 >( 0, 2 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_node );
-                J_rot *= 20; // to account for the scale difference from porting the code over
+*/
 
+                J_rot *= 20; // to account for the scale difference from porting the code over
                 J.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ + 3 ) =
-                        std::exp( -rotation_rigidity_ * dist_to_gripper.second ) * J_rot * 50;
+                        std::exp( -rotation_rigidity_ * dist_to_gripper.second ) * J_rot;
+
+
             }
         }
     }

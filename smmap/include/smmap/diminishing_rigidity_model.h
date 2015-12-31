@@ -64,7 +64,8 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             Eigen::MatrixXd computeGrippersToObjectJacobian(
-                    const VectorGrippersData& grippers_data ) const;
+                    const VectorGrippersData& grippers_data,
+                    const ObjectPointSet& current_configuration ) const;
 
             std::vector< CollisionAvoidanceResult > computeGrippersObjectAvoidance(
                     const VectorGrippersData& grippers_data,

@@ -21,7 +21,7 @@ namespace smmap
 
         friend std::ostream& operator<< ( std::ostream& out, const GripperData& data )
         {
-            out << data.name << " Num Indices: " << PrettyPrint::PrettyPrint( data.node_indices )
+            out << data.name << " Node Indices: " << PrettyPrint::PrettyPrint( data.node_indices )
                 << " " << PrettyPrint::PrettyPrint( data.pose );
             return out;
         }

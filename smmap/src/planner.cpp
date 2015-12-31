@@ -438,7 +438,6 @@ void Planner::simulatorFbkCallback(
     }
 
     sim_time_ = fbk.sim_time;
-//    std::cout << "Post convert:\n" << PrettyPrint::PrettyPrint( grippers_trajectory_[0][ grippers_trajectory_[0].size() -1 ] ) << std::endl ;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -490,7 +489,10 @@ void Planner::getGrippersData()
         gripper_pose_client.call( pose_srv_data );
 
         std::vector< long > node_indices( node_srv_data.response.indices.size() );
-        memcpy( &(node_indices.front()), &(node_srv_data.response.indices.front()), node_srv_data.response.indices.size() );
+        for ( size_t ind = 0; ind < node_indices.size(); ind++ )
+        {
+            node_indices[ind] = (long)node_srv_data.response.indices[ind];
+        }
 
         grippers_data_.push_back(
                     GripperData( GeometryPoseToEigenAffine3d( pose_srv_data.response.pose ),
