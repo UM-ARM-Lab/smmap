@@ -191,13 +191,6 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
         std::vector< CollisionAvoidanceResult > grippers_collision_avoidance_result
                 = computeGrippersObjectAvoidance( grippers_data, max_step_size );
 
-
-
-
-        std::cout << J.block< 3, 12 >(0, 0) << std::endl;
-
-
-
         ////////////////////////////////////////////////////////////////////////
         // Combine the velocities into a single command velocity
         ////////////////////////////////////////////////////////////////////////
@@ -257,26 +250,24 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
 //            std::cout << "ExpTwist version\n";
 //            std::cout << kinematics::expTwistAffine3d( gripper_velocity, 1 ).matrix() << std::endl;
 
-            std::cout << "gripper " << gripper_ind << ": " << gripper_velocity.transpose() << std::endl;
-
-            traj[(size_t)gripper_ind].push_back(
-                    traj[(size_t)gripper_ind][traj_step - 1] *
-                    ( Eigen::Translation3d( gripper_velocity.segment< 3 >( 0 ) ) *
-                    Eigen::AngleAxisd( gripper_velocity(5), Eigen::Vector3d( 0, 0, 1 ) ) *
-                    Eigen::AngleAxisd( gripper_velocity(4), Eigen::Vector3d( 0, 1, 0 ) ) *
-                    Eigen::AngleAxisd( gripper_velocity(3), Eigen::Vector3d( 1, 0, 0 ) ) ) );
+//            std::cout << "gripper " << gripper_ind << ": " << gripper_velocity.transpose() << std::endl;
 
 //            traj[(size_t)gripper_ind].push_back(
-//                        traj[(size_t)gripper_ind][traj_step - 1] *
-//                        kinematics::expTwistAffine3d( gripper_velocity, 1 ) );
+//                    traj[(size_t)gripper_ind][traj_step - 1] *
+//                    ( Eigen::Translation3d( gripper_velocity.segment< 3 >( 0 ) ) *
+//                    Eigen::AngleAxisd( gripper_velocity(5), Eigen::Vector3d( 0, 0, 1 ) ) *
+//                    Eigen::AngleAxisd( gripper_velocity(4), Eigen::Vector3d( 0, 1, 0 ) ) *
+//                    Eigen::AngleAxisd( gripper_velocity(3), Eigen::Vector3d( 1, 0, 0 ) ) ) );
+
+            traj[(size_t)gripper_ind].push_back(
+                        traj[(size_t)gripper_ind][traj_step - 1] *
+                        kinematics::expTwistAffine3d( gripper_velocity, 1 ) );
 
             grippers_data[(size_t)gripper_ind].pose = traj[(size_t)gripper_ind].back();
 
             // Assume that our Jacobian is correct, and predict where we will end up
             current += J.block( 0, cols_per_gripper_*gripper_ind, J.rows(), cols_per_gripper_ ) * actual_gripper_velocity;
         }
-
-        exit(-1);
     }
 
     return traj;
@@ -335,8 +326,8 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(
                 = getMinimumDistanceToGripper( gripper_node_indices, node_ind,
                         object_initial_node_distance_ );
 
-            Eigen::Matrix3d J_trans = Eigen::Matrix3d::Identity();
-//            Eigen::Matrix3d J_trans = gripper_rot;
+//            Eigen::Matrix3d J_trans = Eigen::Matrix3d::Identity();
+            Eigen::Matrix3d J_trans = gripper_rot;
 
             J.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ ) =
                     std::exp( -translation_rigidity_ * dist_to_gripper.second ) * J_trans;
@@ -345,37 +336,39 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(
             {
                 Eigen::Matrix3d J_rot = Eigen::Matrix3d::Zero();
 
-                const double rot_angle = 0.2;
+//                const double rot_angle = 0.2;
 
-                EigenHelpers::VectorAffine3d perts(3);
-                perts[0] = Eigen::AngleAxisd( rot_angle, Eigen::Vector3d( 1, 0, 0 ) );
-                perts[1] = Eigen::AngleAxisd( rot_angle, Eigen::Vector3d( 0, 1, 0 ) );
-                perts[2] = Eigen::AngleAxisd( rot_angle, Eigen::Vector3d( 0, 0, 1 ) );
+//                EigenHelpers::VectorAffine3d perts(3);
+//                perts[0] = Eigen::AngleAxisd( rot_angle, Eigen::Vector3d( 1, 0, 0 ) );
+//                perts[1] = Eigen::AngleAxisd( rot_angle, Eigen::Vector3d( 0, 1, 0 ) );
+//                perts[2] = Eigen::AngleAxisd( rot_angle, Eigen::Vector3d( 0, 0, 1 ) );
 
-                for ( size_t pert_ind = 0; pert_ind < perts.size(); pert_ind++ )
-                {
-                    // get the vector of translation induced at closest attached point by the rotation about the center of the gripper
-                    // TODO: why is this picking the node on the gripper rather than the object node?
-                    Eigen::Affine3d T0_attached; T0_attached = Eigen::Translation3d( current_configuration.block< 3, 1 >( 0, dist_to_gripper.first ) );
-                    //Eigen::Affine3d T0_attached; T0_attached = Eigen::Translation3d( current_configuration.block< 3, 1 >( 0, node_ind ) );
-                    Eigen::Affine3d T0_center = grippers_data[(size_t)gripper_ind].pose;
-                    Eigen::Affine3d Tcenter_attached = T0_center.inverse()*T0_attached;
-                    Eigen::Affine3d T0_newattached =  T0_center*perts[pert_ind]*Tcenter_attached;
-                    Eigen::Vector3d transvec = (T0_attached.inverse()*T0_newattached).translation()/rot_angle;
+//                for ( size_t pert_ind = 0; pert_ind < perts.size(); pert_ind++ )
+//                {
+//                    // get the vector of translation induced at closest attached point by the rotation about the center of the gripper
+//                    // TODO: why is this picking the node on the gripper rather than the object node?
+//                    Eigen::Affine3d T0_attached; T0_attached = Eigen::Translation3d( current_configuration.block< 3, 1 >( 0, dist_to_gripper.first ) );
+//                    //Eigen::Affine3d T0_attached; T0_attached = Eigen::Translation3d( current_configuration.block< 3, 1 >( 0, node_ind ) );
+//                    Eigen::Affine3d T0_center = grippers_data[(size_t)gripper_ind].pose;
+//                    Eigen::Affine3d Tcenter_attached = T0_center.inverse()*T0_attached;
+//                    Eigen::Affine3d T0_newattached =  T0_center*perts[pert_ind]*Tcenter_attached;
+//                    Eigen::Vector3d transvec = (T0_attached.inverse()*T0_newattached).translation()/rot_angle;
 
-                    J_rot.block< 3, 1 >( 0, (long)pert_ind ) = transvec;
-                }
+//                    J_rot.block< 3, 1 >( 0, (long)pert_ind ) = transvec;
+//                }
 
 
 
                 // Vector from gripper to node
-//                Eigen::Matrix3d J_rot_cross_product = Eigen::Matrix3d::Zero();
-//                const Eigen::Vector3d gripper_to_node =
-//                        current_configuration.block< 3, 1 >( 0, node_ind ) -
-//                        grippers_data[(size_t)gripper_ind].pose.translation();
-//                J_rot_cross_product.block< 3, 1 >( 0, 0 ) = gripper_rot.block< 3, 1 >( 0, 0 ).cross( gripper_to_node );
-//                J_rot_cross_product.block< 3, 1 >( 0, 1 ) = gripper_rot.block< 3, 1 >( 0, 1 ).cross( gripper_to_node );
-//                J_rot_cross_product.block< 3, 1 >( 0, 2 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_node );
+                Eigen::Matrix3d J_rot_cross_product = Eigen::Matrix3d::Zero();
+                const Eigen::Vector3d gripper_to_node =
+                        current_configuration.block< 3, 1 >( 0, node_ind ) -
+//                        current_configuration.block< 3, 1 >( 0, dist_to_gripper.first ) -
+                        grippers_data[(size_t)gripper_ind].pose.translation();
+                J_rot_cross_product.block< 3, 1 >( 0, 0 ) = gripper_rot.block< 3, 1 >( 0, 0 ).cross( gripper_to_node );
+                J_rot_cross_product.block< 3, 1 >( 0, 1 ) = gripper_rot.block< 3, 1 >( 0, 1 ).cross( gripper_to_node );
+                J_rot_cross_product.block< 3, 1 >( 0, 2 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_node );
+                J_rot = J_rot_cross_product;
 
 //                std::cout << "-------------------------Dmitry rot with perts:\n"
 //                          << J_rot << std::endl;
