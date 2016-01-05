@@ -6,5 +6,6 @@
     <node name="smmap_planner_node"
         pkg="smmap"
         type="smmap_test_node"
-        output="screen"/>
+        output="screen"
+    />
 </launch>

@@ -120,6 +120,7 @@ namespace smmap
             static void spin( double loop_rate );
             void getGrippersData();
             void getObjectInitialConfiguration();
+            void getObjectPlanningStartConfiguration();
 
             ros::NodeHandle nh_;
 

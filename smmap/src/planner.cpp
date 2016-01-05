@@ -88,9 +88,14 @@ void Planner::run( const size_t num_traj_cmds_per_loop )
 {
     // TODO: remove this hardcoded spin rate
     boost::thread spin_thread( boost::bind( &Planner::spin, 1000 ) );
+
     // TODO: This is lame. There needs to be a better way.
     // Wait for ROS to finish making topic connections
     usleep( 500000 );
+
+
+    // Get the configuration at the start of the planning process
+    getObjectPlanningStartConfiguration();
 
     // Initialize the trajectory command message
     ROS_INFO_NAMED( "planner" , "Initializing gripper command message" );
@@ -500,8 +505,6 @@ void Planner::getGrippersData()
 
         grippers_trajectory_[gripper_ind].push_back(
                 GeometryPoseToEigenAffine3d( pose_srv_data.response.pose ) );
-
-        ROS_INFO_NAMED( "planner" , "Gripper #%zu: %s", gripper_ind, PrettyPrint::PrettyPrint( grippers_data_[gripper_ind] ).c_str() );
     }
 }
 
@@ -520,8 +523,22 @@ void Planner::getObjectInitialConfiguration()
     object_initial_configuration_ =
         VectorGeometryPointToEigenMatrix3Xd( srv_data.response.points );
 
-    object_trajectory_.clear();
-    object_trajectory_.push_back( object_initial_configuration_ );
-
     ROS_INFO_NAMED( "planner" , "Number of points on object: %zu", srv_data.response.points.size() );
+}
+
+void Planner::getObjectPlanningStartConfiguration()
+{
+    ROS_INFO_NAMED( "planner" , "Getting object planning start configuration" );
+
+    // Get the initial configuration of the object
+    ros::ServiceClient object_planning_start_configuration_client =
+        nh_.serviceClient< smmap_msgs::GetPointSet >( GetObjectCurrentConfigurationTopic( nh_ ) );
+
+    object_planning_start_configuration_client.waitForExistence();
+
+    smmap_msgs::GetPointSet srv_data;
+    object_planning_start_configuration_client.call( srv_data );
+
+    object_trajectory_.clear();
+    object_trajectory_.push_back( VectorGeometryPointToEigenMatrix3Xd( srv_data.response.points ) );
 }

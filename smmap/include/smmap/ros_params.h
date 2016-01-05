@@ -107,6 +107,11 @@ namespace smmap
         return ROSHelpers::GetParam< std::string >( nh, "get_object_initial_configuration_topic", "get_object_initial_configuration" );
     }
 
+    inline std::string GetObjectCurrentConfigurationTopic( ros::NodeHandle& nh )
+    {
+        return ROSHelpers::GetParam< std::string >( nh, "get_object_current_configuration_topic", "get_object_current_configuration" );
+    }
+
     inline std::string GetVisualizationMarkerTopic( ros::NodeHandle& nh )
     {
         return ROSHelpers::GetParam< std::string >( nh, "visualization_marker_topic", "visualization_marker" );
