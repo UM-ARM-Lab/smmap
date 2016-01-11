@@ -45,7 +45,7 @@ namespace smmap
                 return doCalculateError( current_configuration );
             }
 
-            virtual double getRigidity() const = 0;                     // k
+            virtual double getDeformability() const = 0;                // k
             virtual double getCollisionScalingFactor() const = 0;       // beta (or k2)
             virtual double getStretchingScalingThreshold() const = 0;   // lambda
             virtual bool getUseRotation() const = 0;
@@ -113,7 +113,7 @@ namespace smmap
                 visualization_marker_pub_.publish( marker );
             }
 
-            double getRigidity() const
+            double getDeformability() const
             {
                 return 0.5*20; // k
             }
@@ -130,7 +130,7 @@ namespace smmap
 
             bool getUseRotation() const
             {
-                return false;
+                return true;
             }
 
         private:
@@ -293,7 +293,7 @@ namespace smmap
                 visualization_marker_pub_.publish( marker );
             }
 
-            double getRigidity() const
+            double getDeformability() const
             {
                 return 0.7*20; // k
             }

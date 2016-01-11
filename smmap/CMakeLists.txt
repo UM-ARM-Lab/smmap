@@ -42,12 +42,17 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories( include
-    SYSTEM 
+    SYSTEM
     ${Eigen_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
 )
 
 set( CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} -g -O3 -Wall -Wextra -Wpedantic -Wconversion" )
+
+option( USE_OPEN_MP "Set to ON if we want to use OpenMP" OFF )
+if ( USE_OPEN_MP )
+    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp" )
+endif( USE_OPEN_MP )
 
 ## Library file for the whole project
 add_library( ${PROJECT_NAME}

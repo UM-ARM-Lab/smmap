@@ -1,0 +1,11 @@
+<launch>
+    <include file="$(find smmap)/launch/rope_cylinder_params.launch"/>
+
+    <include file="$(find deform_simulator)/launch/deform_simulator.launch"/>
+
+    <node name="smmap_planner_node"
+        pkg="smmap"
+        type="smmap_test_node"
+        output="screen"
+    />
+</launch>

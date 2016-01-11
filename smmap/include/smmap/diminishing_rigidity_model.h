@@ -17,13 +17,12 @@ namespace smmap
             DiminishingRigidityModel(
                     const VectorGrippersData& grippers_data,
                     const ObjectPointSet& object_initial_configuration,
-                    double rigidity, bool use_rotation,
+                    double deformability, bool use_rotation,
                     double obstacle_avoidance_scale, double strechting_correction_threshold );
 
-            DiminishingRigidityModel(
-                    const VectorGrippersData& grippers_data,
+            DiminishingRigidityModel(const VectorGrippersData& grippers_data,
                     const ObjectPointSet& object_initial_configuration,
-                    double rigidity_translation, double rotation_rigidity, bool use_rotation,
+                    double translation_deformability, double rotation_deformability, bool use_rotation,
                     double obstacle_avoidance_scale, double strechting_correction_threshold );
 
         private:
@@ -90,8 +89,8 @@ namespace smmap
 
             const ObjectPointSet object_initial_configuration_;
 
-            double translation_rigidity_;
-            double rotation_rigidity_;
+            double translation_deformability_;
+            double rotation_deformability_;
             bool use_rotation_;
             const long cols_per_gripper_;
 

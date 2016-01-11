@@ -17,11 +17,13 @@ ModelSet::ModelSet( const VectorGrippersData& grippers_data,
     , object_initial_configuration_( object_initial_configuration )
     , rnd_generator_( (unsigned long)std::chrono::system_clock::now().time_since_epoch().count() )
 {
-//    for ( double rigidity = 0; rigidity <= 20; rigidity += 0.5 )
+//    for ( double deformability = 0; deformability <= 15; deformability += 0.5 )
     {
         addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
                         grippers_data, object_initial_configuration_,
-                        task_.getRigidity(), task_.getUseRotation(),
+//                        task_.getDeformability(), task_.getDeformability(), task_.getUseRotation(),
+                        task_.getDeformability(), task_.getDeformability()*1.5, task_.getUseRotation(),
+//                        deformability, deformability*1.5, task_.getUseRotation(),
                         task_.getCollisionScalingFactor(), task_.getStretchingScalingThreshold() ) ) );
     }
 }
@@ -37,6 +39,7 @@ VectorObjectTrajectory ModelSet::makePredictions(
     VectorObjectTrajectory predictions( model_list_.size() );
     std::vector< kinematics::VectorVector6d > gripper_velocities = calculateGrippersVelocities( grippers_trajectory );
 
+    #pragma omp parallel for
     for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
     {
         predictions[model_ind] = model_list_[model_ind]->getPrediction( object_configuration, grippers_data, grippers_trajectory, gripper_velocities );
@@ -64,9 +67,10 @@ void ModelSet::updateModels(
     evaluateConfidence( grippers_data, grippers_trajectory, grippers_velocities, object_trajectory );
 
     // Allow each model to update itself based on the new data
-    for ( auto& model: model_list_ )
+    #pragma omp parallel for
+    for ( size_t ind = 0; ind < model_list_.size(); ind++ )
     {
-        model->updateModel( grippers_data,
+        model_list_[ind]->updateModel( grippers_data,
                 grippers_trajectory,
                 grippers_velocities,
                 object_trajectory,
@@ -80,8 +84,9 @@ std::vector< std::pair< AllGrippersTrajectory, double > > ModelSet::getDesiredGr
         const VectorGrippersData& grippers_data,
         double max_step_size, size_t num_steps )
 {
-    std::vector< std::pair< AllGrippersTrajectory, double > > grippers_trajectories;
+    std::vector< std::pair< AllGrippersTrajectory, double > > grippers_trajectories( model_list_.size() );
 
+    #pragma omp parallel for
     for ( size_t ind = 0; ind < model_list_.size(); ind++ )
     {
         AllGrippersTrajectory grippers_trajectory = model_list_[ind]->getDesiredGrippersTrajectory(
@@ -91,7 +96,7 @@ std::vector< std::pair< AllGrippersTrajectory, double > > ModelSet::getDesiredGr
                     max_step_size,
                     num_steps );
 
-        grippers_trajectories.push_back( std::pair< AllGrippersTrajectory, double >( grippers_trajectory, model_confidence_[ind] ) );
+        grippers_trajectories[ind] = std::pair< AllGrippersTrajectory, double >( grippers_trajectory, model_confidence_[ind] );
     }
 
     return grippers_trajectories;
@@ -113,6 +118,7 @@ void ModelSet::evaluateConfidence(
         const ObjectTrajectory& object_trajectory )
 {
     // TODO: deal with the object/gripers not moving at all
+    #pragma omp parallel for
     for ( size_t ind = 0; ind < model_list_.size(); ind++ )
     {
         const ObjectTrajectory model_prediction = model_list_[ind]->getPrediction(
@@ -131,9 +137,6 @@ std::vector< kinematics::VectorVector6d > ModelSet::calculateGrippersVelocities(
     for ( size_t ind = 0; ind < grippers_trajectory.size(); ind++ )
     {
         grippers_velocities[ind] = kinematics::calculateVelocities( grippers_trajectory[ind] );
-
-//        std::cout << "GripperTraj:\n" << PrettyPrint::PrettyPrint( grippers_trajectory[ind], true, "\n\n" ) << std::endl;
-//        std::cout << "GripperVel:\n" << PrettyPrint::PrettyPrint( grippers_velocities[ind], true , "\n\n" ) << std::endl;
     }
     return grippers_velocities;
 }
