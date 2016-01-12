@@ -201,10 +201,17 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
             Eigen::VectorXd desired_gripper_vel = grippers_velocity_achieve_goal.segment( gripper_ind * cols_per_gripper_, cols_per_gripper_ );
 
             // normalize the achive goal velocity
+
+            // To account for the scale difference from porting the code over we
+            // need to shrink the size of the rotational components when
+            // calculating the norm. Expanding the rotational components again is
+            // not done at this point as it causes poor performance of the algorithm
+            desired_gripper_vel.segment<3>(3) /= 20;
             if ( desired_gripper_vel.norm() > max_step_size )
             {
                 desired_gripper_vel = desired_gripper_vel / desired_gripper_vel.norm() * max_step_size;
             }
+            //desired_gripper_vel.segment<3>(3) *= 20;
 
             // If we need to avoid an obstacle, then use the sliding scale
             const CollisionAvoidanceResult& collision_result = grippers_collision_avoidance_result[(size_t)gripper_ind];
@@ -320,10 +327,6 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(
                 J_rot.block< 3, 1 >( 0, 1 ) = gripper_rot.block< 3, 1 >( 0, 1 ).cross( gripper_to_node );
                 J_rot.block< 3, 1 >( 0, 2 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_node );
 
-                J_rot *= 20; // to account for the scale difference from porting the code over
-
-                // dividing by larger numbers means we use rotation more
-//                J_rot /= 1.2; // ROTATION_SCALING
                 J.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ + 3 ) =
                         std::exp( -rotation_deformability_ * dist_to_gripper.second ) * J_rot;
             }
@@ -378,20 +381,19 @@ std::vector< CollisionAvoidanceResult > DiminishingRigidityModel::computeGripper
 Eigen::MatrixXd DiminishingRigidityModel::computeCollisionToGripperJacobian( const GripperData &gripper_data ) const
 {
     Eigen::MatrixXd J_collision = Eigen::MatrixXd::Zero( 3, cols_per_gripper_ );
+    const Eigen::Matrix3d gripper_rot = gripper_data.pose.rotation();
 
-    // Translation - if I move the gripper in x,y,z, what happens to the given point?
-    J_collision.block< 3, 3>( 0, 0 ) = gripper_data.pose.rotation();
+    // Translation - if I move the gripper along its x/y/z-axis, what happens to the given point?
+    J_collision.block< 3, 3 >( 0, 0 ) = gripper_rot;
 
-    // TODO find out of these are at all correct
-//    else if(i == 3)
-//        transvec =  (gripper->getWorldTransform()*btVector4(1,0,0,0)).cross(
-//                    points_in_world_frame[k] - gripper->getWorldTransform().getOrigin());
-//    else if(i == 4)
-//        transvec =  (gripper->getWorldTransform()*btVector4(0,1,0,0)).cross(
-//                    points_in_world_frame[k] - gripper->getWorldTransform().getOrigin());
-//    else if(i == 5)
-//        transvec =  (gripper->getWorldTransform()*btVector4(0,0,1,0)).cross(
-//                    points_in_world_frame[k] - gripper->getWorldTransform().getOrigin());
+    const Eigen::Vector3d gripper_to_node =
+            gripper_data.nearest_point_on_gripper -
+            gripper_data.pose.translation();
+
+    // If I rotate the gripper about its x/y/z-axis, what happens?
+    J_collision.block< 3, 1 >( 0, 3 ) = gripper_rot.block< 3, 1 >( 0, 0 ).cross( gripper_to_node );
+    J_collision.block< 3, 1 >( 0, 4 ) = gripper_rot.block< 3, 1 >( 0, 1 ).cross( gripper_to_node );
+    J_collision.block< 3, 1 >( 0, 5 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_node );
 
     return J_collision;
 }

@@ -21,8 +21,8 @@ ModelSet::ModelSet( const VectorGrippersData& grippers_data,
     {
         addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
                         grippers_data, object_initial_configuration_,
-//                        task_.getDeformability(), task_.getDeformability(), task_.getUseRotation(),
-                        task_.getDeformability(), task_.getDeformability()*1.5, task_.getUseRotation(),
+                        task_.getDeformability(), task_.getDeformability(), task_.getUseRotation(),
+//                        task_.getDeformability(), task_.getDeformability()*1.5, task_.getUseRotation(),
 //                        deformability, deformability*1.5, task_.getUseRotation(),
                         task_.getCollisionScalingFactor(), task_.getStretchingScalingThreshold() ) ) );
     }

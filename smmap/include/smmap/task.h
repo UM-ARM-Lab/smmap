@@ -26,7 +26,7 @@ namespace smmap
                         nh.advertise< visualization_msgs::Marker >( GetVisualizationMarkerTopic( nh ), 10 );
 
                 visualization_marker_array_pub_ =
-                        nh.advertise< visualization_msgs::MarkerArray >( GetVisualizationMarkerArrayTopic( nh), 10 );
+                        nh.advertise< visualization_msgs::MarkerArray >( GetVisualizationMarkerArrayTopic( nh ), 10 );
             }
 
             virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj )
