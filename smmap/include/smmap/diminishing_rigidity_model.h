@@ -1,5 +1,5 @@
-#ifndef diminishing_rigidity_model_h
-#define diminishing_rigidity_model_h
+#ifndef DIMINISHING_RIGIDITY_MODEL_H
+#define DIMINISHING_RIGIDITY_MODEL_H
 
 #include "smmap/deformable_model.h"
 
@@ -99,4 +99,4 @@ namespace smmap
     };
 }
 
-#endif // diminishing_rigidity_model_h
+#endif // DIMINISHING_RIGIDITY_MODEL_H

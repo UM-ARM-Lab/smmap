@@ -1,5 +1,5 @@
-#ifndef trajectory_h
-#define trajectory_h
+#ifndef TRAJECTORY_HPP
+#define TRAJECTORY_HPP
 
 #include <arc_utilities/eigen_helpers.hpp>
 
@@ -161,4 +161,4 @@ namespace smmap
     }
 }
 
-#endif // trajectory_h
+#endif // TRAJECTORY_HPP

@@ -1,5 +1,5 @@
-#ifndef gripper_helpers_h
-#define gripper_helpers_h
+#ifndef GRIPPER_HELPERS_HPP
+#define GRIPPER_HELPERS_HPP
 
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/pretty_print.hpp>
@@ -58,4 +58,4 @@ namespace smmap
 
 }
 
-#endif // gripper_helpers_h
+#endif // GRIPPER_HELPERS_HPP

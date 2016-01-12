@@ -1,5 +1,5 @@
-#ifndef ROS_PARAMS_H
-#define ROS_PARAMS_H
+#ifndef ROS_PARAMS_HPP
+#define ROS_PARAMS_HPP
 
 #include <string>
 #include <arc_utilities/ros_helpers.hpp>
@@ -133,4 +133,4 @@ namespace smmap
     }
 }
 
-#endif // ROS_PARAMS_H
+#endif // ROS_PARAMS_HPP

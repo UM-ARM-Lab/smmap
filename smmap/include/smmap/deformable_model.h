@@ -1,13 +1,13 @@
-#ifndef deformable_model_h
-#define deformable_model_h
+#ifndef DEFORMABLE_MODEL_H
+#define DEFORMABLE_MODEL_H
 
 #include <memory>
 #include <random>
 
 #include <kinematics_toolbox/kinematics.h>
 
-#include "smmap/trajectory.h"
-#include "smmap/gripper_helpers.h"
+#include "smmap/trajectory.hpp"
+#include "smmap/gripper_helpers.hpp"
 
 namespace smmap
 {
@@ -93,4 +93,4 @@ namespace smmap
 
 }
 
-#endif // deformable_model_h
+#endif // DEFORMABLE_MODEL_H

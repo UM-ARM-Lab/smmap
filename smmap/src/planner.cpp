@@ -1,12 +1,13 @@
 #include "smmap/planner.h"
-#include "smmap/ros_params.h"
-#include "smmap/trajectory.h"
+#include "smmap/ros_params.hpp"
+#include "smmap/trajectory.hpp"
 
 #include <algorithm>
 #include <assert.h>
 #include <chrono>
 
 #include <boost/thread.hpp>
+#include <boost/filesystem.hpp>
 #include <ros/callback_queue.h>
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
@@ -65,6 +66,26 @@ Planner::Planner(ros::NodeHandle& nh )
     if ( logging_enabled_ )
     {
         std::string log_folder = GetLogFolder( nh_ );
+
+        // If it hasn't been opened, assume that it is because the
+        // directory doesn't exist.
+        boost::filesystem::path p( log_folder );
+        if ( !boost::filesystem::is_directory( p ) )
+        {
+            std::cerr << "\x1b[33;1m" << log_folder << " does not exist! Creating ... ";
+
+            // TODO: why does create_directories not return true?
+            boost::filesystem::create_directories( p );
+            if ( boost::filesystem::is_directory( p ) )
+//            if ( boost::filesystem::create_directories( p ) )
+            {
+                std::cerr << "Succeeded!\x1b[37m\n";
+            }
+            else
+            {
+                std::cerr << "\x1b[31;1mFailed!\x1b[37m\n";
+            }
+        }
 
         loggers.insert( std::make_pair< std::string, Log::Log >(
                             "object_current_configuration",

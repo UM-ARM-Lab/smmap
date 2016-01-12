@@ -1,5 +1,5 @@
-#ifndef model_set_h
-#define model_set_h
+#ifndef MODEL_SET_H
+#define MODEL_SET_H
 
 #include <list>
 #include <memory>
@@ -61,7 +61,6 @@ namespace smmap
 
             // TODO: move this to *somewhere* else
             const Task& task_;
-            VectorGrippersData grippers_data_;
             const ObjectPointSet object_initial_configuration_;
             std::vector< DeformableModel::Ptr > model_list_;
             std::vector< double > model_confidence_;

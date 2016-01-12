@@ -1,5 +1,5 @@
-#ifndef smmap_planner_h
-#define smmap_planner_h
+#ifndef SMMAP_PLANNER_H
+#define SMMAP_PLANNER_H
 
 #include <boost/thread/recursive_mutex.hpp>
 
@@ -142,4 +142,4 @@ namespace smmap
     };
 }
 
-#endif // planner_h
+#endif // SMMAP_PLANNER_H

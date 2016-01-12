@@ -1,5 +1,5 @@
-#ifndef task_hpp
-#define task_hpp
+#ifndef TASK_HPP
+#define TASK_HPP
 
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <ros/ros.h>
@@ -7,9 +7,9 @@
 #include <smmap_msgs/messages.h>
 
 #include "smmap/point_reflector.hpp"
-#include "smmap/ros_params.h"
+#include "smmap/ros_params.hpp"
 #include "smmap/task_enums.h"
-#include "smmap/trajectory.h"
+#include "smmap/trajectory.hpp"
 
 namespace smmap
 {
@@ -136,7 +136,7 @@ namespace smmap
                         }
                     }
 
-                    if ( min_dist >= 0.01 )
+                    if ( min_dist >= 0.2/20. )
                     {
                         desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
                     }
@@ -353,4 +353,4 @@ namespace smmap
     };
 }
 
-#endif // task_h
+#endif // TASK_HPP

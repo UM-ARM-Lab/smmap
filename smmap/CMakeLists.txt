@@ -15,6 +15,7 @@ find_package( catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES} )
 
 ## System dependencies are found with CMake's conventions
 find_package( cmake_modules REQUIRED )
+find_package( Boost REQUIRED COMPONENTS filesystem )
 find_package( Eigen REQUIRED )
 
 ################################################
@@ -43,25 +44,32 @@ catkin_package(
 ## Your package locations should be listed before other locations
 include_directories( include
     SYSTEM
+    ${Boost_INCLUDE_DIRS}
     ${Eigen_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
 )
 
-set( CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} -g -O3 -Wall -Wextra -Wpedantic -Wconversion" )
+set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -g -O3 -Wall -Wextra -Wpedantic -Wconversion" )
 
-option( USE_OPEN_MP "Set to ON if we want to use OpenMP" OFF )
+# TODO: remove this unset once I have stable code that is unlikely to need debugging
+#       this unset is here so that if I change it, I don't need to delete the build and devel folders
+unset( USE_OPEN_MP )
+option( USE_OPEN_MP "Set to ON if we want to use OpenMP" ON )
 if ( USE_OPEN_MP )
     set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp" )
+else( USE_OPEN_MP )
+    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas" )
 endif( USE_OPEN_MP )
+
 
 ## Library file for the whole project
 add_library( ${PROJECT_NAME}
-    include/${PROJECT_NAME}/gripper_helpers.h
-    include/${PROJECT_NAME}/ros_params.h
+    include/${PROJECT_NAME}/gripper_helpers.hpp
+    include/${PROJECT_NAME}/ros_params.hpp
     include/${PROJECT_NAME}/task.hpp
     include/${PROJECT_NAME}/task_enums.h
     include/${PROJECT_NAME}/point_reflector.hpp
-    include/${PROJECT_NAME}/trajectory.h
+    include/${PROJECT_NAME}/trajectory.hpp
     include/${PROJECT_NAME}/deformable_model.h
     include/${PROJECT_NAME}/diminishing_rigidity_model.h
     src/diminishing_rigidity_model.cpp
