@@ -58,7 +58,8 @@ endif( USE_OPEN_MP )
 add_library( ${PROJECT_NAME}
     include/${PROJECT_NAME}/gripper_helpers.h
     include/${PROJECT_NAME}/ros_params.h
-    include/${PROJECT_NAME}/task.h
+    include/${PROJECT_NAME}/task.hpp
+    include/${PROJECT_NAME}/task_enums.h
     include/${PROJECT_NAME}/point_reflector.hpp
     include/${PROJECT_NAME}/trajectory.h
     include/${PROJECT_NAME}/deformable_model.h

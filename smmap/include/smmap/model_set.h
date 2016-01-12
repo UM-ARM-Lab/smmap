@@ -6,7 +6,7 @@
 #include <random>
 
 #include "smmap/deformable_model.h"
-#include "smmap/task.h"
+#include "smmap/task.hpp"
 
 namespace smmap
 {

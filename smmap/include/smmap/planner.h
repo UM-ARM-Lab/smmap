@@ -14,7 +14,7 @@
 #include <arc_utilities/log.hpp>
 
 #include "smmap/model_set.h"
-#include "smmap/task.h"
+#include "smmap/task.hpp"
 
 namespace smmap
 {

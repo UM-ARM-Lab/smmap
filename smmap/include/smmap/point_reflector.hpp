@@ -18,37 +18,37 @@ namespace smmap
                 , max_y_( max_y )
             {}
 
-            Eigen::Vector3d reflect( const Eigen::Vector3d& in )
+            Eigen::Vector3d reflect( const Eigen::Vector3d& in ) const
             {
                 Eigen::Vector3d out = in;
                 out[0] = in[0] - 2*( in[0] - mid_x_ );
                 return out;
             }
 
-            Eigen::Vector3d reflect( Eigen::Vector3d&& in )
+            Eigen::Vector3d reflect( Eigen::Vector3d&& in ) const
             {
                 Eigen::Vector3d out = in;
                 out[0] = in[0] - 2*( in[0] - mid_x_ );
                 return out;
             }
 
-            double get_mid_x()
+            double get_mid_x() const
             {
                 return mid_x_;
             }
 
-            double get_min_y()
+            double get_min_y() const
             {
                 return min_y_;
             }
 
-            double get_max_y()
+            double get_max_y() const
             {
                 return max_y_;
             }
 
         private:
-            double mid_x_, min_y_, max_y_;
+            const double mid_x_, min_y_, max_y_;
     };
 }
 
