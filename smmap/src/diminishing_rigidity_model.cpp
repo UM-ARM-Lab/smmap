@@ -207,11 +207,12 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
             // calculating the norm. Expanding the rotational components again is
             // not done at this point as it causes poor performance of the algorithm
             desired_gripper_vel.segment<3>(3) /= 20;
+//            desired_gripper_vel.segment<3>(3) /= 50;
             if ( desired_gripper_vel.norm() > max_step_size )
             {
                 desired_gripper_vel = desired_gripper_vel / desired_gripper_vel.norm() * max_step_size;
             }
-            //desired_gripper_vel.segment<3>(3) *= 20;
+//            desired_gripper_vel.segment<3>(3) *= 20;
 
             // If we need to avoid an obstacle, then use the sliding scale
             const CollisionAvoidanceResult& collision_result = grippers_collision_avoidance_result[(size_t)gripper_ind];
@@ -220,6 +221,7 @@ AllGrippersTrajectory DiminishingRigidityModel::doGetDesiredGrippersTrajectory(
                  const double collision_severity = std::min( 1.0, std::exp( -obstacle_avoidance_scale_* collision_result.distance ) );
 
                  std::cout << "collision severity: " << collision_severity << std::endl;
+                 std::cout << collision_result.nullspace_projector << std::endl;
 
                  actual_gripper_velocity =
                          collision_severity * ( collision_result.velocity + collision_result.nullspace_projector * desired_gripper_vel ) +
@@ -411,10 +413,13 @@ Eigen::VectorXd DiminishingRigidityModel::computeStretchingCorrection(
     {
         for ( long second_node = first_node + 1; second_node < node_distance_delta.cols(); second_node++)
         {
-            if ( node_distance_delta( first_node, second_node ) - stretching_correction_threshold_ > 0 )
+            if ( node_distance_delta( first_node, second_node ) > stretching_correction_threshold_ )
             {
+                // The correction vector points from the first node to the second node,
+                // and is half the length of the "extra" distance
                 Eigen::Vector3d correction_vector = 0.5 * node_distance_delta( first_node, second_node )
-                        * ( object_current_configuration.block< 3, 1 >( 0, second_node ) - object_current_configuration.block< 3, 1 >( 0, first_node ) );
+                        * ( object_current_configuration.block< 3, 1 >( 0, second_node )
+                            - object_current_configuration.block< 3, 1 >( 0, first_node ) );
 
                 stretching_correction.segment< 3 >( 3 * first_node ) += correction_vector;
                 stretching_correction.segment< 3 >( 3 * second_node ) -= correction_vector;

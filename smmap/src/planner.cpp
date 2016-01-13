@@ -23,6 +23,7 @@ const Eigen::IOFormat Planner::eigen_io_one_line_( Eigen::FullPrecision, Eigen::
 Planner::Planner(ros::NodeHandle& nh )
     : visualize_gripper_translation_( false )
     , nh_( nh )
+    , ph_( "~" )
     , it_( nh_ )
     , sim_time_( 0 )
 {
@@ -37,8 +38,17 @@ Planner::Planner(ros::NodeHandle& nh )
     getGrippersData();
     getObjectInitialConfiguration();
 
-    model_set_ = std::unique_ptr< ModelSet >(
-            new ModelSet( grippers_data_, object_initial_configuration_, *task_ ) );
+    double deformability;
+    if ( ph_.getParam( "deformability", deformability ) )
+    {
+        model_set_ = std::unique_ptr< ModelSet >(
+                new ModelSet( grippers_data_, object_initial_configuration_, *task_, deformability ) );
+    }
+    else
+    {
+        model_set_ = std::unique_ptr< ModelSet >(
+                new ModelSet( grippers_data_, object_initial_configuration_, *task_ ) );
+    }
 
 
     // Connect to the robot's gripper command service
@@ -74,7 +84,10 @@ Planner::Planner(ros::NodeHandle& nh )
         {
             std::cerr << "\x1b[33;1m" << log_folder << " does not exist! Creating ... ";
 
-            // TODO: why does create_directories not return true?
+            // NOTE: create_directories should be able to return true in this case
+            // however due to a bug related to a trailing '/' this is not currently
+            // the case in my version of boost
+            // https://svn.boost.org/trac/boost/ticket/7258
             boost::filesystem::create_directories( p );
             if ( boost::filesystem::is_directory( p ) )
 //            if ( boost::filesystem::create_directories( p ) )
@@ -98,6 +111,14 @@ Planner::Planner(ros::NodeHandle& nh )
         loggers.insert( std::make_pair< std::string, Log::Log > (
                             "object_predicted_configuration",
                             Log::Log( log_folder + "object_predicted_configuration.txt" ) ) ) ;
+
+        loggers.insert( std::make_pair< std::string, Log::Log > (
+                            "error",
+                            Log::Log( log_folder + "error.txt" ) ) ) ;
+
+        loggers.insert( std::make_pair< std::string, Log::Log > (
+                            "time",
+                            Log::Log( log_folder + "time.txt" ) ) ) ;
     }
 }
 
@@ -262,12 +283,10 @@ std::pair< ObjectTrajectory, AllGrippersTrajectory > Planner::readSimulatorFeedb
 
     // reset our buffers
     object_trajectory_.clear();
-    //object_trajectory_.push_back( fbk.first[0] );
 
     for ( size_t gripper_ind = 0; gripper_ind < grippers_trajectory_.size(); gripper_ind++ )
     {
         grippers_trajectory_[gripper_ind].clear();
-//        grippers_trajectory_[gripper_ind].push_back( fbk.second[gripper_ind][0] );
     }
 
     return fbk;
@@ -333,6 +352,10 @@ void Planner::initializeTask()
     else if ( deformable_type == DeformableType::CLOTH && task_type == TaskType::COLAB_FOLDING )
     {
         task_.reset( new ClothColabFolding( nh_ ) );
+    }
+    else if ( deformable_type == DeformableType::CLOTH && task_type == TaskType::COVERAGE )
+    {
+        task_.reset( new ClothTableCoverage( nh_ ) );
     }
     else
     {

@@ -17,9 +17,16 @@ namespace smmap
             // Constructor and destructor
             ////////////////////////////////////////////////////////////////////
 
+            /**
+             * @brief ModelSet
+             * @param grippers_data
+             * @param object_initial_configuration
+             * @param task
+             * @param deformability_override If set to -1, do not override the deformablity value. If set >= 0, use this value, otherwise throw an exception
+             */
             ModelSet( const VectorGrippersData& grippers_data,
                       const ObjectPointSet& object_initial_configuration,
-                      const Task& task );
+                      const Task& task, double deformability_override = -1 );
             ~ModelSet();
 
             void updateModels(

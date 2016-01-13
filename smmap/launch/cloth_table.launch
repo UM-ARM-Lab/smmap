@@ -1,0 +1,14 @@
+<launch>
+    <arg name="test_id" default=""/>
+    
+    <include file="$(find smmap)/launch/cloth_table_params.launch">
+        <arg name="test_id" value="$(arg test_id)"/>
+    </include>
+
+    <include file="$(find deform_simulator)/launch/deform_simulator.launch"/>
+
+    <node name="smmap_planner_node"
+        pkg="smmap"
+        type="smmap_test_node"
+    />
+</launch>

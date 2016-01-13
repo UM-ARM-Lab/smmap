@@ -123,6 +123,7 @@ namespace smmap
             void getObjectPlanningStartConfiguration();
 
             ros::NodeHandle nh_;
+            ros::NodeHandle ph_;
 
             ros::Publisher confidence_pub_;
             image_transport::ImageTransport it_;

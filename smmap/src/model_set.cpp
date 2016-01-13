@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <chrono>
+#include <stdexcept>
 #include <assert.h>
 
 #include <kinematics_toolbox/kinematics.h>
@@ -10,18 +11,33 @@
 
 using namespace smmap;
 
-ModelSet::ModelSet( const VectorGrippersData& grippers_data,
+ModelSet::ModelSet(const VectorGrippersData& grippers_data,
         const ObjectPointSet& object_initial_configuration,
-        const Task& task )
+        const Task& task, double deformability_override )
     : task_( task )
     , object_initial_configuration_( object_initial_configuration )
     , rnd_generator_( (unsigned long)std::chrono::system_clock::now().time_since_epoch().count() )
 {
+    double deformability;
+
+    if ( deformability_override == -1 )
+    {
+        deformability = task_.getDeformability();
+    }
+    else if ( deformability_override >= 0 )
+    {
+        deformability = deformability_override;
+    }
+    else
+    {
+        throw new std::invalid_argument( "deformability_override must be -1 or >= 0" );
+    }
+
 //    for ( double deformability = 0; deformability <= 15; deformability += 0.5 )
     {
         addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
                         grippers_data, object_initial_configuration_,
-                        task_.getDeformability(), task_.getDeformability(), task_.getUseRotation(),
+                        deformability, deformability, task_.getUseRotation(),
 //                        task_.getDeformability(), task_.getDeformability()*1.5, task_.getUseRotation(),
 //                        deformability, deformability*1.5, task_.getUseRotation(),
                         task_.getCollisionScalingFactor(), task_.getStretchingScalingThreshold() ) ) );

@@ -1,0 +1,9 @@
+<launch>
+    <arg name="test_id" default=""/>
+
+    <param name="logging_enabled" value="false"/>
+    <param name="log_folder" value="$(find smmap)/../logs/$(arg test_id)/"/>
+
+    <param name="deformable_type" value="cloth"/>
+    <param name="task_type" value="coverage"/>
+</launch>

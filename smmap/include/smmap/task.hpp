@@ -77,16 +77,16 @@ namespace smmap
                 , cover_points_( getCoverPointsHelper( nh ) )
             {}
 
-            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
-            {
-                std_msgs::ColorRGBA color;
-                color.r = 1;
-                color.g = 1;
-                color.b = 0;
-                color.a = 1;
+//            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
+//            {
+//                std_msgs::ColorRGBA color;
+//                color.r = 1;
+//                color.g = 1;
+//                color.b = 0;
+//                color.a = 1;
 
-                visualizeRope( model_predictions[best_traj].back(), color, "rope_predicted" );
-            }
+//                visualizeRope( model_predictions[best_traj].back(), color, "rope_predicted" );
+//            }
 
             void visualizeRope( const ObjectPointSet& rope, const std_msgs::ColorRGBA& color, const std::string& name ) const
             {
@@ -109,9 +109,6 @@ namespace smmap
             ObjectPointSet findObjectDesiredConfiguration( const ObjectPointSet& current_configuration ) const
             {
                 ROS_INFO_NAMED( "rope_coverage_task" , "Finding 'best' configuration" );
-
-                // point should be the same size
-                assert( current_configuration.rows() == cover_points_.rows() );
 
                 ObjectPointSet desired_configuration = current_configuration;
 
@@ -200,16 +197,16 @@ namespace smmap
                 , mirror_map_( createMirrorMap( nh, point_reflector_ ) )
             {}
 
-            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
-            {
-                std_msgs::ColorRGBA color;
-                color.r = 1;
-                color.g = 1;
-                color.b = 0;
-                color.a = 1;
+//            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
+//            {
+//                std_msgs::ColorRGBA color;
+//                color.r = 1;
+//                color.g = 1;
+//                color.b = 0;
+//                color.a = 1;
 
-                visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
-            }
+//                visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
+//            }
 
             void visualizeCloth( const ObjectPointSet& cloth, const std_msgs::ColorRGBA color, const std::string& name ) const
             {
@@ -288,7 +285,7 @@ namespace smmap
 
             double getStretchingScalingThreshold() const
             {
-                return 0.1*20; // lambda
+                return 0.1/20; // lambda
             }
 
             bool getUseRotation() const
@@ -350,6 +347,130 @@ namespace smmap
 
                 return mirror_map;
             }
+    };
+
+    class ClothTableCoverage : public Task
+    {
+        public:
+            ClothTableCoverage( ros::NodeHandle& nh )
+                : Task( nh )
+                , cover_points_( getCoverPointsHelper( nh ) )
+            {
+
+            }
+
+            void visualizeCloth( const ObjectPointSet& cloth, const std_msgs::ColorRGBA color, const std::string& name ) const
+            {
+                std::vector< std_msgs::ColorRGBA > colors( (size_t)cloth.cols(), color );
+
+                visualizeCloth( cloth, colors, name );
+            }
+
+            void visualizeCloth( const ObjectPointSet& cloth, std::vector< std_msgs::ColorRGBA > colors, const std::string& name ) const
+            {
+                visualization_msgs::Marker marker;
+
+                marker.type = visualization_msgs::Marker::POINTS;
+                marker.ns = name;
+                marker.id = 0;
+                marker.scale.x = 0.002;
+                marker.scale.y = 0.002;
+                marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( cloth );
+                marker.colors = colors;
+
+                visualization_marker_pub_.publish( marker );
+            }
+
+            ObjectPointSet findObjectDesiredConfiguration( const ObjectPointSet &current_configuration ) const
+            {
+                ROS_INFO_NAMED( "cloth_table_coverage_task" , "Finding 'best' configuration" );
+
+                ObjectPointSet desired_configuration = current_configuration;
+
+                // for every cover point, find the nearest deformable object point
+                for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
+                {
+                    Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
+
+                    ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
+
+                    Eigen::RowVectorXd dist_sq = diff.array().square().colwise().sum();
+
+                    // find the closest deformable point
+                    int min_ind = -1;
+                    double min_dist = std::numeric_limits< double >::infinity();
+                    for ( int object_ind = 0; object_ind < dist_sq.cols(); object_ind++ )
+                    {
+                        if ( dist_sq( object_ind ) < min_dist )
+                        {
+                            min_ind = object_ind;
+                            min_dist = dist_sq( object_ind );
+                        }
+                    }
+
+//                    if ( min_dist >= 0.2/20. )
+//                    {
+                        desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
+//                    }
+                }
+
+                std_msgs::ColorRGBA color;
+
+                color.r = 1;
+                color.g = 0;
+                color.b = 0;
+                color.a = 1;
+
+                visualizeCloth( desired_configuration, color, "cloth_desired" );
+
+                return desired_configuration;
+            }
+
+            double getDeformability() const
+            {
+                return 0.7*20; // k
+            }
+
+            double getCollisionScalingFactor() const
+            {
+                return  100*20; // beta
+            }
+
+            double getStretchingScalingThreshold() const
+            {
+                return 0.1/20; // lambda
+            }
+
+            bool getUseRotation() const
+            {
+                return true;
+            }
+
+
+        private:
+            /// Stores the points that we are trying to cover with the cloth
+            const ObjectPointSet cover_points_;
+            /// Constructor helper that allows cover_points_ to be const
+            ObjectPointSet getCoverPointsHelper( ros::NodeHandle& nh )
+            {
+                ROS_INFO_NAMED( "cloth_table_coverage_task" , "Getting cover points" );
+
+                // Get the initial configuration of the object
+                ros::ServiceClient cover_points_client =
+                    nh.serviceClient< smmap_msgs::GetPointSet >( GetCoverPointsTopic( nh ) );
+
+                cover_points_client.waitForExistence();
+
+                smmap_msgs::GetPointSet srv_data;
+                cover_points_client.call( srv_data );
+                ObjectPointSet cover_points =
+                    EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd( srv_data.response.points );
+
+                ROS_INFO_NAMED( "cloth_table_coverage_task" , "Number of cover points: %zu", srv_data.response.points.size() );
+
+                return cover_points;
+            }
+
     };
 }
 
