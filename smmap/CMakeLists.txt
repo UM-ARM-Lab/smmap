@@ -2,6 +2,7 @@ cmake_minimum_required( VERSION 2.8.3 )
 project( smmap )
 
 set( CATKIN_PACKAGES
+    actionlib
     arc_utilities
     geometry_msgs
     kinematics_toolbox
@@ -71,6 +72,7 @@ add_library( ${PROJECT_NAME}
     include/${PROJECT_NAME}/point_reflector.hpp
     include/${PROJECT_NAME}/trajectory.hpp
     include/${PROJECT_NAME}/deformable_model.h
+    src/deformable_model.cpp
     include/${PROJECT_NAME}/diminishing_rigidity_model.h
     src/diminishing_rigidity_model.cpp
     include/${PROJECT_NAME}/model_set.h

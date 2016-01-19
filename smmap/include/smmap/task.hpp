@@ -28,11 +28,11 @@ namespace smmap
                         nh.advertise< visualization_msgs::MarkerArray >( GetVisualizationMarkerArrayTopic( nh ), 10 );
             }
 
-            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
-            {
-                (void)model_predictions;
-                (void)best_traj;
-            }
+//            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
+//            {
+//                (void)model_predictions;
+//                (void)best_traj;
+//            }
 
             virtual ObjectPointSet findObjectDesiredConfiguration( const ObjectPointSet& current_configuration ) const = 0;
 

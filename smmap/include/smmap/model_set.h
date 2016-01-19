@@ -22,27 +22,25 @@ namespace smmap
              * @param grippers_data
              * @param object_initial_configuration
              * @param task
-             * @param deformability_override If set to -1, do not override the deformablity value. If set >= 0, use this value, otherwise throw an exception
+             * @param deformability_override If set to -1, do not override the
+             * deformablity value. If set >= 0, use this value, otherwise throw
+             * an exception
              */
-            ModelSet( const VectorGrippersData& grippers_data,
+            ModelSet( const std::vector< GripperData >& grippers_data,
                       const ObjectPointSet& object_initial_configuration,
                       const Task& task, double deformability_override = -1 );
             ~ModelSet();
 
-            void updateModels(
-                    const VectorGrippersData& grippers_data,
-                    const AllGrippersTrajectory& grippers_trajectory,
-                    const ObjectTrajectory& object_trajectory );
+            void updateModels( const std::vector<WorldFeedback>& feedback );
 
             VectorObjectTrajectory makePredictions(
-                    VectorGrippersData grippers_data,
-                    const AllGrippersTrajectory& grippers_trajectory,
-                    const ObjectPointSet& object_configuration ) const;
+                    const WorldFeedback& current_world_configuration,
+                    const std::vector< AllGrippersSinglePose >& grippers_trajectory ) const;
 
-            std::vector< std::pair< AllGrippersTrajectory, double > > getDesiredGrippersTrajectories(
-                    const ObjectPointSet& object_current_configuration,
+            std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > >
+            getDesiredGrippersTrajectories(
+                    const WorldFeedback& world_feedback,
                     const ObjectPointSet& object_desired_configuration,
-                    const VectorGrippersData& grippers_data,
                     double max_step_size, size_t num_steps );
 
             const std::vector< double >& getModelConfidence() const;
@@ -54,23 +52,18 @@ namespace smmap
 
             void addModel( DeformableModel::Ptr model );
 
-            std::vector< kinematics::VectorVector6d > calculateGrippersVelocities(
-                    const AllGrippersTrajectory& grippers_trajectory ) const;
+            void evaluateConfidence( const std::vector<WorldFeedback>& feedback );
 
-            kinematics::VectorMatrix3Xd calculateObjectVelocities(
-                    const ObjectTrajectory& object_trajectory ) const;
+            ////////////////////////////////////////////////////////////////////
+            // The data for the models themselves
+            ////////////////////////////////////////////////////////////////////
 
-            void evaluateConfidence(
-                    VectorGrippersData grippers_data,
-                    const AllGrippersTrajectory& grippers_trajectory,
-                    const std::vector< kinematics::VectorVector6d >& grippers_velocities,
-                    const ObjectTrajectory& object_trajectory );
-
-            // TODO: move this to *somewhere* else
-            const Task& task_;
-            const ObjectPointSet object_initial_configuration_;
             std::vector< DeformableModel::Ptr > model_list_;
             std::vector< double > model_confidence_;
+
+            ////////////////////////////////////////////////////////////////////
+            // Utility variables
+            ////////////////////////////////////////////////////////////////////
 
             std::mt19937_64 rnd_generator_;
     };

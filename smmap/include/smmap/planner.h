@@ -27,7 +27,7 @@ namespace smmap
             // Main function that makes things happen
             ////////////////////////////////////////////////////////////////////
 
-            void run( const size_t num_traj_cmds_per_loop = 1 );
+            void run( const size_t num_traj_cmds_per_loop = 1, const double dt = 0.01 );
 
         private:
 
@@ -35,7 +35,7 @@ namespace smmap
             // Magic numbers
             ////////////////////////////////////////////////////////////////////
 
-            static constexpr double MAX_GRIPPER_STEP_SIZE = 0.05/20.0;
+            static constexpr double MAX_GRIPPER_VELOCITY = 0.05/20.0/0.01;
 
             ////////////////////////////////////////////////////////////////////
             // Loggering functionality
@@ -62,18 +62,19 @@ namespace smmap
 
             std::unique_ptr< ModelSet > model_set_;
 
-            VectorGrippersData grippers_data_;
-            ObjectPointSet object_initial_configuration_;
+            std::vector< GripperData > grippers_data_;
+            void getGrippersData();
 
             ////////////////////////////////////////////////////////////////////
             // Internal helpers for the run() function
             ////////////////////////////////////////////////////////////////////
 
-            AllGrippersTrajectory replan( size_t num_traj_cmds_per_loop );
+            std::vector< AllGrippersSinglePose > replan(size_t num_traj_cmds_per_loop , double dt );
 
-            std::pair<ObjectTrajectory, AllGrippersTrajectory> readSimulatorFeedbackBuffer();
-            void updateModels( const ObjectTrajectory& object_trajectory,
-                               const AllGrippersTrajectory& grippers_trajectory );
+            smmap_msgs::CmdGrippersTrajectoryGoal noOpTrajectoryGoal();
+
+            //std::pair<ObjectTrajectory, AllGrippersTrajectory> readSimulatorFeedbackBuffer();
+            void updateModels( const std::vector< WorldFeedback >& feedback );
 
 
             ////////////////////////////////////////////////////////////////////
@@ -108,9 +109,6 @@ namespace smmap
             // ROS Callbacks
             ////////////////////////////////////////////////////////////////////
 
-            // TODO: when moving to a real robot, create a node that deals with
-            // synchronization problems, and rename this function
-            void simulatorFbkCallback( const smmap_msgs::SimulatorFbkStamped& fbk );
 
             ////////////////////////////////////////////////////////////////////
             // ROS Objects and Helpers
@@ -118,8 +116,8 @@ namespace smmap
 
             // Our internal version of ros::spin()
             static void spin( double loop_rate );
-            void getGrippersData();
-            void getObjectInitialConfiguration();
+            std::vector< std::string > getGripperNames();
+            ObjectPointSet getObjectInitialConfiguration();
             void getObjectPlanningStartConfiguration();
 
             ros::NodeHandle nh_;
@@ -128,18 +126,9 @@ namespace smmap
             ros::Publisher confidence_pub_;
             image_transport::ImageTransport it_;
             image_transport::Publisher confidence_image_pub_;
-            ros::ServiceClient cmd_gripper_traj_client_;
 
             ros::Publisher visualization_marker_pub_;
             ros::Publisher visualization_marker_array_pub_;
-
-            // global input mutex
-            boost::recursive_mutex input_mtx_;
-
-            ros::Subscriber simulator_fbk_sub_;
-            ObjectTrajectory object_trajectory_;
-            AllGrippersTrajectory grippers_trajectory_;
-            double sim_time_;
     };
 }
 
