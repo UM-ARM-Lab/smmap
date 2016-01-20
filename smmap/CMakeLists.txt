@@ -50,16 +50,16 @@ include_directories( include
     ${catkin_INCLUDE_DIRS}
 )
 
-set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -g -O0 -Wall -Wextra -Wpedantic -Wconversion" )
+set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -g -O3 -Wall -Wextra -Wpedantic -Wconversion" )
 
-# TODO: remove this unset once I have stable code that is unlikely to need debugging
-#       this unset is here so that if I change it, I don't need to delete the build and devel folders
-unset( USE_OPEN_MP )
+unset( USE_OPEN_MP CACHE )
 option( USE_OPEN_MP "Set to ON if we want to use OpenMP" OFF )
 if ( USE_OPEN_MP )
     set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp" )
+    message( STATUS "Enabling OpenMP for SMMAP library" )
 else( USE_OPEN_MP )
     set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas" )
+    message( WARNING "Disabling OpenMP for SMMAP library" )
 endif( USE_OPEN_MP )
 
 

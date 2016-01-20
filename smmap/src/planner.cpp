@@ -115,7 +115,7 @@ Planner::Planner( ros::NodeHandle& nh )
 // Main function that makes things happen
 ////////////////////////////////////////////////////////////////////////////////
 
-void Planner::run(const size_t num_traj_cmds_per_loop , const double dt )
+void Planner::run( const size_t num_traj_cmds_per_loop , const double dt )
 {
     // TODO: remove this hardcoded spin rate
     boost::thread spin_thread( boost::bind( &Planner::spin, 1000 ) );
