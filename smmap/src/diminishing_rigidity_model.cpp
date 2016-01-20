@@ -153,9 +153,14 @@ std::vector< AllGrippersSinglePose > DiminishingRigidityModel::getDesiredGripper
     std::vector< AllGrippersSinglePose > traj( num_steps + 1, AllGrippersSinglePose( grippers_data_.size() ) );
     traj[0] = world_feedback.all_grippers_single_pose_;
 
-    Eigen::MatrixXd current = world_feedback.object_configuration_;
-    Eigen::MatrixXd desired = object_desired_configuration;
-    desired.resize( 3 * num_nodes_, 1);
+    // Create a mutable pair of objects that represent the current configuration
+    // as either a point set or a stacked vector
+    ObjectPointSet current_as_point_set = world_feedback.object_configuration_;
+    Eigen::Map< Eigen::VectorXd, Eigen::Aligned > current_as_vector( current_as_point_set.data(), 3 * num_nodes_ );
+    // Convince the compiler to allow us to refer to the desired configuration
+    // as a stacked vector
+    const Eigen::Map< Eigen::VectorXd, Eigen::Aligned >desired_as_vector (
+                const_cast<double *>( object_desired_configuration.data() ), 3 * num_nodes_ );
 
     for ( size_t traj_step = 1; traj_step <= num_steps; traj_step++ )
     {
@@ -164,19 +169,14 @@ std::vector< AllGrippersSinglePose > DiminishingRigidityModel::getDesiredGripper
         ////////////////////////////////////////////////////////////////////////
 
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
-        current.resize( 3, num_nodes_ );
-        const Eigen::MatrixXd J = computeGrippersToObjectJacobian( traj[traj_step-1], current );
-        // Yes, this is ugly. This is to suppress a warning on type conversion related to Eigen operations
-        #pragma GCC diagnostic push
-        #pragma GCC diagnostic ignored "-Wconversion"
-        const Eigen::MatrixXd J_inv =
-                EigenHelpers::Pinv( J.transpose() * J, EigenHelpers::SuggestedRcond() ) * J.transpose();
+        const Eigen::MatrixXd J = computeGrippersToObjectJacobian( traj[traj_step-1], current_as_point_set );
+
+        const Eigen::MatrixXd J_inv = (J.transpose() * J).inverse() * J.transpose();
         // Apply the desired object delta Jacobian pseudo-inverse - will normalize later
-        Eigen::VectorXd stretching_correction = computeStretchingCorrection( current );
-        current.resize( 3 * num_nodes_, 1 );
         Eigen::VectorXd grippers_velocity_achieve_goal = J_inv *
-                ( (desired - current) + stretching_correction );
-        #pragma GCC diagnostic pop
+                ( (desired_as_vector - current_as_vector) + computeStretchingCorrection(
+//                      world_feedback.object_configuration_ ) );
+                      current_as_point_set ) );
 
         // Find the collision avoidance data that we'll need
         std::vector< CollisionAvoidanceResult > grippers_collision_avoidance_result
@@ -242,7 +242,7 @@ std::vector< AllGrippersSinglePose > DiminishingRigidityModel::getDesiredGripper
             // Assume that our Jacobian is correct, and predict where we will end up (if needed)
             if ( traj_step < num_steps )
             {
-                current += J.block( 0, cols_per_gripper_*gripper_ind, J.rows(), cols_per_gripper_ ) * actual_gripper_velocity;
+                current_as_vector += J.block( 0, cols_per_gripper_*gripper_ind, J.rows(), cols_per_gripper_ ) * actual_gripper_velocity;
             }
         }
     }
