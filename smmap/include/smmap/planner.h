@@ -4,6 +4,7 @@
 #include <boost/thread/recursive_mutex.hpp>
 
 #include <ros/ros.h>
+#include <actionlib/client/simple_action_client.h>
 #include <std_msgs/ColorRGBA.h>
 #include <image_transport/image_transport.h>
 #include <opencv2/highgui/highgui.hpp>
@@ -69,9 +70,9 @@ namespace smmap
             // Internal helpers for the run() function
             ////////////////////////////////////////////////////////////////////
 
-            std::vector< AllGrippersSinglePose > replan(size_t num_traj_cmds_per_loop , double dt );
-
-            smmap_msgs::CmdGrippersTrajectoryGoal noOpTrajectoryGoal();
+            std::vector< AllGrippersSinglePose > replan(
+                    std::vector<WorldFeedback>& world_feedback,
+                    size_t num_traj_cmds_per_loop , double dt );
 
             //std::pair<ObjectTrajectory, AllGrippersTrajectory> readSimulatorFeedbackBuffer();
             void updateModels( const std::vector< WorldFeedback >& feedback );
@@ -118,7 +119,12 @@ namespace smmap
             static void spin( double loop_rate );
             std::vector< std::string > getGripperNames();
             ObjectPointSet getObjectInitialConfiguration();
-            void getObjectPlanningStartConfiguration();
+            std::vector< WorldFeedback > sendGripperTrajectory(
+                    const smmap_msgs::CmdGrippersTrajectoryGoal& goal );
+
+            smmap_msgs::CmdGrippersTrajectoryGoal noOpTrajectoryGoal( size_t num_no_op );
+            smmap_msgs::CmdGrippersTrajectoryGoal toRosGoal(
+                    const std::vector< AllGrippersSinglePose >& trajectory );
 
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
@@ -129,6 +135,8 @@ namespace smmap
 
             ros::Publisher visualization_marker_pub_;
             ros::Publisher visualization_marker_array_pub_;
+
+            actionlib::SimpleActionClient< smmap_msgs::CmdGrippersTrajectoryAction > cmd_grippers_traj_client_;
     };
 }
 

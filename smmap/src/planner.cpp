@@ -6,7 +6,6 @@
 #include <assert.h>
 #include <chrono>
 
-#include <actionlib/client/simple_action_client.h>
 #include <boost/thread.hpp>
 #include <boost/filesystem.hpp>
 #include <ros/callback_queue.h>
@@ -26,6 +25,7 @@ Planner::Planner( ros::NodeHandle& nh )
     , nh_( nh )
     , ph_( "~" )
     , it_( nh )
+    , cmd_grippers_traj_client_( nh_, GetCommandGripperTrajTopic( nh_ ), false )
 {
     // Initialize our task object with whatever it needs
     initializeTask();
@@ -120,31 +120,25 @@ void Planner::run(const size_t num_traj_cmds_per_loop , const double dt )
     // TODO: remove this hardcoded spin rate
     boost::thread spin_thread( boost::bind( &Planner::spin, 1000 ) );
 
-    actionlib::SimpleActionClient< smmap_msgs::CmdGrippersTrajectoryAction >
-            cmd_grippers_traj_client( nh_, GetCommandGripperTrajTopic( nh_ ), false );
     ROS_INFO_NAMED( "planner" , "Waiting for the robot gripper action server to be avaiable" );
-    cmd_grippers_traj_client.waitForServer();
+    cmd_grippers_traj_client_.waitForServer();
 
-    ROS_INFO_NAMED( "planner", "Getting the planner ready to go" );
-    smmap_msgs::CmdGrippersTrajectoryGoal cmd_grippers_traj_goal = noOpTrajectoryGoal();
+    // Objects used for simulator/robot IO
+    std::vector< WorldFeedback > world_feedback;
+
+    ROS_INFO_NAMED( "planner", "Kickstarting the planner with a no-op" );
+    world_feedback = sendGripperTrajectory( noOpTrajectoryGoal( 2 ) );
 
     // Run the planner at whatever rate we've been given
     ROS_INFO_NAMED( "planner" , "Running our planner" );
     while ( ros::ok() )
     {
         // get the best trajectory given the current data
-        const std::vector< AllGrippersSinglePose > best_grippers_traj = replan( num_traj_cmds_per_loop, dt );
-
-        // convert the trajectory into a ROS message
-//        cmd_traj_req.trajectories.resize( best_grippers_traj.size() );
-//        for ( size_t gripper_ind = 0; gripper_ind < cmd_traj_req.trajectories.size(); gripper_ind++ )
-//        {
-//            cmd_traj_req.trajectories[gripper_ind].pose =
-//                    VectorAffine3dToVectorGeometryPose( best_grippers_traj[gripper_ind] );
-//        }
+        const std::vector< AllGrippersSinglePose > best_grippers_traj = replan(
+                    world_feedback, num_traj_cmds_per_loop, dt );
 
         ROS_INFO_NAMED( "planner" , "Sending 'best' trajectory" );
-//        cmd_gripper_traj_client_.call( cmd_traj_req, cmd_traj_res );
+        world_feedback = sendGripperTrajectory( toRosGoal( best_grippers_traj ) );
     }
 
     ROS_INFO_NAMED( "planner" , "Terminating" );
@@ -160,9 +154,10 @@ void Planner::run(const size_t num_traj_cmds_per_loop , const double dt )
  * @param num_traj_cmds_per_loop
  * @return
  */
-std::vector< AllGrippersSinglePose > Planner::replan( size_t num_traj_cmds_per_loop, double dt )
+std::vector< AllGrippersSinglePose > Planner::replan(
+        std::vector< WorldFeedback >& world_feedback,
+        size_t num_traj_cmds_per_loop, double dt )
 {
-    std::vector< WorldFeedback > world_feedback;
     updateModels( world_feedback );
 
     // here we find the desired configuration of the object given the current config
@@ -217,11 +212,6 @@ std::vector< AllGrippersSinglePose > Planner::replan( size_t num_traj_cmds_per_l
 //              (model_predictions[min_weighted_cost_ind].back()).format( eigen_io_one_line_ ) );
 
     return suggested_trajectories[min_weighted_cost_ind].first;
-}
-
-smmap_msgs::CmdGrippersTrajectoryGoal Planner::noOpTrajectoryGoal()
-{
-
 }
 
 /**
@@ -487,16 +477,63 @@ ObjectPointSet Planner::getObjectInitialConfiguration()
     return VectorGeometryPointToEigenMatrix3Xd( srv_data.response.points );
 }
 
-void Planner::getObjectPlanningStartConfiguration()
+std::vector< WorldFeedback > Planner::sendGripperTrajectory(
+        const smmap_msgs::CmdGrippersTrajectoryGoal& goal )
 {
-    ROS_INFO_NAMED( "planner" , "Getting object planning start configuration" );
+    std::vector< WorldFeedback > feedback;
 
-    // Get the initial configuration of the object
-    ros::ServiceClient object_planning_start_configuration_client =
-        nh_.serviceClient< smmap_msgs::GetPointSet >( GetObjectCurrentConfigurationTopic( nh_ ) );
+    cmd_grippers_traj_client_.sendGoalAndWait( goal );
+    if ( cmd_grippers_traj_client_.getState() == actionlib::SimpleClientGoalState::SUCCEEDED )
+    {
+        feedback = parseGripperActionResult( cmd_grippers_traj_client_.getResult() );
+    }
+    else
+    {
+        ROS_FATAL_NAMED( "planner", "Sending a goal to the robot failed" );
+    }
 
-    object_planning_start_configuration_client.waitForExistence();
+    return feedback;
+}
 
-    smmap_msgs::GetPointSet srv_data;
-    object_planning_start_configuration_client.call( srv_data );
+smmap_msgs::CmdGrippersTrajectoryGoal Planner::noOpTrajectoryGoal( size_t num_no_op )
+{
+    smmap_msgs::CmdGrippersTrajectoryGoal goal;
+    goal.gripper_names = GetGripperNames( grippers_data_ );
+
+    smmap_msgs::VectorPose grippers_pose;
+    grippers_pose.pose.resize( grippers_data_.size() );
+    for ( size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++ )
+    {
+        ros::ServiceClient gripper_pose_client =
+            nh_.serviceClient< smmap_msgs::GetGripperPose >( GetGripperPoseTopic( nh_ ) );
+        gripper_pose_client.waitForExistence();
+
+        smmap_msgs::GetGripperPose pose_srv_data;
+        pose_srv_data.request.name = grippers_data_[gripper_ind].name;
+        if ( !gripper_pose_client.call( pose_srv_data ) )
+        {
+            ROS_FATAL_STREAM_NAMED( "planner", "Unabled to retrieve gripper pose: " << grippers_data_[gripper_ind].name );
+        }
+
+        grippers_pose.pose[gripper_ind] = pose_srv_data.response.pose;
+    }
+
+    goal.trajectory.resize( num_no_op, grippers_pose );
+
+    return goal;
+}
+
+smmap_msgs::CmdGrippersTrajectoryGoal Planner::toRosGoal(
+        const std::vector<AllGrippersSinglePose>& trajectory )
+{
+    smmap_msgs::CmdGrippersTrajectoryGoal goal;
+    goal.gripper_names = GetGripperNames( grippers_data_ );
+
+    goal.trajectory.resize( trajectory.size() );
+    for ( size_t time_ind = 0; time_ind < trajectory.size(); time_ind++ )
+    {
+        goal.trajectory[time_ind].pose = VectorAffine3dToVectorGeometryPose( trajectory[time_ind] );
+    }
+
+    return goal;
 }

@@ -1,0 +1,5 @@
+<launch>
+    <include file="$(find smmap)/launch/rope_cylinder_params.launch"/>
+
+    <include file="$(find deform_simulator)/launch/deform_simulator.launch"/>
+</launch>

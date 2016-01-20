@@ -34,6 +34,11 @@ namespace smmap
         AllGrippersSingleVelocity all_grippers_single_velocity_;
     };
 
+    /**
+     * @brief computeNextFeedback
+     * @param next_feedback_ros
+     * @return
+     */
     inline WorldFeedback computeNextFeedback(
             const smmap_msgs::SimulatorFeedback& next_feedback_ros )
     {
@@ -54,34 +59,26 @@ namespace smmap
         next_feedback_eigen.all_grippers_obstacle_surface_normal_ =
                 EigenHelpersConversions::VectorGeometryVector3ToEigenVector3d(
                     next_feedback_ros.obstacle_surface_normal );
+
+        next_feedback_eigen.all_grippers_distance_to_obstacle_ =
+                next_feedback_ros.gripper_distance_to_obstacle;
 
         next_feedback_eigen.sim_time_ = next_feedback_ros.sim_time;
 
         return next_feedback_eigen;
     }
 
+    /**
+     * @brief computeNextFeedback
+     * @param prev_feedback_ros
+     * @param next_feedback_ros
+     * @return
+     */
     inline WorldFeedback computeNextFeedback(
             const WorldFeedback& prev_feedback_ros,
             const smmap_msgs::SimulatorFeedback& next_feedback_ros )
     {
-        WorldFeedback next_feedback_eigen;
-        next_feedback_eigen.object_configuration_ =
-                EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(
-                    next_feedback_ros.object_configuration );
-
-        next_feedback_eigen.all_grippers_single_pose_ =
-                EigenHelpersConversions::VectorGeometryPoseToVectorAffine3d(
-                    next_feedback_ros.gripper_poses );
-
-        next_feedback_eigen.all_grippers_nearest_point_to_obstacle_ =
-                EigenHelpersConversions::VectorGeometryPointToEigenVector3d(
-                    next_feedback_ros.gripper_nearest_point_to_obstacle );
-
-        next_feedback_eigen.all_grippers_obstacle_surface_normal_ =
-                EigenHelpersConversions::VectorGeometryVector3ToEigenVector3d(
-                    next_feedback_ros.obstacle_surface_normal );
-
-        next_feedback_eigen.sim_time_ = next_feedback_ros.sim_time;
+        WorldFeedback next_feedback_eigen = computeNextFeedback( next_feedback_ros );
 
         // Calculate object and gripper velocities based on the previous timestep
         const double time_delta =
@@ -111,6 +108,33 @@ namespace smmap
         return next_feedback_eigen;
     }
 
+    /**
+     * @brief parseGripperActionResult
+     * @param result
+     * @return
+     */
+    inline std::vector< WorldFeedback > parseGripperActionResult(
+            const smmap_msgs::CmdGrippersTrajectoryResultConstPtr& result )
+    {
+        assert( result->sim_state_trajectory.size() > 0 );
+        std::vector< WorldFeedback > world_feedback( result->sim_state_trajectory.size() );
+
+        world_feedback[0] = computeNextFeedback( result->sim_state_trajectory[0] );
+        for ( size_t time_ind = 1; time_ind < result->sim_state_trajectory.size(); time_ind++ )
+        {
+            world_feedback[time_ind] = computeNextFeedback(
+                    world_feedback[time_ind-1],
+                    result->sim_state_trajectory[time_ind] );
+        }
+
+        return world_feedback;
+    }
+
+    /**
+     * @brief getGripperTrajectories
+     * @param feedback
+     * @return
+     */
     inline std::vector< AllGrippersSinglePose > getGripperTrajectories(
             const std::vector< WorldFeedback >& feedback )
     {
@@ -126,6 +150,11 @@ namespace smmap
         return grippers_trajectories;
     }
 
+    /**
+     * @brief getGripperVelocities
+     * @param feedback
+     * @return
+     */
     inline std::vector< AllGrippersSingleVelocity > getGripperVelocities(
             const std::vector< WorldFeedback >& feedback )
     {
@@ -134,13 +163,19 @@ namespace smmap
 
         for ( size_t time_ind = 1; time_ind < feedback.size(); time_ind++ )
         {
-            grippers_velocities[time_ind] =
+            grippers_velocities[time_ind-1] =
                     feedback[time_ind].all_grippers_single_velocity_;
         }
 
         return grippers_velocities;
     }
 
+    /**
+     * @brief calculateGrippersVelocities
+     * @param grippers_trajectory
+     * @param dt
+     * @return
+     */
     inline std::vector< AllGrippersSingleVelocity > calculateGrippersVelocities(
             const std::vector< AllGrippersSinglePose >& grippers_trajectory,
             const double dt )
@@ -163,9 +198,11 @@ namespace smmap
                             dt );
             }
         }
+
         return grippers_velocities;
     }
 
+    /// Stores the result of a collision avoidance calculation for a single gripper
     struct CollisionAvoidanceResult
     {
         CollisionAvoidanceResult( long cols_per_gripper )
@@ -256,7 +293,6 @@ namespace smmap
 
         return std::sqrt( dist_squared / (double)traj1.size() );
     }
-
 
     /**
      * @brief Computes the distance between each node in the given object

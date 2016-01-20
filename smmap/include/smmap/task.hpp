@@ -139,6 +139,13 @@ namespace smmap
                     }
                 }
 
+                std_msgs::ColorRGBA color;
+                color.r = 0;
+                color.g = 0;
+                color.b = 1;
+                color.a = 1;
+                visualizeRope( desired_configuration, color, "rope_desired_configuration" );
+
                 return desired_configuration;
             }
 
