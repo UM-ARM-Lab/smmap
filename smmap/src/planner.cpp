@@ -33,11 +33,13 @@ Planner::Planner( ros::NodeHandle& nh )
     // Get the data we need to create our model set
     getGrippersData();
 
-    double deformability;
-    if ( ph_.getParam( "deformability", deformability ) )
+    double translational_deformability, rotational_deformability;
+    if ( ph_.getParam( "translational_deformability", translational_deformability ) &&
+         ph_.getParam( "rotational_deformability", rotational_deformability ) )
     {
         model_set_ = std::unique_ptr< ModelSet >(
-                new ModelSet( grippers_data_, getObjectInitialConfiguration(), *task_, deformability ) );
+                    new ModelSet( grippers_data_, getObjectInitialConfiguration(), *task_,
+                                  translational_deformability, rotational_deformability ) );
     }
     else
     {
@@ -89,25 +91,29 @@ Planner::Planner( ros::NodeHandle& nh )
             }
         }
 
+        loggers.insert( std::make_pair< std::string, Log::Log > (
+                            "time",
+                            Log::Log( log_folder + "time.txt", false ) ) ) ;
+
         loggers.insert( std::make_pair< std::string, Log::Log >(
                             "object_current_configuration",
-                            Log::Log( log_folder + "object_current_configuration.txt" ) ) );
+                            Log::Log( log_folder + "object_current_configuration.txt", false ) ) );
 
         loggers.insert( std::make_pair< std::string, Log::Log >(
                             "object_desired_configuration",
-                            Log::Log( log_folder + "object_desired_configuration.txt" ) ) );
-
-        loggers.insert( std::make_pair< std::string, Log::Log > (
-                            "object_predicted_configuration",
-                            Log::Log( log_folder + "object_predicted_configuration.txt" ) ) ) ;
+                            Log::Log( log_folder + "object_desired_configuration.txt", false ) ) );
 
         loggers.insert( std::make_pair< std::string, Log::Log > (
                             "error",
-                            Log::Log( log_folder + "error.txt" ) ) ) ;
+                            Log::Log( log_folder + "error.txt", false ) ) ) ;
 
         loggers.insert( std::make_pair< std::string, Log::Log > (
-                            "time",
-                            Log::Log( log_folder + "time.txt" ) ) ) ;
+                            "suggested_grippers_delta",
+                            Log::Log( log_folder + "suggested_grippers_delta", false ) ) ) ;
+
+        loggers.insert( std::make_pair< std::string, Log::Log > (
+                            "object_predicted_configuration",
+                            Log::Log( log_folder + "object_predicted_configuration.txt", false ) ) ) ;
     }
 }
 
@@ -120,7 +126,7 @@ void Planner::run( const size_t num_traj_cmds_per_loop , const double dt )
     // TODO: remove this hardcoded spin rate
     boost::thread spin_thread( boost::bind( &Planner::spin, 1000 ) );
 
-    ROS_INFO_NAMED( "planner" , "Waiting for the robot gripper action server to be avaiable" );
+    ROS_INFO_NAMED( "planner" , "Waiting for the robot gripper action server to be available" );
     cmd_grippers_traj_client_.waitForServer();
 
     // Objects used for simulator/robot IO
@@ -128,6 +134,8 @@ void Planner::run( const size_t num_traj_cmds_per_loop , const double dt )
 
     ROS_INFO_NAMED( "planner", "Kickstarting the planner with a no-op" );
     world_feedback = sendGripperTrajectory( noOpTrajectoryGoal( 2 ) );
+
+    ros::console::shutdown();
 
     // Run the planner at whatever rate we've been given
     ROS_INFO_NAMED( "planner" , "Running our planner" );
@@ -139,6 +147,11 @@ void Planner::run( const size_t num_traj_cmds_per_loop , const double dt )
 
         ROS_INFO_NAMED( "planner" , "Sending 'best' trajectory" );
         world_feedback = sendGripperTrajectory( toRosGoal( best_grippers_traj ) );
+
+        if ( task_->maxTime() < world_feedback.back().sim_time_ )
+        {
+            ros::shutdown();
+        }
     }
 
     ROS_INFO_NAMED( "planner" , "Terminating" );
@@ -203,13 +216,33 @@ std::vector< AllGrippersSinglePose > Planner::replan(
         }
     }
 
+
     // TODO: deal with multiple predictions, which one is the best?
-//    VectorObjectTrajectory model_predictions = model_set_->makePredictions( world_feedback.back(), suggested_trajectories[min_weighted_cost_ind].first );
+    VectorObjectTrajectory model_predictions = model_set_->makePredictions( world_feedback.back(), suggested_trajectories[min_weighted_cost_ind].first, dt );
 
-//    task_->visualizePredictions( model_predictions, min_weighted_cost_ind );
+    // TODO: make this logging work for multi-step trajectories
+    if ( logging_enabled_ )
+    {
+        assert( num_traj_cmds_per_loop == 1 );
+    }
 
-//    LOG_COND( loggers.at( "object_predicted_configuration" ) , logging_enabled_,
-//              (model_predictions[min_weighted_cost_ind].back()).format( eigen_io_one_line_ ) );
+    LOG_COND( loggers.at( "time" ), logging_enabled_,
+              world_feedback.back().sim_time_ );
+
+    LOG_COND( loggers.at( "object_current_configuration" ), logging_enabled_,
+              world_feedback.back().object_configuration_.format( eigen_io_one_line_ ) );
+
+    LOG_COND( loggers.at( "object_desired_configuration" ), logging_enabled_,
+              object_desired_config.format( eigen_io_one_line_ ) );
+
+    LOG_COND( loggers.at( "error"), logging_enabled_,
+              task_->calculateError( world_feedback.back().object_configuration_ ) );
+
+    LOG_COND( loggers.at( "suggested_grippers_delta"), logging_enabled_,
+              PrintDeltaOneLine( suggested_trajectories[min_weighted_cost_ind].first ) );
+
+    LOG_COND( loggers.at( "object_predicted_configuration" ), logging_enabled_,
+              (model_predictions[min_weighted_cost_ind].back()).format( eigen_io_one_line_ ) );
 
     return suggested_trajectories[min_weighted_cost_ind].first;
 }

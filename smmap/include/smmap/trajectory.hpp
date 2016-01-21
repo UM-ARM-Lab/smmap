@@ -202,6 +202,27 @@ namespace smmap
         return grippers_velocities;
     }
 
+
+    inline std::string PrintDeltaOneLine( std::vector< AllGrippersSinglePose > gripper_traj )
+    {
+        const Eigen::IOFormat eigen_io_one_line_( Eigen::FullPrecision, Eigen::DontAlignCols, " ", " ", "", "", "", ""  );
+
+        std::stringstream out;
+
+        AllGrippersSinglePose start = gripper_traj.front();
+        AllGrippersSinglePose end = gripper_traj.back();
+
+        assert( start.size() == end.size() );
+
+        for ( size_t gripper_ind = 0; gripper_ind < start.size(); gripper_ind++ )
+        {
+            out << kinematics::calculateVelocity( start[gripper_ind], end[gripper_ind], 1 ).format( eigen_io_one_line_ ) << " ";
+        }
+
+        return out.str();
+    }
+
+
     /// Stores the result of a collision avoidance calculation for a single gripper
     struct CollisionAvoidanceResult
     {

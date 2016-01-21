@@ -1,7 +1,7 @@
 <launch>
     <arg name="test_id" default=""/>
 
-    <param name="logging_enabled" value="false"/>
+    <param name="logging_enabled" value="true"/>
     <param name="log_folder" value="$(find smmap)/../logs/$(arg test_id)/"/>
 
     <param name="deformable_type" value="cloth"/>

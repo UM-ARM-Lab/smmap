@@ -17,25 +17,23 @@ namespace smmap
             // Constructor and destructor
             ////////////////////////////////////////////////////////////////////
 
-            /**
-             * @brief ModelSet
-             * @param grippers_data
-             * @param object_initial_configuration
-             * @param task
-             * @param deformability_override If set to -1, do not override the
-             * deformablity value. If set >= 0, use this value, otherwise throw
-             * an exception
-             */
             ModelSet( const std::vector< GripperData >& grippers_data,
                       const ObjectPointSet& object_initial_configuration,
-                      const Task& task, double deformability_override = -1 );
+                      const Task& task );
+
+            ModelSet( const std::vector< GripperData >& grippers_data,
+                      const ObjectPointSet& object_initial_configuration,
+                      const Task& task,
+                      double translational_deformability,
+                      double rotational_deformability );
             ~ModelSet();
 
             void updateModels( const std::vector<WorldFeedback>& feedback );
 
             VectorObjectTrajectory makePredictions(
                     const WorldFeedback& current_world_configuration,
-                    const std::vector< AllGrippersSinglePose >& grippers_trajectory ) const;
+                    const std::vector< AllGrippersSinglePose >& grippers_trajectory,
+                    double dt ) const;
 
             std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > >
             getDesiredGrippersTrajectories(

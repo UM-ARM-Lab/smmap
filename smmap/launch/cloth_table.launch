@@ -1,5 +1,6 @@
 <launch>
     <arg name="test_id" default=""/>
+    <arg name="deformability_override" default="0"/>
     
     <include file="$(find smmap)/launch/cloth_table_params.launch">
         <arg name="test_id" value="$(arg test_id)"/>
@@ -10,5 +11,8 @@
     <node name="smmap_planner_node"
         pkg="smmap"
         type="smmap_test_node"
-    />
+        required="true">
+        <param if="$(arg deformability_override)" name="translational_deformability" value="$(arg translational_deformability)"/>
+        <param if="$(arg deformability_override)" name="rotational_deformability" value="$(arg rotational_deformability)"/>
+    </node>
 </launch>

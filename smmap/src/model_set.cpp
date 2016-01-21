@@ -12,50 +12,43 @@
 using namespace smmap;
 
 ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
-        const ObjectPointSet& object_initial_configuration,
-        const Task& task, double deformability_override )
+                    const ObjectPointSet& object_initial_configuration,
+                    const Task& task )
+    : ModelSet( grippers_data, object_initial_configuration, task,
+                task.getDeformability(), task.getDeformability() )
+{}
+
+ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
+                    const ObjectPointSet& object_initial_configuration,
+                    const Task& task,
+                    double translational_deformability,
+                    double rotational_deformability )
     : rnd_generator_( (unsigned long)std::chrono::system_clock::now().time_since_epoch().count() )
 {
     // Initialize model types with their needed data
     DeformableModel::UpdateGrippersData( grippers_data );
     DiminishingRigidityModel::SetInitialObjectConfiguration( object_initial_configuration );
 
-    // Initialze a diminishing rigidity model
-    double deformability;
-
-    if ( deformability_override == -1 )
-    {
-        deformability = task.getDeformability();
-    }
-    else if ( deformability_override >= 0 )
-    {
-        deformability = deformability_override;
-    }
-    else
-    {
-        throw new std::invalid_argument( "deformability_override must be -1 or >= 0" );
-    }
-
-//    for ( double deformability = 0; deformability <= 15; deformability += 0.5 )
-    {
-        addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
-                        deformability, deformability, task.getUseRotation(),
-//                        deformability, deformability*1.5, task.getUseRotation(),
-                        task.getCollisionScalingFactor(), task.getStretchingScalingThreshold() ) ) );
-    }
+    addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
+                    translational_deformability,
+                    rotational_deformability,
+                    task.getUseRotation(),
+                    task.getCollisionScalingFactor(),
+                    task.getStretchingScalingThreshold() ) ) );
 }
 
 ModelSet::~ModelSet()
 {}
 
-/*
+
 VectorObjectTrajectory ModelSet::makePredictions(
         const WorldFeedback& current_world_configuration,
-        const std::vector<AllGrippersSinglePose>& grippers_trajectory ) const
+        const std::vector<AllGrippersSinglePose>& grippers_trajectory,
+        double dt ) const
 {
     VectorObjectTrajectory predictions( model_list_.size() );
     std::vector< kinematics::VectorVector6d > gripper_velocities =
-            calculateGrippersVelocities( grippers_trajectory );
+            calculateGrippersVelocities( grippers_trajectory, dt );
 
     #pragma omp parallel for
     for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
@@ -66,7 +59,7 @@ VectorObjectTrajectory ModelSet::makePredictions(
 
     return predictions;
 }
-*/
+
 
 void ModelSet::updateModels( const std::vector< WorldFeedback >& feedback )
 {

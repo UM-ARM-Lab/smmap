@@ -10,7 +10,9 @@
 
     <node name="smmap_planner_node"
         pkg="smmap"
-        type="smmap_test_node">
-        <param if="$(arg deformability_override)" name="deformability" value="$(arg deformability)"/>
+        type="smmap_test_node"
+        required="true">
+        <param if="$(arg deformability_override)" name="translational_deformability" value="$(arg translational_deformability)"/>
+        <param if="$(arg deformability_override)" name="rotational_deformability" value="$(arg rotational_deformability)"/>
     </node>
 </launch>

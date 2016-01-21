@@ -27,12 +27,13 @@ namespace smmap
                 visualization_marker_array_pub_ =
                         nh.advertise< visualization_msgs::MarkerArray >( GetVisualizationMarkerArrayTopic( nh ), 10 );
             }
-
-//            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
-//            {
-//                (void)model_predictions;
-//                (void)best_traj;
-//            }
+/*
+            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
+            {
+                (void)model_predictions;
+                (void)best_traj;
+            }
+*/
 
             virtual ObjectPointSet findObjectDesiredConfiguration( const ObjectPointSet& current_configuration ) const = 0;
 
@@ -63,6 +64,7 @@ namespace smmap
             virtual double getCollisionScalingFactor() const = 0;       // beta (or k2)
             virtual double getStretchingScalingThreshold() const = 0;   // lambda
             virtual bool getUseRotation() const = 0;
+            virtual double maxTime() const = 0; // max simulation time when scripting things
 
         protected:
             mutable ros::Publisher visualization_marker_pub_;
@@ -77,16 +79,18 @@ namespace smmap
                 , cover_points_( getCoverPointsHelper( nh ) )
             {}
 
-//            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
-//            {
-//                std_msgs::ColorRGBA color;
-//                color.r = 1;
-//                color.g = 1;
-//                color.b = 0;
-//                color.a = 1;
+/*
+            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
+            {
+                std_msgs::ColorRGBA color;
+                color.r = 1;
+                color.g = 1;
+                color.b = 0;
+                color.a = 1;
 
-//                visualizeRope( model_predictions[best_traj].back(), color, "rope_predicted" );
-//            }
+                visualizeRope( model_predictions[best_traj].back(), color, "rope_predicted" );
+            }
+*/
 
             void visualizeRope( const ObjectPointSet& rope, const std_msgs::ColorRGBA& color, const std::string& name ) const
             {
@@ -115,11 +119,9 @@ namespace smmap
                 // for every cover point, find the nearest deformable object point
                 for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
                 {
-                    Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
-
-                    ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
-
-                    Eigen::RowVectorXd dist_sq = diff.array().square().colwise().sum();
+                    const Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
+                    const ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
+                    const Eigen::RowVectorXd dist_sq = diff.array().square().colwise().sum();
 
                     // find the closest deformable point
                     int min_ind = -1;
@@ -149,6 +151,26 @@ namespace smmap
                 return desired_configuration;
             }
 
+            double calculateError( const ObjectPointSet& current_configuration )
+            {
+                double error = 0;
+
+                // for every cover point, find the nearest deformable object point
+                for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
+                {
+                    const Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
+                    const ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
+                    const double min_dist = diff.array().square().colwise().sum().minCoeff();
+
+                    if ( min_dist >= 0.2/20. )
+                    {
+                        error += min_dist;
+                    }
+                }
+
+                return error;
+            }
+
             double getDeformability() const
             {
                 return 0.5*20; // k
@@ -169,6 +191,10 @@ namespace smmap
                 return true;
             }
 
+            double maxTime() const
+            {
+                return 25;
+            }
 
         private:
             /// Stores the points that we are trying to cover with the rope
@@ -204,16 +230,18 @@ namespace smmap
                 , mirror_map_( createMirrorMap( nh, point_reflector_ ) )
             {}
 
-//            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
-//            {
-//                std_msgs::ColorRGBA color;
-//                color.r = 1;
-//                color.g = 1;
-//                color.b = 0;
-//                color.a = 1;
+/*
+            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
+            {
+                std_msgs::ColorRGBA color;
+                color.r = 1;
+                color.g = 1;
+                color.b = 0;
+                color.a = 1;
 
-//                visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
-//            }
+                visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
+            }
+*/
 
             void visualizeCloth( const ObjectPointSet& cloth, const std_msgs::ColorRGBA color, const std::string& name ) const
             {
@@ -280,6 +308,19 @@ namespace smmap
                 return desired_configuration;
             }
 
+            double calculateError( const ObjectPointSet& current_configuration ) const
+            {
+                double error = 0;
+
+                for ( std::map< long, long >::const_iterator ittr = mirror_map_.begin(); ittr != mirror_map_.end(); ittr++ )
+                {
+                    error += ( current_configuration.block< 3, 1 >( 0, ittr->second ) -
+                               point_reflector_.reflect( current_configuration.block< 3, 1 >( 0, ittr->first ) ) ).norm();
+                }
+
+                return error;
+            }
+
             double getDeformability() const
             {
                 return 0.7*20; // k
@@ -298,6 +339,11 @@ namespace smmap
             bool getUseRotation() const
             {
                 return true;
+            }
+
+            double maxTime() const
+            {
+                return 10.;
             }
 
         private:
@@ -397,13 +443,11 @@ namespace smmap
                 // for every cover point, find the nearest deformable object point
                 for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
                 {
-                    Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
+                    const Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
+                    const ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
+                    const Eigen::RowVectorXd dist_sq = diff.array().square().colwise().sum();
 
-                    ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
-
-                    Eigen::RowVectorXd dist_sq = diff.array().square().colwise().sum();
-
-                    // find the closest deformable point
+                    // find the closest deformable object point
                     int min_ind = -1;
                     double min_dist = std::numeric_limits< double >::infinity();
                     for ( int object_ind = 0; object_ind < dist_sq.cols(); object_ind++ )
@@ -415,10 +459,7 @@ namespace smmap
                         }
                     }
 
-//                    if ( min_dist >= 0.2/20. )
-//                    {
-                        desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
-//                    }
+                    desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
                 }
 
                 std_msgs::ColorRGBA color;
@@ -431,6 +472,21 @@ namespace smmap
                 visualizeCloth( desired_configuration, color, "cloth_desired" );
 
                 return desired_configuration;
+            }
+
+            double calculateError( const ObjectPointSet &current_configuration ) const
+            {
+                double error = 0;
+
+                // for every cover point, find the nearest deformable object point
+                for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
+                {
+                    Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
+                    ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
+                    error += diff.array().square().colwise().sum().minCoeff();
+                }
+
+                return error;
             }
 
             double getDeformability() const
@@ -453,6 +509,10 @@ namespace smmap
                 return true;
             }
 
+            double maxTime() const
+            {
+                return 12.;
+            }
 
         private:
             /// Stores the points that we are trying to cover with the cloth
