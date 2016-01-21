@@ -40,7 +40,6 @@ ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
     {
         addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
                         deformability, deformability, task.getUseRotation(),
-//                        task.getDeformability(), task.getDeformability()*1.5, task.getUseRotation(),
 //                        deformability, deformability*1.5, task.getUseRotation(),
                         task.getCollisionScalingFactor(), task.getStretchingScalingThreshold() ) ) );
     }

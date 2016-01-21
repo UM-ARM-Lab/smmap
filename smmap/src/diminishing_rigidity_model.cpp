@@ -174,9 +174,7 @@ std::vector< AllGrippersSinglePose > DiminishingRigidityModel::getDesiredGripper
         const Eigen::MatrixXd J_inv = (J.transpose() * J).inverse() * J.transpose();
         // Apply the desired object delta Jacobian pseudo-inverse - will normalize later
         Eigen::VectorXd grippers_velocity_achieve_goal = J_inv *
-                ( (desired_as_vector - current_as_vector) + computeStretchingCorrection(
-//                      world_feedback.object_configuration_ ) );
-                      current_as_point_set ) );
+                ( (desired_as_vector - current_as_vector) + computeStretchingCorrection( current_as_point_set ) );
 
         // Find the collision avoidance data that we'll need
         std::vector< CollisionAvoidanceResult > grippers_collision_avoidance_result
@@ -201,12 +199,14 @@ std::vector< AllGrippersSinglePose > DiminishingRigidityModel::getDesiredGripper
             {
                 desired_gripper_vel.segment<3>(3) /= 20;
             }
-//            desired_gripper_vel.segment<3>(3) /= 50;
             if ( desired_gripper_vel.norm() > max_step_size )
             {
                 desired_gripper_vel = desired_gripper_vel / desired_gripper_vel.norm() * max_step_size;
             }
-//            desired_gripper_vel.segment<3>(3) *= 20;
+            if ( use_rotation_ )
+            {
+                desired_gripper_vel.segment<3>(3) *= 20;
+            }
 
             // If we need to avoid an obstacle, then use the sliding scale
             const CollisionAvoidanceResult& collision_result = grippers_collision_avoidance_result[(size_t)gripper_ind];
@@ -311,14 +311,20 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(
 
                 // Vector from gripper to node
                 const Eigen::Vector3d gripper_to_node =
-                        current_configuration.block< 3, 1 >( 0, node_ind ) -
-//                        current_configuration.block< 3, 1 >( 0, dist_to_gripper.first ) -
+//                        current_configuration.block< 3, 1 >( 0, node_ind ) -
+                        current_configuration.block< 3, 1 >( 0, dist_to_gripper.first ) -
                         grippers_pose[(size_t)gripper_ind].translation();
+
+//                const Eigen::Vector3d gripper_to_nearest_attached_node =
+//                        current_configuration.block< 3, 1 >( 0, dist_to_gripper.first ) -
+//                        grippers_pose[(size_t)gripper_ind].translation();
+
                 J_rot.block< 3, 1 >( 0, 0 ) = gripper_rot.block< 3, 1 >( 0, 0 ).cross( gripper_to_node );
                 J_rot.block< 3, 1 >( 0, 1 ) = gripper_rot.block< 3, 1 >( 0, 1 ).cross( gripper_to_node );
                 J_rot.block< 3, 1 >( 0, 2 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_node );
 
                 J.block< 3, 3 >( node_ind * 3, gripper_ind * cols_per_gripper_ + 3 ) =
+//                        gripper_to_nearest_attached_node.norm() / gripper_to_node.norm() *
                         std::exp( -rotation_deformability_ * dist_to_gripper.second ) * J_rot;
             }
         }
@@ -383,15 +389,15 @@ Eigen::MatrixXd DiminishingRigidityModel::computeCollisionToGripperJacobian(
     // Translation - if I move the gripper along its x/y/z-axis, what happens to the given point?
     J_collision.block< 3, 3 >( 0, 0 ) = gripper_rot;
 
-    const Eigen::Vector3d gripper_to_node =
+    const Eigen::Vector3d gripper_to_point_in_collision =
             point_on_gripper - gripper_pose.translation();
 
     // If I rotate the gripper about its x/y/z-axis, what happens to the point in question?
     if ( cols_per_gripper_ == 6 )
     {
-        J_collision.block< 3, 1 >( 0, 3 ) = gripper_rot.block< 3, 1 >( 0, 0 ).cross( gripper_to_node );
-        J_collision.block< 3, 1 >( 0, 4 ) = gripper_rot.block< 3, 1 >( 0, 1 ).cross( gripper_to_node );
-        J_collision.block< 3, 1 >( 0, 5 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_node );
+        J_collision.block< 3, 1 >( 0, 3 ) = gripper_rot.block< 3, 1 >( 0, 0 ).cross( gripper_to_point_in_collision );
+        J_collision.block< 3, 1 >( 0, 4 ) = gripper_rot.block< 3, 1 >( 0, 1 ).cross( gripper_to_point_in_collision );
+        J_collision.block< 3, 1 >( 0, 5 ) = gripper_rot.block< 3, 1 >( 0, 2 ).cross( gripper_to_point_in_collision );
     }
 
     return J_collision;
