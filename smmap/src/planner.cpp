@@ -202,11 +202,11 @@ std::vector< AllGrippersSinglePose > Planner::replan(
         }
     }
 
-    std::vector< AllGrippersSinglePose > best_trajectory =
-            optimizeTrajectoryDirectShooting(
-                world_feedback.back(),
-                suggested_trajectories[min_weighted_cost_ind].first,
-                dt );
+    std::vector< AllGrippersSinglePose > best_trajectory = suggested_trajectories[min_weighted_cost_ind].first;
+//            optimizeTrajectoryDirectShooting(
+//                world_feedback.back(),
+//                suggested_trajectories[min_weighted_cost_ind].first,
+//                dt );
 
     // Send the desired "best" gripper translation to the visualizer to plot
     if ( visualize_gripper_translation_ )
@@ -258,6 +258,7 @@ std::vector< AllGrippersSinglePose > Planner::replan(
 
     return suggested_trajectories[min_weighted_cost_ind].first;
 }
+
 
 /**
  * @brief Planner::updateModels

@@ -14,9 +14,30 @@ using namespace smmap;
 ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
                     const ObjectPointSet& object_initial_configuration,
                     const Task& task )
-    : ModelSet( grippers_data, object_initial_configuration, task,
-                task.getDeformability(), task.getDeformability() )
-{}
+    : rnd_generator_( (unsigned long)std::chrono::system_clock::now().time_since_epoch().count() )
+{
+    // Initialize model types with their needed data
+    DeformableModel::UpdateGrippersData( grippers_data );
+    DiminishingRigidityModel::SetInitialObjectConfiguration( object_initial_configuration );
+
+    const double deform_step = 0.5;
+    //const double deform_min = std::max( 0., task.getDeformability() - 5 );
+    const double deform_min = 10;
+    const double deform_max = deform_min + 20 * deform_step;
+
+    for ( double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step )
+    {
+        for ( double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step )
+        {
+            addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
+                            trans_deform,
+                            rot_deform,
+                            task.getUseRotation(),
+                            task.getCollisionScalingFactor(),
+                            task.getStretchingScalingThreshold() ) ) );
+        }
+    }
+}
 
 ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
                     const ObjectPointSet& object_initial_configuration,

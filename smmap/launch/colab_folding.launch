@@ -1,5 +1,5 @@
 <launch>
-    <arg name="test_id" default="shooting_10_ittr_trans_14_rot_14"/>
+    <arg name="test_id" default="colab_folding/multi_model"/>
     <arg name="deformability_override" default="0"/>
     
     <include file="$(find smmap)/launch/colab_folding_params.launch">

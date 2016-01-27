@@ -53,7 +53,7 @@ include_directories( include
 set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -g -O3 -Wall -Wextra -Wpedantic -Wconversion" )
 
 unset( USE_OPEN_MP CACHE )
-option( USE_OPEN_MP "Set to ON if we want to use OpenMP" OFF )
+option( USE_OPEN_MP "Set to ON if we want to use OpenMP" ON )
 if ( USE_OPEN_MP )
     set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp" )
     message( STATUS "Enabling OpenMP for SMMAP library" )
