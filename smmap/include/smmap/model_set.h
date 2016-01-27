@@ -38,8 +38,8 @@ namespace smmap
                     const ObjectPointSet& object_desired_configuration,
                     double max_step_size, size_t num_steps );
 
-            std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > >
-            getObjectiveFunctionDerivitives(
+            std::vector< Eigen::VectorXd >
+            getObjectiveFunction1stDerivitive(
                     const WorldFeedback& current_world_configuration,
                     const std::vector< AllGrippersSinglePose >& grippers_trajectory,
                     const std::vector< AllGrippersSingleVelocity >& grippers_velocities,

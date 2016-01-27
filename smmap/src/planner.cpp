@@ -350,6 +350,27 @@ ObjectPointSet Planner::combineModelPredictionsLastTimestep(
     return weighted_average_configuration;
 }
 
+Eigen::VectorXd Planner::combineModelDerivitives(
+        const std::vector< Eigen::VectorXd >& model_derivitives ) const
+{
+    assert( model_derivitives.size() > 0 );
+
+    const std::vector< double >& model_confidences =
+            model_set_->getModelConfidence();
+    double total_weight = std::accumulate( model_confidences.begin(), model_confidences.end(), 0. );
+
+    Eigen::VectorXd weighted_average_derivitive = Eigen::VectorXd::Zero( model_derivitives[0].size() );
+
+    // Itterate through each model derivitive
+    for ( size_t model_ind = 0; model_ind < model_derivitives.size(); model_ind++ )
+    {
+        weighted_average_derivitive +=
+                model_derivitives[model_ind] * model_confidences[model_ind] / total_weight;
+    }
+
+    return weighted_average_derivitive;
+}
+
 std::pair< Eigen::VectorXd, Eigen::MatrixXd > Planner::combineModelDerivitives(
         const std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > >& model_derivitives ) const
 {
@@ -413,16 +434,12 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
     do
     {
         ROS_INFO_STREAM_NAMED( "planner" , "  Direct shooting itteration " << ittr << ". Current objective value " << objective_value );
-        // Find the first and second derivitives of the objective function with
+
+        // Find the first derivitives of the objective function with
         // respect to the gripper velocities
-        //
-        // Note that these derivitives are layed out as
-        //     Eigen::VectorXd( num_grippers * 6 * num_timesteps ),
-        //     Eigen::MatrixXd( num_grippers * 6 * num_timesteps, num_grippers * 6 * num_timesteps ) );
-        //
-        std::pair< Eigen::VectorXd, Eigen::MatrixXd > derivitives =
+        Eigen::VectorXd derivitives =
                 combineModelDerivitives(
-                    model_set_->getObjectiveFunctionDerivitives(
+                    model_set_->getObjectiveFunction1stDerivitive(
                         current_world_configuration,
                         grippers_trajectory,
                         grippers_velocities,
@@ -431,7 +448,7 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
 
         // Update the gripper velocities based on a Newton style gradient descent
 //        Eigen::VectorXd velocity_update = derivitives.second.colPivHouseholderQr().solve( -derivitives.first );
-        Eigen::VectorXd velocity_update = -derivitives.first ;
+        Eigen::VectorXd velocity_update = -derivitives ;
         if ( velocity_update.norm() > MAX_GRIPPER_VELOCITY )
         {
             velocity_update *= MAX_GRIPPER_VELOCITY / velocity_update.norm();

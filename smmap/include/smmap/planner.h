@@ -83,6 +83,9 @@ namespace smmap
             ObjectPointSet combineModelPredictionsLastTimestep(
                     const VectorObjectTrajectory& model_predictions ) const;
 
+            Eigen::VectorXd combineModelDerivitives(
+                    const std::vector< Eigen::VectorXd >& model_derivitives ) const;
+
             std::pair< Eigen::VectorXd, Eigen::MatrixXd > combineModelDerivitives(
                     const std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > >& model_derivitives ) const;
 

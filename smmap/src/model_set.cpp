@@ -96,19 +96,19 @@ std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > > ModelSe
 }
 
 
-std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > > ModelSet::getObjectiveFunctionDerivitives(
+std::vector< Eigen::VectorXd > ModelSet::getObjectiveFunction1stDerivitive(
         const WorldFeedback& current_world_configuration,
         const std::vector< AllGrippersSinglePose >& grippers_trajectory,
         const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
         double dt,
         std::function< double( const ObjectPointSet& ) > objective_function ) const
 {
-    std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > > derivitives( model_list_.size() );
+    std::vector< Eigen::VectorXd > derivitives( model_list_.size() );
 
     #pragma omp parallel for
     for ( size_t ind = 0; ind < model_list_.size(); ind++ )
     {
-        derivitives[ind] = model_list_[ind]->getObjectiveFunctionDerivitives(
+        derivitives[ind] = model_list_[ind]->getObjectiveFunction1stDerivitive(
                     current_world_configuration,
                     grippers_trajectory,
                     grippers_velocities,
