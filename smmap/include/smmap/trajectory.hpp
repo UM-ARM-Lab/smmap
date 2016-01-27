@@ -39,7 +39,7 @@ namespace smmap
      * @param next_feedback_ros
      * @return
      */
-    inline WorldFeedback computeNextFeedback(
+    inline WorldFeedback ComputeNextFeedback(
             const smmap_msgs::SimulatorFeedback& next_feedback_ros )
     {
         WorldFeedback next_feedback_eigen;
@@ -74,11 +74,11 @@ namespace smmap
      * @param next_feedback_ros
      * @return
      */
-    inline WorldFeedback computeNextFeedback(
+    inline WorldFeedback ComputeNextFeedback(
             const WorldFeedback& prev_feedback_ros,
             const smmap_msgs::SimulatorFeedback& next_feedback_ros )
     {
-        WorldFeedback next_feedback_eigen = computeNextFeedback( next_feedback_ros );
+        WorldFeedback next_feedback_eigen = ComputeNextFeedback( next_feedback_ros );
 
         // Calculate object and gripper velocities based on the previous timestep
         const double time_delta =
@@ -113,16 +113,16 @@ namespace smmap
      * @param result
      * @return
      */
-    inline std::vector< WorldFeedback > parseGripperActionResult(
+    inline std::vector< WorldFeedback > ParseGripperActionResult(
             const smmap_msgs::CmdGrippersTrajectoryResultConstPtr& result )
     {
         assert( result->sim_state_trajectory.size() > 0 );
         std::vector< WorldFeedback > world_feedback( result->sim_state_trajectory.size() );
 
-        world_feedback[0] = computeNextFeedback( result->sim_state_trajectory[0] );
+        world_feedback[0] = ComputeNextFeedback( result->sim_state_trajectory[0] );
         for ( size_t time_ind = 1; time_ind < result->sim_state_trajectory.size(); time_ind++ )
         {
-            world_feedback[time_ind] = computeNextFeedback(
+            world_feedback[time_ind] = ComputeNextFeedback(
                     world_feedback[time_ind-1],
                     result->sim_state_trajectory[time_ind] );
         }
@@ -135,7 +135,7 @@ namespace smmap
      * @param feedback
      * @return
      */
-    inline std::vector< AllGrippersSinglePose > getGripperTrajectories(
+    inline std::vector< AllGrippersSinglePose > GetGripperTrajectories(
             const std::vector< WorldFeedback >& feedback )
     {
         std::vector< AllGrippersSinglePose >
@@ -155,7 +155,7 @@ namespace smmap
      * @param feedback
      * @return
      */
-    inline std::vector< AllGrippersSingleVelocity > getGripperVelocities(
+    inline std::vector< AllGrippersSingleVelocity > GetGripperVelocities(
             const std::vector< WorldFeedback >& feedback )
     {
         std::vector< AllGrippersSingleVelocity >
@@ -176,7 +176,7 @@ namespace smmap
      * @param dt
      * @return
      */
-    inline std::vector< AllGrippersSingleVelocity > calculateGrippersVelocities(
+    inline std::vector< AllGrippersSingleVelocity > CalculateGrippersVelocities(
             const std::vector< AllGrippersSinglePose >& grippers_trajectory,
             const double dt )
     {
@@ -202,6 +202,38 @@ namespace smmap
         return grippers_velocities;
     }
 
+    /**
+     * @brief CalculateGrippersTrajectory
+     * @param grippers_initial_pose
+     * @param grippers_velocities
+     * @param dt
+     * @return
+     */
+    inline std::vector< AllGrippersSinglePose > CalculateGrippersTrajectory(
+            const AllGrippersSinglePose& grippers_initial_pose,
+            const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+            double dt )
+    {
+        const size_t num_grippers = grippers_initial_pose.size();
+
+        std::vector< AllGrippersSinglePose > grippers_trajectory(
+                    grippers_velocities.size() + 1,
+                    AllGrippersSinglePose( num_grippers ) );
+
+        grippers_trajectory[0] = grippers_initial_pose;
+
+        for ( size_t time_ind = 0; time_ind < grippers_velocities.size(); time_ind++ )
+        {
+            for ( size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind ++ )
+            {
+                grippers_trajectory[time_ind+1][gripper_ind] =
+                        grippers_trajectory[time_ind][gripper_ind] *
+                        kinematics::expTwistAffine3d( grippers_velocities[time_ind][gripper_ind], dt );
+            }
+        }
+
+        return grippers_trajectory;
+    }
 
     inline std::string PrintDeltaOneLine( std::vector< AllGrippersSinglePose > gripper_traj )
     {

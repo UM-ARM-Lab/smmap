@@ -33,12 +33,32 @@ namespace smmap
             ObjectTrajectory getPrediction(
                     const WorldFeedback& current_world_configuration,
                     const std::vector< AllGrippersSinglePose >& grippers_trajectory,
-                    const std::vector< AllGrippersSingleVelocity >& grippers_velocities ) const;
+                    const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+                    double dt ) const;
 
-            virtual std::vector< AllGrippersSinglePose > getDesiredGrippersTrajectory(
+            ObjectPointSet getFinalConfiguration(
+                    const WorldFeedback& current_world_configuration,
+                    const std::vector< AllGrippersSinglePose >& grippers_trajectory,
+                    const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+                    double dt ) const;
+
+            ObjectPointSet getObjectDelta(
+                    const ObjectPointSet& object_current_configuration,
+                    const AllGrippersSinglePose & grippers_pose,
+                    const AllGrippersSingleVelocity& grippers_velocity,
+                    double dt ) const;
+
+            std::vector< AllGrippersSinglePose > getDesiredGrippersTrajectory(
                     const WorldFeedback& world_feedback,
                     const ObjectPointSet& object_desired_configuration,
                     double max_step_size, size_t num_steps ) const;
+
+            std::pair< Eigen::VectorXd, Eigen::MatrixXd > getObjectiveFunctionDerivitives(
+                    const WorldFeedback& current_world_configuration,
+                    const std::vector< AllGrippersSinglePose >& grippers_trajectory,
+                    const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+                    double dt,
+                    std::function< double( const ObjectPointSet& ) > objective_function ) const;
 
             void perturbModel( std::mt19937_64& generator );
 

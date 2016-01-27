@@ -58,7 +58,7 @@ namespace smmap
         return names;
     }
 
-    inline double gripperVelocityNorm( const kinematics::Vector6d& velocity )
+    inline double GripperVelocity6dNorm( const kinematics::Vector6d& velocity )
     {
         kinematics::Matrix6d weight = kinematics::Matrix6d::Identity();
 
@@ -68,7 +68,6 @@ namespace smmap
 
         return (weight * velocity).norm();
     }
-
 
     /**
      * @brief getMinimumDistanceToGripper

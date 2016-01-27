@@ -3,11 +3,16 @@
 #include "smmap/trajectory.hpp"
 
 #include <algorithm>
-#include <assert.h>
 #include <chrono>
+#include <functional>
+#include <numeric>
+#include <assert.h>
 
 #include <boost/thread.hpp>
 #include <boost/filesystem.hpp>
+
+#include <Eigen/QR>
+
 #include <ros/callback_queue.h>
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
@@ -109,7 +114,7 @@ Planner::Planner( ros::NodeHandle& nh )
 
         loggers.insert( std::make_pair< std::string, Log::Log > (
                             "suggested_grippers_delta",
-                            Log::Log( log_folder + "suggested_grippers_delta", false ) ) ) ;
+                            Log::Log( log_folder + "suggested_grippers_delta.txt", false ) ) ) ;
 
         loggers.insert( std::make_pair< std::string, Log::Log > (
                             "object_predicted_configuration",
@@ -134,8 +139,6 @@ void Planner::run( const size_t num_traj_cmds_per_loop , const double dt )
 
     ROS_INFO_NAMED( "planner", "Kickstarting the planner with a no-op" );
     world_feedback = sendGripperTrajectory( noOpTrajectoryGoal( 2 ) );
-
-    ros::console::shutdown();
 
     // Run the planner at whatever rate we've been given
     ROS_INFO_NAMED( "planner" , "Running our planner" );
@@ -187,7 +190,7 @@ std::vector< AllGrippersSinglePose > Planner::replan(
     size_t min_weighted_cost_ind = 0;
     double min_weighted_cost = std::numeric_limits< double >::infinity();
 
-    ROS_INFO_NAMED( "planner" , "Finding 'best' trajectory" );
+    ROS_INFO_NAMED( "planner" , "Finding 'best' trajectory suggestion for a seed" );
     for ( size_t traj_ind = 0; traj_ind < suggested_trajectories.size(); traj_ind++ )
     {
         double weighted_cost = suggested_trajectories[traj_ind].second; //*
@@ -198,6 +201,12 @@ std::vector< AllGrippersSinglePose > Planner::replan(
             min_weighted_cost_ind = traj_ind;
         }
     }
+
+    std::vector< AllGrippersSinglePose > best_trajectory =
+            optimizeTrajectoryDirectShooting(
+                world_feedback.back(),
+                suggested_trajectories[min_weighted_cost_ind].first,
+                dt );
 
     // Send the desired "best" gripper translation to the visualizer to plot
     if ( visualize_gripper_translation_ )
@@ -211,14 +220,17 @@ std::vector< AllGrippersSinglePose > Planner::replan(
             color.a = 1;
             visualizeTranslation( grippers_data_[gripper_ind].name,
                                   world_feedback.back().all_grippers_single_pose_[gripper_ind],
-                                  suggested_trajectories[min_weighted_cost_ind].first.back()[gripper_ind],
+                                  best_trajectory.back()[gripper_ind],
                                   color );
         }
     }
 
-
     // TODO: deal with multiple predictions, which one is the best?
-    VectorObjectTrajectory model_predictions = model_set_->makePredictions( world_feedback.back(), suggested_trajectories[min_weighted_cost_ind].first, dt );
+    VectorObjectTrajectory model_predictions = model_set_->makePredictions(
+                world_feedback.back(),
+                best_trajectory,
+                CalculateGrippersVelocities( best_trajectory, dt ),
+                dt );
 
     // TODO: make this logging work for multi-step trajectories
     if ( logging_enabled_ )
@@ -283,6 +295,192 @@ void Planner::updateModels( const std::vector<WorldFeedback>& feedback )
         confidence_image_pub_.publish( img_msg );
         */
     }
+}
+
+
+ObjectTrajectory Planner::combineModelPredictions(
+        const VectorObjectTrajectory& model_predictions ) const
+{
+    assert( model_predictions.size() > 0 );
+    assert( model_predictions[0].size() > 0 );
+
+    const std::vector< double >& model_confidences =
+            model_set_->getModelConfidence();
+    double total_weight = std::accumulate( model_confidences.begin(), model_confidences.end(), 0. );
+
+    ObjectTrajectory weighted_average_trajectory( model_predictions[0].size(),
+            ObjectPointSet::Zero( 3, model_predictions[0][0].cols() ) );
+
+    // Itterate through each model prediction
+    for ( size_t model_ind = 0; model_ind < model_predictions.size(); model_ind++ )
+    {
+        // For each model, itterate through time, weighing by the model confidence
+        for ( size_t time_ind = 0; time_ind < model_predictions[model_ind].size(); time_ind++ )
+        {
+            weighted_average_trajectory[time_ind] +=
+                    model_predictions[model_ind][time_ind] * model_confidences[model_ind] / total_weight;
+        }
+    }
+
+    return weighted_average_trajectory;
+}
+
+ObjectPointSet Planner::combineModelPredictionsLastTimestep(
+        const VectorObjectTrajectory& model_predictions ) const
+{
+    assert( model_predictions.size() > 0 );
+    size_t traj_length = model_predictions[0].size();
+    assert( traj_length > 0 );
+
+    const std::vector< double >& model_confidences =
+            model_set_->getModelConfidence();
+    double total_weight = std::accumulate( model_confidences.begin(), model_confidences.end(), 0. );
+
+    ObjectPointSet weighted_average_configuration = ObjectPointSet::Zero( 3, model_predictions[0][0].cols() );
+
+    // Itterate through each model prediction
+    for ( size_t model_ind = 0; model_ind < model_predictions.size(); model_ind++ )
+    {
+        assert( model_predictions[model_ind].size() == traj_length );
+
+        weighted_average_configuration +=
+                model_predictions[model_ind][traj_length-1] * model_confidences[model_ind] / total_weight;
+    }
+
+    return weighted_average_configuration;
+}
+
+std::pair< Eigen::VectorXd, Eigen::MatrixXd > Planner::combineModelDerivitives(
+        const std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > >& model_derivitives ) const
+{
+    assert( model_derivitives.size() > 0 );
+
+    const std::vector< double >& model_confidences =
+            model_set_->getModelConfidence();
+    double total_weight = std::accumulate( model_confidences.begin(), model_confidences.end(), 0. );
+
+    std::pair< Eigen::VectorXd, Eigen::MatrixXd > weighted_average_derivitive(
+            Eigen::VectorXd::Zero( model_derivitives[0].first.size() ),
+            Eigen::MatrixXd::Zero( model_derivitives[0].second.rows(), model_derivitives[0].second.cols() ) );
+
+    // Itterate through each model derivitive
+    for ( size_t model_ind = 0; model_ind < model_derivitives.size(); model_ind++ )
+    {
+        weighted_average_derivitive.first +=
+                model_derivitives[model_ind].first * model_confidences[model_ind] / total_weight;
+
+        weighted_average_derivitive.second +=
+                model_derivitives[model_ind].second * model_confidences[model_ind] / total_weight;
+    }
+
+    return weighted_average_derivitive;
+}
+
+
+std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
+        const WorldFeedback& current_world_configuration,
+        std::vector< AllGrippersSinglePose > grippers_trajectory,
+        double dt ) const
+{
+    ROS_INFO_NAMED( "planner" , "Using direct shooting to optimize the trajectory" );
+
+    std::cout << "Pre optimizing grippers last pose:\n"
+              << PrettyPrint::PrettyPrint( grippers_trajectory.back(), true, "\n " ) << std::endl;
+
+    // TODO: move these magic numbers elsewhere
+    #warning "Magic numbers here need to be moved elsewhere"
+    const int MAX_ITTR = 10;
+    const double LEARNING_RATE = 0.1;
+
+    double objective_delta = std::numeric_limits< double >::infinity();
+
+    std::vector< AllGrippersSingleVelocity > grippers_velocities =
+            CalculateGrippersVelocities( grippers_trajectory, dt );
+
+    std::function< double( const ObjectPointSet& ) > objective_function =
+            std::bind( &Task::calculateError, task_.get(), std::placeholders::_1  );
+
+    // TODO: replace this with something that just averages the last positions
+    double objective_value = objective_function(
+                combineModelPredictionsLastTimestep(
+                     model_set_->makePredictions(
+                         current_world_configuration,
+                         grippers_trajectory,
+                         grippers_velocities,
+                         dt ) ) );
+
+    int ittr = 0;
+    do
+    {
+        ROS_INFO_STREAM_NAMED( "planner" , "  Direct shooting itteration " << ittr << ". Current objective value " << objective_value );
+        // Find the first and second derivitives of the objective function with
+        // respect to the gripper velocities
+        //
+        // Note that these derivitives are layed out as
+        //     Eigen::VectorXd( num_grippers * 6 * num_timesteps ),
+        //     Eigen::MatrixXd( num_grippers * 6 * num_timesteps, num_grippers * 6 * num_timesteps ) );
+        //
+        std::pair< Eigen::VectorXd, Eigen::MatrixXd > derivitives =
+                combineModelDerivitives(
+                    model_set_->getObjectiveFunctionDerivitives(
+                        current_world_configuration,
+                        grippers_trajectory,
+                        grippers_velocities,
+                        dt,
+                        objective_function ) );
+
+        // Update the gripper velocities based on a Newton style gradient descent
+//        Eigen::VectorXd velocity_update = derivitives.second.colPivHouseholderQr().solve( -derivitives.first );
+        Eigen::VectorXd velocity_update = -derivitives.first ;
+        if ( velocity_update.norm() > MAX_GRIPPER_VELOCITY )
+        {
+            velocity_update *= MAX_GRIPPER_VELOCITY / velocity_update.norm();
+        }
+
+        for ( size_t time_ind = 0; time_ind < grippers_velocities.size(); time_ind++ )
+        {
+            for ( size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++ )
+            {
+                grippers_velocities[time_ind][gripper_ind] += LEARNING_RATE *
+                        velocity_update.segment< 6 >(
+                            (long)( time_ind * grippers_data_.size() * 6 +
+                                    gripper_ind * 6 ) );
+
+                if ( GripperVelocity6dNorm( grippers_velocities[time_ind][gripper_ind] ) > MAX_GRIPPER_VELOCITY )
+                {
+                    grippers_velocities[time_ind][gripper_ind] *=
+                            MAX_GRIPPER_VELOCITY / GripperVelocity6dNorm( grippers_velocities[time_ind][gripper_ind] );
+                }
+            }
+        }
+
+        // Update the trajectory of the grippers based on the new
+        grippers_trajectory = CalculateGrippersTrajectory(
+                    grippers_trajectory[0],
+                    grippers_velocities,
+                    dt );
+
+        // Calculate the new value of the objective function at the updated velocity
+        // locations
+        double new_objective_value = objective_function(
+                    combineModelPredictionsLastTimestep(
+                        model_set_->makePredictions(
+                            current_world_configuration,
+                            grippers_trajectory,
+                            grippers_velocities,
+                            dt ) ) );
+
+        objective_delta = std::abs( objective_value - new_objective_value );
+        objective_value = new_objective_value;
+
+        ittr++;
+    }
+    while ( ittr < MAX_ITTR  && objective_delta > objective_value * 1e-6 );
+
+    std::cout << "Post optimizing grippers last pose:\n"
+              << PrettyPrint::PrettyPrint( grippers_trajectory.back(), true, "\n " ) << std::endl;
+
+    return grippers_trajectory;
 }
 
 
@@ -518,7 +716,7 @@ std::vector< WorldFeedback > Planner::sendGripperTrajectory(
     cmd_grippers_traj_client_.sendGoalAndWait( goal );
     if ( cmd_grippers_traj_client_.getState() == actionlib::SimpleClientGoalState::SUCCEEDED )
     {
-        feedback = parseGripperActionResult( cmd_grippers_traj_client_.getResult() );
+        feedback = ParseGripperActionResult( cmd_grippers_traj_client_.getResult() );
     }
     else
     {

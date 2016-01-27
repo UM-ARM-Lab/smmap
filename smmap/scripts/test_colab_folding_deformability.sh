@@ -4,12 +4,12 @@ function calc {
     awk "BEGIN { print "$*" }"
 }
 
-for trans in `seq 20 40`;
+for trans in `seq 0 20`;
 do
-   trans_deform=`calc $trans/2`
-    for rot in `seq 20 40`;
+   trans_deform=`calc $trans*2`
+    for rot in `seq 0 20`;
     do
-        rot_deform=`calc $rot/2`
+        rot_deform=`calc $rot*2`
 
         test_id="colab_folding/trans_"$trans_deform"_rot_"$rot_deform
 

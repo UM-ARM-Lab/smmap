@@ -72,11 +72,23 @@ namespace smmap
 
             std::vector< AllGrippersSinglePose > replan(
                     std::vector<WorldFeedback>& world_feedback,
-                    size_t num_traj_cmds_per_loop , double dt );
+                    size_t num_traj_cmds_per_loop, double dt );
 
             //std::pair<ObjectTrajectory, AllGrippersTrajectory> readSimulatorFeedbackBuffer();
             void updateModels( const std::vector< WorldFeedback >& feedback );
 
+            ObjectTrajectory combineModelPredictions(
+                    const VectorObjectTrajectory& model_predictions ) const;
+
+            ObjectPointSet combineModelPredictionsLastTimestep(
+                    const VectorObjectTrajectory& model_predictions ) const;
+
+            std::pair< Eigen::VectorXd, Eigen::MatrixXd > combineModelDerivitives(
+                    const std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > >& model_derivitives ) const;
+
+            std::vector< AllGrippersSinglePose > optimizeTrajectoryDirectShooting(const WorldFeedback& current_world_configuration,
+                    std::vector<AllGrippersSinglePose> grippers_trajectory,
+                    double dt ) const;
 
             ////////////////////////////////////////////////////////////////////
             // Task specific functionality

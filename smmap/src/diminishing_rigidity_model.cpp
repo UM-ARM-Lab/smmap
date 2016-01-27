@@ -4,6 +4,9 @@
 #include <limits>
 #include <stdexcept>
 #include <algorithm>
+#include <functional>
+
+#include <Eigen/SVD>
 
 #include <ros/ros.h>
 
@@ -98,7 +101,8 @@ void DiminishingRigidityModel::updateModel( const std::vector<WorldFeedback>& fe
 ObjectTrajectory DiminishingRigidityModel::getPrediction(
         const WorldFeedback& current_world_configuration,
         const std::vector< AllGrippersSinglePose >& grippers_trajectory,
-        const std::vector< AllGrippersSingleVelocity >& grippers_velocities ) const
+        const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+        double dt ) const
 {
     assert( grippers_trajectory.size() > 0 );
     assert( grippers_velocities.size() == grippers_trajectory.size() - 1 );
@@ -108,36 +112,86 @@ ObjectTrajectory DiminishingRigidityModel::getPrediction(
 
     for ( size_t time_ind = 0; time_ind < grippers_velocities.size(); time_ind++ )
     {
-        // Recalculate the jacobian at each timestep, because of rotations being non-linear
-        const Eigen::MatrixXd J = computeGrippersToObjectJacobian(
-                    grippers_trajectory[time_ind], object_traj[time_ind] );
-
-        // We start from where we were last
-        object_traj[time_ind + 1] = object_traj[time_ind];
-
-        // Move the object based on the movement of each gripper
-        for ( size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++ )
-        {
-            Eigen::MatrixXd delta;
-
-            // Assume that our Jacobian is correct, and predict where we will end up
-            if ( use_rotation_ )
-            {
-                delta = J.block( 0, 6*gripper_ind, J.rows(), 6 )
-                        * grippers_velocities[time_ind][gripper_ind];
-            }
-            else
-            {
-                delta = J.block( 0, 3*gripper_ind, J.rows(), 3 )
-                        * grippers_velocities[time_ind][gripper_ind].segment< 3 >( 0 );
-            }
-            delta.resizeLike( current_world_configuration.object_configuration_ );
-            object_traj[time_ind + 1] = object_traj[time_ind + 1] + delta;
-        }
+        object_traj[time_ind + 1] = object_traj[time_ind] + getObjectDelta(
+                    object_traj[time_ind],
+                    grippers_trajectory[time_ind],
+                    grippers_velocities[time_ind],
+                    dt );
     }
 
     return object_traj;
 }
+
+/**
+ * @brief DiminishingRigidityModel::getFinalConfiguration
+ * @param object_configuration
+ * @param grippers_trajectory
+ * @param grippers_velocities Note that velocity 0 moves us from pose 0 to pose 1 for a given gripper
+ * @return
+ */
+ObjectPointSet DiminishingRigidityModel::getFinalConfiguration(
+        const WorldFeedback& current_world_configuration,
+        const std::vector< AllGrippersSinglePose >& grippers_trajectory,
+        const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+        double dt ) const
+{
+    assert( grippers_trajectory.size() > 0 );
+    assert( grippers_velocities.size() == grippers_trajectory.size() - 1 );
+
+    ObjectPointSet final_configuration = current_world_configuration.object_configuration_;
+
+    for ( size_t time_ind = 0; time_ind < grippers_velocities.size(); time_ind++ )
+    {
+        final_configuration += getObjectDelta(
+                    final_configuration,
+                    grippers_trajectory[time_ind],
+                    grippers_velocities[time_ind],
+                    dt );
+    }
+
+    return final_configuration;
+}
+
+/**
+ * @brief DiminishingRigidityModel::getObjectDelta
+ * @param object_current_configuration
+ * @param grippers_pose
+ * @param grippers_velocity
+ * @param dt
+ * @return
+ */
+ObjectPointSet DiminishingRigidityModel::getObjectDelta(
+        const ObjectPointSet& object_current_configuration,
+        const AllGrippersSinglePose & grippers_pose,
+        const AllGrippersSingleVelocity& grippers_velocity,
+        double dt ) const
+{
+    const Eigen::MatrixXd J = computeGrippersToObjectJacobian( grippers_pose, object_current_configuration );
+
+    Eigen::MatrixXd delta = Eigen::MatrixXd::Zero( num_nodes_ * 3, 1 );
+
+    // Move the object based on the movement of each gripper
+    for ( size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++ )
+    {
+        // Assume that our Jacobian is correct, and predict where we will end up
+        if ( use_rotation_ )
+        {
+            delta += J.block( 0, 6*gripper_ind, J.rows(), 6 )
+                    * grippers_velocity[gripper_ind] * dt;
+        }
+        else
+        {
+            delta += J.block( 0, 3*gripper_ind, J.rows(), 3 )
+                    * grippers_velocity[gripper_ind].segment< 3 >( 0 ) * dt;
+        }
+    }
+
+    delta.resizeLike( object_current_configuration );
+    return delta;
+}
+
+
+
 
 std::vector< AllGrippersSinglePose > DiminishingRigidityModel::getDesiredGrippersTrajectory(
         const WorldFeedback& world_feedback,
@@ -168,13 +222,17 @@ std::vector< AllGrippersSinglePose > DiminishingRigidityModel::getDesiredGripper
         // Find the velocities of each part of the algorithm
         ////////////////////////////////////////////////////////////////////////
 
+        // Calculate the desired object velocity (p_dot)
+        const Eigen::VectorXd desired_object_velocity =
+                (desired_as_vector - current_as_vector) +
+                computeStretchingCorrection( current_as_point_set );
+
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
         const Eigen::MatrixXd J = computeGrippersToObjectJacobian( traj[traj_step-1], current_as_point_set );
 
-        const Eigen::MatrixXd J_inv = (J.transpose() * J).inverse() * J.transpose();
-        // Apply the desired object delta Jacobian pseudo-inverse - will normalize later
-        Eigen::VectorXd grippers_velocity_achieve_goal = J_inv *
-                ( (desired_as_vector - current_as_vector) + computeStretchingCorrection( current_as_point_set ) );
+        // Find the least-squares fitting to the desired object velocity
+        Eigen::VectorXd grippers_velocity_achieve_goal =
+                J.jacobiSvd( Eigen::ComputeThinU | Eigen::ComputeThinV ).solve( desired_object_velocity );
 
         // Find the collision avoidance data that we'll need
         std::vector< CollisionAvoidanceResult > grippers_collision_avoidance_result
@@ -195,17 +253,13 @@ std::vector< AllGrippersSinglePose > DiminishingRigidityModel::getDesiredGripper
             // need to shrink the size of the rotational components when
             // calculating the norm. Expanding the rotational components again is
             // not done at this point as it causes poor performance of the algorithm
-            if ( use_rotation_ )
+            const double velocity_norm = use_rotation_ ?
+                GripperVelocity6dNorm( desired_gripper_vel ) :
+                desired_gripper_vel.norm();
+
+            if ( velocity_norm > max_step_size )
             {
-                desired_gripper_vel.segment<3>(3) /= 20;
-            }
-            if ( desired_gripper_vel.norm() > max_step_size )
-            {
-                desired_gripper_vel = desired_gripper_vel / desired_gripper_vel.norm() * max_step_size;
-            }
-            if ( use_rotation_ )
-            {
-                desired_gripper_vel.segment<3>(3) *= 20;
+                desired_gripper_vel *= max_step_size / velocity_norm;
             }
 
             // If we need to avoid an obstacle, then use the sliding scale
@@ -249,6 +303,133 @@ std::vector< AllGrippersSinglePose > DiminishingRigidityModel::getDesiredGripper
 
     return traj;
 }
+
+
+
+std::pair< Eigen::VectorXd, Eigen::MatrixXd > DiminishingRigidityModel::getObjectiveFunctionDerivitives(
+        const WorldFeedback& current_world_configuration,
+        const std::vector< AllGrippersSinglePose >& grippers_trajectory,
+        const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+        double dt,
+        std::function< double( const ObjectPointSet& ) > objective_function ) const
+{
+    const double h = 0.0001; // arbitrary step size for numeric differencing
+    const size_t num_grippers = grippers_data_.size();
+    const size_t num_timesteps = grippers_velocities.size();
+
+    assert( num_timesteps > 0 );
+    assert( num_grippers > 0 );
+
+    const double initial_objective_value = objective_function(
+                getFinalConfiguration( current_world_configuration,
+                                       grippers_trajectory,
+                                       grippers_velocities,
+                                       dt ) );
+
+    // Allocate some space to store the results of the differencing.
+    std::pair< Eigen::VectorXd, Eigen::MatrixXd > derivitives (
+                Eigen::VectorXd( num_grippers * 6 * num_timesteps ),
+                Eigen::MatrixXd( num_grippers * 6 * num_timesteps, num_grippers * 6 * num_timesteps ) );
+
+    // Note that I am following the math found on the Finite difference page of
+    // Wikipedia for "finite difference in several variables"
+
+    // First calculate all of the perturbations for a single variable
+    Eigen::VectorXd objective_value_x_plus_h( num_grippers * 6 * num_timesteps );
+    Eigen::VectorXd objective_value_x_minus_h( num_grippers * 6 * num_timesteps );
+    std::vector< AllGrippersSingleVelocity > new_grippers_velocities( grippers_velocities );
+
+    // This loop fills out the Jacobian (first derivitive) of the objective function
+    for ( long ind = 0; ind < (long)(num_grippers * 6 * num_timesteps); ind++ )
+    {
+        const long time_ind = ind / ( num_grippers * 6 );
+        const long vel_ind = ind % ( num_grippers * 6 );
+
+        std::vector< AllGrippersSinglePose > new_grippers_trajectory;
+
+        // f(x + h, y)
+        new_grippers_velocities[ time_ind ][ vel_ind / 6 ]( vel_ind  % 6 ) += h;
+        new_grippers_trajectory = CalculateGrippersTrajectory( grippers_trajectory[0], new_grippers_velocities, dt );
+        objective_value_x_plus_h( ind ) = objective_function(
+                    getFinalConfiguration( current_world_configuration,
+                                           new_grippers_trajectory,
+                                           new_grippers_velocities,
+                                           dt ) );
+        new_grippers_velocities[ time_ind ][ vel_ind / 6 ]( vel_ind  % 6 ) -= h;
+
+        // f(x - h, y)
+        new_grippers_velocities[ time_ind ][ vel_ind / 6 ]( vel_ind  % 6 ) -= h;
+        new_grippers_trajectory = CalculateGrippersTrajectory( grippers_trajectory[0], new_grippers_velocities, dt );
+        objective_value_x_minus_h( ind ) = objective_function(
+                    getFinalConfiguration( current_world_configuration,
+                                           new_grippers_trajectory,
+                                           new_grippers_velocities,
+                                           dt ) );
+        new_grippers_velocities[ time_ind ][ vel_ind / 6 ]( vel_ind  % 6 ) += h;
+
+        // f_x = [ f(x + h, y) - f(x - h, y) ] / ( 2h )
+        derivitives.first( ind ) = ( objective_value_x_plus_h( ind ) - objective_value_x_minus_h( ind ) ) / ( 2*h );
+    }
+
+    for ( long row_ind = 0; row_ind < derivitives.second.rows(); row_ind++ )
+    {
+        const long row_time_ind = row_ind / ( num_grippers * 6 );
+        const long row_vel_ind = row_ind % ( num_grippers * 6 );
+
+        // f(x + h, y)
+        const double objective_value_row_plus_h = objective_value_x_plus_h( row_ind );
+        // f(x - h, y)
+        const double objective_value_row_minus_h = objective_value_x_minus_h( row_ind );
+
+        // f_xx = [ f(x + h, y) - 2 f(x,y) + f(x - h, y) ] / h^2
+        derivitives.second( row_ind, row_ind ) = ( objective_value_row_plus_h - 2*initial_objective_value + objective_value_row_minus_h ) / std::pow( h, 2 );
+
+        #pragma omp parallel for
+        for ( long col_ind = row_ind + 1; col_ind < derivitives.second.cols(); col_ind++ )
+        {
+            const long col_time_ind = col_ind / ( num_grippers * 6 );
+            const long col_vel_ind = col_ind % ( num_grippers * 6 );
+
+            // f(x, y + h)
+            const double objective_value_col_plus_h = objective_value_x_plus_h( col_ind );
+            // f(x, y - h)
+            const double objective_value_col_minus_h = objective_value_x_minus_h( col_ind );;
+
+            std::vector< AllGrippersSinglePose > new_grippers_trajectory;
+
+            // f(x + h, y + h)
+            new_grippers_velocities[ row_time_ind ][ row_vel_ind / 6 ]( row_vel_ind  % 6 ) += h;
+            new_grippers_velocities[ col_time_ind ][ col_vel_ind / 6 ]( col_vel_ind  % 6 ) += h;
+            new_grippers_trajectory = CalculateGrippersTrajectory( grippers_trajectory[0], new_grippers_velocities, dt );
+            const double objective_value_row_col_plus_h = objective_function(
+                        getFinalConfiguration( current_world_configuration,
+                                               new_grippers_trajectory,
+                                               new_grippers_velocities,
+                                               dt ) );
+            new_grippers_velocities[ row_time_ind ][ row_vel_ind / 6 ]( row_vel_ind  % 6 ) -= h;
+            new_grippers_velocities[ col_time_ind ][ col_vel_ind / 6 ]( col_vel_ind  % 6 ) -= h;
+
+            // f(x - h, y - h)
+            new_grippers_velocities[ row_time_ind ][ row_vel_ind / 6 ]( row_vel_ind  % 6 ) -= h;
+            new_grippers_velocities[ col_time_ind ][ col_vel_ind / 6 ]( col_vel_ind  % 6 ) -= h;
+            new_grippers_trajectory = CalculateGrippersTrajectory( grippers_trajectory[0], new_grippers_velocities, dt );
+            const double objective_value_row_col_minus_h  = objective_function(
+                        getFinalConfiguration( current_world_configuration,
+                                               new_grippers_trajectory,
+                                               new_grippers_velocities,
+                                               dt ) );
+            new_grippers_velocities[ row_time_ind ][ row_vel_ind / 6 ]( row_vel_ind  % 6 ) += h;
+            new_grippers_velocities[ col_time_ind ][ col_vel_ind / 6 ]( col_vel_ind  % 6 ) += h;
+
+            // f_xy = [ f(x + h, y + h) - f(x + h, y) - f(x, y + h) + 2f(x, y) - f(x - h, y) - f(x, y - h) + f(x - h, y - h) ] / ( 2 h^2 )
+            derivitives.second( row_ind, row_ind ) = ( objective_value_row_col_plus_h - objective_value_row_plus_h - objective_value_col_plus_h + 2*initial_objective_value - objective_value_row_minus_h - objective_value_col_minus_h + objective_value_row_col_minus_h ) / ( 2 * std::pow( h, 2 ) );
+        }
+    }
+
+    return derivitives;
+}
+
+
 
 void DiminishingRigidityModel::perturbModel( std::mt19937_64& generator )
 {

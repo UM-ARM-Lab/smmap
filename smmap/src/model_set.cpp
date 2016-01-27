@@ -44,17 +44,16 @@ ModelSet::~ModelSet()
 VectorObjectTrajectory ModelSet::makePredictions(
         const WorldFeedback& current_world_configuration,
         const std::vector<AllGrippersSinglePose>& grippers_trajectory,
+        const std::vector< kinematics::VectorVector6d >& grippers_velocities,
         double dt ) const
 {
     VectorObjectTrajectory predictions( model_list_.size() );
-    std::vector< kinematics::VectorVector6d > gripper_velocities =
-            calculateGrippersVelocities( grippers_trajectory, dt );
 
     #pragma omp parallel for
     for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
     {
         predictions[model_ind] = model_list_[model_ind]->getPrediction(
-                    current_world_configuration, grippers_trajectory, gripper_velocities );
+                    current_world_configuration, grippers_trajectory, grippers_velocities, dt );
     }
 
     return predictions;
@@ -96,6 +95,31 @@ std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > > ModelSe
     return grippers_trajectories;
 }
 
+
+std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > > ModelSet::getObjectiveFunctionDerivitives(
+        const WorldFeedback& current_world_configuration,
+        const std::vector< AllGrippersSinglePose >& grippers_trajectory,
+        const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+        double dt,
+        std::function< double( const ObjectPointSet& ) > objective_function ) const
+{
+    std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > > derivitives( model_list_.size() );
+
+    #pragma omp parallel for
+    for ( size_t ind = 0; ind < model_list_.size(); ind++ )
+    {
+        derivitives[ind] = model_list_[ind]->getObjectiveFunctionDerivitives(
+                    current_world_configuration,
+                    grippers_trajectory,
+                    grippers_velocities,
+                    dt,
+                    objective_function );
+    }
+
+    return derivitives;
+}
+
+
 const std::vector< double >& ModelSet::getModelConfidence() const
 {
     return model_confidence_;
@@ -108,17 +132,19 @@ const std::vector< double >& ModelSet::getModelConfidence() const
 void ModelSet::evaluateConfidence( const std::vector< WorldFeedback >& feedback )
 {
     const std::vector< AllGrippersSinglePose > grippers_trajectory =
-            getGripperTrajectories( feedback );
+            GetGripperTrajectories( feedback );
 
     const std::vector< kinematics::VectorVector6d > grippers_velocities =
-            getGripperVelocities( feedback );
+            GetGripperVelocities( feedback );
 
     // TODO: deal with the object/gripers not moving at all
     #pragma omp parallel for
     for ( size_t ind = 0; ind < model_list_.size(); ind++ )
     {
+        // TODO: remove this terribad constant 'dt' value
+        #warning "Constant value here that should be replaced"
         const ObjectTrajectory model_prediction = model_list_[ind]->getPrediction(
-                feedback.front(), grippers_trajectory, grippers_velocities );
+                feedback.front(), grippers_trajectory, grippers_velocities, 0.01 );
 
         const double dist = distanceRMS( feedback, model_prediction );
 

@@ -1,10 +1,6 @@
 #ifndef MODEL_SET_H
 #define MODEL_SET_H
 
-#include <list>
-#include <memory>
-#include <random>
-
 #include "smmap/deformable_model.h"
 #include "smmap/task.hpp"
 
@@ -33,6 +29,7 @@ namespace smmap
             VectorObjectTrajectory makePredictions(
                     const WorldFeedback& current_world_configuration,
                     const std::vector< AllGrippersSinglePose >& grippers_trajectory,
+                    const std::vector<kinematics::VectorVector6d>& grippers_velocities,
                     double dt ) const;
 
             std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > >
@@ -40,6 +37,14 @@ namespace smmap
                     const WorldFeedback& world_feedback,
                     const ObjectPointSet& object_desired_configuration,
                     double max_step_size, size_t num_steps );
+
+            std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > >
+            getObjectiveFunctionDerivitives(
+                    const WorldFeedback& current_world_configuration,
+                    const std::vector< AllGrippersSinglePose >& grippers_trajectory,
+                    const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+                    double dt,
+                    std::function< double( const ObjectPointSet& ) > objective_function ) const;
 
             const std::vector< double >& getModelConfidence() const;
 

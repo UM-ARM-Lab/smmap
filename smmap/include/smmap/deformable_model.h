@@ -1,11 +1,13 @@
 #ifndef DEFORMABLE_MODEL_H
 #define DEFORMABLE_MODEL_H
 
+#include <functional>
 #include <memory>
 #include <random>
 
 #include "smmap/trajectory.hpp"
 #include "smmap/gripper_helpers.hpp"
+#include "smmap/task.hpp"
 
 namespace smmap
 {
@@ -15,7 +17,7 @@ namespace smmap
             typedef std::shared_ptr< DeformableModel > Ptr;
 
             ////////////////////////////////////////////////////////////////////
-            /// Wrappers for virtual functions
+            /// Virtual functions that define the interface
             ////////////////////////////////////////////////////////////////////
 
             virtual void updateModel( const std::vector< WorldFeedback >& feedback ) = 0;
@@ -23,12 +25,31 @@ namespace smmap
             virtual ObjectTrajectory getPrediction(
                     const WorldFeedback& current_world_configuration,
                     const std::vector< AllGrippersSinglePose >& grippers_trajectory,
-                    const std::vector< AllGrippersSingleVelocity >& grippers_velocities ) const = 0;
+                    const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+                    double dt ) const = 0;
+
+            virtual ObjectPointSet getFinalConfiguration(
+                    const WorldFeedback& current_world_configuration,
+                    const std::vector< AllGrippersSinglePose >& grippers_trajectory,
+                    const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+                    double dt ) const = 0;
 
             virtual std::vector< AllGrippersSinglePose > getDesiredGrippersTrajectory(
                     const WorldFeedback& world_feedback,
                     const ObjectPointSet& object_desired_configuration,
                     double max_step_size, size_t num_steps ) const = 0;
+
+            /**
+             * @brief getObjectiveFunctionHessian
+             * @param object_current_configuration
+             * @return
+             */
+            virtual std::pair< Eigen::VectorXd, Eigen::MatrixXd > getObjectiveFunctionDerivitives(
+                    const WorldFeedback& current_world_configuration,
+                    const std::vector< AllGrippersSinglePose >& grippers_trajectory,
+                    const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+                    double dt,
+                    std::function< double( const ObjectPointSet& ) > objective_function ) const = 0;
 
             virtual void perturbModel( std::mt19937_64& generator ) = 0;
 
