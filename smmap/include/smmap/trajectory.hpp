@@ -212,7 +212,7 @@ namespace smmap
     inline std::vector< AllGrippersSinglePose > CalculateGrippersTrajectory(
             const AllGrippersSinglePose& grippers_initial_pose,
             const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
-            double dt )
+            const double dt )
     {
         const size_t num_grippers = grippers_initial_pose.size();
 

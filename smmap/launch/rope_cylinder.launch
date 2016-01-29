@@ -1,5 +1,5 @@
 <launch>
-    <arg name="test_id" default=""/>
+    <arg name="test_id" default="rope_cylinder/shooting_method"/>
     <arg name="deformability_override" default="0"/>
     
     <include file="$(find smmap)/launch/rope_cylinder_params.launch">

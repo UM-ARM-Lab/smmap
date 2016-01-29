@@ -2,7 +2,7 @@
     <arg name="test_id" default=""/>
     <arg name="deformability_override" default="0"/>
     
-    <include file="$(find smmap)/launch/rope_cylinder_params.launch">
+    <include file="$(find smmap)/launch/cloth_table_params.launch">
         <arg name="test_id" value="$(arg test_id)"/>
     </include>
 

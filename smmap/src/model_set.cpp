@@ -20,6 +20,7 @@ ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
     DeformableModel::UpdateGrippersData( grippers_data );
     DiminishingRigidityModel::SetInitialObjectConfiguration( object_initial_configuration );
 
+    /*
     const double deform_step = 0.5;
     //const double deform_min = std::max( 0., task.getDeformability() - 5 );
     const double deform_min = 10;
@@ -37,6 +38,14 @@ ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
                             task.getStretchingScalingThreshold() ) ) );
         }
     }
+    */
+
+    addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
+                    task.getDeformability(),
+                    task.getDeformability(),
+                    task.getUseRotation(),
+                    task.getCollisionScalingFactor(),
+                    task.getStretchingScalingThreshold() ) ) );
 }
 
 ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,

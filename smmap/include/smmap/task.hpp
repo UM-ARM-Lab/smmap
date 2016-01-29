@@ -27,38 +27,27 @@ namespace smmap
                 visualization_marker_array_pub_ =
                         nh.advertise< visualization_msgs::MarkerArray >( GetVisualizationMarkerArrayTopic( nh ), 10 );
             }
-/*
-            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
+
+            virtual ~Task() {}
+
+            // TODO: This is closer to a way of finding a error gradient
+            // for some of the methods. Fix this naming problem/usage problem.
+            virtual ObjectPointSet findObjectDesiredConfiguration(
+                    const ObjectPointSet& current_configuration ) const = 0;
+
+            double calculateError(
+                    const ObjectPointSet& current_configuration ) const
             {
-                (void)model_predictions;
-                (void)best_traj;
-            }
-*/
-
-            virtual ObjectPointSet findObjectDesiredConfiguration( const ObjectPointSet& current_configuration ) const = 0;
-
-            virtual double calculateError( const ObjectPointSet& current_configuration ) const
-            {
-                const ObjectPointSet desired_configuration = findObjectDesiredConfiguration( current_configuration );
-
-                return (desired_configuration - current_configuration).norm();
+                return calculateError_impl( current_configuration );
             }
 
-            virtual ObjectPointSet getObjectErrorGradient( ObjectPointSet current_configuration ) const
+            /*
+            ObjectPointSet getObjectErrorGradient(
+                    ObjectPointSet current_configuration ) const
             {
-                const double current_error = calculateError( current_configuration );
-                const double delta = 0.01;
-                ObjectPointSet gradient( 3, current_configuration.cols() );
-
-                for ( long ind = 0; ind < 3 * current_configuration.cols() ; ind++ )
-                {
-                    current_configuration.data()[ind] += delta;
-                    gradient.data()[ind] = ( calculateError( current_configuration ) - current_error ) / delta;
-                    current_configuration.data()[ind] -= delta;
-                }
-
-                return gradient;
+                return getObjectErrorGradient_impl( current_configuration );
             }
+            */
 
             virtual double getDeformability() const = 0;                // k
             virtual double getCollisionScalingFactor() const = 0;       // beta (or k2)
@@ -66,9 +55,54 @@ namespace smmap
             virtual bool getUseRotation() const = 0;
             virtual double maxTime() const = 0; // max simulation time when scripting things
 
+            void visualizePredictions(
+                    const VectorObjectTrajectory& model_predictions,
+                    size_t best_traj ) const
+            {
+                visualizePredictions_impl( model_predictions, best_traj );
+            }
+
         protected:
             mutable ros::Publisher visualization_marker_pub_;
             mutable ros::Publisher visualization_marker_array_pub_;
+
+        private:
+            virtual double calculateError_impl(
+                    const ObjectPointSet& current_configuration ) const
+            {
+                const ObjectPointSet desired_configuration =
+                        findObjectDesiredConfiguration( current_configuration );
+
+                return (desired_configuration - current_configuration).norm();
+            }
+
+            /*
+            virtual ObjectPointSet getObjectErrorGradient_impl(
+                    ObjectPointSet current_configuration ) const
+            {
+                const double starting_error = calculateError( current_configuration );
+                const double delta = 0.001;
+                ObjectPointSet gradient( 3, current_configuration.cols() );
+
+                for ( long ind = 0; ind < 3 * current_configuration.cols() ; ind++ )
+                {
+                    current_configuration.data()[ind] += delta;
+                    const double new_error = calculateError( current_configuration );
+                    gradient.data()[ind] = ( new_error - starting_error ) / delta;
+                    current_configuration.data()[ind] -= delta;
+                }
+
+                return gradient;
+            }
+            */
+
+            virtual void visualizePredictions_impl(
+                    const VectorObjectTrajectory& model_predictions,
+                    size_t best_traj ) const
+            {
+                (void)model_predictions;
+                (void)best_traj;
+            }
     };
 
     class RopeCoverage : public Task
@@ -79,38 +113,8 @@ namespace smmap
                 , cover_points_( getCoverPointsHelper( nh ) )
             {}
 
-/*
-            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
-            {
-                std_msgs::ColorRGBA color;
-                color.r = 1;
-                color.g = 1;
-                color.b = 0;
-                color.a = 1;
-
-                visualizeRope( model_predictions[best_traj].back(), color, "rope_predicted" );
-            }
-*/
-
-            void visualizeRope( const ObjectPointSet& rope, const std_msgs::ColorRGBA& color, const std::string& name ) const
-            {
-                visualization_msgs::Marker marker;
-
-                marker.type = visualization_msgs::Marker::LINE_STRIP;
-                marker.ns = name;
-                marker.id = 0;
-                marker.scale.x = 0.1;
-                marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( rope );
-                marker.colors = std::vector< std_msgs::ColorRGBA >( (size_t)rope.cols(), color );
-                visualization_marker_pub_.publish( marker );
-
-                marker.type = visualization_msgs::Marker::SPHERE;
-                marker.id = 1;
-                marker.scale.x = 0.01;
-                visualization_marker_pub_.publish( marker );
-            }
-
-            ObjectPointSet findObjectDesiredConfiguration( const ObjectPointSet& current_configuration ) const
+            ObjectPointSet findObjectDesiredConfiguration(
+                    const ObjectPointSet& current_configuration ) const
             {
                 ROS_INFO_NAMED( "rope_coverage_task" , "Finding 'best' configuration" );
 
@@ -120,7 +124,9 @@ namespace smmap
                 for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
                 {
                     const Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
-                    const ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
+                    const ObjectPointSet diff =
+                            ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) )
+                            - current_configuration;
                     const Eigen::RowVectorXd dist_sq = diff.array().square().colwise().sum();
 
                     // find the closest deformable point
@@ -137,7 +143,9 @@ namespace smmap
 
                     if ( min_dist >= 0.2/20. )
                     {
-                        desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
+                        desired_configuration.block< 3, 1 >( 0, min_ind ) =
+                                desired_configuration.block< 3, 1 >( 0, min_ind )
+                                + diff.block< 3, 1 >( 0, min_ind );
                     }
                 }
 
@@ -151,7 +159,47 @@ namespace smmap
                 return desired_configuration;
             }
 
-            double calculateError( const ObjectPointSet& current_configuration )
+            virtual double getDeformability() const
+            {
+                return 0.5*20; // k
+            }
+
+            virtual double getCollisionScalingFactor() const
+            {
+                return  10*20; // beta
+            }
+
+            virtual double getStretchingScalingThreshold() const
+            {
+                return 0.1/20; // lambda
+            }
+
+            virtual bool getUseRotation() const
+            {
+                return true;
+            }
+
+            virtual double maxTime() const
+            {
+                return 25;
+            }
+
+        private:
+            virtual void visualizePredictions_impl(
+                    const VectorObjectTrajectory& model_predictions,
+                    size_t best_traj ) const
+            {
+                std_msgs::ColorRGBA color;
+                color.r = 1;
+                color.g = 1;
+                color.b = 0;
+                color.a = 1;
+
+                visualizeRope( model_predictions[best_traj].back(), color, "rope_predicted" );
+            }
+
+            virtual double calculateError_impl(
+                    const ObjectPointSet& current_configuration )
             {
                 double error = 0;
 
@@ -159,7 +207,9 @@ namespace smmap
                 for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
                 {
                     const Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
-                    const ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
+                    const ObjectPointSet diff =
+                            ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) )
+                            - current_configuration;
                     const double min_dist = diff.array().square().colwise().sum().minCoeff();
 
                     if ( min_dist >= 0.2/20. )
@@ -169,31 +219,6 @@ namespace smmap
                 }
 
                 return error;
-            }
-
-            double getDeformability() const
-            {
-                return 0.5*20; // k
-            }
-
-            double getCollisionScalingFactor() const
-            {
-                return  10*20; // beta
-            }
-
-            double getStretchingScalingThreshold() const
-            {
-                return 0.1/20; // lambda
-            }
-
-            bool getUseRotation() const
-            {
-                return true;
-            }
-
-            double maxTime() const
-            {
-                return 25;
             }
 
         private:
@@ -219,6 +244,27 @@ namespace smmap
 
                 return cover_points;
             }
+
+            void visualizeRope(
+                    const ObjectPointSet& rope,
+                    const std_msgs::ColorRGBA& color,
+                    const std::string& name ) const
+            {
+                visualization_msgs::Marker marker;
+
+                marker.type = visualization_msgs::Marker::LINE_STRIP;
+                marker.ns = name;
+                marker.id = 0;
+                marker.scale.x = 0.1;
+                marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( rope );
+                marker.colors = std::vector< std_msgs::ColorRGBA >( (size_t)rope.cols(), color );
+                visualization_marker_pub_.publish( marker );
+
+                marker.type = visualization_msgs::Marker::SPHERE;
+                marker.id = 1;
+                marker.scale.x = 0.01;
+                visualization_marker_pub_.publish( marker );
+            }
     };
 
     class ClothColabFolding : public Task
@@ -230,42 +276,8 @@ namespace smmap
                 , mirror_map_( createMirrorMap( nh, point_reflector_ ) )
             {}
 
-/*
-            virtual void visualizePredictions( const VectorObjectTrajectory& model_predictions, size_t best_traj ) const
-            {
-                std_msgs::ColorRGBA color;
-                color.r = 1;
-                color.g = 1;
-                color.b = 0;
-                color.a = 1;
-
-                visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
-            }
-*/
-
-            void visualizeCloth( const ObjectPointSet& cloth, const std_msgs::ColorRGBA color, const std::string& name ) const
-            {
-                std::vector< std_msgs::ColorRGBA > colors( (size_t)cloth.cols(), color );
-
-                visualizeCloth( cloth, colors, name );
-            }
-
-            void visualizeCloth( const ObjectPointSet& cloth, std::vector< std_msgs::ColorRGBA > colors, const std::string& name ) const
-            {
-                visualization_msgs::Marker marker;
-
-                marker.type = visualization_msgs::Marker::POINTS;
-                marker.ns = name;
-                marker.id = 0;
-                marker.scale.x = 0.002;
-                marker.scale.y = 0.002;
-                marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( cloth );
-                marker.colors = colors;
-
-                visualization_marker_pub_.publish( marker );
-            }
-
-            ObjectPointSet findObjectDesiredConfiguration( const ObjectPointSet& current_configuration ) const
+            virtual ObjectPointSet findObjectDesiredConfiguration(
+                    const ObjectPointSet& current_configuration ) const
             {
                 ObjectPointSet desired_configuration = current_configuration;
 
@@ -308,19 +320,6 @@ namespace smmap
                 return desired_configuration;
             }
 
-            double calculateError( const ObjectPointSet& current_configuration ) const
-            {
-                double error = 0;
-
-                for ( std::map< long, long >::const_iterator ittr = mirror_map_.begin(); ittr != mirror_map_.end(); ittr++ )
-                {
-                    error += ( current_configuration.block< 3, 1 >( 0, ittr->second ) -
-                               point_reflector_.reflect( current_configuration.block< 3, 1 >( 0, ittr->first ) ) ).norm();
-                }
-
-                return error;
-            }
-
             double getDeformability() const
             {
                 return 0.7*20; // k
@@ -347,6 +346,34 @@ namespace smmap
             }
 
         private:
+            virtual void visualizePredictions_impl(
+                    const VectorObjectTrajectory& model_predictions,
+                    size_t best_traj ) const
+            {
+                std_msgs::ColorRGBA color;
+                color.r = 1;
+                color.g = 1;
+                color.b = 0;
+                color.a = 1;
+
+                visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
+            }
+
+            virtual double calculateError_impl(
+                    const ObjectPointSet& current_configuration ) const
+            {
+                double error = 0;
+
+                for ( std::map< long, long >::const_iterator ittr = mirror_map_.begin(); ittr != mirror_map_.end(); ittr++ )
+                {
+                    error += ( current_configuration.block< 3, 1 >( 0, ittr->second ) -
+                               point_reflector_.reflect( current_configuration.block< 3, 1 >( 0, ittr->first ) ) ).norm();
+                }
+
+                return error;
+            }
+
+        private:
             const PointReflector point_reflector_;
             PointReflector createPointReflector( ros::NodeHandle& nh )
             {
@@ -367,7 +394,9 @@ namespace smmap
             }
 
             const std::map< long, long > mirror_map_;
-            static std::map< long, long > createMirrorMap( ros::NodeHandle& nh, const PointReflector& point_reflector )
+            static std::map< long, long > createMirrorMap(
+                    ros::NodeHandle& nh,
+                    const PointReflector& point_reflector )
             {
                 ROS_INFO_NAMED( "cloth_colab_folding_task" , "Getting object initial configuration" );
 
@@ -400,26 +429,22 @@ namespace smmap
 
                 return mirror_map;
             }
-    };
 
-    class ClothTableCoverage : public Task
-    {
-        public:
-            ClothTableCoverage( ros::NodeHandle& nh )
-                : Task( nh )
-                , cover_points_( getCoverPointsHelper( nh ) )
-            {
-
-            }
-
-            void visualizeCloth( const ObjectPointSet& cloth, const std_msgs::ColorRGBA color, const std::string& name ) const
+            // TODO: move these to some help class/struct/place
+            void visualizeCloth(
+                    const ObjectPointSet& cloth,
+                    const std_msgs::ColorRGBA color,
+                    const std::string& name ) const
             {
                 std::vector< std_msgs::ColorRGBA > colors( (size_t)cloth.cols(), color );
 
                 visualizeCloth( cloth, colors, name );
             }
 
-            void visualizeCloth( const ObjectPointSet& cloth, std::vector< std_msgs::ColorRGBA > colors, const std::string& name ) const
+            void visualizeCloth(
+                    const ObjectPointSet& cloth,
+                    std::vector< std_msgs::ColorRGBA > colors,
+                    const std::string& name ) const
             {
                 visualization_msgs::Marker marker;
 
@@ -433,8 +458,20 @@ namespace smmap
 
                 visualization_marker_pub_.publish( marker );
             }
+    };
 
-            ObjectPointSet findObjectDesiredConfiguration( const ObjectPointSet &current_configuration ) const
+    class ClothTableCoverage : public Task
+    {
+        public:
+            ClothTableCoverage( ros::NodeHandle& nh )
+                : Task( nh )
+                , cover_points_( getCoverPointsHelper( nh ) )
+            {
+
+            }
+
+            virtual ObjectPointSet findObjectDesiredConfiguration(
+                    const ObjectPointSet &current_configuration ) const
             {
                 ROS_INFO_NAMED( "cloth_table_coverage_task" , "Finding 'best' configuration" );
 
@@ -474,7 +511,47 @@ namespace smmap
                 return desired_configuration;
             }
 
-            double calculateError( const ObjectPointSet &current_configuration ) const
+            virtual double getDeformability() const
+            {
+                return 0.7*20; // k
+            }
+
+            virtual double getCollisionScalingFactor() const
+            {
+                return  100*20; // beta
+            }
+
+            virtual double getStretchingScalingThreshold() const
+            {
+                return 0.1/20; // lambda
+            }
+
+            virtual bool getUseRotation() const
+            {
+                return true;
+            }
+
+            virtual double maxTime() const
+            {
+                return 12.;
+            }
+
+        private:
+            virtual void visualizePredictions_impl(
+                    const VectorObjectTrajectory& model_predictions,
+                    size_t best_traj ) const
+            {
+                std_msgs::ColorRGBA color;
+                color.r = 1;
+                color.g = 1;
+                color.b = 0;
+                color.a = 1;
+
+                visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
+            }
+
+            virtual double calculateError_impl(
+                    const ObjectPointSet &current_configuration ) const
             {
                 double error = 0;
 
@@ -482,36 +559,13 @@ namespace smmap
                 for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
                 {
                     Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
-                    ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
+                    ObjectPointSet diff =
+                            ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) )
+                            - current_configuration;
                     error += diff.array().square().colwise().sum().minCoeff();
                 }
 
                 return error;
-            }
-
-            double getDeformability() const
-            {
-                return 0.7*20; // k
-            }
-
-            double getCollisionScalingFactor() const
-            {
-                return  100*20; // beta
-            }
-
-            double getStretchingScalingThreshold() const
-            {
-                return 0.1/20; // lambda
-            }
-
-            bool getUseRotation() const
-            {
-                return true;
-            }
-
-            double maxTime() const
-            {
-                return 12.;
             }
 
         private:
@@ -537,6 +591,36 @@ namespace smmap
 
                 return cover_points;
             }
+
+            // TODO: move these to some help class/struct/place
+            void visualizeCloth(
+                    const ObjectPointSet& cloth,
+                    const std_msgs::ColorRGBA color,
+                    const std::string& name ) const
+            {
+                std::vector< std_msgs::ColorRGBA > colors( (size_t)cloth.cols(), color );
+
+                visualizeCloth( cloth, colors, name );
+            }
+
+            void visualizeCloth(
+                    const ObjectPointSet& cloth,
+                    std::vector< std_msgs::ColorRGBA > colors,
+                    const std::string& name ) const
+            {
+                visualization_msgs::Marker marker;
+
+                marker.type = visualization_msgs::Marker::POINTS;
+                marker.ns = name;
+                marker.id = 0;
+                marker.scale.x = 0.002;
+                marker.scale.y = 0.002;
+                marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( cloth );
+                marker.colors = colors;
+
+                visualization_marker_pub_.publish( marker );
+            }
+
 
     };
 }

@@ -96,6 +96,8 @@ Planner::Planner( ros::NodeHandle& nh )
             }
         }
 
+        ROS_INFO_STREAM_NAMED( "planner", "Logging to " << log_folder );
+
         loggers.insert( std::make_pair< std::string, Log::Log > (
                             "time",
                             Log::Log( log_folder + "time.txt", false ) ) ) ;
@@ -202,11 +204,11 @@ std::vector< AllGrippersSinglePose > Planner::replan(
         }
     }
 
-    std::vector< AllGrippersSinglePose > best_trajectory = suggested_trajectories[min_weighted_cost_ind].first;
-//            optimizeTrajectoryDirectShooting(
-//                world_feedback.back(),
-//                suggested_trajectories[min_weighted_cost_ind].first,
-//                dt );
+    std::vector< AllGrippersSinglePose > best_trajectory =
+            optimizeTrajectoryDirectShooting(
+                world_feedback.back(),
+                suggested_trajectories[min_weighted_cost_ind].first,
+                dt );
 
     // Send the desired "best" gripper translation to the visualizer to plot
     if ( visualize_gripper_translation_ )
@@ -256,7 +258,7 @@ std::vector< AllGrippersSinglePose > Planner::replan(
     LOG_COND( loggers.at( "object_predicted_configuration" ), logging_enabled_,
               (model_predictions[min_weighted_cost_ind].back()).format( eigen_io_one_line_ ) );
 
-    return suggested_trajectories[min_weighted_cost_ind].first;
+    return best_trajectory;
 }
 
 
@@ -412,7 +414,7 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
     // TODO: move these magic numbers elsewhere
     #warning "Magic numbers here need to be moved elsewhere"
     const int MAX_ITTR = 10;
-    const double LEARNING_RATE = 0.1;
+    const double LEARNING_RATE = 0.01;
 
     double objective_delta = std::numeric_limits< double >::infinity();
 
@@ -422,7 +424,6 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
     std::function< double( const ObjectPointSet& ) > objective_function =
             std::bind( &Task::calculateError, task_.get(), std::placeholders::_1  );
 
-    // TODO: replace this with something that just averages the last positions
     double objective_value = objective_function(
                 combineModelPredictionsLastTimestep(
                      model_set_->makePredictions(
@@ -450,10 +451,10 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
         // Update the gripper velocities based on a Newton style gradient descent
 //        Eigen::VectorXd velocity_update = derivitives.second.colPivHouseholderQr().solve( -derivitives.first );
         Eigen::VectorXd velocity_update = -derivitives ;
-        if ( velocity_update.norm() > MAX_GRIPPER_VELOCITY )
-        {
-            velocity_update *= MAX_GRIPPER_VELOCITY / velocity_update.norm();
-        }
+//        if ( velocity_update.norm() > MAX_GRIPPER_VELOCITY )
+//        {
+//            velocity_update *= MAX_GRIPPER_VELOCITY / velocity_update.norm();
+//        }
 
         for ( size_t time_ind = 0; time_ind < grippers_velocities.size(); time_ind++ )
         {
