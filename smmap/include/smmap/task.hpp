@@ -68,13 +68,7 @@ namespace smmap
 
         private:
             virtual double calculateError_impl(
-                    const ObjectPointSet& current_configuration ) const
-            {
-                const ObjectPointSet desired_configuration =
-                        findObjectDesiredConfiguration( current_configuration );
-
-                return (desired_configuration - current_configuration).norm();
-            }
+                    const ObjectPointSet& current_configuration ) const = 0;
 
             /*
             virtual ObjectPointSet getObjectErrorGradient_impl(
@@ -199,7 +193,7 @@ namespace smmap
             }
 
             virtual double calculateError_impl(
-                    const ObjectPointSet& current_configuration )
+                    const ObjectPointSet& current_configuration ) const
             {
                 double error = 0;
 
@@ -279,6 +273,8 @@ namespace smmap
             virtual ObjectPointSet findObjectDesiredConfiguration(
                     const ObjectPointSet& current_configuration ) const
             {
+                ROS_INFO_NAMED( "cloth_colab_folding_task" , "Finding 'best' configuration" );
+
                 ObjectPointSet desired_configuration = current_configuration;
 
                 ObjectPointSet robot_cloth_points_desired( 3, (long)mirror_map_.size() );

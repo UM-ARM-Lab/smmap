@@ -178,7 +178,7 @@ void ModelSet::evaluateConfidence( const std::vector< WorldFeedback >& feedback 
 
         const double dist = distanceRMS( feedback, model_prediction );
 
-        model_confidence_[ind] = 1.0 / ( 1 + dist );
+        model_confidence_[ind] = 1.0 / ( 1.0 + dist );
     }
 }
 

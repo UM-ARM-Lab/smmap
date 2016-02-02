@@ -408,9 +408,6 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
 {
     ROS_INFO_NAMED( "planner" , "Using direct shooting to optimize the trajectory" );
 
-    std::cout << "Pre optimizing grippers last pose:\n"
-              << PrettyPrint::PrettyPrint( grippers_trajectory.back(), true, "\n " ) << std::endl;
-
     // TODO: move these magic numbers elsewhere
     #warning "Magic numbers here need to be moved elsewhere"
     const int MAX_ITTR = 10;
@@ -437,9 +434,9 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
     {
         ROS_INFO_STREAM_NAMED( "planner" , "  Direct shooting itteration " << ittr << ". Current objective value " << objective_value );
 
-        // Find the first derivitives of the objective function with
+        // Find the first derivitive of the objective function with
         // respect to the gripper velocities
-        Eigen::VectorXd derivitives =
+        Eigen::VectorXd derivitive =
                 combineModelDerivitives(
                     model_set_->getObjectiveFunction1stDerivitive(
                         current_world_configuration,
@@ -450,11 +447,7 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
 
         // Update the gripper velocities based on a Newton style gradient descent
 //        Eigen::VectorXd velocity_update = derivitives.second.colPivHouseholderQr().solve( -derivitives.first );
-        Eigen::VectorXd velocity_update = -derivitives ;
-//        if ( velocity_update.norm() > MAX_GRIPPER_VELOCITY )
-//        {
-//            velocity_update *= MAX_GRIPPER_VELOCITY / velocity_update.norm();
-//        }
+        Eigen::VectorXd velocity_update = -derivitive ;
 
         for ( size_t time_ind = 0; time_ind < grippers_velocities.size(); time_ind++ )
         {
@@ -496,8 +489,7 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
     }
     while ( ittr < MAX_ITTR  && objective_delta > objective_value * 1e-6 );
 
-    std::cout << "Post optimizing grippers last pose:\n"
-              << PrettyPrint::PrettyPrint( grippers_trajectory.back(), true, "\n " ) << std::endl;
+    ROS_INFO_STREAM_NAMED( "planner" , "  Direct shooting final objective value " << objective_value );
 
     return grippers_trajectory;
 }
