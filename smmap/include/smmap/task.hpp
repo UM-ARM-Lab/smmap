@@ -32,7 +32,7 @@ namespace smmap
 
             // TODO: This is closer to a way of finding a error gradient
             // for some of the methods. Fix this naming problem/usage problem.
-            virtual ObjectPointSet findObjectDesiredConfiguration(
+            virtual Eigen::VectorXd calculateObjectDesiredVelocity(
                     const ObjectPointSet& current_configuration ) const = 0;
 
             double calculateError(
@@ -107,15 +107,16 @@ namespace smmap
                 , cover_points_( getCoverPointsHelper( nh ) )
             {}
 
-            ObjectPointSet findObjectDesiredConfiguration(
+            virtual Eigen::VectorXd calculateObjectDesiredVelocity(
                     const ObjectPointSet& current_configuration ) const
             {
                 ROS_INFO_NAMED( "rope_coverage_task" , "Finding 'best' configuration" );
 
-                ObjectPointSet desired_configuration = current_configuration;
+                Eigen::VectorXd desired_velocity =
+                        Eigen::VectorXd::Zero( current_configuration.cols() * 3 );
 
                 // for every cover point, find the nearest deformable object point
-                for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
+                for ( long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
                 {
                     const Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
                     const ObjectPointSet diff =
@@ -124,9 +125,9 @@ namespace smmap
                     const Eigen::RowVectorXd dist_sq = diff.array().square().colwise().sum();
 
                     // find the closest deformable point
-                    int min_ind = -1;
+                    long min_ind = -1;
                     double min_dist = std::numeric_limits< double >::infinity();
-                    for ( int object_ind = 0; object_ind < dist_sq.cols(); object_ind++ )
+                    for ( long object_ind = 0; object_ind < dist_sq.cols(); object_ind++ )
                     {
                         if ( dist_sq( object_ind ) < min_dist )
                         {
@@ -137,20 +138,13 @@ namespace smmap
 
                     if ( min_dist >= 0.2/20. )
                     {
-                        desired_configuration.block< 3, 1 >( 0, min_ind ) =
-                                desired_configuration.block< 3, 1 >( 0, min_ind )
+                        desired_velocity.segment< 3 >( min_ind * 3 ) =
+                                desired_velocity.segment< 3 >( min_ind * 3 )
                                 + diff.block< 3, 1 >( 0, min_ind );
                     }
                 }
 
-                std_msgs::ColorRGBA color;
-                color.r = 0;
-                color.g = 0;
-                color.b = 1;
-                color.a = 1;
-                visualizeRope( desired_configuration, color, "rope_desired_configuration" );
-
-                return desired_configuration;
+                return desired_velocity;
             }
 
             virtual double getDeformability() const
@@ -198,7 +192,7 @@ namespace smmap
                 double error = 0;
 
                 // for every cover point, find the nearest deformable object point
-                for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
+                for ( long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
                 {
                     const Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
                     const ObjectPointSet diff =
@@ -270,73 +264,75 @@ namespace smmap
                 , mirror_map_( createMirrorMap( nh, point_reflector_ ) )
             {}
 
-            virtual ObjectPointSet findObjectDesiredConfiguration(
+            virtual Eigen::VectorXd calculateObjectDesiredVelocity(
                     const ObjectPointSet& current_configuration ) const
             {
                 ROS_INFO_NAMED( "cloth_colab_folding_task" , "Finding 'best' configuration" );
 
-                ObjectPointSet desired_configuration = current_configuration;
+                Eigen::VectorXd desired_velocity =
+                        Eigen::VectorXd::Zero( current_configuration.cols() * 3 );
 
-                ObjectPointSet robot_cloth_points_desired( 3, (long)mirror_map_.size() );
-                ObjectPointSet robot_cloth_points_current( 3, (long)mirror_map_.size() );
-                std::vector< std_msgs::ColorRGBA > robot_cloth_points_current_colors( mirror_map_.size() );
+                ObjectPointSet robot_cloth_points_desired = ObjectPointSet::Zero( 3, (long)mirror_map_.size() );
+//                ObjectPointSet robot_cloth_points_current( 3, (long)mirror_map_.size() );
+//                std::vector< std_msgs::ColorRGBA > robot_cloth_points_current_colors( mirror_map_.size() );
+
+                std_msgs::ColorRGBA red;
+
+                red.r = 1;
+                red.g = 0;
+                red.b = 0;
+                red.a = 1;
 
                 long robot_cloth_points_ind = 0;
-                for ( std::map< long, long >::const_iterator ittr = mirror_map_.begin(); ittr != mirror_map_.end(); ittr++ )
+                for ( std::map< long, long >::const_iterator ittr = mirror_map_.begin();
+                      ittr != mirror_map_.end(); ittr++, robot_cloth_points_ind++ )
                 {
-                    desired_configuration.block< 3, 1 >( 0, ittr->second ) =
+                    desired_velocity.segment< 3 >( ittr->second * 3) =
+                            point_reflector_.reflect( current_configuration.block< 3, 1 >( 0, ittr->first ) )
+                            - current_configuration.block< 3, 1 >( 0, ittr->second );
+
+                    robot_cloth_points_desired.block< 3, 1 >( 0, robot_cloth_points_ind ) =
                             point_reflector_.reflect( current_configuration.block< 3, 1 >( 0, ittr->first ) );
+//                    robot_cloth_points_current.block< 3, 1 >( 0, robot_cloth_points_ind ) = current_configuration.block< 3, 1 >( 0, ittr->second );
 
-                    robot_cloth_points_desired.block< 3, 1 >( 0, robot_cloth_points_ind ) = desired_configuration.block< 3, 1 >( 0, ittr->second );
-                    robot_cloth_points_current.block< 3, 1 >( 0, robot_cloth_points_ind ) = current_configuration.block< 3, 1 >( 0, ittr->second );
+//                    std_msgs::ColorRGBA color;
 
-                    std_msgs::ColorRGBA color;
+//                    color.r = 0;
+//                    color.g = (float)( robot_cloth_points_desired.block< 3, 1 >( 0, robot_cloth_points_ind )
+//                               - robot_cloth_points_current.block< 3, 1 >( 0, robot_cloth_points_ind ) ).norm() * 20;
+//                    color.b = 0;
+//                    color.a = 1;
 
-                    color.r = 0;
-                    color.g = (float)( robot_cloth_points_desired.block< 3, 1 >( 0, robot_cloth_points_ind )
-                               - robot_cloth_points_current.block< 3, 1 >( 0, robot_cloth_points_ind ) ).norm() * 20;
-                    color.b = 0;
-                    color.a = 1;
-
-                    robot_cloth_points_current_colors[(size_t)robot_cloth_points_ind] = color;
-
-                    robot_cloth_points_ind++;
+//                    robot_cloth_points_current_colors[(size_t)robot_cloth_points_ind] = color;
                 }
 
-                std_msgs::ColorRGBA color;
+//                visualizeCloth( robot_cloth_points_desired, red, "cloth_desired" );
+//                visualizeCloth( robot_cloth_points_current, robot_cloth_points_current_colors, "cloth_current" );
 
-                color.r = 1;
-                color.g = 0;
-                color.b = 0;
-                color.a = 1;
-
-                visualizeCloth( robot_cloth_points_desired, color, "cloth_desired" );
-                visualizeCloth( robot_cloth_points_current, robot_cloth_points_current_colors, "cloth_current" );
-
-                return desired_configuration;
+                return desired_velocity;
             }
 
-            double getDeformability() const
+            virtual double getDeformability() const
             {
                 return 0.7*20; // k
             }
 
-            double getCollisionScalingFactor() const
+            virtual double getCollisionScalingFactor() const
             {
                 return  100*20; // beta
             }
 
-            double getStretchingScalingThreshold() const
+            virtual double getStretchingScalingThreshold() const
             {
                 return 0.1/20; // lambda
             }
 
-            bool getUseRotation() const
+            virtual bool getUseRotation() const
             {
                 return true;
             }
 
-            double maxTime() const
+            virtual double maxTime() const
             {
                 return 10.;
             }
@@ -429,7 +425,7 @@ namespace smmap
             // TODO: move these to some help class/struct/place
             void visualizeCloth(
                     const ObjectPointSet& cloth,
-                    const std_msgs::ColorRGBA color,
+                    const std_msgs::ColorRGBA& color,
                     const std::string& name ) const
             {
                 std::vector< std_msgs::ColorRGBA > colors( (size_t)cloth.cols(), color );
@@ -439,7 +435,7 @@ namespace smmap
 
             void visualizeCloth(
                     const ObjectPointSet& cloth,
-                    std::vector< std_msgs::ColorRGBA > colors,
+                    const std::vector< std_msgs::ColorRGBA >& colors,
                     const std::string& name ) const
             {
                 visualization_msgs::Marker marker;
@@ -466,24 +462,33 @@ namespace smmap
 
             }
 
-            virtual ObjectPointSet findObjectDesiredConfiguration(
+            virtual Eigen::VectorXd calculateObjectDesiredVelocity(
                     const ObjectPointSet &current_configuration ) const
             {
                 ROS_INFO_NAMED( "cloth_table_coverage_task" , "Finding 'best' configuration" );
 
-                ObjectPointSet desired_configuration = current_configuration;
+                Eigen::VectorXd desired_velocity =
+                        Eigen::VectorXd::Zero( current_configuration.cols() * 3 );
+
+                std_msgs::ColorRGBA red;
+                {
+                    red.r = 1;
+                    red.g = 0;
+                    red.b = 0;
+                    red.a = 1;
+                }
 
                 // for every cover point, find the nearest deformable object point
-                for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
+                for ( long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
                 {
                     const Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
                     const ObjectPointSet diff = ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) ) - current_configuration;
                     const Eigen::RowVectorXd dist_sq = diff.array().square().colwise().sum();
 
                     // find the closest deformable object point
-                    int min_ind = -1;
+                    long min_ind = -1;
                     double min_dist = std::numeric_limits< double >::infinity();
-                    for ( int object_ind = 0; object_ind < dist_sq.cols(); object_ind++ )
+                    for ( long object_ind = 0; object_ind < dist_sq.cols(); object_ind++ )
                     {
                         if ( dist_sq( object_ind ) < min_dist )
                         {
@@ -492,19 +497,18 @@ namespace smmap
                         }
                     }
 
-                    desired_configuration.block< 3, 1 >( 0, min_ind ) = desired_configuration.block< 3, 1 >( 0, min_ind ) + diff.block< 3, 1 >( 0, min_ind );
+                    desired_velocity.segment< 3 >( min_ind * 3 ) =
+                            desired_velocity.segment< 3 >( min_ind * 3 )
+                            + diff.block< 3, 1 >( 0, min_ind );
+
                 }
 
-                std_msgs::ColorRGBA color;
+                Eigen::MatrixXd cloth_delta = desired_velocity;
+                cloth_delta.resizeLike( current_configuration );
 
-                color.r = 1;
-                color.g = 0;
-                color.b = 0;
-                color.a = 1;
+//                visualizeCloth( current_configuration + cloth_delta, red, "desired_delta" );
 
-                visualizeCloth( desired_configuration, color, "cloth_desired" );
-
-                return desired_configuration;
+                return desired_velocity;
             }
 
             virtual double getDeformability() const
@@ -552,7 +556,7 @@ namespace smmap
                 double error = 0;
 
                 // for every cover point, find the nearest deformable object point
-                for ( int cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
+                for ( long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
                 {
                     Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
                     ObjectPointSet diff =
@@ -591,7 +595,7 @@ namespace smmap
             // TODO: move these to some help class/struct/place
             void visualizeCloth(
                     const ObjectPointSet& cloth,
-                    const std_msgs::ColorRGBA color,
+                    const std_msgs::ColorRGBA& color,
                     const std::string& name ) const
             {
                 std::vector< std_msgs::ColorRGBA > colors( (size_t)cloth.cols(), color );
@@ -601,7 +605,7 @@ namespace smmap
 
             void visualizeCloth(
                     const ObjectPointSet& cloth,
-                    std::vector< std_msgs::ColorRGBA > colors,
+                    const std::vector< std_msgs::ColorRGBA >& colors,
                     const std::string& name ) const
             {
                 visualization_msgs::Marker marker;

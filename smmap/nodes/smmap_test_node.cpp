@@ -9,8 +9,11 @@ int main( int argc, char* argv[] )
 
     ros::NodeHandle nh;
 
+    const size_t num_traj_cmds_per_loop = 10;
+    const double dt = 0.01;
+
     Planner planner( nh );
-    planner.run();
+    planner.run( num_traj_cmds_per_loop, dt );
 
     return 0;
 }

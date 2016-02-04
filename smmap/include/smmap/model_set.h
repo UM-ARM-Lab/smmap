@@ -20,6 +20,11 @@ namespace smmap
             ModelSet( const std::vector< GripperData >& grippers_data,
                       const ObjectPointSet& object_initial_configuration,
                       const Task& task,
+                      const size_t num_models_parameter );
+
+            ModelSet( const std::vector< GripperData >& grippers_data,
+                      const ObjectPointSet& object_initial_configuration,
+                      const Task& task,
                       double translational_deformability,
                       double rotational_deformability );
             ~ModelSet();
@@ -35,7 +40,6 @@ namespace smmap
             std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > >
             getDesiredGrippersTrajectories(
                     const WorldFeedback& world_feedback,
-                    const ObjectPointSet& object_desired_configuration,
                     double max_step_size, size_t num_steps );
 
             std::vector< Eigen::VectorXd >

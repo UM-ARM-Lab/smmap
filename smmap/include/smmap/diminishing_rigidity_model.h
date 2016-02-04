@@ -13,16 +13,20 @@ namespace smmap
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
-            DiminishingRigidityModel( double deformability,
-                                      bool use_rotation,
-                                      double obstacle_avoidance_scale,
-                                      double strechting_correction_threshold );
+            DiminishingRigidityModel(
+                    const Task& task,
+                    double deformability,
+                    bool use_rotation,
+                    double obstacle_avoidance_scale,
+                    double strechting_correction_threshold );
 
-            DiminishingRigidityModel( double translation_deformability,
-                                      double rotation_deformability,
-                                      bool use_rotation,
-                                      double obstacle_avoidance_scale,
-                                      double strechting_correction_threshold );
+            DiminishingRigidityModel(
+                    const Task& task,
+                    double translation_deformability,
+                    double rotation_deformability,
+                    bool use_rotation,
+                    double obstacle_avoidance_scale,
+                    double strechting_correction_threshold );
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function overrides
@@ -50,8 +54,8 @@ namespace smmap
 
             std::vector< AllGrippersSinglePose > getDesiredGrippersTrajectory(
                     const WorldFeedback& world_feedback,
-                    const ObjectPointSet& object_desired_configuration,
-                    double max_step_size, size_t num_steps ) const;
+                    double max_step_size,
+                    size_t num_steps ) const;
 
             void perturbModel( std::mt19937_64& generator );
 
@@ -96,6 +100,8 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
             // Private members
             ////////////////////////////////////////////////////////////////////
+
+            const Task& task_;
 
             static long num_nodes_;
 

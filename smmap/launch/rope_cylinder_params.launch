@@ -2,7 +2,7 @@
     <arg name="test_id" default=""/>
     
     <param name="logging_enabled" value="true"/>
-    <param name="log_folder" value="$(find smmap)/../logs/$(arg test_id)/"/>
+    <param name="log_folder" value="$(find smmap)/../logs/rope_cylinder/$(arg test_id)/"/>
 
     <param name="deformable_type" value="rope"/>
     <param name="task_type" value="coverage"/>

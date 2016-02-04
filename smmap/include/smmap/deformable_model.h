@@ -36,8 +36,8 @@ namespace smmap
 
             virtual std::vector< AllGrippersSinglePose > getDesiredGrippersTrajectory(
                     const WorldFeedback& world_feedback,
-                    const ObjectPointSet& object_desired_configuration,
-                    double max_step_size, size_t num_steps ) const = 0;
+                    double max_step_size,
+                    size_t num_steps ) const = 0;
 
             virtual Eigen::VectorXd getObjectiveFunction1stDerivitive(
                     const WorldFeedback& current_world_configuration,

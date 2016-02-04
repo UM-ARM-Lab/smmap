@@ -39,12 +39,20 @@ Planner::Planner( ros::NodeHandle& nh )
     getGrippersData();
 
     double translational_deformability, rotational_deformability;
+
     if ( ph_.getParam( "translational_deformability", translational_deformability ) &&
          ph_.getParam( "rotational_deformability", rotational_deformability ) )
     {
         model_set_ = std::unique_ptr< ModelSet >(
                     new ModelSet( grippers_data_, getObjectInitialConfiguration(), *task_,
                                   translational_deformability, rotational_deformability ) );
+    }
+    else if ( GetUseMultiModel( ph_ ) )
+    {
+        const size_t num_models_per_param = 20;
+        model_set_ = std::unique_ptr< ModelSet >(
+                    new ModelSet( grippers_data_, getObjectInitialConfiguration(), *task_,
+                                  num_models_per_param) );
     }
     else
     {
@@ -102,25 +110,25 @@ Planner::Planner( ros::NodeHandle& nh )
                             "time",
                             Log::Log( log_folder + "time.txt", false ) ) ) ;
 
-        loggers.insert( std::make_pair< std::string, Log::Log >(
-                            "object_current_configuration",
-                            Log::Log( log_folder + "object_current_configuration.txt", false ) ) );
-
-        loggers.insert( std::make_pair< std::string, Log::Log >(
-                            "object_desired_configuration",
-                            Log::Log( log_folder + "object_desired_configuration.txt", false ) ) );
-
         loggers.insert( std::make_pair< std::string, Log::Log > (
                             "error",
                             Log::Log( log_folder + "error.txt", false ) ) ) ;
 
         loggers.insert( std::make_pair< std::string, Log::Log > (
-                            "suggested_grippers_delta",
-                            Log::Log( log_folder + "suggested_grippers_delta.txt", false ) ) ) ;
+                            "model_chosen",
+                            Log::Log( log_folder + "model_chosen.txt", false ) ) ) ;
 
-        loggers.insert( std::make_pair< std::string, Log::Log > (
-                            "object_predicted_configuration",
-                            Log::Log( log_folder + "object_predicted_configuration.txt", false ) ) ) ;
+//        loggers.insert( std::make_pair< std::string, Log::Log >(
+//                            "object_current_configuration",
+//                            Log::Log( log_folder + "object_current_configuration.txt", false ) ) );
+
+//        loggers.insert( std::make_pair< std::string, Log::Log > (
+//                            "suggested_grippers_delta",
+//                            Log::Log( log_folder + "suggested_grippers_delta.txt", false ) ) ) ;
+
+//        loggers.insert( std::make_pair< std::string, Log::Log > (
+//                            "object_predicted_configuration",
+//                            Log::Log( log_folder + "object_predicted_configuration.txt", false ) ) ) ;
     }
 }
 
@@ -178,14 +186,10 @@ std::vector< AllGrippersSinglePose > Planner::replan(
 {
     updateModels( world_feedback );
 
-    // here we find the desired configuration of the object given the current config
-    ObjectPointSet object_desired_config = task_->findObjectDesiredConfiguration( world_feedback.back().object_configuration_ );
-
     // Querry each model for it's best trajectory
     std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > > suggested_trajectories =
             model_set_->getDesiredGrippersTrajectories(
                 world_feedback.back(),
-                object_desired_config,
                 MAX_GRIPPER_VELOCITY * dt,
                 num_traj_cmds_per_loop );
 
@@ -205,10 +209,11 @@ std::vector< AllGrippersSinglePose > Planner::replan(
     }
 
     std::vector< AllGrippersSinglePose > best_trajectory =
-            optimizeTrajectoryDirectShooting(
-                world_feedback.back(),
-                suggested_trajectories[min_weighted_cost_ind].first,
-                dt );
+            suggested_trajectories[min_weighted_cost_ind].first;
+//            optimizeTrajectoryDirectShooting(
+//                world_feedback.back(),
+//                suggested_trajectories[min_weighted_cost_ind].first,
+//                dt );
 
     // Send the desired "best" gripper translation to the visualizer to plot
     if ( visualize_gripper_translation_ )
@@ -234,29 +239,28 @@ std::vector< AllGrippersSinglePose > Planner::replan(
                 CalculateGrippersVelocities( best_trajectory, dt ),
                 dt );
 
-    // TODO: make this logging work for multi-step trajectories
-    if ( logging_enabled_ )
+
+    for ( size_t fbk_ind = 0; fbk_ind < world_feedback.size(); fbk_ind++ )
     {
-        assert( num_traj_cmds_per_loop == 1 );
+
+        LOG_COND( loggers.at( "time" ), logging_enabled_,
+                  world_feedback[fbk_ind].sim_time_ );
+
+        LOG_COND( loggers.at( "error"), logging_enabled_,
+                  task_->calculateError( world_feedback[fbk_ind].object_configuration_ ) );
+
+        LOG_COND( loggers.at( "model_chosen"), logging_enabled_,
+                  min_weighted_cost_ind );
+
+//        LOG_COND( loggers.at( "object_current_configuration" ), logging_enabled_,
+//                  world_feedback[fbk_ind].object_configuration_.format( eigen_io_one_line_ ) );
+
+//        LOG_COND( loggers.at( "suggested_grippers_delta"), logging_enabled_,
+//                  PrintDeltaOneLine( suggested_trajectories[min_weighted_cost_ind].first ) );
+
+//        LOG_COND( loggers.at( "object_predicted_configuration" ), logging_enabled_,
+//                  model_predictions[min_weighted_cost_ind][fbk_ind].format( eigen_io_one_line_ ) );
     }
-
-    LOG_COND( loggers.at( "time" ), logging_enabled_,
-              world_feedback.back().sim_time_ );
-
-    LOG_COND( loggers.at( "object_current_configuration" ), logging_enabled_,
-              world_feedback.back().object_configuration_.format( eigen_io_one_line_ ) );
-
-    LOG_COND( loggers.at( "object_desired_configuration" ), logging_enabled_,
-              object_desired_config.format( eigen_io_one_line_ ) );
-
-    LOG_COND( loggers.at( "error"), logging_enabled_,
-              task_->calculateError( world_feedback.back().object_configuration_ ) );
-
-    LOG_COND( loggers.at( "suggested_grippers_delta"), logging_enabled_,
-              PrintDeltaOneLine( suggested_trajectories[min_weighted_cost_ind].first ) );
-
-    LOG_COND( loggers.at( "object_predicted_configuration" ), logging_enabled_,
-              (model_predictions[min_weighted_cost_ind].back()).format( eigen_io_one_line_ ) );
 
     return best_trajectory;
 }

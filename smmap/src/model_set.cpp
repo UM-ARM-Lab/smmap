@@ -14,23 +14,36 @@ using namespace smmap;
 ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
                     const ObjectPointSet& object_initial_configuration,
                     const Task& task )
+    : ModelSet( grippers_data,
+                object_initial_configuration,
+                task,
+                task.getDeformability(),
+                task.getDeformability() )
+{}
+
+ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
+                    const ObjectPointSet& object_initial_configuration,
+                    const Task& task,
+                    const size_t num_models_parameter )
     : rnd_generator_( (unsigned long)std::chrono::system_clock::now().time_since_epoch().count() )
 {
+    assert( num_models_parameter == 20 );
+
     // Initialize model types with their needed data
     DeformableModel::UpdateGrippersData( grippers_data );
     DiminishingRigidityModel::SetInitialObjectConfiguration( object_initial_configuration );
 
-    /*
     const double deform_step = 0.5;
     //const double deform_min = std::max( 0., task.getDeformability() - 5 );
     const double deform_min = 10;
-    const double deform_max = deform_min + 20 * deform_step;
+    const double deform_max = deform_min + num_models_parameter * deform_step;
 
     for ( double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step )
     {
         for ( double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step )
         {
             addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
+                            task,
                             trans_deform,
                             rot_deform,
                             task.getUseRotation(),
@@ -38,14 +51,6 @@ ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
                             task.getStretchingScalingThreshold() ) ) );
         }
     }
-    */
-
-    addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
-                    task.getDeformability(),
-                    task.getDeformability(),
-                    task.getUseRotation(),
-                    task.getCollisionScalingFactor(),
-                    task.getStretchingScalingThreshold() ) ) );
 }
 
 ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
@@ -60,6 +65,7 @@ ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
     DiminishingRigidityModel::SetInitialObjectConfiguration( object_initial_configuration );
 
     addModel( DeformableModel::Ptr( new DiminishingRigidityModel(
+                    task,
                     translational_deformability,
                     rotational_deformability,
                     task.getUseRotation(),
@@ -105,7 +111,6 @@ void ModelSet::updateModels( const std::vector< WorldFeedback >& feedback )
 
 std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > > ModelSet::getDesiredGrippersTrajectories(
         const WorldFeedback& world_feedback,
-        const ObjectPointSet& object_desired_configuration,
         double max_step_size, size_t num_steps )
 {
     std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > > grippers_trajectories( model_list_.size() );
@@ -115,7 +120,6 @@ std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > > ModelSe
     {
         std::vector< AllGrippersSinglePose > grippers_trajectory = model_list_[ind]->getDesiredGrippersTrajectory(
                     world_feedback,
-                    object_desired_configuration,
                     max_step_size,
                     num_steps );
 

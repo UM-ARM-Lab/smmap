@@ -28,7 +28,7 @@ namespace smmap
             // Main function that makes things happen
             ////////////////////////////////////////////////////////////////////
 
-            void run( const size_t num_traj_cmds_per_loop = 1, const double dt = 0.01 );
+            void run( const size_t num_traj_cmds_per_loop, const double dt );
 
         private:
 

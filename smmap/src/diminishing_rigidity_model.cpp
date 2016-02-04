@@ -5,7 +5,6 @@
 #include <stdexcept>
 #include <algorithm>
 #include <functional>
-
 #include <Eigen/SVD>
 
 #include <ros/ros.h>
@@ -19,11 +18,13 @@ using namespace smmap;
 ////////////////////////////////////////////////////////////////////////////////
 
 DiminishingRigidityModel::DiminishingRigidityModel(
+        const Task& task,
         double deformability,
         bool use_rotation,
         double obstacle_avoidance_scale,
         double strechting_correction_threshold )
     : DiminishingRigidityModel(
+          task,
           deformability,
           deformability,
           use_rotation,
@@ -32,12 +33,14 @@ DiminishingRigidityModel::DiminishingRigidityModel(
 {}
 
 DiminishingRigidityModel::DiminishingRigidityModel(
+        const Task& task,
         double translation_deformability,
         double rotation_deformability,
         bool use_rotation,
         double obstacle_avoidance_scale,
         double strechting_correction_threshold )
-    : translation_deformability_( translation_deformability )
+    : task_( task )
+    , translation_deformability_( translation_deformability )
     , rotation_deformability_( rotation_deformability )
     , use_rotation_( use_rotation )
     , cols_per_gripper_( use_rotation_ ? 6 : 3 )
@@ -70,10 +73,11 @@ DiminishingRigidityModel::DiminishingRigidityModel(
 
 /**
  * @brief DiminishingRigidityModel::SetInitialObjectConfiguration This function
- *          is not thread save
+ *          is not thread safe.
  * @param object_initial_configuration
  */
-void DiminishingRigidityModel::SetInitialObjectConfiguration( const ObjectPointSet& object_initial_configuration )
+void DiminishingRigidityModel::SetInitialObjectConfiguration(
+        const ObjectPointSet& object_initial_configuration )
 {
     num_nodes_ = object_initial_configuration.cols();
     object_initial_node_distance_ = distanceMatrix( object_initial_configuration );
@@ -166,7 +170,9 @@ ObjectPointSet DiminishingRigidityModel::getObjectDelta(
         const AllGrippersSingleVelocity& grippers_velocity,
         double dt ) const
 {
-    const Eigen::MatrixXd J = computeGrippersToObjectJacobian( grippers_pose, object_current_configuration );
+    const Eigen::MatrixXd J = computeGrippersToObjectJacobian(
+                grippers_pose,
+                object_current_configuration );
 
     Eigen::MatrixXd delta = Eigen::MatrixXd::Zero( num_nodes_ * 3, 1 );
 
@@ -195,7 +201,6 @@ ObjectPointSet DiminishingRigidityModel::getObjectDelta(
 
 std::vector< AllGrippersSinglePose > DiminishingRigidityModel::getDesiredGrippersTrajectory(
         const WorldFeedback& world_feedback,
-        const ObjectPointSet& object_desired_configuration,
         double max_step_size, size_t num_steps ) const
 {
     ROS_INFO_STREAM_NAMED( "diminishing_rigidity_model",
@@ -211,10 +216,6 @@ std::vector< AllGrippersSinglePose > DiminishingRigidityModel::getDesiredGripper
     // as either a point set or a stacked vector
     ObjectPointSet current_as_point_set = world_feedback.object_configuration_;
     Eigen::Map< Eigen::VectorXd, Eigen::Aligned > current_as_vector( current_as_point_set.data(), 3 * num_nodes_ );
-    // Convince the compiler to allow us to refer to the desired configuration
-    // as a stacked vector
-    const Eigen::Map< Eigen::VectorXd, Eigen::Aligned >desired_as_vector (
-                const_cast<double *>( object_desired_configuration.data() ), 3 * num_nodes_ );
 
     for ( size_t traj_step = 1; traj_step <= num_steps; traj_step++ )
     {
@@ -222,13 +223,21 @@ std::vector< AllGrippersSinglePose > DiminishingRigidityModel::getDesiredGripper
         // Find the velocities of each part of the algorithm
         ////////////////////////////////////////////////////////////////////////
 
+        const Eigen::VectorXd error_correction =
+                task_.calculateObjectDesiredVelocity( current_as_point_set );
+
+        const Eigen::VectorXd stretching_correction
+                = computeStretchingCorrection( current_as_point_set );
+
         // Calculate the desired object velocity (p_dot)
         const Eigen::VectorXd desired_object_velocity =
-                (desired_as_vector - current_as_vector) +
-                computeStretchingCorrection( current_as_point_set );
+                error_correction +
+                stretching_correction;
 
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
-        const Eigen::MatrixXd J = computeGrippersToObjectJacobian( traj[traj_step-1], current_as_point_set );
+        const Eigen::MatrixXd J = computeGrippersToObjectJacobian(
+                traj[traj_step-1],
+                current_as_point_set );
 
         // Find the least-squares fitting to the desired object velocity
         Eigen::VectorXd grippers_velocity_achieve_goal =
