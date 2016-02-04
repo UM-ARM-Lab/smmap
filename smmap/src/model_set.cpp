@@ -24,10 +24,10 @@ ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
 ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
                     const ObjectPointSet& object_initial_configuration,
                     const Task& task,
-                    const size_t num_models_parameter )
+                    const size_t num_models_per_parameter )
     : rnd_generator_( (unsigned long)std::chrono::system_clock::now().time_since_epoch().count() )
 {
-    assert( num_models_parameter == 20 );
+    assert( num_models_per_parameter == 20 );
 
     // Initialize model types with their needed data
     DeformableModel::UpdateGrippersData( grippers_data );
@@ -36,7 +36,7 @@ ModelSet::ModelSet( const std::vector< GripperData >& grippers_data,
     const double deform_step = 0.5;
     //const double deform_min = std::max( 0., task.getDeformability() - 5 );
     const double deform_min = 10;
-    const double deform_max = deform_min + num_models_parameter * deform_step;
+    const double deform_max = deform_min + (double)num_models_per_parameter * deform_step;
 
     for ( double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step )
     {

@@ -20,7 +20,7 @@ namespace smmap
             ModelSet( const std::vector< GripperData >& grippers_data,
                       const ObjectPointSet& object_initial_configuration,
                       const Task& task,
-                      const size_t num_models_parameter );
+                      const size_t num_models_per_parameter );
 
             ModelSet( const std::vector< GripperData >& grippers_data,
                       const ObjectPointSet& object_initial_configuration,
