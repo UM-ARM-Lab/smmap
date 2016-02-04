@@ -111,7 +111,8 @@ void ModelSet::updateModels( const std::vector< WorldFeedback >& feedback )
 
 std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > > ModelSet::getDesiredGrippersTrajectories(
         const WorldFeedback& world_feedback,
-        double max_step_size, size_t num_steps )
+        const double max_step_size,
+        const size_t num_steps )
 {
     std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > > grippers_trajectories( model_list_.size() );
 

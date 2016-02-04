@@ -136,12 +136,12 @@ Planner::Planner( ros::NodeHandle& nh )
 // Main function that makes things happen
 ////////////////////////////////////////////////////////////////////////////////
 
-void Planner::run( const size_t num_traj_cmds_per_loop , const double dt )
+void Planner::run( const double dt )
 {
     // TODO: remove this hardcoded spin rate
     boost::thread spin_thread( boost::bind( &Planner::spin, 1000 ) );
 
-    ROS_INFO_NAMED( "planner" , "Waiting for the robot gripper action server to be available" );
+    ROS_INFO_NAMED( "planner", "Waiting for the robot gripper action server to be available" );
     cmd_grippers_traj_client_.waitForServer();
 
     // Objects used for simulator/robot IO
@@ -150,15 +150,17 @@ void Planner::run( const size_t num_traj_cmds_per_loop , const double dt )
     ROS_INFO_NAMED( "planner", "Kickstarting the planner with a no-op" );
     world_feedback = sendGripperTrajectory( noOpTrajectoryGoal( 2 ) );
 
+    const size_t planning_horizion = GetPlanningHorizon( ph_ );
+
     // Run the planner at whatever rate we've been given
-    ROS_INFO_NAMED( "planner" , "Running our planner" );
+    ROS_INFO_STREAM_NAMED( "planner", "Running our planner with a horizion of " << planning_horizion );
     while ( ros::ok() )
     {
         // get the best trajectory given the current data
         const std::vector< AllGrippersSinglePose > best_grippers_traj = replan(
-                    world_feedback, num_traj_cmds_per_loop, dt );
+                    world_feedback, planning_horizion, dt );
 
-        ROS_INFO_NAMED( "planner" , "Sending 'best' trajectory" );
+        ROS_INFO_NAMED( "planner", "Sending 'best' trajectory" );
         world_feedback = sendGripperTrajectory( toRosGoal( best_grippers_traj ) );
 
         if ( task_->maxTime() < world_feedback.back().sim_time_ )
@@ -167,7 +169,7 @@ void Planner::run( const size_t num_traj_cmds_per_loop , const double dt )
         }
     }
 
-    ROS_INFO_NAMED( "planner" , "Terminating" );
+    ROS_INFO_NAMED( "planner", "Terminating" );
     spin_thread.join();
 }
 
@@ -181,17 +183,19 @@ void Planner::run( const size_t num_traj_cmds_per_loop , const double dt )
  * @return
  */
 std::vector< AllGrippersSinglePose > Planner::replan(
-        std::vector< WorldFeedback >& world_feedback,
-        size_t num_traj_cmds_per_loop, double dt )
+        const std::vector< WorldFeedback >& world_feedback,
+        const size_t planning_horizion,
+        const double dt )
 {
     updateModels( world_feedback );
 
     // Querry each model for it's best trajectory
+    ROS_INFO_STREAM_NAMED( "planner", "Getting trajectory suggestions of length " << planning_horizion );
     std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > > suggested_trajectories =
             model_set_->getDesiredGrippersTrajectories(
                 world_feedback.back(),
                 MAX_GRIPPER_VELOCITY * dt,
-                num_traj_cmds_per_loop );
+                planning_horizion );
 
     size_t min_weighted_cost_ind = 0;
     double min_weighted_cost = std::numeric_limits< double >::infinity();
@@ -233,11 +237,11 @@ std::vector< AllGrippersSinglePose > Planner::replan(
     }
 
     // TODO: deal with multiple predictions, which one is the best?
-    VectorObjectTrajectory model_predictions = model_set_->makePredictions(
-                world_feedback.back(),
-                best_trajectory,
-                CalculateGrippersVelocities( best_trajectory, dt ),
-                dt );
+//    VectorObjectTrajectory model_predictions = model_set_->makePredictions(
+//                world_feedback.back(),
+//                best_trajectory,
+//                CalculateGrippersVelocities( best_trajectory, dt ),
+//                dt );
 
 
     for ( size_t fbk_ind = 0; fbk_ind < world_feedback.size(); fbk_ind++ )
@@ -261,6 +265,10 @@ std::vector< AllGrippersSinglePose > Planner::replan(
 //        LOG_COND( loggers.at( "object_predicted_configuration" ), logging_enabled_,
 //                  model_predictions[min_weighted_cost_ind][fbk_ind].format( eigen_io_one_line_ ) );
     }
+
+    // Trim off the first timestep as the simulator is dealing with the extra
+    // settling time
+    best_trajectory.erase( best_trajectory.begin() );
 
     return best_trajectory;
 }

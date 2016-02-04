@@ -28,7 +28,7 @@ namespace smmap
             // Main function that makes things happen
             ////////////////////////////////////////////////////////////////////
 
-            void run( const size_t num_traj_cmds_per_loop, const double dt );
+            void run( const double dt );
 
         private:
 
@@ -71,8 +71,9 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             std::vector< AllGrippersSinglePose > replan(
-                    std::vector<WorldFeedback>& world_feedback,
-                    size_t num_traj_cmds_per_loop, double dt );
+                    const std::vector<WorldFeedback>& world_feedback,
+                    const size_t planning_horizion,
+                    const double dt );
 
             //std::pair<ObjectTrajectory, AllGrippersTrajectory> readSimulatorFeedbackBuffer();
             void updateModels( const std::vector< WorldFeedback >& feedback );

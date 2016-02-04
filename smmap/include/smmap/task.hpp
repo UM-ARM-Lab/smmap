@@ -164,7 +164,7 @@ namespace smmap
 
             virtual bool getUseRotation() const
             {
-                return true;
+                return false;
             }
 
             virtual double maxTime() const

@@ -40,7 +40,8 @@ namespace smmap
             std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > >
             getDesiredGrippersTrajectories(
                     const WorldFeedback& world_feedback,
-                    double max_step_size, size_t num_steps );
+                    const double max_step_size,
+                    const size_t num_steps );
 
             std::vector< Eigen::VectorXd >
             getObjectiveFunction1stDerivitive(

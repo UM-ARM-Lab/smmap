@@ -1,7 +1,8 @@
 <launch>
-    <arg name="test_id" default="10_step_multi_model"/>
+    <arg name="test_id" default=""/>
     <arg name="deformability_override" default="0"/>
     <arg name="multi_model" default="0"/>
+    <arg name="planning_horizion" default="1"/>
     
     <include file="$(find smmap)/launch/rope_cylinder_params.launch">
         <arg name="test_id" value="$(arg test_id)"/>
@@ -9,11 +10,9 @@
 
     <include file="$(find deform_simulator)/launch/deform_simulator.launch"/>
 
-    <node name="smmap_planner_node"
-        pkg="smmap"
-        type="smmap_test_node"
-        required="true">
+    <node name="smmap_planner_node" pkg="smmap" type="smmap_test_node" required="true">
         <param name="use_multi_model" value="$(arg multi_model)" type="bool"/>
+        <param name="planning_horizion" value="$(arg planning_horizion)" type="int"/>
         <param if="$(arg deformability_override)" name="translational_deformability" value="$(arg translational_deformability)"/>
         <param if="$(arg deformability_override)" name="rotational_deformability" value="$(arg rotational_deformability)"/>
     </node>
