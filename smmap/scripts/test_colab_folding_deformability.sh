@@ -3,7 +3,11 @@
 source multi_model_trial.sh
 
 base_environment="colab_folding"
-base_experiment="1_step"
-multi_model_trial_cloth
-base_experiment="10_step"
-multi_model_trial_cloth
+planning_horizion=1
+base_experiment=$planning_horizion"_step"
+multi_model_trial
+single_model_trial_multiple_deform_values 10 20
+planning_horizion=10
+base_experiment=$planning_horizion"_step"
+multi_model_trial
+single_model_trial_multiple_deform_values 10 20
