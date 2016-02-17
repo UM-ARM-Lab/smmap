@@ -422,7 +422,7 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
 
     // TODO: move these magic numbers elsewhere
     #warning "Magic numbers here need to be moved elsewhere"
-    const int MAX_ITTR = 10;
+    const int MAX_ITTR = 1000;
     const double LEARNING_RATE = 0.01;
 
     double objective_delta = std::numeric_limits< double >::infinity();
@@ -494,12 +494,12 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
                             grippers_velocities,
                             dt ) ) );
 
-        objective_delta = std::abs( objective_value - new_objective_value );
+        objective_delta = new_objective_value - objective_value;
         objective_value = new_objective_value;
 
         ittr++;
     }
-    while ( ittr < MAX_ITTR  && objective_delta > objective_value * 1e-6 );
+    while ( ittr < MAX_ITTR  && objective_delta < 0 && std::abs( objective_delta ) > objective_value * 1e-6 );
 
     ROS_INFO_STREAM_NAMED( "planner" , "  Direct shooting final objective value " << objective_value );
 

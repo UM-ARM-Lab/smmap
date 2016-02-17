@@ -140,7 +140,6 @@ std::vector< Eigen::VectorXd > ModelSet::getObjectiveFunction1stDerivitive(
 {
     std::vector< Eigen::VectorXd > derivitives( model_list_.size() );
 
-    #pragma omp parallel for
     for ( size_t ind = 0; ind < model_list_.size(); ind++ )
     {
         derivitives[ind] = model_list_[ind]->getObjectiveFunction1stDerivitive(
