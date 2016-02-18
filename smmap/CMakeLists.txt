@@ -71,6 +71,7 @@ add_library( ${PROJECT_NAME}
     include/${PROJECT_NAME}/task_enums.h
     include/${PROJECT_NAME}/point_reflector.hpp
     include/${PROJECT_NAME}/trajectory.hpp
+    include/${PROJECT_NAME}/visualization_tools.hpp
     include/${PROJECT_NAME}/deformable_model.h
     src/deformable_model.cpp
     include/${PROJECT_NAME}/diminishing_rigidity_model.h

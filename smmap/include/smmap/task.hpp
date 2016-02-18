@@ -3,13 +3,11 @@
 
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <ros/ros.h>
-#include <visualization_msgs/MarkerArray.h>
 #include <smmap_msgs/messages.h>
 
 #include "smmap/point_reflector.hpp"
-#include "smmap/ros_params.hpp"
-#include "smmap/task_enums.h"
 #include "smmap/trajectory.hpp"
+#include "smmap/visualization_tools.hpp"
 
 namespace smmap
 {
@@ -19,14 +17,8 @@ namespace smmap
             typedef std::shared_ptr< Task > Ptr;
 
             Task( ros::NodeHandle& nh )
-            {
-                // Publish visualization request markers
-                visualization_marker_pub_ =
-                        nh.advertise< visualization_msgs::Marker >( GetVisualizationMarkerTopic( nh ), 10 );
-
-                visualization_marker_array_pub_ =
-                        nh.advertise< visualization_msgs::MarkerArray >( GetVisualizationMarkerArrayTopic( nh ), 10 );
-            }
+                : vis_( nh )
+            {}
 
             virtual ~Task() {}
 
@@ -53,7 +45,7 @@ namespace smmap
             virtual double getCollisionScalingFactor() const = 0;       // beta (or k2)
             virtual double getStretchingScalingThreshold() const = 0;   // lambda
             virtual bool getUseRotation() const = 0;
-            virtual double maxTime() const = 0; // max simulation time when scripting things
+            virtual double maxTime() const = 0;                         // max simulation time when scripting things
 
             void visualizePredictions(
                     const VectorObjectTrajectory& model_predictions,
@@ -63,40 +55,15 @@ namespace smmap
             }
 
         protected:
-            mutable ros::Publisher visualization_marker_pub_;
-            mutable ros::Publisher visualization_marker_array_pub_;
+            mutable Visualizer vis_;
 
         private:
             virtual double calculateError_impl(
                     const ObjectPointSet& current_configuration ) const = 0;
 
-            /*
-            virtual ObjectPointSet getObjectErrorGradient_impl(
-                    ObjectPointSet current_configuration ) const
-            {
-                const double starting_error = calculateError( current_configuration );
-                const double delta = 0.001;
-                ObjectPointSet gradient( 3, current_configuration.cols() );
-
-                for ( long ind = 0; ind < 3 * current_configuration.cols() ; ind++ )
-                {
-                    current_configuration.data()[ind] += delta;
-                    const double new_error = calculateError( current_configuration );
-                    gradient.data()[ind] = ( new_error - starting_error ) / delta;
-                    current_configuration.data()[ind] -= delta;
-                }
-
-                return gradient;
-            }
-            */
-
             virtual void visualizePredictions_impl(
                     const VectorObjectTrajectory& model_predictions,
-                    size_t best_traj ) const
-            {
-                (void)model_predictions;
-                (void)best_traj;
-            }
+                    size_t best_traj ) const = 0;
     };
 
     class RopeCoverage : public Task
@@ -118,29 +85,28 @@ namespace smmap
                 // for every cover point, find the nearest deformable object point
                 for ( long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
                 {
-                    const Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
-                    const ObjectPointSet diff =
-                            ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) )
-                            - current_configuration;
-                    const Eigen::RowVectorXd dist_sq = diff.array().square().colwise().sum();
+                    const Eigen::Vector3d& cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
 
-                    // find the closest deformable point
+                    // find the closest deformable object point
                     long min_ind = -1;
-                    double min_dist = std::numeric_limits< double >::infinity();
-                    for ( long object_ind = 0; object_ind < dist_sq.cols(); object_ind++ )
+                    double min_dist_squared = std::numeric_limits< double >::infinity();
+                    // Note that this cannot be done in parallel (without locks) due to the desired_velocity object
+                    for ( long rope_ind = 0; rope_ind < current_configuration.cols(); rope_ind++ )
                     {
-                        if ( dist_sq( object_ind ) < min_dist )
+                        const Eigen::Vector3d& rope_point = current_configuration.block< 3, 1 >( 0, rope_ind );
+                        const double new_dist_squared = ( cover_point - rope_point ).squaredNorm();
+                        if ( new_dist_squared < min_dist_squared )
                         {
-                            min_ind = object_ind;
-                            min_dist = dist_sq( object_ind );
+                            min_dist_squared = new_dist_squared;
+                            min_ind = rope_ind;
                         }
                     }
 
-                    if ( min_dist >= 0.2/20. )
+                    if ( std::sqrt( min_dist_squared ) >= 0.2/20. )
                     {
                         desired_velocity.segment< 3 >( min_ind * 3 ) =
                                 desired_velocity.segment< 3 >( min_ind * 3 )
-                                + diff.block< 3, 1 >( 0, min_ind );
+                                + ( cover_point - current_configuration.block< 3, 1 >( 0, min_ind ) );
                     }
                 }
 
@@ -169,7 +135,7 @@ namespace smmap
 
             virtual double maxTime() const
             {
-                return 25;
+                return 15.0;
             }
 
         private:
@@ -183,30 +149,40 @@ namespace smmap
                 color.b = 0;
                 color.a = 1;
 
-                visualizeRope( model_predictions[best_traj].back(), color, "rope_predicted" );
+                vis_.visualizeRope( model_predictions[best_traj].back(), color, "rope_predicted" );
             }
 
             virtual double calculateError_impl(
                     const ObjectPointSet& current_configuration ) const
             {
-                double error = 0;
+                Eigen::VectorXd error( cover_points_.cols() );
 
                 // for every cover point, find the nearest deformable object point
+                #pragma omp parallel for
                 for ( long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
                 {
-                    const Eigen::Vector3d cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
-                    const ObjectPointSet diff =
-                            ( cover_point * Eigen::MatrixXd::Ones( 1, current_configuration.cols() ) )
-                            - current_configuration;
-                    const double min_dist = diff.array().square().colwise().sum().minCoeff();
+                    const Eigen::Vector3d& cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
 
-                    if ( min_dist >= 0.2/20. )
+                    // find the closest deformable object point
+                    double min_dist_squared = std::numeric_limits< double >::infinity();
+                    for ( long rope_ind = 0; rope_ind < current_configuration.cols(); rope_ind++ )
                     {
-                        error += min_dist;
+                        const Eigen::Vector3d& rope_point = current_configuration.block< 3, 1 >( 0, rope_ind );
+                        const double new_dist_squared = ( cover_point - rope_point ).squaredNorm();
+                        min_dist_squared = std::min( new_dist_squared, min_dist_squared );
+                    }
+
+                    if ( std::sqrt( min_dist_squared ) >= 0.2/20. )
+                    {
+                        error( cover_ind ) = std::sqrt( min_dist_squared );
+                    }
+                    else
+                    {
+                        error( cover_ind ) = 0;
                     }
                 }
 
-                return error;
+                return error.sum();
             }
 
         private:
@@ -231,27 +207,6 @@ namespace smmap
                 ROS_INFO_NAMED( "rope_coverage_task" , "Number of cover points: %zu", srv_data.response.points.size() );
 
                 return cover_points;
-            }
-
-            void visualizeRope(
-                    const ObjectPointSet& rope,
-                    const std_msgs::ColorRGBA& color,
-                    const std::string& name ) const
-            {
-                visualization_msgs::Marker marker;
-
-                marker.type = visualization_msgs::Marker::LINE_STRIP;
-                marker.ns = name;
-                marker.id = 0;
-                marker.scale.x = 0.1;
-                marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( rope );
-                marker.colors = std::vector< std_msgs::ColorRGBA >( (size_t)rope.cols(), color );
-                visualization_marker_pub_.publish( marker );
-
-                marker.type = visualization_msgs::Marker::SPHERE;
-                marker.id = 1;
-                marker.scale.x = 0.01;
-                visualization_marker_pub_.publish( marker );
             }
     };
 
@@ -348,7 +303,7 @@ namespace smmap
                 color.b = 0;
                 color.a = 1;
 
-                visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
+                vis_.visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
             }
 
             virtual double calculateError_impl(
@@ -420,35 +375,6 @@ namespace smmap
                 }
 
                 return mirror_map;
-            }
-
-            // TODO: move these to some help class/struct/place
-            void visualizeCloth(
-                    const ObjectPointSet& cloth,
-                    const std_msgs::ColorRGBA& color,
-                    const std::string& name ) const
-            {
-                std::vector< std_msgs::ColorRGBA > colors( (size_t)cloth.cols(), color );
-
-                visualizeCloth( cloth, colors, name );
-            }
-
-            void visualizeCloth(
-                    const ObjectPointSet& cloth,
-                    const std::vector< std_msgs::ColorRGBA >& colors,
-                    const std::string& name ) const
-            {
-                visualization_msgs::Marker marker;
-
-                marker.type = visualization_msgs::Marker::POINTS;
-                marker.ns = name;
-                marker.id = 0;
-                marker.scale.x = 0.002;
-                marker.scale.y = 0.002;
-                marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( cloth );
-                marker.colors = colors;
-
-                visualization_marker_pub_.publish( marker );
             }
     };
 
@@ -548,7 +474,7 @@ namespace smmap
                 color.b = 0;
                 color.a = 1;
 
-                visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
+                vis_.visualizeCloth( model_predictions[best_traj].back(), color, "cloth_predicted" );
             }
 
             virtual double calculateError_impl(
@@ -597,37 +523,6 @@ namespace smmap
 
                 return cover_points;
             }
-
-            // TODO: move these to some help class/struct/place
-            void visualizeCloth(
-                    const ObjectPointSet& cloth,
-                    const std_msgs::ColorRGBA& color,
-                    const std::string& name ) const
-            {
-                std::vector< std_msgs::ColorRGBA > colors( (size_t)cloth.cols(), color );
-
-                visualizeCloth( cloth, colors, name );
-            }
-
-            void visualizeCloth(
-                    const ObjectPointSet& cloth,
-                    const std::vector< std_msgs::ColorRGBA >& colors,
-                    const std::string& name ) const
-            {
-                visualization_msgs::Marker marker;
-
-                marker.type = visualization_msgs::Marker::POINTS;
-                marker.ns = name;
-                marker.id = 0;
-                marker.scale.x = 0.002;
-                marker.scale.y = 0.002;
-                marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( cloth );
-                marker.colors = colors;
-
-                visualization_marker_pub_.publish( marker );
-            }
-
-
     };
 }
 

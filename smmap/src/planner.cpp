@@ -213,11 +213,11 @@ std::vector< AllGrippersSinglePose > Planner::replan(
     }
 
     std::vector< AllGrippersSinglePose > best_trajectory =
-            suggested_trajectories[min_weighted_cost_ind].first;
-//            optimizeTrajectoryDirectShooting(
-//                world_feedback.back(),
-//                suggested_trajectories[min_weighted_cost_ind].first,
-//                dt );
+//            suggested_trajectories[min_weighted_cost_ind].first;
+            optimizeTrajectoryDirectShooting(
+                world_feedback.back(),
+                suggested_trajectories[min_weighted_cost_ind].first,
+                dt );
 
     // Send the desired "best" gripper translation to the visualizer to plot
     if ( visualize_gripper_translation_ )
@@ -423,7 +423,7 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
     // TODO: move these magic numbers elsewhere
     #warning "Magic numbers here need to be moved elsewhere"
     const int MAX_ITTR = 1000;
-    const double LEARNING_RATE = 0.01;
+    const double LEARNING_RATE = 1;
 
     double objective_delta = std::numeric_limits< double >::infinity();
 
@@ -457,9 +457,18 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
                         dt,
                         objective_function ) );
 
-        // Update the gripper velocities based on a Newton style gradient descent
+        Eigen::VectorXd velocity_update = -derivitive;
+
+//        auto derivitives =
+//                model_set_->getObjectiveFunction2ndDerivitive(
+//                    current_world_configuration,
+//                    grippers_trajectory,
+//                    grippers_velocities,
+//                    dt,
+//                    objective_function )[0];
+
+//        // Update the gripper velocities based on a Newton style gradient descent
 //        Eigen::VectorXd velocity_update = derivitives.second.colPivHouseholderQr().solve( -derivitives.first );
-        Eigen::VectorXd velocity_update = -derivitive ;
 
         for ( size_t time_ind = 0; time_ind < grippers_velocities.size(); time_ind++ )
         {

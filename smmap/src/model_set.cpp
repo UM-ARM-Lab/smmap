@@ -153,6 +153,27 @@ std::vector< Eigen::VectorXd > ModelSet::getObjectiveFunction1stDerivitive(
     return derivitives;
 }
 
+std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > > ModelSet::getObjectiveFunction2ndDerivitive(
+        const WorldFeedback& current_world_configuration,
+        const std::vector< AllGrippersSinglePose >& grippers_trajectory,
+        const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+        double dt,
+        std::function< double( const ObjectPointSet& ) > objective_function ) const
+{
+    std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > > derivitives( model_list_.size() );
+
+    for ( size_t ind = 0; ind < model_list_.size(); ind++ )
+    {
+        derivitives[ind] = model_list_[ind]->getObjectiveFunction2ndDerivitive(
+                    current_world_configuration,
+                    grippers_trajectory,
+                    grippers_velocities,
+                    dt,
+                    objective_function );
+    }
+
+    return derivitives;
+}
 
 const std::vector< double >& ModelSet::getModelConfidence() const
 {
