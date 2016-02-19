@@ -30,6 +30,7 @@ Planner::Planner( ros::NodeHandle& nh )
     , nh_( nh )
     , ph_( "~" )
     , it_( nh )
+    , vis_( nh )
     , cmd_grippers_traj_client_( nh_, GetCommandGripperTrajTopic( nh_ ), false )
 {
     // Initialize our task object with whatever it needs
@@ -59,14 +60,6 @@ Planner::Planner( ros::NodeHandle& nh )
         model_set_ = std::unique_ptr< ModelSet >(
                 new ModelSet( grippers_data_, getObjectInitialConfiguration(), *task_ ) );
     }
-
-
-    // Publish visualization request markers
-    visualization_marker_pub_ =
-            nh_.advertise< visualization_msgs::Marker >( GetVisualizationMarkerTopic( nh_ ), 10 );
-
-    visualization_marker_array_pub_ =
-            nh_.advertise< visualization_msgs::MarkerArray >( GetVisualizationMarkerArrayTopic( nh_ ), 10 );
 
 
     // Publish a our confidence values
@@ -229,7 +222,7 @@ std::vector< AllGrippersSinglePose > Planner::replan(
             color.g = 1;
             color.b = 1;
             color.a = 1;
-            visualizeTranslation( grippers_data_[gripper_ind].name,
+            vis_.visualizeTranslation( grippers_data_[gripper_ind].name,
                                   world_feedback.back().all_grippers_single_pose_[gripper_ind],
                                   best_trajectory.back()[gripper_ind],
                                   color );
@@ -423,7 +416,8 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
     // TODO: move these magic numbers elsewhere
     #warning "Magic numbers here need to be moved elsewhere"
     const int MAX_ITTR = 1000;
-    const double LEARNING_RATE = 1;
+    const double LEARNING_RATE = 0.1;
+    const double TOLERANCE = 1e-6;
 
     double objective_delta = std::numeric_limits< double >::infinity();
 
@@ -470,27 +464,29 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
 //        // Update the gripper velocities based on a Newton style gradient descent
 //        Eigen::VectorXd velocity_update = derivitives.second.colPivHouseholderQr().solve( -derivitives.first );
 
-        for ( size_t time_ind = 0; time_ind < grippers_velocities.size(); time_ind++ )
+        // create a new velocity and trajectory to test
+        std::vector< AllGrippersSingleVelocity > test_grippers_velocities = grippers_velocities;
+        for ( size_t time_ind = 0; time_ind < test_grippers_velocities.size(); time_ind++ )
         {
             for ( size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++ )
             {
-                grippers_velocities[time_ind][gripper_ind] += LEARNING_RATE *
+                test_grippers_velocities[time_ind][gripper_ind] += LEARNING_RATE *
                         velocity_update.segment< 6 >(
                             (long)( time_ind * grippers_data_.size() * 6 +
                                     gripper_ind * 6 ) );
 
-                if ( GripperVelocity6dNorm( grippers_velocities[time_ind][gripper_ind] ) > MAX_GRIPPER_VELOCITY )
+                if ( GripperVelocity6dNorm( test_grippers_velocities[time_ind][gripper_ind] ) > MAX_GRIPPER_VELOCITY )
                 {
-                    grippers_velocities[time_ind][gripper_ind] *=
-                            MAX_GRIPPER_VELOCITY / GripperVelocity6dNorm( grippers_velocities[time_ind][gripper_ind] );
+                    test_grippers_velocities[time_ind][gripper_ind] *=
+                            MAX_GRIPPER_VELOCITY / GripperVelocity6dNorm( test_grippers_velocities[time_ind][gripper_ind] );
                 }
             }
         }
 
-        // Update the trajectory of the grippers based on the new
-        grippers_trajectory = CalculateGrippersTrajectory(
+        // Update the trajectory of the grippers based on the new velocities
+        std::vector< AllGrippersSinglePose > test_grippers_trajectory = CalculateGrippersTrajectory(
                     grippers_trajectory[0],
-                    grippers_velocities,
+                    test_grippers_velocities,
                     dt );
 
         // Calculate the new value of the objective function at the updated velocity
@@ -499,16 +495,24 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
                     combineModelPredictionsLastTimestep(
                         model_set_->makePredictions(
                             current_world_configuration,
-                            grippers_trajectory,
-                            grippers_velocities,
+                            test_grippers_trajectory,
+                            test_grippers_velocities,
                             dt ) ) );
 
         objective_delta = new_objective_value - objective_value;
         objective_value = new_objective_value;
 
+		// TODO: clean up this code to be more efficient
+		//       only need to update the result traj after the last step
+        if ( objective_delta < TOLERANCE )
+        {
+            grippers_velocities = test_grippers_velocities;
+            grippers_trajectory = test_grippers_trajectory;
+        }
+
         ittr++;
     }
-    while ( ittr < MAX_ITTR  && objective_delta < 0 && std::abs( objective_delta ) > objective_value * 1e-6 );
+    while ( ittr < MAX_ITTR  && objective_delta < TOLERANCE && std::abs( objective_delta ) > objective_value * TOLERANCE );
 
     ROS_INFO_STREAM_NAMED( "planner" , "  Direct shooting final objective value " << objective_value );
 
@@ -541,101 +545,6 @@ void Planner::initializeTask()
     {
         assert( false && "THIS PAIR OF DEFORMALBE AND TASK IS NOT YET IMPLEMENTED" );
     }
-
-    // TODO: the rest
-}
-
-void Planner::visualizeObjectDelta( const std::string& marker_name,
-                                    const ObjectPointSet& current,
-                                    const ObjectPointSet& desired )
-{
-    visualization_msgs::Marker marker;
-    std_msgs::ColorRGBA color;
-
-    marker.type = visualization_msgs::Marker::LINE_LIST;
-    marker.ns = marker_name;
-    marker.id = 0;
-    marker.scale.x = 0.1;
-    marker.points.reserve( (size_t)current.cols() * 2 );
-    marker.colors.reserve( (size_t)current.cols() * 2 );
-    for ( long col = 0; col < current.cols(); col++ )
-    {
-        color.r = 0;//(1.0 + std::cos( 2*M_PI*(double)col/15.0 )) / 3;
-        color.g = 1;//(1.0 + std::cos( 2*M_PI*(double)(col+5)/15.0 )) / 3;
-        color.b = 0;//(1.0 + std::cos( 2*M_PI*double(col+10)/15.0 )) / 3;
-        color.a = 1;
-
-        marker.points.push_back( EigenVector3dToGeometryPoint( current.block< 3, 1 >( 0, col ) ) );
-        marker.points.push_back( EigenVector3dToGeometryPoint( desired.block< 3, 1 >( 0, col ) ) );
-        marker.colors.push_back( color );
-        marker.colors.push_back( color );
-    }
-
-    visualization_marker_pub_.publish( marker );
-}
-
-void Planner::visualizeTranslation( const std::string& marker_name,
-                                    const geometry_msgs::Point& start,
-                                    const geometry_msgs::Point& end,
-                                    const std_msgs::ColorRGBA& color )
-{
-    visualization_msgs::Marker marker;
-
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.ns = marker_name;
-    marker.id = 0;
-    marker.scale.x = 0.1;
-    marker.points.push_back( start );
-    marker.points.push_back( end );
-    marker.colors.push_back( color );
-    marker.colors.push_back( color );
-
-    visualization_marker_pub_.publish( marker );
-}
-
-void Planner::visualizeTranslation( const std::string& marker_name,
-                                    const Eigen::Vector3d& start,
-                                    const Eigen::Vector3d& end,
-                                    const std_msgs::ColorRGBA& color )
-{
-    visualizeTranslation( marker_name,
-                          EigenVector3dToGeometryPoint( start ),
-                          EigenVector3dToGeometryPoint( end ),
-                          color );
-}
-
-void Planner::visualizeTranslation( const std::string& marker_name,
-                                    const Eigen::Affine3d &start,
-                                    const Eigen::Affine3d &end,
-                                    const std_msgs::ColorRGBA& color )
-{
-    visualizeTranslation( marker_name,
-                          start.translation(),
-                          end.translation(),
-                          color );
-}
-
-void Planner::visualizeLines( const std::string& marker_name,
-                              const EigenHelpers::VectorVector3d& start,
-                              const EigenHelpers::VectorVector3d& end,
-                              const std_msgs::ColorRGBA& color )
-{
-    visualization_msgs::Marker marker;
-
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.ns = marker_name;
-    marker.id = 0;
-    marker.scale.x = 0.1;
-
-    for ( size_t ind = 0; ind < start.size(); ind++ )
-    {
-        marker.points.push_back( EigenVector3dToGeometryPoint( start[ind] ) );
-        marker.points.push_back( EigenVector3dToGeometryPoint( end[ind] ) );
-        marker.colors.push_back( color );
-        marker.colors.push_back( color );
-    }
-
-    visualization_marker_pub_.publish( marker );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -787,7 +696,7 @@ smmap_msgs::CmdGrippersTrajectoryGoal Planner::noOpTrajectoryGoal( size_t num_no
 }
 
 smmap_msgs::CmdGrippersTrajectoryGoal Planner::toRosGoal(
-        const std::vector<AllGrippersSinglePose>& trajectory )
+        const std::vector< AllGrippersSinglePose >& trajectory )
 {
     smmap_msgs::CmdGrippersTrajectoryGoal goal;
     goal.gripper_names = GetGripperNames( grippers_data_ );

@@ -405,7 +405,6 @@ namespace smmap
                 }
 
                 // for every cover point, find the nearest deformable object point
-                #pragma omp parallel for
                 for ( long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
                 {
                     const Eigen::Vector3d& cover_point = cover_points_.block< 3, 1 >( 0, cover_ind );
@@ -424,9 +423,12 @@ namespace smmap
                         }
                     }
 
-                    desired_velocity.segment< 3 >( min_ind * 3 ) =
-                            desired_velocity.segment< 3 >( min_ind * 3 )
-                            + ( cover_point - current_configuration.block< 3, 1 >( 0, min_ind ) );
+                    if ( std::sqrt( min_dist_squared ) > 0.04/20.0 )
+                    {
+                        desired_velocity.segment< 3 >( min_ind * 3 ) =
+                                desired_velocity.segment< 3 >( min_ind * 3 )
+                                + ( cover_point - current_configuration.block< 3, 1 >( 0, min_ind ) );
+                    }
 
                 }
 
@@ -494,7 +496,15 @@ namespace smmap
                         const double new_dist_squared = ( cover_point - cloth_point ).squaredNorm();
                         min_dist_squared = std::min( new_dist_squared, min_dist_squared );
                     }
-                    error( cover_ind ) = std::sqrt( min_dist_squared );
+
+                    if ( std::sqrt( min_dist_squared ) > 0.04/20.0 )
+                    {
+                        error( cover_ind ) = std::sqrt( min_dist_squared );
+                    }
+                    else
+                    {
+                        error( cover_ind ) = 0;
+                    }
                 }
 
                 return error.sum();

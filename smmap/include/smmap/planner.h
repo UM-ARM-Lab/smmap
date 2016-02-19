@@ -5,17 +5,16 @@
 
 #include <ros/ros.h>
 #include <actionlib/client/simple_action_client.h>
-#include <std_msgs/ColorRGBA.h>
 #include <image_transport/image_transport.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <cv_bridge/cv_bridge.h>
-#include <visualization_msgs/MarkerArray.h>
 #include <smmap_msgs/messages.h>
 
 #include <arc_utilities/log.hpp>
 
 #include "smmap/model_set.h"
 #include "smmap/task.hpp"
+#include "smmap/visualization_tools.hpp"
 
 namespace smmap
 {
@@ -98,30 +97,6 @@ namespace smmap
             // Task specific functionality
             ////////////////////////////////////////////////////////////////////
 
-            void visualizeObjectDelta( const std::string& marker_name,
-                                       const ObjectPointSet& current,
-                                       const ObjectPointSet& desired );
-
-            void visualizeTranslation( const std::string& marker_name,
-                                       const geometry_msgs::Point& start,
-                                       const geometry_msgs::Point& end,
-                                       const std_msgs::ColorRGBA& color );
-
-            void visualizeTranslation( const std::string& marker_name,
-                                       const Eigen::Vector3d& start,
-                                       const Eigen::Vector3d& end,
-                                       const std_msgs::ColorRGBA& color );
-
-            void visualizeTranslation( const std::string& marker_name,
-                                       const Eigen::Affine3d& start,
-                                       const Eigen::Affine3d& end,
-                                       const std_msgs::ColorRGBA& color );
-
-            void visualizeLines( const std::string& marker_name,
-                                 const EigenHelpers::VectorVector3d& start,
-                                 const EigenHelpers::VectorVector3d& end,
-                                 const std_msgs::ColorRGBA& color );
-
             ////////////////////////////////////////////////////////////////////
             // ROS Callbacks
             ////////////////////////////////////////////////////////////////////
@@ -149,8 +124,7 @@ namespace smmap
             image_transport::ImageTransport it_;
             image_transport::Publisher confidence_image_pub_;
 
-            ros::Publisher visualization_marker_pub_;
-            ros::Publisher visualization_marker_array_pub_;
+            Visualizer vis_;
 
             actionlib::SimpleActionClient< smmap_msgs::CmdGrippersTrajectoryAction > cmd_grippers_traj_client_;
     };

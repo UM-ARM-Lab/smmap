@@ -17,7 +17,7 @@ namespace smmap
             typedef std::shared_ptr< DeformableModel > Ptr;
 
             ////////////////////////////////////////////////////////////////////
-            /// Virtual functions that define the interface
+            // Virtual functions that define the interface
             ////////////////////////////////////////////////////////////////////
 
             virtual void updateModel( const std::vector< WorldFeedback >& feedback ) = 0;
@@ -56,7 +56,7 @@ namespace smmap
             virtual void perturbModel( std::mt19937_64& generator ) = 0;
 
             ////////////////////////////////////////////////////////////////////
-            /// Update function for static member
+            // Update function for static member
             ////////////////////////////////////////////////////////////////////
 
             static void UpdateGrippersData( const std::vector< GripperData >& grippers_data )
@@ -67,14 +67,13 @@ namespace smmap
         protected:
 
             ////////////////////////////////////////////////////////////////////
-            /// Destructor that prevents "delete pointer to base object"
+            // Destructor that prevents "delete pointer to base object"
             ////////////////////////////////////////////////////////////////////
 
             ~DeformableModel() {}
 
             static std::vector< GripperData > grippers_data_;
     };
-
 }
 
 #endif // DEFORMABLE_MODEL_H

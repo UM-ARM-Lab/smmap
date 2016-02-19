@@ -68,7 +68,7 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > DeformableModel::getObjectiveFunct
         const double dt,
         const std::function< double( const ObjectPointSet& ) > objective_function ) const
 {
-    const double h = 0.0001; // arbitrary step size for numeric differencing
+    const double h = 0.1; // arbitrary step size for numeric differencing
     const size_t num_grippers = grippers_data_.size();
     const size_t num_timesteps = grippers_velocities.size();
 
@@ -95,6 +95,7 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > DeformableModel::getObjectiveFunct
     std::vector< AllGrippersSingleVelocity > new_grippers_velocities( grippers_velocities );
 
     // This loop fills out the Jacobian (first derivitive) of the objective function
+    #pragma omp parallel for
     for ( long ind = 0; ind < (long)(num_grippers * 6 * num_timesteps); ind++ )
     {
         const long time_ind = ind / ( num_grippers * 6 );
