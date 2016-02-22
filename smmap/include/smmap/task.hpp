@@ -289,7 +289,7 @@ namespace smmap
 
             virtual double maxTime() const
             {
-                return 10.;
+                return 6.0;
             }
 
         private:
@@ -462,7 +462,7 @@ namespace smmap
 
             virtual double maxTime() const
             {
-                return 6.;
+                return 4.0;
             }
 
         private:

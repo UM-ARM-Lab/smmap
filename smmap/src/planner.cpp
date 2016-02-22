@@ -108,6 +108,10 @@ Planner::Planner( ros::NodeHandle& nh )
                             Log::Log( log_folder + "error.txt", false ) ) ) ;
 
         loggers.insert( std::make_pair< std::string, Log::Log > (
+                            "utility",
+                            Log::Log( log_folder + "utility.txt", false ) ) ) ;
+
+        loggers.insert( std::make_pair< std::string, Log::Log > (
                             "model_chosen",
                             Log::Log( log_folder + "model_chosen.txt", false ) ) ) ;
 
@@ -206,11 +210,11 @@ std::vector< AllGrippersSinglePose > Planner::replan(
     }
 
     std::vector< AllGrippersSinglePose > best_trajectory =
-//            suggested_trajectories[min_weighted_cost_ind].first;
-            optimizeTrajectoryDirectShooting(
-                world_feedback.back(),
-                suggested_trajectories[min_weighted_cost_ind].first,
-                dt );
+            suggested_trajectories[min_weighted_cost_ind].first;
+//            optimizeTrajectoryDirectShooting(
+//                world_feedback.back(),
+//                suggested_trajectories[min_weighted_cost_ind].first,
+//                dt );
 
     // Send the desired "best" gripper translation to the visualizer to plot
     if ( visualize_gripper_translation_ )
@@ -282,7 +286,7 @@ void Planner::updateModels( const std::vector<WorldFeedback>& feedback )
 
         ROS_INFO_NAMED( "planner", "Evaluating confidence" );
         smmap_msgs::ConfidenceStamped double_msg;
-        double_msg.confidence = model_set_->getModelConfidence();
+        double_msg.confidence = model_set_->getModelUtility();
         double_msg.header.stamp = ros::Time::now();
         confidence_pub_.publish( double_msg );
 
@@ -313,7 +317,7 @@ ObjectTrajectory Planner::combineModelPredictions(
     assert( model_predictions[0].size() > 0 );
 
     const std::vector< double >& model_confidences =
-            model_set_->getModelConfidence();
+            model_set_->getModelUtility();
     double total_weight = std::accumulate( model_confidences.begin(), model_confidences.end(), 0. );
 
     ObjectTrajectory weighted_average_trajectory( model_predictions[0].size(),
@@ -341,7 +345,7 @@ ObjectPointSet Planner::combineModelPredictionsLastTimestep(
     assert( traj_length > 0 );
 
     const std::vector< double >& model_confidences =
-            model_set_->getModelConfidence();
+            model_set_->getModelUtility();
     double total_weight = std::accumulate( model_confidences.begin(), model_confidences.end(), 0. );
 
     ObjectPointSet weighted_average_configuration = ObjectPointSet::Zero( 3, model_predictions[0][0].cols() );
@@ -364,7 +368,7 @@ Eigen::VectorXd Planner::combineModelDerivitives(
     assert( model_derivitives.size() > 0 );
 
     const std::vector< double >& model_confidences =
-            model_set_->getModelConfidence();
+            model_set_->getModelUtility();
     double total_weight = std::accumulate( model_confidences.begin(), model_confidences.end(), 0. );
 
     Eigen::VectorXd weighted_average_derivitive = Eigen::VectorXd::Zero( model_derivitives[0].size() );
@@ -385,7 +389,7 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > Planner::combineModelDerivitives(
     assert( model_derivitives.size() > 0 );
 
     const std::vector< double >& model_confidences =
-            model_set_->getModelConfidence();
+            model_set_->getModelUtility();
     double total_weight = std::accumulate( model_confidences.begin(), model_confidences.end(), 0. );
 
     std::pair< Eigen::VectorXd, Eigen::MatrixXd > weighted_average_derivitive(
@@ -502,8 +506,8 @@ std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
         objective_delta = new_objective_value - objective_value;
         objective_value = new_objective_value;
 
-		// TODO: clean up this code to be more efficient
-		//       only need to update the result traj after the last step
+        // TODO: clean up this code to be more efficient
+        //       only need to update the result traj after the last step
         if ( objective_delta < TOLERANCE )
         {
             grippers_velocities = test_grippers_velocities;
@@ -543,7 +547,7 @@ void Planner::initializeTask()
     }
     else
     {
-        assert( false && "THIS PAIR OF DEFORMALBE AND TASK IS NOT YET IMPLEMENTED" );
+        assert( false && "THIS PAIR OF DEFORMABLE AND TASK IS NOT YET IMPLEMENTED" );
     }
 }
 

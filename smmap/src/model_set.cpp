@@ -99,7 +99,7 @@ VectorObjectTrajectory ModelSet::makePredictions(
 void ModelSet::updateModels( const std::vector< WorldFeedback >& feedback )
 {
     // Evaluate our confidence in each model
-    evaluateConfidence( feedback );
+    evaluateUtility( feedback );
 
     // Allow each model to update itself based on the new data
     #pragma omp parallel for
@@ -124,7 +124,7 @@ std::vector< std::pair< std::vector< AllGrippersSinglePose >, double > > ModelSe
                     max_step_size,
                     num_steps );
 
-        grippers_trajectories[ind] = std::pair< std::vector< AllGrippersSinglePose >, double >( grippers_trajectory, model_confidence_[ind] );
+        grippers_trajectories[ind] = std::pair< std::vector< AllGrippersSinglePose >, double >( grippers_trajectory, model_utility_[ind] );
     }
 
     return grippers_trajectories;
@@ -175,16 +175,16 @@ std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > > ModelSet::getObject
     return derivitives;
 }
 
-const std::vector< double >& ModelSet::getModelConfidence() const
+const std::vector< double >& ModelSet::getModelUtility() const
 {
-    return model_confidence_;
+    return model_utility_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Private helpers
 ////////////////////////////////////////////////////////////////////////////////
 
-void ModelSet::evaluateConfidence( const std::vector< WorldFeedback >& feedback )
+void ModelSet::evaluateUtility( const std::vector< WorldFeedback >& feedback )
 {
     const std::vector< AllGrippersSinglePose > grippers_trajectory =
             GetGripperTrajectories( feedback );
@@ -203,14 +203,14 @@ void ModelSet::evaluateConfidence( const std::vector< WorldFeedback >& feedback 
 
         const double dist = distanceRMS( feedback, model_prediction );
 
-        model_confidence_[ind] = 1.0 / ( 1.0 + dist );
+        model_utility_[ind] = 1.0 / ( 1.0 + dist );
     }
 }
 
 void ModelSet::addModel( DeformableModel::Ptr model )
 {
-    assert( model_list_.size() == model_confidence_.size() );
+    assert( model_list_.size() == model_utility_.size() );
 
     model_list_.push_back( model );
-    model_confidence_.push_back( 0 );
+    model_utility_.push_back( 0 );
 }

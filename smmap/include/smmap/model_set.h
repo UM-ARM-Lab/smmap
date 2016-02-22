@@ -59,7 +59,7 @@ namespace smmap
                     double dt,
                     std::function< double( const ObjectPointSet& ) > objective_function ) const;
 
-            const std::vector< double >& getModelConfidence() const;
+            const std::vector< double >& getModelUtility() const;
 
         private:
             ////////////////////////////////////////////////////////////////////
@@ -68,14 +68,14 @@ namespace smmap
 
             void addModel( DeformableModel::Ptr model );
 
-            void evaluateConfidence( const std::vector<WorldFeedback>& feedback );
+            void evaluateUtility( const std::vector<WorldFeedback>& feedback );
 
             ////////////////////////////////////////////////////////////////////
             // The data for the models themselves
             ////////////////////////////////////////////////////////////////////
 
             std::vector< DeformableModel::Ptr > model_list_;
-            std::vector< double > model_confidence_;
+            std::vector< double > model_utility_;
 
             ////////////////////////////////////////////////////////////////////
             // Utility variables
