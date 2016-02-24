@@ -6,6 +6,8 @@
 #include <kinematics_toolbox/kinematics.h>
 #include <smmap_msgs/messages.h>
 
+#include "smmap/collision_helpers.hpp"
+
 namespace smmap
 {
     // Typedefs to help deal with Deformable Object and Gripper tracking
@@ -14,24 +16,20 @@ namespace smmap
     typedef std::vector< ObjectTrajectory > VectorObjectTrajectory;
 
     typedef EigenHelpers::VectorAffine3d AllGrippersSinglePose;
-    typedef kinematics::VectorVector6d AllGrippersSingleVelocity;
+    typedef std::vector< AllGrippersSinglePose > AllGrippersPoseTrajectory;
 
-    /// Feedback structure for a single time step
-    struct WorldFeedback
+    typedef kinematics::VectorVector6d AllGrippersSingleVelocity;
+    typedef AllGrippersSingleVelocity AllGrippersSinglePoseDelta;
+    typedef std::vector< AllGrippersSingleVelocity > AllGrippersVelocityTrajectory;
+    typedef std::vector< AllGrippersSinglePoseDelta > AllGrippersPoseDeltaTrajectory;
+
+    /// World state structure for a single time step
+    struct WorldState
     {
         ObjectPointSet object_configuration_;
         AllGrippersSinglePose all_grippers_single_pose_;
-        kinematics::VectorVector3d all_grippers_nearest_point_to_obstacle_;
-        kinematics::VectorVector3d all_grippers_obstacle_surface_normal_;
-        std::vector< double > all_grippers_distance_to_obstacle_;
+        std::vector< CollisionData > gripper_collision_data_;
         double sim_time_;
-
-        // NOTE: that this velocity is calculated as the difference between the
-        // previous state and the state encoded by this structure. Thus the
-        // first entry in an array of std::vector< WorldFeedback > will not have
-        // a valid velocity entry.
-        Eigen::Matrix3Xd object_velocity_;
-        AllGrippersSingleVelocity all_grippers_single_velocity_;
     };
 
     /**
@@ -39,95 +37,36 @@ namespace smmap
      * @param next_feedback_ros
      * @return
      */
-    inline WorldFeedback ComputeNextFeedback(
-            const smmap_msgs::SimulatorFeedback& next_feedback_ros )
+    inline WorldState ConvertToEigenFeedback(
+            const smmap_msgs::SimulatorFeedback& feedback_ros )
     {
-        WorldFeedback next_feedback_eigen;
+        WorldState feedback_eigen;
 
-        next_feedback_eigen.object_configuration_ =
+        feedback_eigen.object_configuration_ =
                 EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(
-                    next_feedback_ros.object_configuration );
+                    feedback_ros.object_configuration );
 
-        next_feedback_eigen.all_grippers_single_pose_ =
+        feedback_eigen.all_grippers_single_pose_ =
                 EigenHelpersConversions::VectorGeometryPoseToVectorAffine3d(
-                    next_feedback_ros.gripper_poses );
+                    feedback_ros.gripper_poses );
 
-        next_feedback_eigen.all_grippers_nearest_point_to_obstacle_ =
-                EigenHelpersConversions::VectorGeometryPointToEigenVector3d(
-                    next_feedback_ros.gripper_nearest_point_to_obstacle );
-
-        next_feedback_eigen.all_grippers_obstacle_surface_normal_ =
-                EigenHelpersConversions::VectorGeometryVector3ToEigenVector3d(
-                    next_feedback_ros.obstacle_surface_normal );
-
-        next_feedback_eigen.all_grippers_distance_to_obstacle_ =
-                next_feedback_ros.gripper_distance_to_obstacle;
-
-        next_feedback_eigen.sim_time_ = next_feedback_ros.sim_time;
-
-        return next_feedback_eigen;
-    }
-
-    /**
-     * @brief computeNextFeedback
-     * @param prev_feedback_ros
-     * @param next_feedback_ros
-     * @return
-     */
-    inline WorldFeedback ComputeNextFeedback(
-            const WorldFeedback& prev_feedback_ros,
-            const smmap_msgs::SimulatorFeedback& next_feedback_ros )
-    {
-        WorldFeedback next_feedback_eigen = ComputeNextFeedback( next_feedback_ros );
-
-        // Calculate object and gripper velocities based on the previous timestep
-        const double time_delta =
-                next_feedback_ros.sim_time - prev_feedback_ros.sim_time_;
-
-        const ObjectPointSet object_delta =
-                next_feedback_eigen.object_configuration_
-                - prev_feedback_ros.object_configuration_;
-        next_feedback_eigen.object_velocity_ = object_delta / time_delta;
-
-        next_feedback_eigen.all_grippers_single_velocity_.resize(
-                    next_feedback_eigen.all_grippers_single_pose_.size() );
-
-        for ( size_t gripper_ind = 0;
-              gripper_ind < next_feedback_eigen.all_grippers_single_pose_.size();
-              gripper_ind++ )
+        // TODO: modify the feedback to change this data ordering
+        size_t num_grippers = feedback_ros.gripper_poses.size();
+        feedback_eigen.gripper_collision_data_.reserve( num_grippers );
+        for ( size_t gripper_ind; gripper_ind < num_grippers; gripper_ind++ )
         {
-            const Eigen::Affine3d curr_pose =
-                    next_feedback_eigen.all_grippers_single_pose_[gripper_ind];
-            const Eigen::Affine3d prev_pose =
-                    prev_feedback_ros.all_grippers_single_pose_[gripper_ind];
-
-            next_feedback_eigen.all_grippers_single_velocity_[gripper_ind] =
-                    kinematics::calculateVelocity( prev_pose, curr_pose, time_delta );
+            feedback_eigen.gripper_collision_data_.push_back(
+                        CollisionData(
+                            EigenHelpersConversions::GeometryPointToEigenVector3d(
+                                feedback_ros.gripper_nearest_point_to_obstacle[gripper_ind] ),
+                            EigenHelpersConversions::GeometryVector3ToEigenVector3d(
+                                feedback_ros.obstacle_surface_normal[gripper_ind] ),
+                            feedback_ros.gripper_distance_to_obstacle[gripper_ind] ) );
         }
 
-        return next_feedback_eigen;
-    }
+        feedback_eigen.sim_time_ = feedback_ros.sim_time;
 
-    /**
-     * @brief parseGripperActionResult
-     * @param result
-     * @return
-     */
-    inline std::vector< WorldFeedback > ParseGripperActionResult(
-            const smmap_msgs::CmdGrippersTrajectoryResultConstPtr& result )
-    {
-        assert( result->sim_state_trajectory.size() > 0 );
-        std::vector< WorldFeedback > world_feedback( result->sim_state_trajectory.size() );
-
-        world_feedback[0] = ComputeNextFeedback( result->sim_state_trajectory[0] );
-        for ( size_t time_ind = 1; time_ind < result->sim_state_trajectory.size(); time_ind++ )
-        {
-            world_feedback[time_ind] = ComputeNextFeedback(
-                    world_feedback[time_ind-1],
-                    result->sim_state_trajectory[time_ind] );
-        }
-
-        return world_feedback;
+        return feedback_eigen;
     }
 
     /**
@@ -135,11 +74,10 @@ namespace smmap
      * @param feedback
      * @return
      */
-    inline std::vector< AllGrippersSinglePose > GetGripperTrajectories(
-            const std::vector< WorldFeedback >& feedback )
+    inline AllGrippersPoseTrajectory GetGripperTrajectories(
+            const std::vector< WorldState >& feedback )
     {
-        std::vector< AllGrippersSinglePose >
-                grippers_trajectories( feedback.size() );
+        AllGrippersPoseTrajectory grippers_trajectories( feedback.size() );
 
         for ( size_t time_ind = 0; time_ind < feedback.size(); time_ind++ )
         {
@@ -151,55 +89,32 @@ namespace smmap
     }
 
     /**
-     * @brief getGripperVelocities
-     * @param feedback
-     * @return
-     */
-    inline std::vector< AllGrippersSingleVelocity > GetGripperVelocities(
-            const std::vector< WorldFeedback >& feedback )
-    {
-        std::vector< AllGrippersSingleVelocity >
-                grippers_velocities( feedback.size() - 1 );
-
-        for ( size_t time_ind = 1; time_ind < feedback.size(); time_ind++ )
-        {
-            grippers_velocities[time_ind-1] =
-                    feedback[time_ind].all_grippers_single_velocity_;
-        }
-
-        return grippers_velocities;
-    }
-
-    /**
-     * @brief calculateGrippersVelocities
+     * @brief CalculateGrippersPoseDeltas
      * @param grippers_trajectory
-     * @param dt
      * @return
      */
-    inline std::vector< AllGrippersSingleVelocity > CalculateGrippersVelocities(
-            const std::vector< AllGrippersSinglePose >& grippers_trajectory,
-            const double dt )
+    inline AllGrippersPoseDeltaTrajectory CalculateGrippersPoseDeltas(
+            const AllGrippersPoseTrajectory& grippers_trajectory )
     {
         assert( grippers_trajectory.size() > 1 );
         const size_t num_grippers = grippers_trajectory[0].size();
 
-        std::vector< AllGrippersSingleVelocity > grippers_velocities(
+        AllGrippersPoseDeltaTrajectory grippers_pose_delta_traj(
                     grippers_trajectory.size() - 1,
                     AllGrippersSingleVelocity( num_grippers ) );
 
-        for ( size_t time_ind = 0; time_ind < grippers_velocities.size(); time_ind++ )
+        for ( size_t time_ind = 0; time_ind < grippers_pose_delta_traj.size(); time_ind++ )
         {
             for ( size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++ )
             {
-                grippers_velocities[time_ind][gripper_ind] =
-                        kinematics::calculateVelocity(
+                grippers_pose_delta_traj[time_ind][gripper_ind] =
+                        kinematics::calculateError(
                             grippers_trajectory[time_ind][gripper_ind],
-                            grippers_trajectory[time_ind + 1][gripper_ind],
-                            dt );
+                            grippers_trajectory[time_ind + 1][gripper_ind] );
             }
         }
 
-        return grippers_velocities;
+        return grippers_pose_delta_traj;
     }
 
     /**
@@ -209,68 +124,31 @@ namespace smmap
      * @param dt
      * @return
      */
-    inline std::vector< AllGrippersSinglePose > CalculateGrippersTrajectory(
+    inline AllGrippersPoseTrajectory CalculateGrippersTrajectory(
             const AllGrippersSinglePose& grippers_initial_pose,
-            const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+            const AllGrippersVelocityTrajectory& grippers_velocities,
             const double dt )
     {
         const size_t num_grippers = grippers_initial_pose.size();
 
-        std::vector< AllGrippersSinglePose > grippers_trajectory(
+        AllGrippersPoseTrajectory grippers_pose_trajectory(
                     grippers_velocities.size() + 1,
                     AllGrippersSinglePose( num_grippers ) );
 
-        grippers_trajectory[0] = grippers_initial_pose;
+        grippers_pose_trajectory[0] = grippers_initial_pose;
 
         for ( size_t time_ind = 0; time_ind < grippers_velocities.size(); time_ind++ )
         {
             for ( size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind ++ )
             {
-                grippers_trajectory[time_ind+1][gripper_ind] =
-                        grippers_trajectory[time_ind][gripper_ind] *
+                grippers_pose_trajectory[time_ind+1][gripper_ind] =
+                        grippers_pose_trajectory[time_ind][gripper_ind] *
                         kinematics::expTwistAffine3d( grippers_velocities[time_ind][gripper_ind], dt );
             }
         }
 
-        return grippers_trajectory;
+        return grippers_pose_trajectory;
     }
-
-    inline std::string PrintDeltaOneLine( std::vector< AllGrippersSinglePose > gripper_traj )
-    {
-        const Eigen::IOFormat eigen_io_one_line_( Eigen::FullPrecision, Eigen::DontAlignCols, " ", " ", "", "", "", ""  );
-
-        std::stringstream out;
-
-        AllGrippersSinglePose start = gripper_traj.front();
-        AllGrippersSinglePose end = gripper_traj.back();
-
-        assert( start.size() == end.size() );
-
-        for ( size_t gripper_ind = 0; gripper_ind < start.size(); gripper_ind++ )
-        {
-            out << kinematics::calculateVelocity( start[gripper_ind], end[gripper_ind], 1 ).format( eigen_io_one_line_ ) << " ";
-        }
-
-        return out.str();
-    }
-
-
-    /// Stores the result of a collision avoidance calculation for a single gripper
-    struct CollisionAvoidanceResult
-    {
-        CollisionAvoidanceResult( long cols_per_gripper )
-            : nullspace_projector( Eigen::MatrixXd::Identity(
-                                       cols_per_gripper, cols_per_gripper ) )
-            , velocity( Eigen::VectorXd::Zero( cols_per_gripper ) )
-            , distance( std::numeric_limits< double >::infinity() )
-        {}
-        Eigen::MatrixXd nullspace_projector;
-        Eigen::VectorXd velocity;
-        double distance;
-
-        CollisionAvoidanceResult() = delete;
-    };
-
 
     /**
      * @brief Calculates the distance bewtween two deformable object
@@ -333,7 +211,7 @@ namespace smmap
      *
      * @return The RMS distance between two object trajectories
      */
-    inline double distanceRMS( const std::vector< WorldFeedback >& traj1,
+    inline double distanceRMS( const std::vector< WorldState >& traj1,
                                const ObjectTrajectory& traj2 )
     {
         assert( traj1.size() == traj2.size() );
@@ -359,13 +237,13 @@ namespace smmap
         const long num_nodes = obj.cols();
         Eigen::MatrixXd dist( num_nodes, num_nodes );
 
+        #pragma omp parallel for
         for ( long i = 0; i < num_nodes; i++ )
         {
             for ( long j = i; j < num_nodes; j++ )
             {
                 dist( i, j ) =
                     ( obj.block< 3, 1>( 0, i ) - obj.block< 3, 1>( 0, j ) ).norm();
-
                 dist( j, i ) = dist( i, j );
             }
         }
@@ -374,6 +252,7 @@ namespace smmap
     }
 
     // TODO: vectorize this
+    // TODO: use this for the coverage task error functions?
     inline long closestPointInSet( const ObjectPointSet& obj,
                                    const Eigen::Vector3d& point )
     {
@@ -395,6 +274,7 @@ namespace smmap
     }
 
     // TODO: vectorize this
+    // TODO: use this for the coverage task error functions?
     inline long closestPointInSet( const ObjectPointSet& obj,
                                    Eigen::Vector3d&& point )
     {

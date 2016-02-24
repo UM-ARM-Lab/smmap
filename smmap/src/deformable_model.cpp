@@ -1,9 +1,31 @@
 #include "smmap/deformable_model.h"
 
-#include "smmap/visualization_tools.hpp"
-
 using namespace smmap;
 
+////////////////////////////////////////////////////////////////////////////////
+// Constructor
+////////////////////////////////////////////////////////////////////////////////
+
+DeformableModel::DeformableModel()
+{
+    if ( !grippers_data_initialized_.load() )
+    {
+        throw new std::runtime_error(
+                    "You must call SetGrippersData before constructing a DeformableObjectModel" );
+    }
+
+    if ( !function_pointers_initialized_.load() )
+    {
+        throw new std::runtime_error(
+                    "You must call SetCallbackFunctions before constructing a DeformableObjectModel" );
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Default derivitive functions
+////////////////////////////////////////////////////////////////////////////////
+
+/*
 Eigen::VectorXd DeformableModel::getObjectiveFunction1stDerivitive(
         const WorldFeedback& current_world_configuration,
         const std::vector< AllGrippersSinglePose >& grippers_trajectory,
@@ -211,10 +233,35 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > DeformableModel::getObjectiveFunct
 
     return derivitives;
 }
+*/
 
 ////////////////////////////////////////////////////////////////////////////////
 // Static member initialization
 ////////////////////////////////////////////////////////////////////////////////
 
+std::atomic_bool DeformableModel::grippers_data_initialized_( false );
 std::vector< GripperData > DeformableModel::grippers_data_;
 
+void DeformableModel::SetGrippersData(
+        const std::vector< GripperData >& grippers_data )
+{
+    grippers_data_ = grippers_data;
+
+    grippers_data_initialized_.store( true );
+}
+
+std::atomic_bool DeformableModel::function_pointers_initialized_( false );
+GripperCollisionCheckFunctionType DeformableModel::gripper_collision_check_fn_;
+TaskDesiredObjectDeltaFunctionType DeformableModel::task_desired_object_delta_fn_;
+
+void DeformableModel::SetCallbackFunctions(
+        const GripperCollisionCheckFunctionType& gripper_collision_check_fn,
+        const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn )
+{
+    assert( function_pointers_initialized_.load() == false );
+
+    gripper_collision_check_fn_     = gripper_collision_check_fn;
+    task_desired_object_delta_fn_   = task_desired_object_delta_fn;
+
+    function_pointers_initialized_.store( true );
+}

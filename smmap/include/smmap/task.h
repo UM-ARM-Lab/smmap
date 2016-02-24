@@ -1,27 +1,124 @@
-#ifndef TASK_HPP
-#define TASK_HPP
+#ifndef TASK_H
+#define TASK_H
 
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <ros/ros.h>
 #include <smmap_msgs/messages.h>
 
+#include "smmap/task_enums.h"
+#include "smmap/task_function_pointer_types.h"
 #include "smmap/point_reflector.hpp"
-#include "smmap/trajectory.hpp"
-#include "smmap/visualization_tools.hpp"
+#include "smmap/model_set.h"
+#include "smmap/visualization_tools.h"
+
+/*
+Eigen::VectorXd DiminishingRigidityModel::computeStretchingCorrection(
+        const ObjectPointSet& object_current_configuration ) const
+{
+    Eigen::VectorXd stretching_correction = Eigen::VectorXd::Zero( object_current_configuration.cols() * 3 );
+
+    Eigen::MatrixXd node_distance_delta =
+            distanceMatrix( object_current_configuration )
+            - object_initial_node_distance_;
+
+    for ( long first_node = 0; first_node < node_distance_delta.rows(); first_node++)
+    {
+        for ( long second_node = first_node + 1; second_node < node_distance_delta.cols(); second_node++)
+        {
+            if ( node_distance_delta( first_node, second_node ) > stretching_correction_threshold_ )
+            {
+                // The correction vector points from the first node to the second node,
+                // and is half the length of the "extra" distance
+                Eigen::Vector3d correction_vector = 0.5 * node_distance_delta( first_node, second_node )
+                        * ( object_current_configuration.block< 3, 1 >( 0, second_node )
+                            - object_current_configuration.block< 3, 1 >( 0, first_node ) );
+
+                stretching_correction.segment< 3 >( 3 * first_node ) += correction_vector;
+                stretching_correction.segment< 3 >( 3 * second_node ) -= correction_vector;
+            }
+        }
+    }
+
+    return stretching_correction;
+}
+*/
 
 namespace smmap
 {
     class Task
     {
         public:
-            typedef std::shared_ptr< Task > Ptr;
+            Task( ros::NodeHandle& nh );
+            void execute();
 
-            Task( ros::NodeHandle& nh )
-                : vis_( nh )
-            {}
+        private:
+            ////////////////////////////////////////////////////////////////////
+            //
+            ////////////////////////////////////////////////////////////////////
 
-            virtual ~Task() {}
+            ros::NodeHandle nh_;
+            ros::NodeHandle ph_;
+            Visualizer vis_;
 
+            const TaskType task_type_;
+            const DeformableType deformable_type_;
+
+            ////////////////////////////////////////////////////////////////////
+            // Function pointers that are created in the construtor that are
+            // then passed on to the models or the planner
+            ////////////////////////////////////////////////////////////////////
+
+            const ErrorFunctionType error_fn_;
+            const ModelPredictionFunctionType model_prediction_fn_;
+            const ModelSuggestedGrippersTrajFunctionType model_suggested_grippers_traj_fn_;
+            const ModelGetUtilityFunctionType model_get_utility_fn_;
+            const ModelUpdateUtilityFunctionType model_utility_update_fn_;
+            const GripperCollisionCheckFunctionType gripper_collision_check_fn_;
+            const TaskDesiredObjectDeltaFunctionType task_desired_object_delta_fn_;
+
+            ////////////////////////////////////////////////////////////////////
+            // Functions that are used to initialize function pointers in the
+            // constructor. These all require that task_type_ and
+            // deformable_type_ have been set already
+            ////////////////////////////////////////////////////////////////////
+
+            ErrorFunctionType createErrorFunction();
+            ModelPredictionFunctionType createModelPredictionFunction();
+            ModelSuggestedGrippersTrajFunctionType createModelSuggestedGrippersTrajFunction();
+            ModelGetUtilityFunctionType createModelGetUtilityFunction();
+            ModelUpdateUtilityFunctionType createModelUtilityUpdateFunction();
+            GripperCollisionCheckFunctionType createGripperCollisionCheckFunction();
+            TaskDesiredObjectDeltaFunctionType createTaskDesiredObjectDeltaFunction();
+
+            ////////////////////////////////////////////////////////////////////
+            // Task specific functions that get bound as needed
+            ////////////////////////////////////////////////////////////////////
+
+            double calculateRopeCoverageError( const ObjectPointSet& current_configuration ) const;
+            double calculateClothCoverageError( const ObjectPointSet& current_configuration ) const;
+            double calculateClothColabFoldingError( const ObjectPointSet& current_configuration ) const;
+
+            std::pair< Eigen::VectorXd, Eigen::MatrixXd > calculateRopeCoverageDesiredDelta(
+                    const WorldState& world_state );
+            std::pair< Eigen::VectorXd, Eigen::MatrixXd > calculateClothCoverageDesiredDelta(
+                    const WorldState& world_state );
+            std::pair< Eigen::VectorXd, Eigen::MatrixXd > calculateClothColabFoldingDesiredDelta(
+                    const WorldState& world_state );
+
+            ////////////////////////////////////////////////////////////////////
+            // ModelSet management
+            ////////////////////////////////////////////////////////////////////
+
+            ModelSet model_set_;
+    };
+}
+
+/*
+namespace blarg
+{
+    class Task_old
+    {
+        public:
             // TODO: This is closer to a way of finding a error gradient
             // for some of the methods. Fix this naming problem/usage problem.
             virtual Eigen::VectorXd calculateObjectDesiredVelocity(
@@ -33,18 +130,17 @@ namespace smmap
                 return calculateError_impl( current_configuration );
             }
 
-            /*
-            ObjectPointSet getObjectErrorGradient(
-                    ObjectPointSet current_configuration ) const
-            {
-                return getObjectErrorGradient_impl( current_configuration );
-            }
-            */
+
+//            ObjectPointSet getObjectErrorGradient(
+//                    ObjectPointSet current_configuration ) const
+//            {
+//                return getObjectErrorGradient_impl( current_configuration );
+//            }
+
 
             virtual double getDeformability() const = 0;                // k
             virtual double getCollisionScalingFactor() const = 0;       // beta (or k2)
             virtual double getStretchingScalingThreshold() const = 0;   // lambda
-            virtual bool getUseRotation() const = 0;
             virtual double maxTime() const = 0;                         // max simulation time when scripting things
 
             void visualizePredictions(
@@ -535,5 +631,6 @@ namespace smmap
             }
     };
 }
+*/
 
-#endif // TASK_HPP
+#endif // TASK_H

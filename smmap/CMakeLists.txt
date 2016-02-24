@@ -55,7 +55,7 @@ set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -g -O3 -march=native -Wall -
 unset( USE_OPEN_MP CACHE )
 option( USE_OPEN_MP "Set to ON if we want to use OpenMP" ON )
 if ( USE_OPEN_MP )
-    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp" )
+    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -DUSE_OPEN_MP" )
     message( STATUS "Enabling OpenMP for SMMAP library" )
 else( USE_OPEN_MP )
     set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas" )
@@ -65,13 +65,17 @@ endif( USE_OPEN_MP )
 
 ## Library file for the whole project
 add_library( ${PROJECT_NAME}
+    include/${PROJECT_NAME}/collision_helpers.hpp
     include/${PROJECT_NAME}/gripper_helpers.hpp
     include/${PROJECT_NAME}/ros_params.hpp
-    include/${PROJECT_NAME}/task.hpp
+    include/${PROJECT_NAME}/task.h
+    src/task.cpp
     include/${PROJECT_NAME}/task_enums.h
+    include/${PROJECT_NAME}/task_function_pointer_types.h
     include/${PROJECT_NAME}/point_reflector.hpp
     include/${PROJECT_NAME}/trajectory.hpp
-    include/${PROJECT_NAME}/visualization_tools.hpp
+    include/${PROJECT_NAME}/visualization_tools.h
+    src/visualization_tools.cpp
     include/${PROJECT_NAME}/deformable_model.h
     src/deformable_model.cpp
     include/${PROJECT_NAME}/diminishing_rigidity_model.h

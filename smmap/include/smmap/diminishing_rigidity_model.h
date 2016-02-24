@@ -2,7 +2,6 @@
 #define DIMINISHING_RIGIDITY_MODEL_H
 
 #include "smmap/deformable_model.h"
-#include <atomic>
 
 namespace smmap
 {
@@ -13,49 +12,36 @@ namespace smmap
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
-            DiminishingRigidityModel(
-                    const Task& task,
-                    double deformability,
-                    bool use_rotation,
-                    double obstacle_avoidance_scale,
-                    double strechting_correction_threshold );
+            DiminishingRigidityModel( double deformability );
 
             DiminishingRigidityModel(
-                    const Task& task,
                     double translation_deformability,
-                    double rotation_deformability,
-                    bool use_rotation,
-                    double obstacle_avoidance_scale,
-                    double strechting_correction_threshold );
+                    double rotation_deformability);
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            void updateModel( const std::vector< WorldFeedback >& feedback );
+            virtual void updateModel( const std::vector< WorldState >& feedback );
 
-            ObjectTrajectory getPrediction(
-                    const WorldFeedback& current_world_configuration,
-                    const std::vector< AllGrippersSinglePose >& grippers_trajectory,
-                    const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+            virtual ObjectTrajectory getPrediction(
+                    const WorldState& world_initial_state,
+                    const AllGrippersPoseTrajectory& grippers_pose_trajectory,
+                    const AllGrippersPoseDeltaTrajectory& grippers_pose_delta_trajectory,
                     double dt ) const;
 
-            ObjectPointSet getFinalConfiguration(
-                    const WorldFeedback& current_world_configuration,
-                    const std::vector< AllGrippersSinglePose >& grippers_trajectory,
-                    const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
-                    double dt ) const;
+            virtual ObjectPointSet getFinalConfiguration(
+                    const WorldState& world_initial_state,
+                    const AllGrippersPoseTrajectory& gripper_pose_trajectory,
+                    const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
+                    double dt ) const ;
 
-            ObjectPointSet getObjectDelta(
-                    const ObjectPointSet& object_current_configuration,
-                    const AllGrippersSinglePose & grippers_pose,
-                    const AllGrippersSingleVelocity& grippers_velocity,
-                    double dt ) const;
-
-            std::vector< AllGrippersSinglePose > getDesiredGrippersTrajectory(
-                    const WorldFeedback& world_feedback,
-                    double max_step_size,
-                    size_t num_steps ) const;
+            virtual std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > getSuggestedGrippersTrajectory(
+                    const WorldState& world_initial_state,
+                    const int planning_horizion,
+                    const double dt,
+                    const double max_gripper_velocity,
+                    const double obstacle_avoidance_scale ) const;
 
             void perturbModel( std::mt19937_64& generator );
 
@@ -73,45 +59,32 @@ namespace smmap
             // Computation helpers
             ////////////////////////////////////////////////////////////////////
 
+            ObjectPointSet getObjectDelta(
+                    const ObjectPointSet& object_initial_configuration,
+                    const AllGrippersSinglePose & grippers_pose,
+                    const AllGrippersSingleVelocity& grippers_velocity,
+                    double dt ) const;
+
             Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
                     const ObjectPointSet& current_configuration ) const;
-
-            std::vector< CollisionAvoidanceResult > computeGrippersObjectAvoidance(
-                    const WorldFeedback& world_feedback,
-                    const AllGrippersSinglePose& grippers_pose,
-                    double max_step_size ) const;
-
-            Eigen::MatrixXd computeCollisionToGripperJacobian(
-                    const Eigen::Vector3d& point_on_gripper,
-                    const Eigen::Affine3d& gripper_pose ) const;
-
-            Eigen::VectorXd computeStretchingCorrection(
-                    const ObjectPointSet& object_current_configuration ) const ;
 
             ////////////////////////////////////////////////////////////////////
             // Static members
             ////////////////////////////////////////////////////////////////////
 
-            static std::atomic< bool > initialized_;
-            static std::normal_distribution< double > perturbation_distribution;
+            static std::atomic_bool static_data_initialized_;
+            static std::normal_distribution< double > perturbation_distribution_;
             static Eigen::MatrixXd object_initial_node_distance_;
 
             ////////////////////////////////////////////////////////////////////
             // Private members
             ////////////////////////////////////////////////////////////////////
 
-            const Task& task_;
-
             static long num_nodes_;
 
             double translation_deformability_;
             double rotation_deformability_;
-            bool use_rotation_;
-            const long cols_per_gripper_;
-
-            const double obstacle_avoidance_scale_;
-            const double stretching_correction_threshold_;
     };
 }
 
