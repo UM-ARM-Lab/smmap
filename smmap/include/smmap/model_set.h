@@ -12,7 +12,7 @@ namespace smmap
             // Constructor
             ////////////////////////////////////////////////////////////////////
 
-            ModelSet( const ModelUpdateUtilityFunctionType& model_utility_update_fn );
+            ModelSet( const UpdateModelUtilityFunctionType& update_model_utility_fn );
 
             void addModel( DeformableModel::Ptr model );
             void updateModels( const std::vector< WorldState >& world_feedback );
@@ -56,7 +56,7 @@ namespace smmap
 
             std::vector< DeformableModel::Ptr > model_list_;
             std::vector< double > model_utility_;
-            const ModelUpdateUtilityFunctionType model_utility_update_fn_;
+            const UpdateModelUtilityFunctionType update_model_utility_fn_;
 
             ////////////////////////////////////////////////////////////////////
             // Utility variables

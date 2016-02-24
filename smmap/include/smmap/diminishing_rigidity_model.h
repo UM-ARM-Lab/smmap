@@ -5,9 +5,17 @@
 
 namespace smmap
 {
+    // TODO: find a way to accept dynamic/online gripper re-grasping
     class DiminishingRigidityModel final : public DeformableModel
     {
         public:
+            ////////////////////////////////////////////////////////////////////
+            // Static functions to set data for all models
+            ////////////////////////////////////////////////////////////////////
+
+            static void SetInitialObjectConfiguration(
+                    const ObjectPointSet& object_initial_configuration );
+
             ////////////////////////////////////////////////////////////////////
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
@@ -16,7 +24,7 @@ namespace smmap
 
             DiminishingRigidityModel(
                     double translation_deformability,
-                    double rotation_deformability);
+                    double rotation_deformability );
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function overrides
@@ -44,8 +52,6 @@ namespace smmap
                     const double obstacle_avoidance_scale ) const;
 
             void perturbModel( std::mt19937_64& generator );
-
-            static void SetInitialObjectConfiguration( const ObjectPointSet& object_initial_configuration );
 
         private:
 
@@ -76,12 +82,11 @@ namespace smmap
             static std::atomic_bool static_data_initialized_;
             static std::normal_distribution< double > perturbation_distribution_;
             static Eigen::MatrixXd object_initial_node_distance_;
+            static long num_nodes_;
 
             ////////////////////////////////////////////////////////////////////
             // Private members
             ////////////////////////////////////////////////////////////////////
-
-            static long num_nodes_;
 
             double translation_deformability_;
             double rotation_deformability_;

@@ -13,14 +13,14 @@ Visualizer::Visualizer( ros::NodeHandle& nh )
 }
 
 void Visualizer::visualizeRope(
+        const std::string& marker_name,
         const ObjectPointSet& rope,
-        const std_msgs::ColorRGBA& color,
-        const std::string& name )
+        const std_msgs::ColorRGBA& color )
 {
     visualization_msgs::Marker marker;
 
     marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.ns = name;
+    marker.ns = marker_name;
     marker.id = 0;
     marker.scale.x = 0.1;
     marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( rope );
@@ -34,24 +34,24 @@ void Visualizer::visualizeRope(
 }
 
 void Visualizer::visualizeCloth(
+        const std::string& marker_name,
         const ObjectPointSet& cloth,
-        const std_msgs::ColorRGBA& color,
-        const std::string& name )
+        const std_msgs::ColorRGBA& color )
 {
     std::vector< std_msgs::ColorRGBA > colors( (size_t)cloth.cols(), color );
 
-    visualizeCloth( cloth, colors, name );
+    visualizeCloth( marker_name, cloth, colors );
 }
 
 void Visualizer::visualizeCloth(
+        const std::string& marker_name,
         const ObjectPointSet& cloth,
-        const std::vector< std_msgs::ColorRGBA >& colors,
-        const std::string& name )
+        const std::vector< std_msgs::ColorRGBA >& colors )
 {
     visualization_msgs::Marker marker;
 
     marker.type = visualization_msgs::Marker::POINTS;
-    marker.ns = name;
+    marker.ns = marker_name;
     marker.id = 0;
     marker.scale.x = 0.002;
     marker.scale.y = 0.002;
@@ -62,17 +62,19 @@ void Visualizer::visualizeCloth(
 }
 
 void Visualizer::visualizeGripper(
+        const std::string& marker_name,
         const geometry_msgs::Pose& pose,
-        const std_msgs::ColorRGBA& color,
-        const std::string& name )
+        const std_msgs::ColorRGBA& color )
 {
     // TODO: do
+    assert( false && "THIS IS NOT YET IMPLEMENTED" );
 }
 
 
-void Visualizer::visualizeObjectDelta( const std::string& marker_name,
-                           const ObjectPointSet& current,
-                           const ObjectPointSet& desired )
+void Visualizer::visualizeObjectDelta(
+        const std::string& marker_name,
+        const ObjectPointSet& current,
+        const ObjectPointSet& desired)
 {
     visualization_msgs::Marker marker;
     std_msgs::ColorRGBA color;
@@ -99,10 +101,11 @@ void Visualizer::visualizeObjectDelta( const std::string& marker_name,
     visualization_marker_pub_.publish( marker );
 }
 
-void Visualizer::visualizeTranslation( const std::string& marker_name,
-                           const geometry_msgs::Point& start,
-                           const geometry_msgs::Point& end,
-                           const std_msgs::ColorRGBA& color )
+void Visualizer::visualizeTranslation(
+        const std::string& marker_name,
+        const geometry_msgs::Point& start,
+        const geometry_msgs::Point& end,
+        const std_msgs::ColorRGBA& color )
 {
     visualization_msgs::Marker marker;
 
@@ -118,10 +121,11 @@ void Visualizer::visualizeTranslation( const std::string& marker_name,
     visualization_marker_pub_.publish( marker );
 }
 
-void Visualizer::visualizeTranslation( const std::string& marker_name,
-                           const Eigen::Vector3d& start,
-                           const Eigen::Vector3d& end,
-                           const std_msgs::ColorRGBA& color )
+void Visualizer::visualizeTranslation(
+        const std::string& marker_name,
+        const Eigen::Vector3d& start,
+        const Eigen::Vector3d& end,
+        const std_msgs::ColorRGBA& color )
 {
     visualizeTranslation( marker_name,
                           EigenHelpersConversions::EigenVector3dToGeometryPoint( start ),
@@ -129,10 +133,11 @@ void Visualizer::visualizeTranslation( const std::string& marker_name,
                           color );
 }
 
-void Visualizer::visualizeTranslation( const std::string& marker_name,
-                           const Eigen::Affine3d &start,
-                           const Eigen::Affine3d &end,
-                           const std_msgs::ColorRGBA& color )
+void Visualizer::visualizeTranslation(
+        const std::string& marker_name,
+        const Eigen::Affine3d &start,
+        const Eigen::Affine3d &end,
+        const std_msgs::ColorRGBA& color )
 {
     Visualizer::visualizeTranslation( marker_name,
                           start.translation(),
@@ -140,10 +145,11 @@ void Visualizer::visualizeTranslation( const std::string& marker_name,
                           color );
 }
 
-void Visualizer::visualizeLines( const std::string& marker_name,
-                     const EigenHelpers::VectorVector3d& start,
-                     const EigenHelpers::VectorVector3d& end,
-                     const std_msgs::ColorRGBA& color )
+void Visualizer::visualizeLines(
+        const std::string& marker_name,
+        const EigenHelpers::VectorVector3d& start,
+        const EigenHelpers::VectorVector3d& end,
+        const std_msgs::ColorRGBA& color )
 {
     visualization_msgs::Marker marker;
 

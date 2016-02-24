@@ -68,10 +68,14 @@ add_library( ${PROJECT_NAME}
     include/${PROJECT_NAME}/collision_helpers.hpp
     include/${PROJECT_NAME}/gripper_helpers.hpp
     include/${PROJECT_NAME}/ros_params.hpp
+    include/${PROJECT_NAME}/ros_communication_helpers.hpp
     include/${PROJECT_NAME}/task.h
     src/task.cpp
     include/${PROJECT_NAME}/task_enums.h
     include/${PROJECT_NAME}/task_function_pointer_types.h
+    include/${PROJECT_NAME}/task_specification.h
+    include/${PROJECT_NAME}/task_specification_implementions.hpp
+    src/task_specification.cpp
     include/${PROJECT_NAME}/point_reflector.hpp
     include/${PROJECT_NAME}/trajectory.hpp
     include/${PROJECT_NAME}/visualization_tools.h

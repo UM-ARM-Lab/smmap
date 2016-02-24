@@ -18,7 +18,7 @@ namespace smmap
             Planner( const ErrorFunctionType& error_fn,
                      const ModelPredictionFunctionType& model_prediction_fn,
                      const ModelSuggestedGrippersTrajFunctionType& model_suggested_grippers_traj_fn,
-                     const ModelGetUtilityFunctionType& model_get_utility_fn,
+                     const GetModelUtilityFunctionType& get_model_utility_fn,
                      Visualizer& vis );
 
             ////////////////////////////////////////////////////////////////////
@@ -31,13 +31,13 @@ namespace smmap
                     const int planning_horizion = 1,
                     const double dt = 0.01,
                     const double max_gripper_velocity = 0.05/20.0/0.01,
-                    const double obstacle_avoidance_scale = 10*20 ) const;
+                    const double obstacle_avoidance_scale = 100*20 ) const;
 
         private:
             const ErrorFunctionType error_fn_;
             const ModelPredictionFunctionType model_prediction_fn_;
             const ModelSuggestedGrippersTrajFunctionType model_suggested_grippers_traj_fn_;
-            const ModelGetUtilityFunctionType model_get_utility_fn_;
+            const GetModelUtilityFunctionType get_model_utility_fn_;
 
             ////////////////////////////////////////////////////////////////////
             // Logging and visualization functionality

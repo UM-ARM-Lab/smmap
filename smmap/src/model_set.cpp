@@ -4,8 +4,8 @@
 
 using namespace smmap;
 
-ModelSet::ModelSet( const ModelUpdateUtilityFunctionType& model_utility_update_fn )
-    : model_utility_update_fn_( model_utility_update_fn )
+ModelSet::ModelSet( const UpdateModelUtilityFunctionType& update_model_utility_fn )
+    : update_model_utility_fn_( update_model_utility_fn )
 {}
 
 void ModelSet::addModel( DeformableModel::Ptr model )
@@ -117,3 +117,8 @@ std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > > ModelSet::getObject
     return derivitives;
 }
 */
+
+const std::vector< double >& ModelSet::getModelUtility() const
+{
+    return model_utility_;
+}

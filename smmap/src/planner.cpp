@@ -23,12 +23,12 @@ using namespace EigenHelpersConversions;
 Planner::Planner( const ErrorFunctionType& error_fn,
                   const ModelPredictionFunctionType& model_prediction_fn,
                   const ModelSuggestedGrippersTrajFunctionType& model_suggested_grippers_traj_fn,
-                  const ModelGetUtilityFunctionType& model_get_utility_fn,
+                  const GetModelUtilityFunctionType& get_model_utility_fn,
                   Visualizer& vis )
     : error_fn_( error_fn )
     , model_prediction_fn_( model_prediction_fn )
     , model_suggested_grippers_traj_fn_( model_suggested_grippers_traj_fn )
-    , model_get_utility_fn_( model_get_utility_fn )
+    , get_model_utility_fn_( get_model_utility_fn )
     , vis_( vis )
 {}
 
@@ -54,7 +54,7 @@ AllGrippersPoseTrajectory Planner::getNextTrajectory(
                 obstacle_avoidance_scale );
 
     // Get the utility of each model
-    const std::vector< double >& model_utility = model_get_utility_fn_();
+    const std::vector< double >& model_utility = get_model_utility_fn_();
 
     // Confirm that our data sizes match what they are supposed to
     assert( model_utility.size() == suggested_trajectories.size() );
@@ -121,7 +121,7 @@ ObjectTrajectory Planner::combineModelPredictions(
     assert( model_predictions.size() > 0 );
     assert( model_predictions[0].size() > 0 );
 
-    const std::vector< double >& model_confidences = model_get_utility_fn_();
+    const std::vector< double >& model_confidences = get_model_utility_fn_();
     double total_weight = std::accumulate( model_confidences.begin(), model_confidences.end(), 0. );
 
     ObjectTrajectory weighted_average_trajectory( model_predictions[0].size(),
@@ -153,7 +153,7 @@ ObjectPointSet Planner::combineModelPredictionsLastTimestep(
     size_t traj_length = model_predictions[0].size();
     assert( traj_length > 0 );
 
-    const std::vector< double >& model_confidences = model_get_utility_fn_();
+    const std::vector< double >& model_confidences = get_model_utility_fn_();
     double total_weight = std::accumulate( model_confidences.begin(), model_confidences.end(), 0. );
 
     ObjectPointSet weighted_average_configuration = ObjectPointSet::Zero( 3, model_predictions[0][0].cols() );
@@ -180,7 +180,7 @@ Eigen::VectorXd Planner::combineModelDerivitives(
 {
     assert( model_derivitives.size() > 0 );
 
-    const std::vector< double >& model_confidences = model_get_utility_fn_();
+    const std::vector< double >& model_confidences = get_model_utility_fn_();
     double total_weight = std::accumulate( model_confidences.begin(), model_confidences.end(), 0. );
 
     Eigen::VectorXd weighted_average_derivitive = Eigen::VectorXd::Zero( model_derivitives[0].size() );
@@ -205,7 +205,7 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > Planner::combineModelDerivitives(
 {
     assert( model_derivitives.size() > 0 );
 
-    const std::vector< double >& model_confidences = model_get_utility_fn_();
+    const std::vector< double >& model_confidences = get_model_utility_fn_();
     double total_weight = std::accumulate( model_confidences.begin(), model_confidences.end(), 0. );
 
     std::pair< Eigen::VectorXd, Eigen::MatrixXd > weighted_average_derivitive(

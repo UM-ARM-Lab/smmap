@@ -29,17 +29,19 @@ namespace smmap
             ) >
     ModelSuggestedGrippersTrajFunctionType;
 
+    // TODO: Get Model Utility operates on all models while Update Model Utility operates on only 1 model
+    // This ought to be fixed.
     typedef std::function< const std::vector< double >&(
             void
             ) >
-    ModelGetUtilityFunctionType;
+    GetModelUtilityFunctionType;
 
     typedef std::function< double(
             const double,                           /* old utility of the given model*/
             const std::vector< WorldState >&,       /* world feedback since the last update */
             const ObjectTrajectory&                 /* the prediction of the given model */
             ) >
-    ModelUpdateUtilityFunctionType;
+    UpdateModelUtilityFunctionType;
 
     typedef std::function< std::vector< CollisionData >(
             const AllGrippersSinglePose&            /* Gripper poses to test for collision */
