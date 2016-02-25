@@ -17,7 +17,7 @@ namespace smmap
             const WorldState&,                      /* current state of the world at the start of prediction */
             const AllGrippersPoseTrajectory&,       /* Gripper pose at each timestep */
             const AllGrippersPoseDeltaTrajectory&,  /* Gripper pose delta between timesteps */
-            double dt                               /* time delta between timesteps */
+            const double dt                         /* time delta between timesteps */
         ) >
     ModelPredictionFunctionType;
 
@@ -40,8 +40,9 @@ namespace smmap
 
     typedef std::function< double(
             const double,                           /* old utility of the given model*/
-            const std::vector< WorldState >&,       /* world feedback since the last update */
-            const ObjectTrajectory&                 /* the prediction of the given model */
+            const WorldState&,                      /* world feedback since the last update */
+            const ObjectPointSet&,                  /* the prediction of the given model */
+            const Eigen::VectorXd&                  /* diagonal weighting matrix */
             ) >
     UpdateModelUtilityFunctionType;
 

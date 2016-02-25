@@ -75,7 +75,7 @@ AllGrippersPoseTrajectory Planner::getNextTrajectory(
         }
     }
 
-    std::vector< AllGrippersSinglePose > best_trajectory =
+    AllGrippersPoseTrajectory best_trajectory =
             suggested_trajectories[min_weighted_cost_ind].first;
 //            optimizeTrajectoryDirectShooting(
 //                world_feedback.back(),

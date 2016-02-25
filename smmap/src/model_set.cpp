@@ -16,22 +16,41 @@ void ModelSet::addModel( DeformableModel::Ptr model )
     model_utility_.push_back( 0 );
 }
 
-void ModelSet::updateModels( const std::vector< WorldState >& feedback )
+// TODO: this is currently being invoked from Task, should this be invoked from the planner?
+void ModelSet::updateModels( const std::vector< WorldState >& feedback,
+                             const Eigen::VectorXd& weights )
 {
+    // TODO: avoid doing all this recalculation
+    const WorldState& starting_world_state = feedback.front();
+    const AllGrippersPoseTrajectory& grippers_pose_trajectory = GetGripperTrajectories( feedback );
+    const AllGrippersPoseDeltaTrajectory& grippers_pose_delta_trajectory = CalculateGrippersPoseDeltas( grippers_pose_trajectory );
+    const double dt = 0.01;
+
     // Allow each model to update itself based on the new data
     #pragma omp parallel for
-    for ( size_t ind = 0; ind < model_list_.size(); ind++ )
+    for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
     {
+        const ObjectPointSet prediction = model_list_[model_ind]->getFinalConfiguration(
+                    starting_world_state,
+                    grippers_pose_trajectory,
+                    grippers_pose_delta_trajectory,
+                    dt );
 
-        model_list_[ind]->updateModel( feedback );
+        model_utility_[model_ind] = update_model_utility_fn_(
+                    model_utility_[model_ind],
+                    starting_world_state,
+                    prediction,
+                    weights );
+
+        model_list_[model_ind]->updateModel( feedback );
     }
 }
 
 VectorObjectTrajectory ModelSet::getPredictions(
-        const WorldState& starting_world_configuration,
-        const AllGrippersPoseTrajectory& gripper_pose_trajectory,
-        const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
-        double dt ) const
+        const WorldState& starting_world_state,
+        const AllGrippersPoseTrajectory& grippers_pose_trajectory,
+        const AllGrippersPoseDeltaTrajectory& grippers_pose_delta_trajectory,
+        const double dt ) const
 {
     VectorObjectTrajectory predictions( model_list_.size() );
 
@@ -39,9 +58,9 @@ VectorObjectTrajectory ModelSet::getPredictions(
     for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
     {
         predictions[model_ind] = model_list_[model_ind]->getPrediction(
-                    starting_world_configuration,
-                    gripper_pose_trajectory,
-                    gripper_pose_delta_trajectory,
+                    starting_world_state,
+                    grippers_pose_trajectory,
+                    grippers_pose_delta_trajectory,
                     dt );
     }
 

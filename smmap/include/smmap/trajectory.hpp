@@ -70,6 +70,26 @@ namespace smmap
     }
 
     /**
+     * @brief parseGripperActionResult
+     * @param result
+     * @return
+     */
+    inline std::vector< WorldState > ParseGripperActionResult(
+            const smmap_msgs::CmdGrippersTrajectoryResultConstPtr& result )
+    {
+        assert( result->sim_state_trajectory.size() > 0 );
+        std::vector< WorldState > world_feedback( result->sim_state_trajectory.size() );
+
+        for ( size_t time_ind = 0; time_ind < result->sim_state_trajectory.size(); time_ind++ )
+        {
+            world_feedback[time_ind] =
+                    ConvertToEigenFeedback( result->sim_state_trajectory[time_ind] );
+        }
+
+        return world_feedback;
+    }
+
+    /**
      * @brief getGripperTrajectories
      * @param feedback
      * @return
@@ -150,6 +170,12 @@ namespace smmap
         return grippers_pose_trajectory;
     }
 
+    inline double anneal( const double old_val, const double new_val, const double annealing_rate )
+    {
+        return ( 1 - annealing_rate ) * old_val +  annealing_rate * new_val;
+    }
+
+
     /**
      * @brief Calculates the distance bewtween two deformable object
      * configurations using an L2 norm.
@@ -163,6 +189,18 @@ namespace smmap
                             const ObjectPointSet& set2 )
     {
         return ( set1 - set2 ).norm();
+    }
+
+    inline double distanceWeighted( const ObjectPointSet& set1,
+                                    const ObjectPointSet& set2,
+                                    const Eigen::VectorXd& weights )
+    {
+        Eigen::MatrixXd diff = set1 - set2;
+        diff.resize( diff.rows() * diff.cols(), 1 );
+        // TODO: find a better way to do this
+        auto result = diff.transpose() * weights.asDiagonal() * diff;
+        assert( result.rows() == 1 && result.cols() == 1 );
+        return result(0);
     }
 
     /**
@@ -224,6 +262,7 @@ namespace smmap
 
         return std::sqrt( dist_squared / (double)traj1.size() );
     }
+
 
     /**
      * @brief Computes the distance between each node in the given object

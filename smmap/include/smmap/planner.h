@@ -31,8 +31,8 @@ namespace smmap
                     const int planning_horizion = 1,
                     const double dt = 0.01,
                     const double max_gripper_velocity = 0.05/20.0/0.01,
-                    const double obstacle_avoidance_scale = 100*20,
-                    const double stretching_corection_scale = 0.1/20 ) const;
+                    const double obstacle_avoidance_scale = 100.0*20.0,
+                    const double stretching_corection_scale = 0.1/20.0 ) const;
 
         private:
             const ErrorFunctionType error_fn_;

@@ -36,13 +36,13 @@ namespace smmap
                     const WorldState& world_initial_state,
                     const AllGrippersPoseTrajectory& grippers_pose_trajectory,
                     const AllGrippersPoseDeltaTrajectory& grippers_pose_delta_trajectory,
-                    double dt ) const;
+                    const double dt ) const;
 
             virtual ObjectPointSet getFinalConfiguration(
                     const WorldState& world_initial_state,
                     const AllGrippersPoseTrajectory& gripper_pose_trajectory,
                     const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
-                    double dt ) const ;
+                    const double dt ) const ;
 
             virtual std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > getSuggestedGrippersTrajectory(
                     const WorldState& world_initial_state,

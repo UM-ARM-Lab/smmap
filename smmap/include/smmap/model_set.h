@@ -15,13 +15,15 @@ namespace smmap
             ModelSet( const UpdateModelUtilityFunctionType& update_model_utility_fn );
 
             void addModel( DeformableModel::Ptr model );
-            void updateModels( const std::vector< WorldState >& world_feedback );
+            void updateModels(
+                    const std::vector< WorldState >& world_feedback,
+                    const Eigen::VectorXd& weights );
 
             VectorObjectTrajectory getPredictions(
-                    const WorldState& starting_world_configuration,
-                    const AllGrippersPoseTrajectory& gripper_pose_trajectory,
-                    const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
-                    double dt ) const;
+                    const WorldState& starting_world_state,
+                    const AllGrippersPoseTrajectory& grippers_pose_trajectory,
+                    const AllGrippersPoseDeltaTrajectory& grippers_pose_delta_trajectory,
+                    const double dt ) const;
 
             std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >
             getSuggestedGrippersTrajectories(

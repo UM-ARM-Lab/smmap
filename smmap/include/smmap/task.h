@@ -1,6 +1,7 @@
 #ifndef TASK_H
 #define TASK_H
 
+#include <actionlib/client/simple_action_client.h>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/log.hpp>
 
@@ -27,13 +28,25 @@ namespace smmap
             void initializeLogging();
 
             ////////////////////////////////////////////////////////////////////
-            // ROS objects
+            // ROS objects and helpers
             ////////////////////////////////////////////////////////////////////
+
+            // Our internal version of ros::spin()
+            static void spin( double loop_rate );
+
+            std::vector< WorldState > sendGripperTrajectory(
+                    const smmap_msgs::CmdGrippersTrajectoryGoal& goal );
+
+            smmap_msgs::CmdGrippersTrajectoryGoal noOpTrajectoryGoal( size_t num_no_op );
+
+            smmap_msgs::CmdGrippersTrajectoryGoal toRosGoal(
+                    const AllGrippersPoseTrajectory& trajectory );
 
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
             GripperCollisionChecker gripper_collision_checker_;
             Visualizer vis_;
+            actionlib::SimpleActionClient< smmap_msgs::CmdGrippersTrajectoryAction > cmd_grippers_traj_client_;
 
             ////////////////////////////////////////////////////////////////////
             // Task specific data
@@ -76,20 +89,10 @@ namespace smmap
             GripperCollisionCheckFunctionType createGripperCollisionCheckFunction();
             TaskDesiredObjectDeltaFunctionType createTaskDesiredObjectDeltaFunction();
 
-            ////////////////////////////////////////////////////////////////////
-            // Task specific functions that get bound as needed
-            ////////////////////////////////////////////////////////////////////
-
-            double calculateRopeCoverageError( const ObjectPointSet& current_configuration ) const;
-            double calculateClothCoverageError( const ObjectPointSet& current_configuration ) const;
-            double calculateClothColabFoldingError( const ObjectPointSet& current_configuration ) const;
-
-            std::pair< Eigen::VectorXd, Eigen::MatrixXd > calculateRopeCoverageDesiredDelta(
-                    const WorldState& world_state );
-            std::pair< Eigen::VectorXd, Eigen::MatrixXd > calculateClothCoverageDesiredDelta(
-                    const WorldState& world_state );
-            std::pair< Eigen::VectorXd, Eigen::MatrixXd > calculateClothColabFoldingDesiredDelta(
-                    const WorldState& world_state );
+            double updateUtility( const double old_utility,
+                                  const WorldState& world_state,
+                                  const ObjectPointSet& prediction,
+                                  const Eigen::VectorXd& weights ) const;
 
             ////////////////////////////////////////////////////////////////////
             //

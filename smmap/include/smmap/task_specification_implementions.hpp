@@ -20,17 +20,17 @@ namespace smmap
         private:
             virtual double getDeformability_impl() const
             {
-                return 0.5*20; // k
+                return 0.5*20.0; // k
             }
 
             virtual double getCollisionScalingFactor_impl() const
             {
-                return  10*20; // beta
+                return  10.0*20.0; // beta
             }
 
             virtual double getStretchingScalingThreshold_impl() const
             {
-                return 0.1/20; // lambda
+                return 0.1/20.0; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -143,17 +143,17 @@ namespace smmap
         private:
             virtual double getDeformability_impl() const
             {
-                return 0.7*20; // k
+                return 0.7*20.0; // k
             }
 
             virtual double getCollisionScalingFactor_impl() const
             {
-                return  100*20; // beta
+                return  100.0*20.0; // beta
             }
 
             virtual double getStretchingScalingThreshold_impl() const
             {
-                return 0.1/20; // lambda
+                return 0.1/20.0; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -270,12 +270,12 @@ namespace smmap
 
             virtual double getCollisionScalingFactor_impl() const
             {
-                return  100*20; // beta
+                return  100.0*20.0; // beta
             }
 
             virtual double getStretchingScalingThreshold_impl() const
             {
-                return 0.1/20; // lambda
+                return 0.1/20.0; // lambda
             }
 
             virtual double maxTime_impl() const
