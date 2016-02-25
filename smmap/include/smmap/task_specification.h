@@ -38,7 +38,13 @@ namespace smmap
             double calculateError(
                     const ObjectPointSet& object_configuration ) const;
 
-            Eigen::VectorXd calculateObjectDesiredDelta(
+            /**
+             * @brief calculateObjectDesiredDelta
+             * @param world_state
+             * @return return.first is the desired movement of the object
+             *         return.second is the importance of that part of the movement
+             */
+            std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectDesiredDelta(
                     const WorldState& world_state ) const;
 
         protected:
@@ -67,7 +73,7 @@ namespace smmap
             virtual double calculateError_impl(
                     const ObjectPointSet& object_configuration ) const = 0;
 
-            virtual Eigen::VectorXd calculateObjectDesiredDelta_impl(
+            virtual std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectDesiredDelta_impl(
                     const WorldState& world_state ) const = 0;
 
     };

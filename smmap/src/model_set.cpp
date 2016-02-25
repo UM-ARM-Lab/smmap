@@ -54,7 +54,8 @@ ModelSet::getSuggestedGrippersTrajectories(
         const int planning_horizion,
         const double dt,
         const double max_gripper_velocity,
-        const double obstacle_avoidance_scale ) const
+        const double obstacle_avoidance_scale,
+        const double stretching_correction_threshold ) const
 {
     std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > > trajectories( model_list_.size() );
 
@@ -66,7 +67,8 @@ ModelSet::getSuggestedGrippersTrajectories(
                     planning_horizion,
                     dt,
                     max_gripper_velocity,
-                    obstacle_avoidance_scale );
+                    obstacle_avoidance_scale,
+                    stretching_correction_threshold );
     }
 
     return trajectories;

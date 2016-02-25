@@ -80,14 +80,15 @@ namespace smmap
                 return error.sum();
             }
 
-            virtual Eigen::VectorXd calculateObjectDesiredDelta_impl(
+            virtual std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectDesiredDelta_impl(
                     const WorldState& world_state ) const
             {
                 ROS_INFO_NAMED( "rope_coverage_task" , "Finding 'best' object delta" );
                 const ObjectPointSet& object_configuration = world_state.object_configuration_;
 
-                Eigen::VectorXd desired_object_delta =
-                        Eigen::VectorXd::Zero( object_configuration.cols() * 3 );
+                std::pair< Eigen::VectorXd, Eigen::VectorXd > desired_rope_delta =
+                        std::make_pair( Eigen::VectorXd::Zero( object_configuration.cols() * 3 ),
+                                        Eigen::VectorXd::Zero( object_configuration.cols() * 3 ) );
 
                 // for every cover point, find the nearest deformable object point
                 for ( long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
@@ -111,13 +112,17 @@ namespace smmap
 
                     if ( std::sqrt( min_dist_squared ) >= 0.2/20. )
                     {
-                        desired_object_delta.segment< 3 >( min_ind * 3 ) =
-                                desired_object_delta.segment< 3 >( min_ind * 3 )
+                        desired_rope_delta.first.segment< 3 >( min_ind * 3 ) =
+                                desired_rope_delta.first.segment< 3 >( min_ind * 3 )
                                 + ( cover_point - object_configuration.block< 3, 1 >( 0, min_ind ) );
+
+                        desired_rope_delta.second( min_ind * 3 ) += 1.0;
+                        desired_rope_delta.second( min_ind * 3 + 1 ) += 1.0;
+                        desired_rope_delta.second( min_ind * 3 + 2 ) += 1.0;
                     }
                 }
 
-                return desired_object_delta;
+                return desired_rope_delta;
             }
 
         private:
@@ -196,15 +201,16 @@ namespace smmap
                 return error.sum();
             }
 
-            virtual Eigen::VectorXd calculateObjectDesiredDelta_impl(
+            virtual std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectDesiredDelta_impl(
                     const WorldState& world_state ) const
             {
                 ROS_INFO_NAMED( "cloth_table_coverage" , "Finding 'best' cloth delta" );
 
                 const ObjectPointSet& object_configuration = world_state.object_configuration_;
 
-                Eigen::VectorXd desired_cloth_delta =
-                        Eigen::VectorXd::Zero( object_configuration.cols() * 3 );
+                std::pair< Eigen::VectorXd, Eigen::VectorXd > desired_cloth_delta =
+                        std::make_pair( Eigen::VectorXd::Zero( object_configuration.cols() * 3 ),
+                                        Eigen::VectorXd::Zero( object_configuration.cols() * 3 ) );
 
                 // for every cover point, find the nearest deformable object point
                 for ( long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++ )
@@ -227,11 +233,14 @@ namespace smmap
 
                     if ( std::sqrt( min_dist_squared ) > 0.04/20.0 )
                     {
-                        desired_cloth_delta.segment< 3 >( min_ind * 3 ) =
-                                desired_cloth_delta.segment< 3 >( min_ind * 3 )
+                        desired_cloth_delta.first.segment< 3 >( min_ind * 3 ) =
+                                desired_cloth_delta.first.segment< 3 >( min_ind * 3 )
                                 + ( cover_point - object_configuration.block< 3, 1 >( 0, min_ind ) );
-                    }
 
+                        desired_cloth_delta.second( min_ind * 3 ) += 1.0;
+                        desired_cloth_delta.second( min_ind * 3 + 1 ) += 1.0;
+                        desired_cloth_delta.second( min_ind * 3 + 2 ) += 1.0;
+                    }
                 }
 
                 return desired_cloth_delta;
@@ -297,27 +306,23 @@ namespace smmap
                 return error;
             }
 
-            virtual Eigen::VectorXd calculateObjectDesiredDelta_impl(
+            virtual std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectDesiredDelta_impl(
                     const WorldState& world_state ) const
             {
                 ROS_INFO_NAMED( "cloth_colab_folding" , "Finding 'best' cloth delta" );
                 const ObjectPointSet& object_configuration = world_state.object_configuration_;
 
-                Eigen::VectorXd desired_cloth_delta =
-                        Eigen::VectorXd::Zero( object_configuration.cols() * 3 );
-
-                ObjectPointSet robot_cloth_points_desired = ObjectPointSet::Zero( 3, (long)mirror_map_.size() );
+                std::pair< Eigen::VectorXd, Eigen::VectorXd > desired_cloth_delta =
+                        std::make_pair( Eigen::VectorXd::Zero( object_configuration.cols() * 3 ),
+                                        Eigen::VectorXd::Ones( object_configuration.cols() * 3 ) );
 
                 long robot_cloth_points_ind = 0;
                 for ( std::map< long, long >::const_iterator ittr = mirror_map_.begin();
                       ittr != mirror_map_.end(); ittr++, robot_cloth_points_ind++ )
                 {
-                    desired_cloth_delta.segment< 3 >( ittr->second * 3) =
+                    desired_cloth_delta.first.segment< 3 >( ittr->second * 3) =
                             point_reflector_.reflect( object_configuration.block< 3, 1 >( 0, ittr->first ) )
                             - object_configuration.block< 3, 1 >( 0, ittr->second );
-
-                    robot_cloth_points_desired.block< 3, 1 >( 0, robot_cloth_points_ind ) =
-                            point_reflector_.reflect( object_configuration.block< 3, 1 >( 0, ittr->first ) );
                 }
 
                 return desired_cloth_delta;

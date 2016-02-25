@@ -13,8 +13,9 @@ using namespace EigenHelpersConversions;
 Task::Task( ros::NodeHandle& nh )
     : nh_( nh )
     , ph_( "~" )
-    , vis_( nh )
-    , task_specification_( TaskSpecification::MakeTaskSpecification( nh ) )
+    , gripper_collision_checker_( nh_ )
+    , vis_( nh_ )
+    , task_specification_( TaskSpecification::MakeTaskSpecification( nh_ ) )
     , grippers_data_( GetGrippersData( nh_) )
     , error_fn_( createErrorFunction() )
     , model_prediction_fn_( createModelPredictionFunction() )
@@ -24,6 +25,7 @@ Task::Task( ros::NodeHandle& nh )
     , gripper_collision_check_fn_( createGripperCollisionCheckFunction() )
     , task_desired_object_delta_fn_( createTaskDesiredObjectDeltaFunction() )
     , model_set_( update_model_utility_fn_ )
+    , planner_( error_fn_, model_prediction_fn_, model_suggested_grippers_traj_fn_, get_model_utility_fn_, vis_ )
 
 {
     initializeModelSet();
@@ -31,7 +33,9 @@ Task::Task( ros::NodeHandle& nh )
 }
 
 void Task::execute()
-{}
+{
+    assert(false && "This is not done yet" );
+}
 
 ////////////////////////////////////////////////////////////////////
 // Internal initialization helpers
@@ -142,11 +146,15 @@ void Task::initializeLogging()
 
 ErrorFunctionType Task::createErrorFunction()
 {
+    return std::bind( &TaskSpecification::calculateError,
+                      task_specification_,
+                      std::placeholders::_1 );
 }
 
 ModelPredictionFunctionType Task::createModelPredictionFunction()
 {
-    return std::bind( &ModelSet::getPredictions, &model_set_,
+    return std::bind( &ModelSet::getPredictions,
+                      &model_set_,
                       std::placeholders::_1,
                       std::placeholders::_2,
                       std::placeholders::_3,
@@ -155,11 +163,20 @@ ModelPredictionFunctionType Task::createModelPredictionFunction()
 
 ModelSuggestedGrippersTrajFunctionType Task::createModelSuggestedGrippersTrajFunction()
 {
+    return std::bind( &ModelSet::getSuggestedGrippersTrajectories,
+                      &model_set_,
+                      std::placeholders::_1,
+                      std::placeholders::_2,
+                      std::placeholders::_3,
+                      std::placeholders::_4,
+                      std::placeholders::_5,
+                      std::placeholders::_6 );
 }
 
 GetModelUtilityFunctionType Task::createGetModelUtilityFunction()
 {
-    return std::bind( &ModelSet::getModelUtility, &model_set_ );
+    return std::bind( &ModelSet::getModelUtility,
+                      &model_set_ );
 }
 
 UpdateModelUtilityFunctionType Task::createUpdateModelUtilityFunction()
@@ -168,8 +185,14 @@ UpdateModelUtilityFunctionType Task::createUpdateModelUtilityFunction()
 
 GripperCollisionCheckFunctionType Task::createGripperCollisionCheckFunction()
 {
+    return std::bind( &GripperCollisionChecker::gripperCollisionCheck,
+                      &gripper_collision_checker_,
+                      std::placeholders::_1 );
 }
 
 TaskDesiredObjectDeltaFunctionType Task::createTaskDesiredObjectDeltaFunction()
 {
+    return std::bind( &TaskSpecification::calculateObjectDesiredDelta,
+                      task_specification_,
+                      std::placeholders::_1 );
 }

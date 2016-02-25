@@ -41,7 +41,8 @@ AllGrippersPoseTrajectory Planner::getNextTrajectory(
         const int planning_horizion,
         const double dt,
         const double max_gripper_velocity,
-        const double obstacle_avoidance_scale ) const
+        const double obstacle_avoidance_scale,
+        const double stretching_corection_scale ) const
 {
     // Querry each model for it's best trajectory
     ROS_INFO_STREAM_NAMED( "planner", "Getting trajectory suggestions of length " << planning_horizion );
@@ -49,9 +50,10 @@ AllGrippersPoseTrajectory Planner::getNextTrajectory(
             model_suggested_grippers_traj_fn_(
                 world_current_state,
                 planning_horizion,
-                max_gripper_velocity,
                 dt,
-                obstacle_avoidance_scale );
+                max_gripper_velocity,
+                obstacle_avoidance_scale,
+                stretching_corection_scale );
 
     // Get the utility of each model
     const std::vector< double >& model_utility = get_model_utility_fn_();

@@ -70,7 +70,7 @@ double TaskSpecification::calculateError(
     return calculateError_impl( object_configuration );
 }
 
-Eigen::VectorXd TaskSpecification::calculateObjectDesiredDelta(
+std::pair<Eigen::VectorXd, Eigen::VectorXd> TaskSpecification::calculateObjectDesiredDelta(
         const WorldState& world_state ) const
 {
     return calculateObjectDesiredDelta_impl( world_state );

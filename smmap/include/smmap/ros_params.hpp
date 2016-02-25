@@ -145,6 +145,11 @@ namespace smmap
     {
         return ROSHelpers::GetParam< std::string >( nh, "confidence_image_topic", "confidence_image" );
     }
+
+    inline std::string GetGripperCollisionCheckTopic( ros::NodeHandle& nh )
+    {
+        return ROSHelpers::GetParam< std::string >( nh, "get_gripper_collision_check_topic", "get_gripper_collision_check" );
+    }
 }
 
 #endif // ROS_PARAMS_HPP

@@ -4,6 +4,7 @@
 #include <functional>
 
 #include "smmap/trajectory.hpp"
+#include "smmap/visualization_tools.h"
 
 namespace smmap
 {
@@ -25,7 +26,8 @@ namespace smmap
             const int,                              /* planning horizion */
             const double,                           /* dt */
             const double,                           /* max gripper velocity */
-            const double                            /* obstacle avoidance scale */
+            const double,                           /* obstacle avoidance scale */
+            const double                            /* stretching correction scale */
             ) >
     ModelSuggestedGrippersTrajFunctionType;
 
@@ -48,7 +50,7 @@ namespace smmap
             ) >
     GripperCollisionCheckFunctionType;
 
-    typedef std::function< std::pair< Eigen::VectorXd, Eigen::MatrixXd >(
+    typedef std::function< std::pair< Eigen::VectorXd, Eigen::VectorXd >(
             const WorldState&                       /* current world state */
             ) >
     TaskDesiredObjectDeltaFunctionType;

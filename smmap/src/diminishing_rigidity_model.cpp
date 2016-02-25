@@ -142,45 +142,14 @@ ObjectPointSet DiminishingRigidityModel::getFinalConfiguration(
     return final_configuration;
 }
 
-/**
- * @brief DiminishingRigidityModel::getObjectDelta
- * @param object_current_configuration
- * @param grippers_pose
- * @param grippers_velocity
- * @param dt
- * @return
- */
-ObjectPointSet DiminishingRigidityModel::getObjectDelta(
-        const ObjectPointSet& object_initial_configuration,
-        const AllGrippersSinglePose & grippers_pose,
-        const AllGrippersSingleVelocity& grippers_velocity,
-        double dt ) const
-{
-    const Eigen::MatrixXd J = computeGrippersToObjectJacobian(
-                grippers_pose,
-                object_initial_configuration );
-
-    Eigen::MatrixXd delta = Eigen::MatrixXd::Zero( num_nodes_ * 3, 1 );
-
-    // Move the object based on the movement of each gripper
-    for ( size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++ )
-    {
-        // Assume that our Jacobian is correct, and predict where we will end up
-        delta += J.block( 0, 6 * gripper_ind, J.rows(), 6 )
-                * grippers_velocity[gripper_ind] * dt;
-    }
-
-    delta.resizeLike( object_initial_configuration );
-    return delta;
-}
-
 std::pair< AllGrippersPoseTrajectory, ObjectTrajectory >
 DiminishingRigidityModel::getSuggestedGrippersTrajectory(
         const WorldState& world_initial_state,
         const int planning_horizion,
         const double dt,
         const double max_gripper_velocity,
-        const double obstacle_avoidance_scale ) const
+        const double obstacle_avoidance_scale,
+        const double stretching_correction_threshold ) const
 {
     ROS_INFO_STREAM_NAMED( "diminishing_rigidity_model",
                            "Creating suggested grippers trajectory: " <<
@@ -195,8 +164,7 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
 
     auto suggested_traj = std::make_pair< AllGrippersPoseTrajectory, ObjectTrajectory >(
                 AllGrippersPoseTrajectory( planning_horizion + 1, AllGrippersSinglePose( grippers_data_.size() ) ),
-                ObjectTrajectory( planning_horizion + 1, ObjectPointSet( 3, num_nodes_ ) )
-                );
+                ObjectTrajectory( planning_horizion + 1, ObjectPointSet( 3, num_nodes_ ) ) );
 
     // Initialize the starting point of the trajectory with the current gripper
     // poses and object configuration
@@ -215,8 +183,15 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
         ////////////////////////////////////////////////////////////////////////
 
         // Retrieve the desired object velocity (p_dot)
-        const std::pair< Eigen::VectorXd, Eigen::MatrixXd > desired_object_velocity
+        std::pair< Eigen::VectorXd, Eigen::MatrixXd > desired_object_velocity
                 = task_desired_object_delta_fn_( world_current_state );
+
+        const std::pair< Eigen::VectorXd, Eigen::MatrixXd > stretching_correction =
+                computeStretchingCorrection( world_current_state.object_configuration_,
+                                             stretching_correction_threshold );
+
+        desired_object_velocity.first += stretching_correction.first;
+        desired_object_velocity.second += stretching_correction.second;
 
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
         const Eigen::MatrixXd J = computeGrippersToObjectJacobian(
@@ -312,6 +287,39 @@ void DiminishingRigidityModel::perturbModel( std::mt19937_64& generator )
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
+ * @brief DiminishingRigidityModel::getObjectDelta
+ * @param object_current_configuration
+ * @param grippers_pose
+ * @param grippers_velocity
+ * @param dt
+ * @return
+ */
+ObjectPointSet DiminishingRigidityModel::getObjectDelta(
+        const ObjectPointSet& object_initial_configuration,
+        const AllGrippersSinglePose & grippers_pose,
+        const AllGrippersSingleVelocity& grippers_velocity,
+        double dt ) const
+{
+    const Eigen::MatrixXd J = computeGrippersToObjectJacobian(
+                grippers_pose,
+                object_initial_configuration );
+
+    Eigen::MatrixXd delta = Eigen::MatrixXd::Zero( num_nodes_ * 3, 1 );
+
+    // Move the object based on the movement of each gripper
+    for ( size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++ )
+    {
+        // Assume that our Jacobian is correct, and predict where we will end up
+        delta += J.block( 0, 6 * gripper_ind, J.rows(), 6 )
+                * grippers_velocity[gripper_ind] * dt;
+    }
+
+    delta.resizeLike( object_initial_configuration );
+    return delta;
+}
+
+
+/**
  * @brief DiminishingRigidityModel::computeObjectToGripperJacobian
  * Computes a Jacobian that converts gripper velocities in the individual
  * gripper frames into object velocities in the world frame
@@ -364,4 +372,50 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(
     }
 
     return J;
+}
+
+/**
+ * @brief computeStretchingCorrection
+ * @param object_configuration
+ * @return return.first is the desired movement of the object
+ *         return.second is the importance of that part of the movement
+ */
+std::pair< Eigen::VectorXd, Eigen::VectorXd > DiminishingRigidityModel::computeStretchingCorrection(
+        const ObjectPointSet& object_configuration,
+        const double stretching_correction_threshold ) const
+{
+    std::pair< Eigen::VectorXd, Eigen::VectorXd > stretching_correction =
+            std::make_pair( Eigen::VectorXd::Zero( object_configuration.cols() * 3 ),
+                            Eigen::VectorXd::Zero( object_configuration.cols() * 3 ) );
+
+    Eigen::MatrixXd node_distance_delta =
+            distanceMatrix( object_configuration )
+            - object_initial_node_distance_;
+
+    for ( long first_node = 0; first_node < node_distance_delta.rows(); first_node++)
+    {
+        for ( long second_node = first_node + 1; second_node < node_distance_delta.cols(); second_node++)
+        {
+            if ( node_distance_delta( first_node, second_node ) > stretching_correction_threshold )
+            {
+                // The correction vector points from the first node to the second node,
+                // and is half the length of the "extra" distance
+                Eigen::Vector3d correction_vector = 0.5 * node_distance_delta( first_node, second_node )
+                        * ( object_configuration.block< 3, 1 >( 0, second_node )
+                            - object_configuration.block< 3, 1 >( 0, first_node ) );
+
+                stretching_correction.first.segment< 3 >( 3 * first_node ) += correction_vector;
+                stretching_correction.first.segment< 3 >( 3 * second_node ) -= correction_vector;
+
+                stretching_correction.second( 3 * first_node ) += 1;
+                stretching_correction.second( 3 * first_node + 1 ) += 1;
+                stretching_correction.second( 3 * first_node + 2 ) += 1;
+                stretching_correction.second( 3 * second_node ) += 1;
+                stretching_correction.second( 3 * second_node + 1 ) += 1;
+                stretching_correction.second( 3 * second_node + 2 ) += 1;
+            }
+        }
+    }
+
+    return stretching_correction;
 }

@@ -4,42 +4,11 @@
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/log.hpp>
 
+#include "smmap/gripper_collision_checker.h"
 #include "smmap/model_set.h"
 #include "smmap/planner.h"
 #include "smmap/task_specification.h"
 #include "smmap/task_function_pointer_types.h"
-
-/*
-Eigen::VectorXd DiminishingRigidityModel::computeStretchingCorrection(
-        const ObjectPointSet& object_current_configuration ) const
-{
-    Eigen::VectorXd stretching_correction = Eigen::VectorXd::Zero( object_current_configuration.cols() * 3 );
-
-    Eigen::MatrixXd node_distance_delta =
-            distanceMatrix( object_current_configuration )
-            - object_initial_node_distance_;
-
-    for ( long first_node = 0; first_node < node_distance_delta.rows(); first_node++)
-    {
-        for ( long second_node = first_node + 1; second_node < node_distance_delta.cols(); second_node++)
-        {
-            if ( node_distance_delta( first_node, second_node ) > stretching_correction_threshold_ )
-            {
-                // The correction vector points from the first node to the second node,
-                // and is half the length of the "extra" distance
-                Eigen::Vector3d correction_vector = 0.5 * node_distance_delta( first_node, second_node )
-                        * ( object_current_configuration.block< 3, 1 >( 0, second_node )
-                            - object_current_configuration.block< 3, 1 >( 0, first_node ) );
-
-                stretching_correction.segment< 3 >( 3 * first_node ) += correction_vector;
-                stretching_correction.segment< 3 >( 3 * second_node ) -= correction_vector;
-            }
-        }
-    }
-
-    return stretching_correction;
-}
-*/
 
 namespace smmap
 {
@@ -63,6 +32,7 @@ namespace smmap
 
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
+            GripperCollisionChecker gripper_collision_checker_;
             Visualizer vis_;
 
             ////////////////////////////////////////////////////////////////////
@@ -122,10 +92,12 @@ namespace smmap
                     const WorldState& world_state );
 
             ////////////////////////////////////////////////////////////////////
-            // ModelSet
+            //
             ////////////////////////////////////////////////////////////////////
 
             ModelSet model_set_;
+            Planner planner_;
+
     };
 }
 

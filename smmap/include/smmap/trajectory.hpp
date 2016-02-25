@@ -53,7 +53,7 @@ namespace smmap
         // TODO: modify the feedback to change this data ordering
         size_t num_grippers = feedback_ros.gripper_poses.size();
         feedback_eigen.gripper_collision_data_.reserve( num_grippers );
-        for ( size_t gripper_ind; gripper_ind < num_grippers; gripper_ind++ )
+        for ( size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++ )
         {
             feedback_eigen.gripper_collision_data_.push_back(
                         CollisionData(
