@@ -67,8 +67,8 @@ endif( USE_OPEN_MP )
 add_library( ${PROJECT_NAME}
     include/${PROJECT_NAME}/collision_helpers.hpp
     include/${PROJECT_NAME}/gripper_helpers.hpp
-    include/${PROJECT_NAME}/gripper_collision_checker.h
-    src/gripper_collision_checker.cpp
+    include/${PROJECT_NAME}/gripper_collision_checker.hpp
+    include/${PROJECT_NAME}/robot_interface.hpp
     include/${PROJECT_NAME}/ros_params.hpp
     include/${PROJECT_NAME}/ros_communication_helpers.hpp
     include/${PROJECT_NAME}/task.h

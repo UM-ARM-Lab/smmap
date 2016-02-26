@@ -58,7 +58,7 @@ namespace smmap
         return ROSHelpers::GetParam( nh, "use_multi_model", false );
     }
 
-    inline size_t GetPlanningHorizon( ros::NodeHandle& nh )
+    inline int GetPlanningHorizon( ros::NodeHandle& nh )
     {
         return ROSHelpers::GetParam( nh, "planning_horizion", 1 );
     }

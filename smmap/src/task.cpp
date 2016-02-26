@@ -1,8 +1,5 @@
 #include <boost/filesystem.hpp>
-#include <boost/thread.hpp>
-
-#include <arc_utilities/eigen_helpers_conversions.hpp>
-#include <ros/callback_queue.h>
+#include <mutex>
 
 #include "smmap/task.h"
 #include "smmap/ros_params.hpp"
@@ -12,14 +9,14 @@
 using namespace smmap;
 using namespace EigenHelpersConversions;
 
-Task::Task( ros::NodeHandle& nh )
-    : nh_( nh )
+Task::Task( RobotInterface& robot,
+            Visualizer& vis,
+            TaskSpecification::Ptr task_specification )
+    : nh_()
     , ph_( "~" )
-    , gripper_collision_checker_( nh_ )
-    , vis_( nh_ )
-    , cmd_grippers_traj_client_( nh_, GetCommandGripperTrajTopic( nh_ ), false )
-    , task_specification_( TaskSpecification::MakeTaskSpecification( nh_ ) )
-    , grippers_data_( GetGrippersData( nh_) )
+    , robot_( robot )
+    , vis_( vis )
+    , task_specification_( task_specification )
     , error_fn_( createErrorFunction() )
     , model_prediction_fn_( createModelPredictionFunction() )
     , model_suggested_grippers_traj_fn_( createModelSuggestedGrippersTrajFunction() )
@@ -38,138 +35,90 @@ Task::Task( ros::NodeHandle& nh )
 
 void Task::execute()
 {
-    // TODO: remove this hardcoded spin rate
-    // TODO: make this std, not boost
-    boost::thread spin_thread( boost::bind( &Task::spin, 1000 ) );
-
-    // TODO: make a "RobotBridge" class (or similar)
-    ROS_INFO_NAMED( "task", "Waiting for the robot gripper action server to be available" );
-    cmd_grippers_traj_client_.waitForServer();
-
-    const size_t planning_horizion = GetPlanningHorizon( ph_ );
+    const int planning_horizion = GetPlanningHorizon( ph_ );
 
     // Run the planner at whatever rate we've been given
     ROS_INFO_STREAM_NAMED( "task", "Running our planner with a horizion of " << planning_horizion );
-    std::vector< WorldState > world_feedback;
+    std::vector< WorldState > world_feedback = robot_.start();
 
-    ROS_INFO_NAMED( "planner", "Kickstarting the planner with a no-op" );
-    world_feedback = sendGripperTrajectory( noOpTrajectoryGoal( 2 ) );
-
-    while ( ros::ok() )
+    while ( robot_.ok() )
     {
-        // TODO: more magic numbers
-        #warning "More magic numbers"
-        // TODO: this is already being calculated the the planner
-        auto task_desired_motion_weights = task_specification_->calculateObjectDesiredDelta( world_feedback.back() ).second;
+        const auto& current_world_state = world_feedback.back();
+
+        std::pair< Eigen::VectorXd, Eigen::VectorXd > first_step_desired_motion;
+        std::atomic_bool first_step_desired_motion_calculated( false );
+        std::mutex first_step_desired_motion_mtx;
+
+        // Update our function callbacks for the models
+        TaskDesiredObjectDeltaFunctionType caching_task_desired_object_delta_fn =
+                [&]( const WorldState& state )
+        {
+            if ( state.sim_time_ == current_world_state.sim_time_ )
+            {
+                if ( first_step_desired_motion_calculated.load() )
+                {
+                    return first_step_desired_motion;
+                }
+                else
+                {
+                    std::lock_guard< std::mutex > lock( first_step_desired_motion_mtx );
+                    if ( first_step_desired_motion_calculated.load() )
+                    {
+                        return first_step_desired_motion;
+                    }
+                    else
+                    {
+                        first_step_desired_motion = task_specification_->calculateObjectDesiredDelta( state );
+                        first_step_desired_motion_calculated.store( true );
+                        return first_step_desired_motion;
+                    }
+                }
+            }
+            else
+            {
+                return task_specification_->calculateObjectDesiredDelta( state );
+            }
+        };
+        DeformableModel::SetCallbackFunctions( gripper_collision_check_fn_,
+                                               caching_task_desired_object_delta_fn );
+
         AllGrippersPoseTrajectory next_trajectory = planner_.getNextTrajectory(
-                    world_feedback.back(),
+                    current_world_state,
                     planning_horizion,
-                    0.01, // dt
-                    0.05/20.0/0.01, // max velocity
+                    RobotInterface::DT,
+                    RobotInterface::MAX_GRIPPER_VELOCITY,
                     task_specification_->getCollisionScalingFactor(),
-                    // TODO: why is this throwing a conversion warning?
                     task_specification_->getStretchingScalingThreshold() );
+
+        assert( first_step_desired_motion_calculated.load() );
 
         // delete the starting pose which should match the current pose
 //        next_trajectory.erase( next_trajectory.begin() );
         ROS_INFO_NAMED( "task", "Sending 'best' trajectory" );
-        world_feedback = sendGripperTrajectory( toRosGoal( next_trajectory ) );
+        world_feedback = robot_.sendGripperTrajectory( next_trajectory );
 
+        // TODO: this is already being calculated the the planner
         ROS_INFO_NAMED( "task", "Updating models" );
-        model_set_.updateModels( world_feedback, task_desired_motion_weights );
+        model_set_.updateModels( world_feedback, first_step_desired_motion.second );
 
-        // TODO: only works with 1 model
-        LOG_COND( loggers.at( "time" ), logging_enabled_,
-                  world_feedback.back().sim_time_ );
+        // Log stuff if so desired
+        {
+            // TODO: only works with 1 model
+            LOG_COND( loggers.at( "time" ), logging_enabled_,
+                      world_feedback.back().sim_time_ );
 
-        LOG_COND( loggers.at( "error"), logging_enabled_,
-                  task_specification_->calculateError( world_feedback.back().object_configuration_ ) );
+            LOG_COND( loggers.at( "error"), logging_enabled_,
+                      task_specification_->calculateError( world_feedback.back().object_configuration_ ) );
 
-        LOG_COND( loggers.at( "utility"), logging_enabled_,
-                  model_set_.getModelUtility()[0] );
+            LOG_COND( loggers.at( "utility"), logging_enabled_,
+                      model_set_.getModelUtility()[0] );
+        }
 
         if ( task_specification_->maxTime() < world_feedback.back().sim_time_ )
         {
-            ros::shutdown();
+            robot_.shutdown();
         }
     }
-
-    ROS_INFO_NAMED( "task", "Terminating" );
-    spin_thread.join();
-}
-
-////////////////////////////////////////////////////////////////////
-// ROS objects and helpers
-////////////////////////////////////////////////////////////////////
-
-void Task::spin( double loop_rate )
-{
-    ROS_INFO_NAMED( "task" , "Starting feedback spinner" );
-    while ( ros::ok() )
-    {
-        ros::getGlobalCallbackQueue()->callAvailable( ros::WallDuration( loop_rate ) );
-    }
-}
-
-std::vector< WorldState > Task::sendGripperTrajectory(
-        const smmap_msgs::CmdGrippersTrajectoryGoal& goal )
-{
-    std::vector< WorldState > feedback;
-
-    cmd_grippers_traj_client_.sendGoalAndWait( goal );
-    if ( cmd_grippers_traj_client_.getState() == actionlib::SimpleClientGoalState::SUCCEEDED )
-    {
-        feedback = ParseGripperActionResult( cmd_grippers_traj_client_.getResult() );
-    }
-    else
-    {
-        ROS_FATAL_NAMED( "planner", "Sending a goal to the robot failed" );
-    }
-
-    return feedback;
-}
-
-smmap_msgs::CmdGrippersTrajectoryGoal Task::noOpTrajectoryGoal( size_t num_no_op )
-{
-    smmap_msgs::CmdGrippersTrajectoryGoal goal;
-    goal.gripper_names = GetGripperNames( grippers_data_ );
-
-    smmap_msgs::VectorPose grippers_pose;
-    grippers_pose.pose.resize( grippers_data_.size() );
-    for ( size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++ )
-    {
-        ros::ServiceClient gripper_pose_client =
-            nh_.serviceClient< smmap_msgs::GetGripperPose >( GetGripperPoseTopic( nh_ ) );
-        gripper_pose_client.waitForExistence();
-
-        smmap_msgs::GetGripperPose pose_srv_data;
-        pose_srv_data.request.name = grippers_data_[gripper_ind].name;
-        if ( !gripper_pose_client.call( pose_srv_data ) )
-        {
-            ROS_FATAL_STREAM_NAMED( "task", "Unabled to retrieve gripper pose: " << grippers_data_[gripper_ind].name );
-        }
-
-        grippers_pose.pose[gripper_ind] = pose_srv_data.response.pose;
-    }
-
-    goal.trajectory.resize( num_no_op, grippers_pose );
-
-    return goal;
-}
-
-smmap_msgs::CmdGrippersTrajectoryGoal Task::toRosGoal(
-        const AllGrippersPoseTrajectory& trajectory )
-{
-    smmap_msgs::CmdGrippersTrajectoryGoal goal;
-    goal.gripper_names = GetGripperNames( grippers_data_ );
-
-    goal.trajectory.resize( trajectory.size() );
-    for ( size_t time_ind = 0; time_ind < trajectory.size(); time_ind++ )
-    {
-        goal.trajectory[time_ind].pose = VectorAffine3dToVectorGeometryPose( trajectory[time_ind] );
-    }
-
-    return goal;
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -179,7 +128,7 @@ smmap_msgs::CmdGrippersTrajectoryGoal Task::toRosGoal(
 void Task::initializeModelSet()
 {
     // Initialze each model type with the shared data
-    DeformableModel::SetGrippersData( grippers_data_ );
+    DeformableModel::SetGrippersData( robot_.getGrippersData() );
     DeformableModel::SetCallbackFunctions( gripper_collision_check_fn_,
                                            task_desired_object_delta_fn_ );
 
@@ -281,7 +230,7 @@ void Task::initializeLogging()
         loggers.insert( std::make_pair< std::string, Log::Log > (
                             "utility",
                             Log::Log( log_folder + "utility.txt", false ) ) ) ;
-
+/*
 //        loggers.insert( std::make_pair< std::string, Log::Log > (
 //                            "model_chosen",
 //                            Log::Log( log_folder + "model_chosen.txt", false ) ) ) ;
@@ -297,6 +246,7 @@ void Task::initializeLogging()
 //        loggers.insert( std::make_pair< std::string, Log::Log > (
 //                            "object_predicted_configuration",
 //                            Log::Log( log_folder + "object_predicted_configuration.txt", false ) ) ) ;
+*/
     }
 }
 
@@ -343,8 +293,7 @@ GetModelUtilityFunctionType Task::createGetModelUtilityFunction()
 
 UpdateModelUtilityFunctionType Task::createUpdateModelUtilityFunction()
 {
-    return std::bind( &Task::updateUtility,
-                      this,
+    return std::bind( &Planner::UpdateUtility,
                       std::placeholders::_1,
                       std::placeholders::_2,
                       std::placeholders::_3,
@@ -353,8 +302,8 @@ UpdateModelUtilityFunctionType Task::createUpdateModelUtilityFunction()
 
 GripperCollisionCheckFunctionType Task::createGripperCollisionCheckFunction()
 {
-    return std::bind( &GripperCollisionChecker::gripperCollisionCheck,
-                      &gripper_collision_checker_,
+    return std::bind( &RobotInterface::checkGripperCollision,
+                      &robot_,
                       std::placeholders::_1 );
 }
 
@@ -363,19 +312,4 @@ TaskDesiredObjectDeltaFunctionType Task::createTaskDesiredObjectDeltaFunction()
     return std::bind( &TaskSpecification::calculateObjectDesiredDelta,
                       task_specification_,
                       std::placeholders::_1 );
-}
-
-double Task::updateUtility( const double old_utility,
-                            const WorldState& world_state,
-                            const ObjectPointSet& prediction,
-                            const Eigen::VectorXd& weights ) const
-{
-    const double distance = distanceWeighted(
-                world_state.object_configuration_,
-                prediction,
-                weights );
-    // TODO: use dt here somewhere, plus the number of nodes, etc.
-    const double new_utility = 1.0/(1.0 + std::sqrt( std::sqrt( distance ) ) );
-    #warning "Another magic number here"
-    return anneal( old_utility, new_utility, 0.1 );
 }

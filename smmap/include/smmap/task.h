@@ -1,11 +1,11 @@
 #ifndef TASK_H
 #define TASK_H
 
-#include <actionlib/client/simple_action_client.h>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/log.hpp>
 
-#include "smmap/gripper_collision_checker.h"
+#include "smmap/robot_interface.hpp"
+
 #include "smmap/model_set.h"
 #include "smmap/planner.h"
 #include "smmap/task_specification.h"
@@ -16,7 +16,9 @@ namespace smmap
     class Task
     {
         public:
-            Task( ros::NodeHandle& nh );
+            Task( RobotInterface& robot,
+                  Visualizer& vis,
+                  TaskSpecification::Ptr task_specification );
             void execute();
 
         private:
@@ -31,29 +33,16 @@ namespace smmap
             // ROS objects and helpers
             ////////////////////////////////////////////////////////////////////
 
-            // Our internal version of ros::spin()
-            static void spin( double loop_rate );
-
-            std::vector< WorldState > sendGripperTrajectory(
-                    const smmap_msgs::CmdGrippersTrajectoryGoal& goal );
-
-            smmap_msgs::CmdGrippersTrajectoryGoal noOpTrajectoryGoal( size_t num_no_op );
-
-            smmap_msgs::CmdGrippersTrajectoryGoal toRosGoal(
-                    const AllGrippersPoseTrajectory& trajectory );
-
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
-            GripperCollisionChecker gripper_collision_checker_;
-            Visualizer vis_;
-            actionlib::SimpleActionClient< smmap_msgs::CmdGrippersTrajectoryAction > cmd_grippers_traj_client_;
+            RobotInterface& robot_;
+            Visualizer& vis_;
 
             ////////////////////////////////////////////////////////////////////
             // Task specific data
             ////////////////////////////////////////////////////////////////////
 
             std::shared_ptr< TaskSpecification > task_specification_;
-            std::vector< GripperData > grippers_data_;
 
             ////////////////////////////////////////////////////////////////////
             // Logging objects
@@ -88,11 +77,6 @@ namespace smmap
             UpdateModelUtilityFunctionType createUpdateModelUtilityFunction();
             GripperCollisionCheckFunctionType createGripperCollisionCheckFunction();
             TaskDesiredObjectDeltaFunctionType createTaskDesiredObjectDeltaFunction();
-
-            double updateUtility( const double old_utility,
-                                  const WorldState& world_state,
-                                  const ObjectPointSet& prediction,
-                                  const Eigen::VectorXd& weights ) const;
 
             ////////////////////////////////////////////////////////////////////
             //

@@ -258,8 +258,6 @@ void DeformableModel::SetCallbackFunctions(
         const GripperCollisionCheckFunctionType& gripper_collision_check_fn,
         const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn )
 {
-    assert( function_pointers_initialized_.load() == false );
-
     gripper_collision_check_fn_     = gripper_collision_check_fn;
     task_desired_object_delta_fn_   = task_desired_object_delta_fn;
 

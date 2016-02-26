@@ -34,6 +34,11 @@ namespace smmap
                     const double obstacle_avoidance_scale = 100.0*20.0,
                     const double stretching_corection_scale = 0.1/20.0 ) const;
 
+            static double UpdateUtility( const double old_utility,
+                                         const WorldState& world_state,
+                                         const ObjectPointSet& prediction,
+                                         const Eigen::VectorXd& weights );
+
         private:
             const ErrorFunctionType error_fn_;
             const ModelPredictionFunctionType model_prediction_fn_;

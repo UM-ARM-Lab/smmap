@@ -82,30 +82,22 @@ AllGrippersPoseTrajectory Planner::getNextTrajectory(
 //                suggested_trajectories[min_weighted_cost_ind].first,
 //                dt );
 
-    // TODO: deal with multiple predictions, which one is the best?
-//    VectorObjectTrajectory model_predictions = model_set_->makePredictions(
-//                world_feedback.back(),
-//                best_trajectory,
-//                CalculateGrippersVelocities( best_trajectory, dt ),
-//                dt );
-
-
-//    for ( int time_ind = 0; time_ind < planning_horizion; time_ind++ )
-//    {
-//        LOG_COND( loggers.at( "model_chosen"), logging_enabled_,
-//                  min_weighted_cost_ind );
-
-//        LOG_COND( loggers.at( "object_current_configuration" ), logging_enabled_,
-//                  world_feedback[fbk_ind].object_configuration_.format( eigen_io_one_line_ ) );
-
-//        LOG_COND( loggers.at( "suggested_grippers_delta"), logging_enabled_,
-//                  PrintDeltaOneLine( suggested_trajectories[min_weighted_cost_ind].first ) );
-
-//        LOG_COND( loggers.at( "object_predicted_configuration" ), logging_enabled_,
-//                  model_predictions[min_weighted_cost_ind][fbk_ind].format( eigen_io_one_line_ ) );
-//    }
-
     return best_trajectory;
+}
+
+double Planner::UpdateUtility( const double old_utility,
+                               const WorldState& world_state,
+                               const ObjectPointSet& prediction,
+                               const Eigen::VectorXd& weights )
+{
+    const double distance = distanceWeighted(
+                world_state.object_configuration_,
+                prediction,
+                weights );
+    // TODO: use dt here somewhere, plus the number of nodes, etc.
+    const double new_utility = 1.0/(1.0 + std::sqrt( std::sqrt( distance ) ) );
+    #warning "Another magic number here"
+    return anneal( old_utility, new_utility, 0.1 );
 }
 
 ////////////////////////////////////////////////////////////////////////////////

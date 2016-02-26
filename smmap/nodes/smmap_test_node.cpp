@@ -9,7 +9,10 @@ int main( int argc, char* argv[] )
 
     ros::NodeHandle nh;
 
-    Task task( nh );
+    RobotInterface robot( nh );
+    Visualizer vis( nh );
+    TaskSpecification::Ptr task_specification = TaskSpecification::MakeTaskSpecification( nh );
+    Task task( robot, vis, task_specification );
     task.execute();
 
     return 0;
