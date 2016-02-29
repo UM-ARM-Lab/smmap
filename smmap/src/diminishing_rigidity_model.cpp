@@ -163,8 +163,8 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
     const double max_step_size = max_gripper_velocity * dt;
 
     auto suggested_traj = std::make_pair< AllGrippersPoseTrajectory, ObjectTrajectory >(
-                AllGrippersPoseTrajectory( planning_horizion + 1, AllGrippersSinglePose( grippers_data_.size() ) ),
-                ObjectTrajectory( planning_horizion + 1, ObjectPointSet( 3, num_nodes_ ) ) );
+                AllGrippersPoseTrajectory( (size_t)planning_horizion + 1, AllGrippersSinglePose( grippers_data_.size() ) ),
+                ObjectTrajectory( (size_t)planning_horizion + 1, ObjectPointSet( 3, num_nodes_ ) ) );
 
     // Initialize the starting point of the trajectory with the current gripper
     // poses and object configuration
@@ -195,8 +195,8 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
 
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
         const Eigen::MatrixXd J = computeGrippersToObjectJacobian(
-                suggested_traj.first[traj_step-1],
-                suggested_traj.second[traj_step-1] );
+                suggested_traj.first[(size_t)traj_step-1],
+                suggested_traj.second[(size_t)traj_step-1] );
 
         // Find the least-squares fitting to the desired object velocity
         Eigen::VectorXd grippers_velocity_achieve_goal =
@@ -206,7 +206,7 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
         std::vector< CollisionAvoidanceResult > grippers_collision_avoidance_result
                 = ComputeGripperObjectAvoidance(
                     world_current_state.gripper_collision_data_,
-                    suggested_traj.first[traj_step-1], max_step_size );
+                    suggested_traj.first[(size_t)traj_step-1], max_step_size );
 
         ////////////////////////////////////////////////////////////////////////
         // Combine the velocities into a single command velocity
@@ -243,21 +243,21 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
                  actual_gripper_velocity = desired_gripper_vel;
             }
 
-            suggested_traj.first[traj_step][(size_t)gripper_ind] =
-                        suggested_traj.first[traj_step - 1][(size_t)gripper_ind] *
+            suggested_traj.first[(size_t)traj_step][(size_t)gripper_ind] =
+                        suggested_traj.first[(size_t)traj_step - 1][(size_t)gripper_ind] *
                         kinematics::expTwistAffine3d( actual_gripper_velocity, 1 );
 
             Eigen::MatrixXd object_delta = J.block( 0, 6 * gripper_ind, J.rows(), 6 ) * actual_gripper_velocity;
-            object_delta.resizeLike( suggested_traj.second[traj_step] );
+            object_delta.resizeLike( suggested_traj.second[(size_t)traj_step] );
 
             // Assume that our Jacobian is correct, and predict where we will end up (if needed)
-            suggested_traj.second[traj_step] = suggested_traj.second[traj_step-1] + object_delta;
+            suggested_traj.second[(size_t)traj_step] = suggested_traj.second[(size_t)traj_step-1] + object_delta;
 
             // If we are going to do more steps, mutate the current world state
             if ( traj_step + 1 < planning_horizion )
             {
-                world_current_state.object_configuration_ = suggested_traj.second[traj_step];
-                world_current_state.all_grippers_single_pose_ = suggested_traj.first[traj_step];
+                world_current_state.object_configuration_ = suggested_traj.second[(size_t)traj_step];
+                world_current_state.all_grippers_single_pose_ = suggested_traj.first[(size_t)traj_step];
                 world_current_state.gripper_collision_data_ = gripper_collision_check_fn_( world_current_state.all_grippers_single_pose_ );
                 world_current_state.sim_time_ += dt;
             }
@@ -310,7 +310,7 @@ ObjectPointSet DiminishingRigidityModel::getObjectDelta(
     for ( size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++ )
     {
         // Assume that our Jacobian is correct, and predict where we will end up
-        delta += J.block( 0, 6 * gripper_ind, J.rows(), 6 )
+        delta += J.block( 0, 6 * (long)gripper_ind, J.rows(), 6 )
                 * grippers_velocity[gripper_ind] * dt;
     }
 

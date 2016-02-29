@@ -191,21 +191,27 @@ namespace smmap
         return ( set1 - set2 ).norm();
     }
 
+    /**
+     * @brief Calculates the distance between two deformable object
+     * configurations using a weighted L2 norm.
+     *
+     * @param set1
+     * @param set2
+     * @param weights
+     * @return
+     */
     inline double distanceWeighted( const ObjectPointSet& set1,
                                     const ObjectPointSet& set2,
                                     const Eigen::VectorXd& weights )
     {
         Eigen::MatrixXd diff = set1 - set2;
         diff.resize( diff.rows() * diff.cols(), 1 );
-        // TODO: find a better way to do this
-        auto result = diff.transpose() * weights.asDiagonal() * diff;
-        assert( result.rows() == 1 && result.cols() == 1 );
-        return result(0);
+        return std::sqrt( diff.cwiseAbs2().cwiseProduct( weights ).sum() );
     }
 
     /**
      * @brief Calculates the squared distance bewtween two deformable object
-     * configurations using an L2 norm.
+     * configurations using a L2 norm.
      *
      * @param set1 The first object configuration
      * @param set2 The second object configuration
@@ -220,7 +226,7 @@ namespace smmap
 
     /**
      * @brief Calculates the RMS distance between two object trajectories using
-     * an L2 norm for each time step.
+     * a L2 norm for each time step.
      *
      * @param traj1 The first object trajectory
      * @param traj2 The second object trajectory
