@@ -96,6 +96,7 @@ ObjectTrajectory DiminishingRigidityModel::getPrediction(
 {
     assert( grippers_pose_trajectory.size() > 0 );
     assert( grippers_pose_delta_trajectory.size() == grippers_pose_trajectory.size() - 1 );
+    (void)dt;
 
     ObjectTrajectory object_traj( grippers_pose_trajectory.size() );
     object_traj[0] = world_initial_state.object_configuration_;
@@ -105,8 +106,7 @@ ObjectTrajectory DiminishingRigidityModel::getPrediction(
         object_traj[time_ind + 1] = object_traj[time_ind] + getObjectDelta(
                     object_traj[time_ind],
                     grippers_pose_trajectory[time_ind],
-                    grippers_pose_delta_trajectory[time_ind],
-                    dt );
+                    grippers_pose_delta_trajectory[time_ind] );
     }
 
     return object_traj;
@@ -121,22 +121,22 @@ ObjectTrajectory DiminishingRigidityModel::getPrediction(
  */
 ObjectPointSet DiminishingRigidityModel::getFinalConfiguration(
         const WorldState& world_initial_state,
-        const std::vector< AllGrippersSinglePose >& grippers_trajectory,
-        const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+        const AllGrippersPoseTrajectory& gripper_pose_trajectory,
+        const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
         double dt ) const
 {
-    assert( grippers_trajectory.size() > 0 );
-    assert( grippers_velocities.size() == grippers_trajectory.size() - 1 );
+    assert( gripper_pose_trajectory.size() > 0 );
+    assert( gripper_pose_delta_trajectory.size() == gripper_pose_trajectory.size() - 1 );
+    (void)dt;
 
     ObjectPointSet final_configuration = world_initial_state.object_configuration_;
 
-    for ( size_t time_ind = 0; time_ind < grippers_velocities.size(); time_ind++ )
+    for ( size_t time_ind = 0; time_ind < gripper_pose_delta_trajectory.size(); time_ind++ )
     {
         final_configuration += getObjectDelta(
                     final_configuration,
-                    grippers_trajectory[time_ind],
-                    grippers_velocities[time_ind],
-                    dt );
+                    gripper_pose_trajectory[time_ind],
+                    gripper_pose_delta_trajectory[time_ind] );
     }
 
     return final_configuration;
@@ -162,19 +162,19 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
 
     const double max_step_size = max_gripper_velocity * dt;
 
-    auto suggested_traj = std::make_pair< AllGrippersPoseTrajectory, ObjectTrajectory >(
-                AllGrippersPoseTrajectory( (size_t)planning_horizion + 1, AllGrippersSinglePose( grippers_data_.size() ) ),
-                ObjectTrajectory( (size_t)planning_horizion + 1, ObjectPointSet( 3, num_nodes_ ) ) );
+    auto suggested_traj =
+            std::make_pair< AllGrippersPoseTrajectory, ObjectTrajectory >(
+                AllGrippersPoseTrajectory(
+                    (size_t)planning_horizion + 1,
+                    AllGrippersSinglePose( grippers_data_.size() ) ),
+                ObjectTrajectory(
+                    (size_t)planning_horizion + 1,
+                    ObjectPointSet( 3, num_nodes_ ) ) );
 
     // Initialize the starting point of the trajectory with the current gripper
     // poses and object configuration
     suggested_traj.first[0] = world_current_state.all_grippers_single_pose_;
     suggested_traj.second[0] = world_current_state.object_configuration_;
-
-    // Create a mutable pair of objects that represent the current configuration
-    // as either a point set or a stacked vector
-//    ObjectPointSet* current_as_point_set = &(suggested_traj.second[0]);
-//    Eigen::Map< Eigen::VectorXd, Eigen::Aligned > current_as_vector( current_as_point_set->data(), 3 * num_nodes_ );
 
     for ( int traj_step = 1; traj_step <= planning_horizion; traj_step++ )
     {
@@ -183,24 +183,31 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
         ////////////////////////////////////////////////////////////////////////
 
         // Retrieve the desired object velocity (p_dot)
-        std::pair< Eigen::VectorXd, Eigen::MatrixXd > desired_object_velocity
+        std::pair< Eigen::VectorXd, Eigen::VectorXd > desired_object_velocity
                 = task_desired_object_delta_fn_( world_current_state );
 
-        const std::pair< Eigen::VectorXd, Eigen::MatrixXd > stretching_correction =
-                computeStretchingCorrection( world_current_state.object_configuration_,
-                                             stretching_correction_threshold );
+        const std::pair< Eigen::VectorXd, Eigen::VectorXd > stretching_correction =
+                computeStretchingCorrection(
+                    world_current_state.object_configuration_,
+                    stretching_correction_threshold );
 
         desired_object_velocity.first += stretching_correction.first;
         desired_object_velocity.second += stretching_correction.second;
 
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
-        const Eigen::MatrixXd J = computeGrippersToObjectJacobian(
+        const Eigen::MatrixXd jacobian = computeGrippersToObjectJacobian(
                 suggested_traj.first[(size_t)traj_step-1],
                 suggested_traj.second[(size_t)traj_step-1] );
 
         // Find the least-squares fitting to the desired object velocity
+        #warning "More magic numbers"
         Eigen::VectorXd grippers_velocity_achieve_goal =
-                J.jacobiSvd( Eigen::ComputeThinU | Eigen::ComputeThinV ).solve( desired_object_velocity.first );
+                EigenHelpers::WeightedLeastSquaresSolver(
+                    jacobian,
+                    desired_object_velocity.first,
+                    desired_object_velocity.second,
+                    0.001,
+                    0.1 );
 
         // Find the collision avoidance data that we'll need
         std::vector< CollisionAvoidanceResult > grippers_collision_avoidance_result
@@ -208,18 +215,20 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
                     world_current_state.gripper_collision_data_,
                     suggested_traj.first[(size_t)traj_step-1], max_step_size );
 
+        // Store the predicted object change for use in later loops
+        Eigen::MatrixXd object_delta = Eigen::MatrixXd::Zero( num_nodes_ * 3, 1 );
+
         ////////////////////////////////////////////////////////////////////////
         // Combine the velocities into a single command velocity
         ////////////////////////////////////////////////////////////////////////
-
         for ( long gripper_ind = 0; gripper_ind < (long)grippers_data_.size(); gripper_ind++ )
         {
             kinematics::Vector6d actual_gripper_velocity;
-            kinematics::Vector6d desired_gripper_vel = grippers_velocity_achieve_goal.segment< 6 >( gripper_ind * 6 );
+            kinematics::Vector6d desired_gripper_vel =
+                    grippers_velocity_achieve_goal.segment< 6 >( gripper_ind * 6 );
 
             // normalize the achive goal velocity
             const double velocity_norm = GripperVelocity6dNorm( desired_gripper_vel );
-
             if ( velocity_norm > max_step_size )
             {
                 desired_gripper_vel *= max_step_size / velocity_norm;
@@ -234,8 +243,9 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
                          std::min( 1.0, std::exp( -obstacle_avoidance_scale * collision_result.distance ) );
 
                  actual_gripper_velocity =
-                         collision_severity * ( collision_result.velocity + collision_result.nullspace_projector * desired_gripper_vel ) +
-                         (1 - collision_severity) * desired_gripper_vel;
+                         collision_severity * ( collision_result.velocity
+                                                + collision_result.nullspace_projector * desired_gripper_vel )
+                         + (1 - collision_severity) * desired_gripper_vel;
             }
             // Otherwise use our desired velocity directly
             else
@@ -247,20 +257,29 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
                         suggested_traj.first[(size_t)traj_step - 1][(size_t)gripper_ind] *
                         kinematics::expTwistAffine3d( actual_gripper_velocity, 1 );
 
-            Eigen::MatrixXd object_delta = J.block( 0, 6 * gripper_ind, J.rows(), 6 ) * actual_gripper_velocity;
-            object_delta.resizeLike( suggested_traj.second[(size_t)traj_step] );
+            object_delta += jacobian.block( 0, 6 * gripper_ind, num_nodes_ * 3, 6 ) * actual_gripper_velocity;
+        }
 
-            // Assume that our Jacobian is correct, and predict where we will end up (if needed)
-            suggested_traj.second[(size_t)traj_step] = suggested_traj.second[(size_t)traj_step-1] + object_delta;
+        // Store our prediction in the output data structure
+        object_delta.resizeLike( suggested_traj.second[(size_t)traj_step] );
 
-            // If we are going to do more steps, mutate the current world state
-            if ( traj_step + 1 < planning_horizion )
-            {
-                world_current_state.object_configuration_ = suggested_traj.second[(size_t)traj_step];
-                world_current_state.all_grippers_single_pose_ = suggested_traj.first[(size_t)traj_step];
-                world_current_state.gripper_collision_data_ = gripper_collision_check_fn_( world_current_state.all_grippers_single_pose_ );
-                world_current_state.sim_time_ += dt;
-            }
+        // Assume that our Jacobian is correct, and predict where we will end up (if needed)
+        suggested_traj.second[(size_t)traj_step] = suggested_traj.second[(size_t)traj_step-1] + object_delta;
+
+        ////////////////////////////////////////////////////////////////////////
+        // If we are going to do more steps, mutate the current world state
+        ////////////////////////////////////////////////////////////////////////
+
+        if ( traj_step + 1 < planning_horizion )
+        {
+            world_current_state.object_configuration_ =
+                    suggested_traj.second[(size_t)traj_step];
+            world_current_state.all_grippers_single_pose_ =
+                    suggested_traj.first[(size_t)traj_step];
+            world_current_state.gripper_collision_data_ =
+                    gripper_collision_check_fn_(
+                        world_current_state.all_grippers_single_pose_ );
+            world_current_state.sim_time_ += dt;
         }
     }
 
@@ -288,17 +307,15 @@ void DiminishingRigidityModel::perturbModel( std::mt19937_64& generator )
 
 /**
  * @brief DiminishingRigidityModel::getObjectDelta
- * @param object_current_configuration
+ * @param object_initial_configuration
  * @param grippers_pose
- * @param grippers_velocity
- * @param dt
+ * @param grippers_pose_delta
  * @return
  */
 ObjectPointSet DiminishingRigidityModel::getObjectDelta(
         const ObjectPointSet& object_initial_configuration,
         const AllGrippersSinglePose & grippers_pose,
-        const AllGrippersSingleVelocity& grippers_velocity,
-        double dt ) const
+        const AllGrippersSinglePoseDelta& grippers_pose_delta ) const
 {
     const Eigen::MatrixXd J = computeGrippersToObjectJacobian(
                 grippers_pose,
@@ -311,7 +328,7 @@ ObjectPointSet DiminishingRigidityModel::getObjectDelta(
     {
         // Assume that our Jacobian is correct, and predict where we will end up
         delta += J.block( 0, 6 * (long)gripper_ind, J.rows(), 6 )
-                * grippers_velocity[gripper_ind] * dt;
+                * grippers_pose_delta[gripper_ind];
     }
 
     delta.resizeLike( object_initial_configuration );
@@ -385,22 +402,23 @@ std::pair< Eigen::VectorXd, Eigen::VectorXd > DiminishingRigidityModel::computeS
         const double stretching_correction_threshold ) const
 {
     std::pair< Eigen::VectorXd, Eigen::VectorXd > stretching_correction =
-            std::make_pair( Eigen::VectorXd::Zero( object_configuration.cols() * 3 ),
-                            Eigen::VectorXd::Zero( object_configuration.cols() * 3 ) );
+            std::make_pair( Eigen::VectorXd::Zero( num_nodes_ * 3 ),
+                            Eigen::VectorXd::Zero( num_nodes_ * 3 ) );
 
-    Eigen::MatrixXd node_distance_delta =
+    const Eigen::MatrixXd node_distance_delta =
             distanceMatrix( object_configuration )
             - object_initial_node_distance_;
 
-    for ( long first_node = 0; first_node < node_distance_delta.rows(); first_node++)
+    for ( long first_node = 0; first_node < num_nodes_; first_node++)
     {
-        for ( long second_node = first_node + 1; second_node < node_distance_delta.cols(); second_node++)
+        for ( long second_node = first_node + 1; second_node < num_nodes_; second_node++)
         {
             if ( node_distance_delta( first_node, second_node ) > stretching_correction_threshold )
             {
                 // The correction vector points from the first node to the second node,
                 // and is half the length of the "extra" distance
-                Eigen::Vector3d correction_vector = 0.5 * node_distance_delta( first_node, second_node )
+                const Eigen::Vector3d correction_vector = 0.5
+                        * node_distance_delta( first_node, second_node )
                         * ( object_configuration.block< 3, 1 >( 0, second_node )
                             - object_configuration.block< 3, 1 >( 0, first_node ) );
 

@@ -68,9 +68,8 @@ namespace smmap
 
             ObjectPointSet getObjectDelta(
                     const ObjectPointSet& object_initial_configuration,
-                    const AllGrippersSinglePose & grippers_pose,
-                    const AllGrippersSingleVelocity& grippers_velocity,
-                    double dt ) const;
+                    const AllGrippersSinglePose& grippers_pose,
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta ) const;
 
             Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,

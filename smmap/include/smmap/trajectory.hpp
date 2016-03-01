@@ -279,6 +279,7 @@ namespace smmap
      */
     inline Eigen::MatrixXd distanceMatrix( const ObjectPointSet& obj )
     {
+        assert ( obj.cols() > 0 );
         const long num_nodes = obj.cols();
         Eigen::MatrixXd dist( num_nodes, num_nodes );
 
@@ -288,12 +289,12 @@ namespace smmap
             for ( long j = i; j < num_nodes; j++ )
             {
                 dist( i, j ) =
-                    ( obj.block< 3, 1>( 0, i ) - obj.block< 3, 1>( 0, j ) ).norm();
+                    ( obj.block< 3, 1>( 0, i ) - obj.block< 3, 1>( 0, j ) ).squaredNorm();
                 dist( j, i ) = dist( i, j );
             }
         }
 
-        return dist;
+        return dist.cwiseSqrt();
     }
 
     // TODO: vectorize this

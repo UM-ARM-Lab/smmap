@@ -1,6 +1,8 @@
 <launch>
     <arg name="test_id" default=""/>
     <arg name="deformability_override" default="0"/>
+    <arg name="multi_model" default="0"/>
+    <arg name="planning_horizion" default="1"/>
     
     <include file="$(find smmap)/launch/cloth_table_params.launch">
         <arg name="test_id" value="$(arg test_id)"/>

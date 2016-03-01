@@ -78,7 +78,6 @@ ModelSet::getSuggestedGrippersTrajectories(
 {
     std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > > trajectories( model_list_.size() );
 
-    #pragma omp parallel for
     for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
     {
         trajectories[model_ind] = model_list_[model_ind]->getSuggestedGrippersTrajectory(
