@@ -132,9 +132,10 @@ namespace smmap
                     }
                 }
 
-                // Normalize weight
-                assert( desired_rope_delta.second.maxCoeff() > 0 );
-                desired_rope_delta.second /= desired_rope_delta.second.maxCoeff();
+                // Normalize weight - note that all weights are positive, so this is an L1 norm
+                const double sum = desired_rope_delta.second.sum();
+                assert( sum > 0 );
+                desired_rope_delta.second /= sum;
 
                 return desired_rope_delta;
             }
@@ -267,9 +268,10 @@ namespace smmap
                     }
                 }
 
-                // Normalize weight
-                assert( desired_cloth_delta.second.maxCoeff() > 0 );
-                desired_cloth_delta.second /= desired_cloth_delta.second.maxCoeff();
+                // Normalize weight - note that all weights are positive, so this is an L1 norm
+                const double sum = desired_cloth_delta.second.sum();
+                assert( sum > 0 );
+                desired_cloth_delta.second /= sum;
 
                 return desired_cloth_delta;
             }
@@ -363,9 +365,10 @@ namespace smmap
                             - object_configuration.block< 3, 1 >( 0, ittr->second );
                 }
 
-                // Normalize weight
-                assert( desired_cloth_delta.second.maxCoeff() > 0 );
-                desired_cloth_delta.second /= desired_cloth_delta.second.maxCoeff();
+                // Normalize weight - note that all weights are positive, so this is an L1 norm
+                const double sum = desired_cloth_delta.second.sum();
+                assert( sum > 0 );
+                desired_cloth_delta.second /= sum;
 
                 return desired_cloth_delta;
             }

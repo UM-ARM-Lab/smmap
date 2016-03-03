@@ -100,16 +100,26 @@ void Task::execute()
                     RobotInterface::MAX_GRIPPER_VELOCITY,
                     task_specification_->getCollisionScalingFactor() );
 
-        std::vector < std_msgs::ColorRGBA > weight_colors( current_world_state.object_configuration_.cols() );
-        for ( long node_ind = 0; (size_t)node_ind < weight_colors.size(); node_ind++ )
+
+
+
+        Eigen::Map< ObjectPointSet > object_delta( first_step_desired_motion.first.data(), 3, current_world_state.object_configuration_.cols() );
+
+        ObjectPointSet vis_object = current_world_state.object_configuration_ + object_delta;
+
+        std::vector < std_msgs::ColorRGBA > colors( current_world_state.object_configuration_.cols() );
+        for ( long node_ind = 0; (size_t)node_ind < colors.size(); node_ind++ )
         {
-            weight_colors[(size_t)node_ind].r = std::sqrt( first_step_stretching_correction.second( node_ind * 3 ) / first_step_stretching_correction.second.maxCoeff() );
-            weight_colors[(size_t)node_ind].g = 0;
-            weight_colors[(size_t)node_ind].b = std::sqrt( first_step_stretching_correction.second( node_ind * 3 ) / first_step_stretching_correction.second.maxCoeff() );
-            weight_colors[(size_t)node_ind].a = std::sqrt( first_step_stretching_correction.second( node_ind * 3 ) / first_step_stretching_correction.second.maxCoeff() );
+            colors[(size_t)node_ind].r = std::sqrt( first_step_desired_motion.second( node_ind * 3 ) / first_step_desired_motion.second.maxCoeff() );
+            colors[(size_t)node_ind].g = 0;
+            colors[(size_t)node_ind].b = std::sqrt( first_step_desired_motion.second( node_ind * 3 ) / first_step_desired_motion.second.maxCoeff() );
+            colors[(size_t)node_ind].a = 1;
         }
 
-        task_specification_->visualizeDeformableObject( vis_, "error_delta_weights", current_world_state.object_configuration_, weight_colors );
+        task_specification_->visualizeDeformableObject( vis_, "error_delta_weights", vis_object, colors );
+
+
+
 
         // delete the starting pose which should match the current pose
         next_trajectory.erase( next_trajectory.begin() );

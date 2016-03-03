@@ -32,14 +32,14 @@ void Visualizer::visualizeRope(
     marker.type = visualization_msgs::Marker::LINE_STRIP;
     marker.ns = marker_name;
     marker.id = 0;
-    marker.scale.x = 0.1;
+    marker.scale.x = 0.15;
     marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( rope );
     marker.colors = colors;
     visualization_marker_pub_.publish( marker );
 
     marker.type = visualization_msgs::Marker::SPHERE;
     marker.id = 1;
-    marker.scale.x = 0.01;
+    marker.scale.x = 0.015;
     visualization_marker_pub_.publish( marker );
 }
 
@@ -63,8 +63,8 @@ void Visualizer::visualizeCloth(
     marker.type = visualization_msgs::Marker::POINTS;
     marker.ns = marker_name;
     marker.id = 0;
-    marker.scale.x = 0.002;
-    marker.scale.y = 0.002;
+    marker.scale.x = 0.005;
+    marker.scale.y = 0.005;
     marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( cloth );
     marker.colors = colors;
 

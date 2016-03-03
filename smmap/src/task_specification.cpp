@@ -138,8 +138,9 @@ std::pair< Eigen::VectorXd, Eigen::VectorXd > TaskSpecification::calculateStretc
         }
     }
 
-    // Normalize by the total number of nodes
-    stretching_correction.second /= (double)num_nodes_;
+    // Normalize the weights so that changing the number of nodes doesn't affect
+    // the weights too much; i.e. minimize the effect of the level of discretization
+//    stretching_correction.second /= (double)num_nodes_;
 
     return stretching_correction;
 }
@@ -150,6 +151,7 @@ std::pair< Eigen::VectorXd, Eigen::VectorXd > TaskSpecification::calculateStretc
  * @param stretching_correction
  * @return
  */
+// TODO: this probably doesn't belong in this class
 std::pair< Eigen::VectorXd, Eigen::VectorXd > TaskSpecification::combineErrorCorrectionAndStretchingCorrection(
         const std::pair< Eigen::VectorXd, Eigen::VectorXd >& error_correction,
         const std::pair< Eigen::VectorXd, Eigen::VectorXd >& stretching_correction ) const
@@ -158,33 +160,35 @@ std::pair< Eigen::VectorXd, Eigen::VectorXd > TaskSpecification::combineErrorCor
             std::make_pair( Eigen::VectorXd( num_nodes_ * 3 ),
                             Eigen::VectorXd( num_nodes_ * 3 ) );
 
-    for ( long ind = 0; ind < num_nodes_; ind += 3 )
+    std::cout << "Max error:      " << error_correction.second.maxCoeff() << std::endl
+              << "Sum error:      " << error_correction.second.sum() << std::endl
+              << "Max stretching: " << stretching_correction.second.maxCoeff() << std::endl
+              << "Sum stretching: " << stretching_correction.second.sum() << std::endl;
+
+
+    for ( long ind = 0; ind < num_nodes_ * 3; ind += 3 )
     {
         const double stretching_importance =
                 1.0 - std::exp( -10.0 * stretching_correction.second( ind ) );
 
-        double stretching_weights_normalizer = stretching_correction.second.maxCoeff();
-        if ( stretching_weights_normalizer <= 0.0 )
-        {
-            stretching_weights_normalizer = 1.0;
-        }
-
         // Calculate the combined object delta
         combined.first.segment< 3 >( ind ) =
-                stretching_importance * stretching_correction.first.segment< 3 >( ind ) / stretching_weights_normalizer
+                stretching_importance * stretching_correction.first.segment< 3 >( ind )
                 + ( 1.0 - stretching_importance ) * error_correction.first.segment< 3 >( ind );
 
         // Calculate the combined node weights
         combined.second.segment< 3 >( ind ) =
                 stretching_importance * stretching_correction.second.segment< 3 >( ind )
                 + ( 1.0 - stretching_importance ) * error_correction.second.segment< 3 >( ind );
-
-        std::cerr << "w_s: " << stretching_correction.second( ind )
-                  << ",\t lambda: " << stretching_importance
-                  << ",\t w_s/max: " << stretching_correction.second( ind ) / stretching_weights_normalizer
-                  << ",\t w_e: " << error_correction.second( ind )
-                  << std::endl;
     }
+
+//    combined.first = error_correction.first + stretching_correction.first;
+//    combined.second = Eigen::VectorXd::Ones( num_nodes_ * 3 );
+
+    // Normalize the weights for later use
+    const double combined_normalizer = combined.second.maxCoeff();
+    assert( combined_normalizer > 0 );
+    combined.second /= combined_normalizer;
 
     return combined;
 }
