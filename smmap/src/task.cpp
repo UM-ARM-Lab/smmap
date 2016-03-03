@@ -43,11 +43,13 @@ void Task::execute()
 
     while ( robot_.ok() )
     {
-        const auto& current_world_state = world_feedback.back();
+        const WorldState current_world_state = world_feedback.back();
 
         std::pair< Eigen::VectorXd, Eigen::VectorXd > first_step_desired_motion;
-        std::atomic_bool first_step_desired_motion_calculated( false );
-        std::mutex first_step_desired_motion_mtx;
+        std::pair< Eigen::VectorXd, Eigen::VectorXd > first_step_error_correction;
+        std::pair< Eigen::VectorXd, Eigen::VectorXd > first_step_stretching_correction;
+        std::atomic_bool first_step_calculated( false );
+        std::mutex first_step_mtx;
 
         // Update our function callbacks for the models
         TaskDesiredObjectDeltaFunctionType caching_task_desired_object_delta_fn =
@@ -55,28 +57,37 @@ void Task::execute()
         {
             if ( state.sim_time_ == current_world_state.sim_time_ )
             {
-                if ( first_step_desired_motion_calculated.load() )
+                if ( first_step_calculated.load() )
                 {
                     return first_step_desired_motion;
                 }
                 else
                 {
-                    std::lock_guard< std::mutex > lock( first_step_desired_motion_mtx );
-                    if ( first_step_desired_motion_calculated.load() )
+                    std::lock_guard< std::mutex > lock( first_step_mtx );
+                    if ( first_step_calculated.load() )
                     {
                         return first_step_desired_motion;
                     }
                     else
                     {
-                        first_step_desired_motion = task_specification_->calculateObjectDesiredDelta( state );
-                        first_step_desired_motion_calculated.store( true );
+                        first_step_error_correction =
+                                task_specification_->calculateObjectErrorCorrectionDelta( state );
+
+                        first_step_stretching_correction =
+                                task_specification_->calculateStretchingCorrectionDelta( state );
+
+                        first_step_desired_motion =
+                                task_specification_->combineErrorCorrectionAndStretchingCorrection(
+                                    first_step_error_correction, first_step_stretching_correction );
+
+                        first_step_calculated.store( true );
                         return first_step_desired_motion;
                     }
                 }
             }
             else
             {
-                return task_specification_->calculateObjectDesiredDelta( state );
+                return task_specification_->calculateObjectErrorCorrectionDelta( state );
             }
         };
         DeformableModel::SetCallbackFunctions( gripper_collision_check_fn_,
@@ -87,17 +98,28 @@ void Task::execute()
                     planning_horizion,
                     RobotInterface::DT,
                     RobotInterface::MAX_GRIPPER_VELOCITY,
-                    task_specification_->getCollisionScalingFactor(),
-                    task_specification_->getStretchingScalingThreshold() );
+                    task_specification_->getCollisionScalingFactor() );
 
-        assert( first_step_desired_motion_calculated.load() );
+        std::vector < std_msgs::ColorRGBA > weight_colors( current_world_state.object_configuration_.cols() );
+        for ( long node_ind = 0; (size_t)node_ind < weight_colors.size(); node_ind++ )
+        {
+            weight_colors[(size_t)node_ind].r = std::sqrt( first_step_stretching_correction.second( node_ind * 3 ) / first_step_stretching_correction.second.maxCoeff() );
+            weight_colors[(size_t)node_ind].g = 0;
+            weight_colors[(size_t)node_ind].b = std::sqrt( first_step_stretching_correction.second( node_ind * 3 ) / first_step_stretching_correction.second.maxCoeff() );
+            weight_colors[(size_t)node_ind].a = std::sqrt( first_step_stretching_correction.second( node_ind * 3 ) / first_step_stretching_correction.second.maxCoeff() );
+        }
+
+        task_specification_->visualizeDeformableObject( vis_, "error_delta_weights", current_world_state.object_configuration_, weight_colors );
 
         // delete the starting pose which should match the current pose
-//        next_trajectory.erase( next_trajectory.begin() );
+        next_trajectory.erase( next_trajectory.begin() );
+
         ROS_INFO_NAMED( "task", "Sending 'best' trajectory" );
         world_feedback = robot_.sendGripperTrajectory( next_trajectory );
+        // Put the previous current world state at the start of the trajectory again
+        // So that we can evaluate the whole object delta
+        world_feedback.emplace( world_feedback.begin(), current_world_state );
 
-        // TODO: this is already being calculated the the planner
         ROS_INFO_NAMED( "task", "Updating models" );
         model_set_.updateModels( world_feedback, first_step_desired_motion.second );
 
@@ -152,17 +174,18 @@ void Task::initializeModelSet()
     {
         // TODO: replace this maic number
         #warning "Magic number here needs to be moved"
-        const size_t num_models_per_parameter = 20;
+        const size_t num_models_per_parameter = 5;
+        const double deform_step = 2;
 
         ROS_INFO_STREAM_NAMED( "task", "Creating " << num_models_per_parameter
                                << " models per parameter " );
 
-        const double deform_step = 0.5;
-        double deform_min = std::max( 0., task_specification_->getDeformability() - 5 );
-        // This round is here to force the values to 10-20 for cloth, 5-15 for rope
-        deform_min = 5.0 * std::round( deform_min / 5.0 );
+        // Center the deformability values on the task specified default
+        const double deform_min = std::max( 0., task_specification_->getDeformability()
+                                      - (num_models_per_parameter - 1) * deform_step / 2.0 );
         const double deform_max = deform_min + (double)num_models_per_parameter * deform_step;
 
+        // Create a bunch of models
         for ( double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step )
         {
             for ( double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step )
@@ -230,23 +253,6 @@ void Task::initializeLogging()
         loggers.insert( std::make_pair< std::string, Log::Log > (
                             "utility",
                             Log::Log( log_folder + "utility.txt", false ) ) ) ;
-/*
-//        loggers.insert( std::make_pair< std::string, Log::Log > (
-//                            "model_chosen",
-//                            Log::Log( log_folder + "model_chosen.txt", false ) ) ) ;
-
-//        loggers.insert( std::make_pair< std::string, Log::Log >(
-//                            "object_current_configuration",
-//                            Log::Log( log_folder + "object_current_configuration.txt", false ) ) );
-
-//        loggers.insert( std::make_pair< std::string, Log::Log > (
-//                            "suggested_grippers_delta",
-//                            Log::Log( log_folder + "suggested_grippers_delta.txt", false ) ) ) ;
-
-//        loggers.insert( std::make_pair< std::string, Log::Log > (
-//                            "object_predicted_configuration",
-//                            Log::Log( log_folder + "object_predicted_configuration.txt", false ) ) ) ;
-*/
     }
 }
 
@@ -281,8 +287,7 @@ ModelSuggestedGrippersTrajFunctionType Task::createModelSuggestedGrippersTrajFun
                       std::placeholders::_2,
                       std::placeholders::_3,
                       std::placeholders::_4,
-                      std::placeholders::_5,
-                      std::placeholders::_6 );
+                      std::placeholders::_5 );
 }
 
 GetModelUtilityFunctionType Task::createGetModelUtilityFunction()
@@ -309,7 +314,8 @@ GripperCollisionCheckFunctionType Task::createGripperCollisionCheckFunction()
 
 TaskDesiredObjectDeltaFunctionType Task::createTaskDesiredObjectDeltaFunction()
 {
-    return std::bind( &TaskSpecification::calculateObjectDesiredDelta,
+    #warning "This function is basically not being used anymore, get rid of it"
+    return std::bind( &TaskSpecification::calculateObjectErrorCorrectionDelta,
                       task_specification_,
                       std::placeholders::_1 );
 }

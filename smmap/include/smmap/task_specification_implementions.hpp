@@ -14,7 +14,8 @@ namespace smmap
     {
         public:
             RopeCoverage( ros::NodeHandle& nh )
-                : cover_points_( GetCoverPoints( nh ) )
+                : TaskSpecification( nh )
+                , cover_points_( GetCoverPoints( nh ) )
             {}
 
         private:
@@ -45,6 +46,15 @@ namespace smmap
                     const std_msgs::ColorRGBA& color ) const
             {
                 vis.visualizeRope( marker_name, object_configuration, color );
+            }
+
+            virtual void visualizeDeformableObject_impl(
+                    Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std::vector< std_msgs::ColorRGBA >& colors ) const
+            {
+                vis.visualizeRope( marker_name, object_configuration, colors );
             }
 
             virtual double calculateError_impl(
@@ -80,7 +90,7 @@ namespace smmap
                 return error.sum();
             }
 
-            virtual std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectDesiredDelta_impl(
+            virtual std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state ) const
             {
                 ROS_INFO_NAMED( "rope_coverage_task" , "Finding 'best' object delta" );
@@ -122,6 +132,10 @@ namespace smmap
                     }
                 }
 
+                // Normalize weight
+                assert( desired_rope_delta.second.maxCoeff() > 0 );
+                desired_rope_delta.second /= desired_rope_delta.second.maxCoeff();
+
                 return desired_rope_delta;
             }
 
@@ -137,7 +151,8 @@ namespace smmap
     {
         public:
             ClothTableCoverage( ros::NodeHandle& nh )
-                : cover_points_( GetCoverPoints( nh ) )
+                : TaskSpecification( nh )
+                , cover_points_( GetCoverPoints( nh ) )
             {}
 
         private:
@@ -168,6 +183,15 @@ namespace smmap
                     const std_msgs::ColorRGBA& color ) const
             {
                 vis.visualizeCloth( marker_name, object_configuration, color );
+            }
+
+            virtual void visualizeDeformableObject_impl(
+                    Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std::vector< std_msgs::ColorRGBA >& colors ) const
+            {
+                vis.visualizeCloth( marker_name, object_configuration, colors );
             }
 
             virtual double calculateError_impl(
@@ -201,7 +225,7 @@ namespace smmap
                 return error.sum();
             }
 
-            virtual std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectDesiredDelta_impl(
+            virtual std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state ) const
             {
                 ROS_INFO_NAMED( "cloth_table_coverage" , "Finding 'best' cloth delta" );
@@ -243,6 +267,10 @@ namespace smmap
                     }
                 }
 
+                // Normalize weight
+                assert( desired_cloth_delta.second.maxCoeff() > 0 );
+                desired_cloth_delta.second /= desired_cloth_delta.second.maxCoeff();
+
                 return desired_cloth_delta;
             }
 
@@ -258,7 +286,8 @@ namespace smmap
     {
         public:
             ClothColabFolding( ros::NodeHandle& nh )
-                : point_reflector_( createPointReflector( nh ) )
+                : TaskSpecification( nh )
+                , point_reflector_( createPointReflector( nh ) )
                 , mirror_map_( createMirrorMap( nh, point_reflector_ ) )
             {}
 
@@ -292,6 +321,15 @@ namespace smmap
                 vis.visualizeCloth( marker_name, object_configuration, color );
             }
 
+            virtual void visualizeDeformableObject_impl(
+                    Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std::vector< std_msgs::ColorRGBA >& colors ) const
+            {
+                vis.visualizeCloth( marker_name, object_configuration, colors );
+            }
+
             virtual double calculateError_impl(
                     const ObjectPointSet& current_configuration ) const
             {
@@ -306,7 +344,7 @@ namespace smmap
                 return error;
             }
 
-            virtual std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectDesiredDelta_impl(
+            virtual std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state ) const
             {
                 ROS_INFO_NAMED( "cloth_colab_folding" , "Finding 'best' cloth delta" );
@@ -324,6 +362,10 @@ namespace smmap
                             point_reflector_.reflect( object_configuration.block< 3, 1 >( 0, ittr->first ) )
                             - object_configuration.block< 3, 1 >( 0, ittr->second );
                 }
+
+                // Normalize weight
+                assert( desired_cloth_delta.second.maxCoeff() > 0 );
+                desired_cloth_delta.second /= desired_cloth_delta.second.maxCoeff();
 
                 return desired_cloth_delta;
             }

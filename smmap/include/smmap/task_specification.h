@@ -14,6 +14,12 @@ namespace smmap
             typedef std::shared_ptr< TaskSpecification > Ptr;
 
             ////////////////////////////////////////////////////////////////////
+            // Constructor to initialize objects that all TaskSpecifications share
+            ////////////////////////////////////////////////////////////////////
+
+            TaskSpecification( ros::NodeHandle& nh );
+
+            ////////////////////////////////////////////////////////////////////
             // Static builder function
             ////////////////////////////////////////////////////////////////////
 
@@ -35,6 +41,12 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color ) const;
 
+            void visualizeDeformableObject(
+                    Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std::vector< std_msgs::ColorRGBA >& colors ) const;
+
             double calculateError(
                     const ObjectPointSet& object_configuration ) const;
 
@@ -44,8 +56,31 @@ namespace smmap
              * @return return.first is the desired movement of the object
              *         return.second is the importance of that part of the movement
              */
-            std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectDesiredDelta(
+            std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectErrorCorrectionDelta(
                     const WorldState& world_state ) const;
+
+            ////////////////////////////////////////////////////////////////////
+            // Helper functions
+            // TODO: Should these be virtual? virtual final?
+            ////////////////////////////////////////////////////////////////////
+
+            /**
+             * @brief computeStretchingCorrection
+             * @param object_configuration
+             * @return
+             */
+            std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateStretchingCorrectionDelta(
+                    const WorldState& world_state ) const;
+
+            /**
+             * @brief combineErrorCorrectionAndStretchingCorrection
+             * @param error_correction
+             * @param stretching_correction
+             * @return
+             */
+            std::pair< Eigen::VectorXd, Eigen::VectorXd > combineErrorCorrectionAndStretchingCorrection(
+                    const std::pair< Eigen::VectorXd, Eigen::VectorXd >& error_correction,
+                    const std::pair< Eigen::VectorXd, Eigen::VectorXd >& stretching_correction ) const;
 
         protected:
             ////////////////////////////////////////////////////////////////////
@@ -53,6 +88,13 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             ~TaskSpecification() {}
+
+            ////////////////////////////////////////////////////////////////////
+            // Objects shared by all task specifications
+            ////////////////////////////////////////////////////////////////////
+
+            const Eigen::MatrixXd object_initial_node_distance_;
+            const long num_nodes_;
 
         private:
             ////////////////////////////////////////////////////////////////////////////////
@@ -70,10 +112,16 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color ) const = 0;
 
+            virtual void visualizeDeformableObject_impl(
+                    Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std::vector< std_msgs::ColorRGBA >& colors ) const = 0;
+
             virtual double calculateError_impl(
                     const ObjectPointSet& object_configuration ) const = 0;
 
-            virtual std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectDesiredDelta_impl(
+            virtual std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state ) const = 0;
 
     };

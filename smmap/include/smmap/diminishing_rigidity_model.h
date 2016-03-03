@@ -49,8 +49,7 @@ namespace smmap
                     const int planning_horizion,
                     const double dt,
                     const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale,
-                    const double stretching_correction_threshold ) const;
+                    const double obstacle_avoidance_scale ) const;
 
             void perturbModel( std::mt19937_64& generator );
 
@@ -74,10 +73,6 @@ namespace smmap
             Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
                     const ObjectPointSet& current_configuration ) const;
-
-            std::pair< Eigen::VectorXd, Eigen::VectorXd > computeStretchingCorrection(
-                    const ObjectPointSet& object_configuration,
-                    const double stretching_correction_threshold ) const;
 
             ////////////////////////////////////////////////////////////////////
             // Static members

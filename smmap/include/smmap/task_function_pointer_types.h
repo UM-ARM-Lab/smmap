@@ -26,8 +26,7 @@ namespace smmap
             const int,                              /* planning horizion */
             const double,                           /* dt */
             const double,                           /* max gripper velocity */
-            const double,                           /* obstacle avoidance scale */
-            const double                            /* stretching correction scale */
+            const double                            /* obstacle avoidance scale */
             ) >
     ModelSuggestedGrippersTrajFunctionType;
 

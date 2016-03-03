@@ -39,8 +39,7 @@ namespace smmap
                     const int planning_horizion,
                     const double dt,
                     const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale,
-                    const double stretching_correction_threshold ) const = 0;
+                    const double obstacle_avoidance_scale ) const = 0;
 
 /*
             virtual Eigen::VectorXd getObjectiveFunction1stDerivitive(

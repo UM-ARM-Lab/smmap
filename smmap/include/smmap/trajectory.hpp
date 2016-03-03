@@ -277,7 +277,7 @@ namespace smmap
      *
      * @return The distances between each pair of nodes
      */
-    inline Eigen::MatrixXd distanceMatrix( const ObjectPointSet& obj )
+    inline Eigen::MatrixXd CalculateDistanceMatrix( const ObjectPointSet& obj )
     {
         assert ( obj.cols() > 0 );
         const long num_nodes = obj.cols();

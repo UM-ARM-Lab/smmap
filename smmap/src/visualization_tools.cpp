@@ -17,6 +17,16 @@ void Visualizer::visualizeRope(
         const ObjectPointSet& rope,
         const std_msgs::ColorRGBA& color )
 {
+    std::vector< std_msgs::ColorRGBA > colors( (size_t)rope.cols(), color );
+
+    visualizeRope( marker_name, rope, colors );
+}
+
+void Visualizer::visualizeRope(
+        const std::string& marker_name,
+        const ObjectPointSet& rope,
+        const std::vector< std_msgs::ColorRGBA >& colors )
+{
     visualization_msgs::Marker marker;
 
     marker.type = visualization_msgs::Marker::LINE_STRIP;
@@ -24,7 +34,7 @@ void Visualizer::visualizeRope(
     marker.id = 0;
     marker.scale.x = 0.1;
     marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint( rope );
-    marker.colors = std::vector< std_msgs::ColorRGBA >( (size_t)rope.cols(), color );
+    marker.colors = colors;
     visualization_marker_pub_.publish( marker );
 
     marker.type = visualization_msgs::Marker::SPHERE;
@@ -67,6 +77,10 @@ void Visualizer::visualizeGripper(
         const std_msgs::ColorRGBA& color )
 {
     // TODO: do
+    (void)marker_name;
+    (void)pose;
+    (void)color;
+    #warning "Function not implemented here"
     assert( false && "THIS IS NOT YET IMPLEMENTED" );
 }
 

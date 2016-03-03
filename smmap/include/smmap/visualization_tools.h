@@ -17,7 +17,12 @@ namespace smmap
             void visualizeRope(
                     const std::string& marker_name,
                     const ObjectPointSet& rope,
-                    const std_msgs::ColorRGBA& color);
+                    const std_msgs::ColorRGBA& color );
+
+            void visualizeRope(
+                    const std::string& marker_name,
+                    const ObjectPointSet& rope,
+                    const std::vector< std_msgs::ColorRGBA >& colors );
 
             void visualizeCloth(
                     const std::string& marker_name,

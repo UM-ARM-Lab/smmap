@@ -40,7 +40,7 @@ namespace smmap
                 cmd_grippers_traj_client_.waitForServer();
 
                 ROS_INFO_NAMED( "robot_bridge", "Kickstarting the planner with a no-op" );
-                return sendGripperTrajectory( noOpTrajectoryGoal( 2 ) );
+                return sendGripperTrajectory( noOpTrajectoryGoal( 1 ) );
             }
 
             bool ok() const

@@ -36,7 +36,7 @@ void DiminishingRigidityModel::SetInitialObjectConfiguration(
         const ObjectPointSet& object_initial_configuration )
 {
     num_nodes_ = object_initial_configuration.cols();
-    object_initial_node_distance_ = distanceMatrix( object_initial_configuration );
+    object_initial_node_distance_ = CalculateDistanceMatrix( object_initial_configuration );
     static_data_initialized_.store( true );
 }
 
@@ -148,8 +148,7 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
         const int planning_horizion,
         const double dt,
         const double max_gripper_velocity,
-        const double obstacle_avoidance_scale,
-        const double stretching_correction_threshold ) const
+        const double obstacle_avoidance_scale ) const
 {
     ROS_INFO_STREAM_NAMED( "diminishing_rigidity_model",
                            "Creating suggested grippers trajectory: " <<
@@ -183,16 +182,8 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
         ////////////////////////////////////////////////////////////////////////
 
         // Retrieve the desired object velocity (p_dot)
-        std::pair< Eigen::VectorXd, Eigen::VectorXd > desired_object_velocity
+        const std::pair< Eigen::VectorXd, Eigen::VectorXd > desired_object_velocity
                 = task_desired_object_delta_fn_( world_current_state );
-
-        const std::pair< Eigen::VectorXd, Eigen::VectorXd > stretching_correction =
-                computeStretchingCorrection(
-                    world_current_state.object_configuration_,
-                    stretching_correction_threshold );
-
-        desired_object_velocity.first += stretching_correction.first;
-        desired_object_velocity.second += stretching_correction.second;
 
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
         const Eigen::MatrixXd jacobian = computeGrippersToObjectJacobian(
@@ -389,51 +380,4 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(
     }
 
     return J;
-}
-
-/**
- * @brief computeStretchingCorrection
- * @param object_configuration
- * @return return.first is the desired movement of the object
- *         return.second is the importance of that part of the movement
- */
-std::pair< Eigen::VectorXd, Eigen::VectorXd > DiminishingRigidityModel::computeStretchingCorrection(
-        const ObjectPointSet& object_configuration,
-        const double stretching_correction_threshold ) const
-{
-    std::pair< Eigen::VectorXd, Eigen::VectorXd > stretching_correction =
-            std::make_pair( Eigen::VectorXd::Zero( num_nodes_ * 3 ),
-                            Eigen::VectorXd::Zero( num_nodes_ * 3 ) );
-
-    const Eigen::MatrixXd node_distance_delta =
-            distanceMatrix( object_configuration )
-            - object_initial_node_distance_;
-
-    for ( long first_node = 0; first_node < num_nodes_; first_node++)
-    {
-        for ( long second_node = first_node + 1; second_node < num_nodes_; second_node++)
-        {
-            if ( node_distance_delta( first_node, second_node ) > stretching_correction_threshold )
-            {
-                // The correction vector points from the first node to the second node,
-                // and is half the length of the "extra" distance
-                const Eigen::Vector3d correction_vector = 0.5
-                        * node_distance_delta( first_node, second_node )
-                        * ( object_configuration.block< 3, 1 >( 0, second_node )
-                            - object_configuration.block< 3, 1 >( 0, first_node ) );
-
-                stretching_correction.first.segment< 3 >( 3 * first_node ) += correction_vector;
-                stretching_correction.first.segment< 3 >( 3 * second_node ) -= correction_vector;
-
-                stretching_correction.second( 3 * first_node ) += 1;
-                stretching_correction.second( 3 * first_node + 1 ) += 1;
-                stretching_correction.second( 3 * first_node + 2 ) += 1;
-                stretching_correction.second( 3 * second_node ) += 1;
-                stretching_correction.second( 3 * second_node + 1 ) += 1;
-                stretching_correction.second( 3 * second_node + 2 ) += 1;
-            }
-        }
-    }
-
-    return stretching_correction;
 }
