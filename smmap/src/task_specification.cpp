@@ -160,16 +160,16 @@ std::pair< Eigen::VectorXd, Eigen::VectorXd > TaskSpecification::combineErrorCor
             std::make_pair( Eigen::VectorXd( num_nodes_ * 3 ),
                             Eigen::VectorXd( num_nodes_ * 3 ) );
 
-    std::cout << "Max error:      " << error_correction.second.maxCoeff() << std::endl
-              << "Sum error:      " << error_correction.second.sum() << std::endl
-              << "Max stretching: " << stretching_correction.second.maxCoeff() << std::endl
-              << "Sum stretching: " << stretching_correction.second.sum() << std::endl;
+//    std::cout << "Max error:      " << error_correction.second.maxCoeff() << std::endl
+//              << "Sum error:      " << error_correction.second.sum() << std::endl
+//              << "Max stretching: " << stretching_correction.second.maxCoeff() << std::endl
+//              << "Sum stretching: " << stretching_correction.second.sum() << std::endl;
 
 
     for ( long ind = 0; ind < num_nodes_ * 3; ind += 3 )
     {
         const double stretching_importance =
-                1.0 - std::exp( -10.0 * stretching_correction.second( ind ) );
+                1.0 - std::exp( -10.0*1e-3 * stretching_correction.second( ind ) );
 
         // Calculate the combined object delta
         combined.first.segment< 3 >( ind ) =

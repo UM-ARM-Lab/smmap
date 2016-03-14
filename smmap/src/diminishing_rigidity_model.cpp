@@ -191,14 +191,14 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
                 suggested_traj.second[(size_t)traj_step-1] );
 
         // Find the least-squares fitting to the desired object velocity
-        #warning "More magic numbers"
+        #warning "More magic numbers - damping threshold and damping coefficient"
         Eigen::VectorXd grippers_velocity_achieve_goal =
                 EigenHelpers::WeightedLeastSquaresSolver(
                     jacobian,
                     desired_object_velocity.first,
                     desired_object_velocity.second,
-                    0.001,
-                    0.1 );
+                    1e-3,
+                    1e-2 );
 
         // Find the collision avoidance data that we'll need
         std::vector< CollisionAvoidanceResult > grippers_collision_avoidance_result

@@ -120,7 +120,7 @@ namespace smmap
                         }
                     }
 
-                    if ( std::sqrt( min_dist_squared ) >= 0.2/20. )
+                    if ( std::sqrt( min_dist_squared ) >= 0.2/20.0 )
                     {
                         desired_rope_delta.first.segment< 3 >( min_ind * 3 ) =
                                 desired_rope_delta.first.segment< 3 >( min_ind * 3 )

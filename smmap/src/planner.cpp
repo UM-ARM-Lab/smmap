@@ -94,7 +94,7 @@ double Planner::UpdateUtility( const double old_utility,
                 weights );
     // TODO: use dt here somewhere, plus the number of nodes, etc.
     const double new_utility = 1.0/(1.0 + std::sqrt( std::sqrt( distance ) ) );
-    #warning "Another magic number here"
+    #warning "Another magic number here - annealing rate"
     return anneal( old_utility, new_utility, 0.1 );
 }
 
