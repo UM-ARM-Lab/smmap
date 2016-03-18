@@ -1,7 +1,8 @@
 <launch>
+    <arg name="logging_enabled" default="true"/>
     <arg name="test_id" default=""/>
     
-    <param name="logging_enabled" value="true"/>
+    <param name="logging_enabled" value="$(arg logging_enabled)"/>
     <param name="log_folder" value="$(find smmap)/../logs/rope_cylinder/$(arg test_id)/"/>
 
     <param name="deformable_type" value="rope"/>

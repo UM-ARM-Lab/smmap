@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source multi_model_trial.sh
+source trial_types.sh
 
 base_environment="rope_cylinder"
 planning_horizion=1

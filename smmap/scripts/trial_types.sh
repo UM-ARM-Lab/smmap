@@ -9,6 +9,12 @@ function multi_model_trial
     roslaunch smmap $base_environment.launch test_id:=$base_experiment"_multi_model" multi_model:=1 planning_horizion:=$planning_horizion
 }
 
+function single_model_trial_baseline_noise
+{
+    covariance=$1
+    roslaunch smmap $base_environment.launch test_id:=$base_experiment"_noise_"$covariance multi_model:=0 planning_horizion:=$planning_horizion feedback_covariance:=$covariance
+}
+
 function single_model_trial_multiple_deform_values
 {
     min=`calc 2*$1`

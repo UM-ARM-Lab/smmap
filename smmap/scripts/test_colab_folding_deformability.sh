@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source multi_model_trial.sh
+source trial_types.sh
 
 base_environment="colab_folding"
 planning_horizion=1
