@@ -1,12 +1,12 @@
 #ifndef DIMINISHING_RIGIDITY_MODEL_H
 #define DIMINISHING_RIGIDITY_MODEL_H
 
-#include "smmap/deformable_model.h"
+#include "smmap/jacobian_model.h"
 
 namespace smmap
 {
     // TODO: find a way to accept dynamic/online gripper re-grasping
-    class DiminishingRigidityModel final : public DeformableModel
+    class DiminishingRigidityModel final : public JacobianModel
     {
         public:
             ////////////////////////////////////////////////////////////////////
@@ -32,26 +32,16 @@ namespace smmap
 
             virtual void updateModel( const std::vector< WorldState >& feedback );
 
-            virtual ObjectTrajectory getPrediction(
-                    const WorldState& world_initial_state,
-                    const AllGrippersPoseTrajectory& grippers_pose_trajectory,
-                    const AllGrippersPoseDeltaTrajectory& grippers_pose_delta_trajectory,
-                    const double dt ) const;
-
-            virtual ObjectPointSet getFinalConfiguration(
-                    const WorldState& world_initial_state,
-                    const AllGrippersPoseTrajectory& gripper_pose_trajectory,
-                    const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
-                    const double dt ) const ;
-
-            virtual std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > getSuggestedGrippersTrajectory(
-                    const WorldState& world_initial_state,
-                    const int planning_horizion,
-                    const double dt,
-                    const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale ) const;
-
             void perturbModel( std::mt19937_64& generator );
+
+            ////////////////////////////////////////////////////////////////////
+            // Helper used only by AdaptiveJacobian (at the moment)
+            // Find a better way to do this
+            ////////////////////////////////////////////////////////////////////
+
+            Eigen::MatrixXd getGrippersToObjectJacobian(
+                    const AllGrippersSinglePose& grippers_pose,
+                    const ObjectPointSet& current_configuration ) const;
 
         private:
 
@@ -64,11 +54,6 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
             // Computation helpers
             ////////////////////////////////////////////////////////////////////
-
-            ObjectPointSet getObjectDelta(
-                    const ObjectPointSet& object_initial_configuration,
-                    const AllGrippersSinglePose& grippers_pose,
-                    const AllGrippersSinglePoseDelta& grippers_pose_delta ) const;
 
             Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
