@@ -10,10 +10,11 @@ using namespace smmap;
 ////////////////////////////////////////////////////////////////////////////////
 
 LeastSquaresJacobianModel::LeastSquaresJacobianModel(
-        const Eigen::MatrixXd& initial_jacobian )
+        const Eigen::MatrixXd& initial_jacobian,
+        const long extra_samples )
     : current_jacobian_( initial_jacobian )
     , next_buffer_ind_( 0 )
-    , buffer_size_( initial_jacobian.cols() + 2 )
+    , buffer_size_( initial_jacobian.cols() + extra_samples )
     , buffer_full_( false )
     , grippers_delta_wide_matrix_( initial_jacobian.cols(), buffer_size_ )
     , deformable_delta_wide_matrix_( initial_jacobian.rows(), buffer_size_ )

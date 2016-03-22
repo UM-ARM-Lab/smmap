@@ -234,7 +234,8 @@ void Task::initializeModelSet()
                                          task_specification_->getDeformability() )
                                      .getGrippersToObjectJacobian(
                                          robot_.getGrippersPose(),
-                                         GetObjectInitialConfiguration( nh_) ) ) ) );
+                                         GetObjectInitialConfiguration( nh_) ),
+                                     2 ) ) );
 
     }
 }

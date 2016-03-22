@@ -12,7 +12,8 @@ namespace smmap
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
-            LeastSquaresJacobianModel( const Eigen::MatrixXd& initial_jacobian );
+            LeastSquaresJacobianModel( const Eigen::MatrixXd& initial_jacobian,
+                                       const long extra_samples );
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function overrides
