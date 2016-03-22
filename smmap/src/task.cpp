@@ -4,8 +4,10 @@
 #include "smmap/task.h"
 #include "smmap/ros_params.hpp"
 #include "smmap/ros_communication_helpers.hpp"
+
 #include "smmap/diminishing_rigidity_model.h"
 #include "smmap/adaptive_jacobian_model.h"
+#include "smmap/least_squares_jacobian_model.h"
 
 using namespace smmap;
 using namespace EigenHelpersConversions;
@@ -217,14 +219,22 @@ void Task::initializeModelSet()
 //                                 DiminishingRigidityModel(
 //                                     task_specification_->getDeformability() ) ) );
 
-        model_set_.addModel( std::make_shared< AdaptiveJacobianModel >(
-                                 AdaptiveJacobianModel(
+//        model_set_.addModel( std::make_shared< AdaptiveJacobianModel >(
+//                                 AdaptiveJacobianModel(
+//                                     DiminishingRigidityModel(
+//                                         task_specification_->getDeformability() )
+//                                     .getGrippersToObjectJacobian(
+//                                         robot_.getGrippersPose(),
+//                                         GetObjectInitialConfiguration( nh_) ),
+//                                     1e-8 ) ) );
+
+        model_set_.addModel( std::make_shared< LeastSquaresJacobianModel >(
+                                 LeastSquaresJacobianModel(
                                      DiminishingRigidityModel(
                                          task_specification_->getDeformability() )
                                      .getGrippersToObjectJacobian(
                                          robot_.getGrippersPose(),
-                                         GetObjectInitialConfiguration( nh_) ),
-                                     1e-8 ) ) );
+                                         GetObjectInitialConfiguration( nh_) ) ) ) );
 
     }
 }
