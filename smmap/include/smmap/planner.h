@@ -33,10 +33,12 @@ namespace smmap
                     const double max_gripper_velocity = 0.05/20.0/0.01,
                     const double obstacle_avoidance_scale = 100.0*20.0 ) const;
 
-            static double UpdateUtility( const double old_utility,
-                                         const WorldState& world_state,
-                                         const ObjectPointSet& prediction,
-                                         const Eigen::VectorXd& weights );
+            static double UpdateUtility(
+                    const size_t model_index,
+                    const double old_utility,
+                    const WorldState& world_state,
+                    const ObjectPointSet& prediction,
+                    const Eigen::VectorXd& weights );
 
         private:
             const ErrorFunctionType error_fn_;

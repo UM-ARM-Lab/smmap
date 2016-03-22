@@ -25,8 +25,9 @@ namespace smmap
                     const AllGrippersPoseDeltaTrajectory& grippers_pose_delta_trajectory,
                     const double dt ) const;
 
-            std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >
-            getSuggestedGrippersTrajectories(
+            std::pair< AllGrippersPoseTrajectory, ObjectTrajectory >
+            getSuggestedGrippersTrajectory(
+                    const size_t model_index,
                     const WorldState& world_current_state,
                     const int planning_horizion,
                     const double dt,

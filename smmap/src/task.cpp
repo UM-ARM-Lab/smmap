@@ -215,9 +215,9 @@ void Task::initializeModelSet()
         ROS_INFO_STREAM_NAMED( "task", "Using default deformability value of "
                                << task_specification_->getDeformability() );
 
-//        model_set_.addModel( std::make_shared< DiminishingRigidityModel >(
-//                                 DiminishingRigidityModel(
-//                                     task_specification_->getDeformability() ) ) );
+        model_set_.addModel( std::make_shared< DiminishingRigidityModel >(
+                                 DiminishingRigidityModel(
+                                     task_specification_->getDeformability() ) ) );
 
 //        model_set_.addModel( std::make_shared< AdaptiveJacobianModel >(
 //                                 AdaptiveJacobianModel(
@@ -228,14 +228,14 @@ void Task::initializeModelSet()
 //                                         GetObjectInitialConfiguration( nh_) ),
 //                                     1e-8 ) ) );
 
-        model_set_.addModel( std::make_shared< LeastSquaresJacobianModel >(
-                                 LeastSquaresJacobianModel(
-                                     DiminishingRigidityModel(
-                                         task_specification_->getDeformability() )
-                                     .getGrippersToObjectJacobian(
-                                         robot_.getGrippersPose(),
-                                         GetObjectInitialConfiguration( nh_) ),
-                                     2 ) ) );
+//        model_set_.addModel( std::make_shared< LeastSquaresJacobianModel >(
+//                                 LeastSquaresJacobianModel(
+//                                     DiminishingRigidityModel(
+//                                         task_specification_->getDeformability() )
+//                                     .getGrippersToObjectJacobian(
+//                                         robot_.getGrippersPose(),
+//                                         GetObjectInitialConfiguration( nh_) ),
+//                                     2 ) ) );
 
     }
 }
@@ -313,13 +313,14 @@ ModelPredictionFunctionType Task::createModelPredictionFunction()
 
 ModelSuggestedGrippersTrajFunctionType Task::createModelSuggestedGrippersTrajFunction()
 {
-    return std::bind( &ModelSet::getSuggestedGrippersTrajectories,
+    return std::bind( &ModelSet::getSuggestedGrippersTrajectory,
                       &model_set_,
                       std::placeholders::_1,
                       std::placeholders::_2,
                       std::placeholders::_3,
                       std::placeholders::_4,
-                      std::placeholders::_5 );
+                      std::placeholders::_5,
+                      std::placeholders::_6 );
 }
 
 GetModelUtilityFunctionType Task::createGetModelUtilityFunction()
@@ -334,7 +335,8 @@ UpdateModelUtilityFunctionType Task::createUpdateModelUtilityFunction()
                       std::placeholders::_1,
                       std::placeholders::_2,
                       std::placeholders::_3,
-                      std::placeholders::_4 );
+                      std::placeholders::_4,
+                      std::placeholders::_5 );
 }
 
 GripperCollisionCheckFunctionType Task::createGripperCollisionCheckFunction()

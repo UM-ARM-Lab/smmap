@@ -43,26 +43,13 @@ AllGrippersPoseTrajectory Planner::getNextTrajectory(
         const double max_gripper_velocity,
         const double obstacle_avoidance_scale ) const
 {
-    // Querry each model for it's best trajectory
-    ROS_INFO_STREAM_NAMED( "planner", "Getting trajectory suggestions of length " << planning_horizion );
-    const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > > suggested_trajectories =
-            model_suggested_grippers_traj_fn_(
-                world_current_state,
-                planning_horizion,
-                dt,
-                max_gripper_velocity,
-                obstacle_avoidance_scale );
-
     // Get the utility of each model
     const std::vector< double >& model_utility = get_model_utility_fn_();
 
-    // Confirm that our data sizes match what they are supposed to
-    assert( model_utility.size() == suggested_trajectories.size() );
-
-    size_t min_weighted_cost_ind = 0;
+    // Find the one with the lowest utility
     double min_weighted_cost = std::numeric_limits< double >::infinity();
-    ROS_INFO_NAMED( "planner" , "Finding 'best' trajectory suggestion for a seed" );
-    for ( size_t model_ind = 0; model_ind < suggested_trajectories.size(); model_ind++ )
+    size_t min_weighted_cost_ind = 0;
+    for ( size_t model_ind = 0; model_ind < model_utility.size(); model_ind++ )
     {
         double weighted_cost = model_utility[model_ind];
 //                * error_fn_( suggested_trajectories[model_ind].second.back() );
@@ -73,20 +60,43 @@ AllGrippersPoseTrajectory Planner::getNextTrajectory(
         }
     }
 
+    // Querry each model for it's best trajectory
+    ROS_INFO_STREAM_NAMED( "planner", "Getting trajectory suggestion for model "
+                           << min_weighted_cost_ind << " of length " << planning_horizion );
+
+    const std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > suggested_trajectory =
+            model_suggested_grippers_traj_fn_(
+                min_weighted_cost_ind,
+                world_current_state,
+                planning_horizion,
+                dt,
+                max_gripper_velocity,
+                obstacle_avoidance_scale );
+
     AllGrippersPoseTrajectory best_trajectory =
-            suggested_trajectories[min_weighted_cost_ind].first;
+            suggested_trajectory.first;
 //            optimizeTrajectoryDirectShooting(
 //                world_feedback.back(),
-//                suggested_trajectories[min_weighted_cost_ind].first,
+//                suggested_trajectories.first,
 //                dt );
 
     return best_trajectory;
 }
 
-double Planner::UpdateUtility( const double old_utility,
-                               const WorldState& world_state,
-                               const ObjectPointSet& prediction,
-                               const Eigen::VectorXd& weights )
+/**
+ * @brief Planner::UpdateUtility
+ * @param old_utility
+ * @param world_state
+ * @param prediction
+ * @param weights
+ * @return
+ */
+double Planner::UpdateUtility(
+        const size_t model_index,
+        const double old_utility,
+        const WorldState& world_state,
+        const ObjectPointSet& prediction,
+        const Eigen::VectorXd& weights )
 {
     const double distance = distanceWeighted(
                 world_state.object_configuration_,

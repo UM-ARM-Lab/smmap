@@ -4,10 +4,18 @@
 
 using namespace smmap;
 
+/**
+ * @brief ModelSet::ModelSet
+ * @param update_model_utility_fn
+ */
 ModelSet::ModelSet( const UpdateModelUtilityFunctionType& update_model_utility_fn )
     : update_model_utility_fn_( update_model_utility_fn )
 {}
 
+/**
+ * @brief ModelSet::addModel
+ * @param model
+ */
 void ModelSet::addModel( DeformableModel::Ptr model )
 {
     assert( model_list_.size() == model_utility_.size() );
@@ -16,6 +24,11 @@ void ModelSet::addModel( DeformableModel::Ptr model )
     model_utility_.push_back( 0 );
 }
 
+/**
+ * @brief ModelSet::updateModels
+ * @param feedback
+ * @param weights
+ */
 // TODO: this is currently being invoked from Task, should this be invoked from the planner?
 void ModelSet::updateModels( const std::vector< WorldState >& feedback,
                              const Eigen::VectorXd& weights )
@@ -37,6 +50,7 @@ void ModelSet::updateModels( const std::vector< WorldState >& feedback,
                     dt );
 
         model_utility_[model_ind] = update_model_utility_fn_(
+                    model_ind,
                     model_utility_[model_ind],
                     starting_world_state,
                     prediction,
@@ -46,6 +60,14 @@ void ModelSet::updateModels( const std::vector< WorldState >& feedback,
     }
 }
 
+/**
+ * @brief ModelSet::getPredictions
+ * @param starting_world_state
+ * @param grippers_pose_trajectory
+ * @param grippers_pose_delta_trajectory
+ * @param dt
+ * @return
+ */
 VectorObjectTrajectory ModelSet::getPredictions(
         const WorldState& starting_world_state,
         const AllGrippersPoseTrajectory& grippers_pose_trajectory,
@@ -67,27 +89,31 @@ VectorObjectTrajectory ModelSet::getPredictions(
     return predictions;
 }
 
-std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >
-ModelSet::getSuggestedGrippersTrajectories(
+/**
+ * @brief ModelSet::getSuggestedGrippersTrajectories
+ * @param model_index
+ * @param world_current_state
+ * @param planning_horizion
+ * @param dt
+ * @param max_gripper_velocity
+ * @param obstacle_avoidance_scale
+ * @return
+ */
+std::pair< AllGrippersPoseTrajectory, ObjectTrajectory >
+ModelSet::getSuggestedGrippersTrajectory(
+        const size_t model_index,
         const WorldState& world_current_state,
         const int planning_horizion,
         const double dt,
         const double max_gripper_velocity,
         const double obstacle_avoidance_scale ) const
 {
-    std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > > trajectories( model_list_.size() );
-
-    for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
-    {
-        trajectories[model_ind] = model_list_[model_ind]->getSuggestedGrippersTrajectory(
-                    world_current_state,
-                    planning_horizion,
-                    dt,
-                    max_gripper_velocity,
-                    obstacle_avoidance_scale );
-    }
-
-    return trajectories;
+    return model_list_[model_index]->getSuggestedGrippersTrajectory(
+                world_current_state,
+                planning_horizion,
+                dt,
+                max_gripper_velocity,
+                obstacle_avoidance_scale );
 }
 
 /*
@@ -136,7 +162,11 @@ std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > > ModelSet::getObject
 }
 */
 
+/**
+ * @brief ModelSet::getModelUtility
+ * @return
+ */
 const std::vector< double >& ModelSet::getModelUtility() const
 {
-    return model_utility_;
+    model_utility_;
 }

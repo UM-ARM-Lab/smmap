@@ -21,7 +21,8 @@ namespace smmap
         ) >
     ModelPredictionFunctionType;
 
-    typedef std::function< std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >(
+    typedef std::function< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory >(
+            const size_t,                           /* model index */
             const WorldState&,                      /* current state of the world at the start of planning */
             const int,                              /* planning horizion */
             const double,                           /* dt */
@@ -30,14 +31,15 @@ namespace smmap
             ) >
     ModelSuggestedGrippersTrajFunctionType;
 
-    // TODO: Get Model Utility operates on all models while Update Model Utility operates on only 1 model
-    // This ought to be fixed.
     typedef std::function< const std::vector< double >&(
             void
             ) >
     GetModelUtilityFunctionType;
 
+    // TODO: this works on a single model, but the get version works on all models
+    // Should this be changed?
     typedef std::function< double(
+            const size_t,                           /* model index */
             const double,                           /* old utility of the given model*/
             const WorldState&,                      /* world feedback since the last update */
             const ObjectPointSet&,                  /* the prediction of the given model */
