@@ -1,14 +1,5 @@
 #include "smmap/jacobian_model.h"
 
-#include <cmath>
-#include <limits>
-#include <stdexcept>
-#include <algorithm>
-#include <functional>
-#include <Eigen/SVD>
-
-#include <ros/ros.h>
-
 using namespace smmap;
 
 ////////////////////////////////////////////////////////////////////////////////

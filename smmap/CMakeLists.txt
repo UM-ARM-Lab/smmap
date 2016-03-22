@@ -86,6 +86,8 @@ add_library( ${PROJECT_NAME}
     src/deformable_model.cpp
     include/${PROJECT_NAME}/jacobian_model.h
     src/jacobian_model.cpp
+    include/${PROJECT_NAME}/adaptive_jacobian_model.h
+    src/adaptive_jacobian_model.cpp
     include/${PROJECT_NAME}/diminishing_rigidity_model.h
     src/diminishing_rigidity_model.cpp
     include/${PROJECT_NAME}/model_set.h

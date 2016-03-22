@@ -55,7 +55,7 @@ namespace smmap
             // Computation helpers
             ////////////////////////////////////////////////////////////////////
 
-            Eigen::MatrixXd computeGrippersToObjectJacobian(
+            virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
                     const ObjectPointSet& current_configuration ) const;
 

@@ -5,6 +5,7 @@
 #include "smmap/ros_params.hpp"
 #include "smmap/ros_communication_helpers.hpp"
 #include "smmap/diminishing_rigidity_model.h"
+#include "smmap/adaptive_jacobian_model.h"
 
 using namespace smmap;
 using namespace EigenHelpersConversions;
@@ -212,9 +213,19 @@ void Task::initializeModelSet()
         ROS_INFO_STREAM_NAMED( "task", "Using default deformability value of "
                                << task_specification_->getDeformability() );
 
-        model_set_.addModel( std::make_shared< DiminishingRigidityModel >(
-                                 DiminishingRigidityModel(
-                                     task_specification_->getDeformability() ) ) );
+//        model_set_.addModel( std::make_shared< DiminishingRigidityModel >(
+//                                 DiminishingRigidityModel(
+//                                     task_specification_->getDeformability() ) ) );
+
+        model_set_.addModel( std::make_shared< AdaptiveJacobianModel >(
+                                 AdaptiveJacobianModel(
+                                     DiminishingRigidityModel(
+                                         task_specification_->getDeformability() )
+                                     .getGrippersToObjectJacobian(
+                                         robot_.getGrippersPose(),
+                                         GetObjectInitialConfiguration( nh_) ),
+                                     1e-6 ) ) );
+
     }
 }
 

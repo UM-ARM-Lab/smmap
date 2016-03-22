@@ -38,7 +38,7 @@ namespace smmap
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale ) const;
 
-        private:
+        protected:
 
             ////////////////////////////////////////////////////////////////////
             // Static helpers

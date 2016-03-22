@@ -59,6 +59,31 @@ namespace smmap
                 return grippers_data_;
             }
 
+            const AllGrippersSinglePose getGrippersPose()
+            {
+                AllGrippersSinglePose grippers_pose( grippers_data_.size() );
+
+                for ( size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++ )
+                {
+                    ros::ServiceClient gripper_pose_client =
+                        nh_.serviceClient< smmap_msgs::GetGripperPose >( GetGripperPoseTopic( nh_ ) );
+                    gripper_pose_client.waitForExistence();
+
+                    smmap_msgs::GetGripperPose pose_srv_data;
+                    pose_srv_data.request.name = grippers_data_[gripper_ind].name;
+                    if ( !gripper_pose_client.call( pose_srv_data ) )
+                    {
+                        ROS_FATAL_STREAM_NAMED( "task", "Unabled to retrieve gripper pose: "
+                                                << grippers_data_[gripper_ind].name );
+                    }
+
+                    grippers_pose[gripper_ind] =
+                            EigenHelpersConversions::GeometryPoseToEigenAffine3d( pose_srv_data.response.pose );
+                }
+
+                return grippers_pose;
+            }
+
             std::vector< WorldState > sendGripperTrajectory(
                     const AllGrippersPoseTrajectory& trajectory )
             {

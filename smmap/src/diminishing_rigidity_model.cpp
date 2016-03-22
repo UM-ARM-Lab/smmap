@@ -1,13 +1,7 @@
 #include "smmap/diminishing_rigidity_model.h"
 
 #include <cmath>
-#include <limits>
 #include <stdexcept>
-#include <algorithm>
-#include <functional>
-#include <Eigen/SVD>
-
-#include <ros/ros.h>
 
 using namespace smmap;
 
@@ -122,8 +116,6 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(
         const AllGrippersSinglePose& grippers_pose,
         const ObjectPointSet& current_configuration ) const
 {
-    //ROS_DEBUG_NAMED( "diminishing_rigidity_model" , "Computing object Jacobian: Diminishing rigidity k_trans: %f k_rot: %f", translation_deformablity_, rotation_deformability_ );
-
     const long num_grippers = (long)grippers_pose.size();
     const long num_Jcols = num_grippers * 6;
     const long num_Jrows = num_nodes_ * 3;
