@@ -224,7 +224,7 @@ void Task::initializeModelSet()
                                      .getGrippersToObjectJacobian(
                                          robot_.getGrippersPose(),
                                          GetObjectInitialConfiguration( nh_) ),
-                                     1e-6 ) ) );
+                                     1e-8 ) ) );
 
     }
 }

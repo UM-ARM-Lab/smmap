@@ -1,5 +1,5 @@
-#ifndef ADAPTIVEJACOBIANMODEL_H
-#define ADAPTIVEJACOBIANMODEL_H
+#ifndef ADAPTIVE_JACOBIAN_MODEL_H
+#define ADAPTIVE_JACOBIAN_MODEL_H
 
 #include "smmap/jacobian_model.h"
 
@@ -38,9 +38,8 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             Eigen::MatrixXd current_jacobian_;
-//            const long num_nodes_;
             const double learning_rate_;
     };
 }
 
-#endif // ADAPTIVEJACOBIANMODEL_H
+#endif // ADAPTIVE_JACOBIAN_MODEL_H
