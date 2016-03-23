@@ -104,6 +104,8 @@ add_library( ${PROJECT_NAME}
 
     include/${PROJECT_NAME}/planner.h
     src/planner.cpp
+
+    include/${PROJECT_NAME}/kalman_filter_multiarm_bandit.hpp
 )
 add_dependencies( ${PROJECT_NAME}
     ${catkin_EXPORTED_TARGETS}

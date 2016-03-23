@@ -1,7 +1,8 @@
 #include "smmap/planner.h"
 
-#include <numeric>
 #include <assert.h>
+#include <chrono>
+#include <numeric>
 
 #include <arc_utilities/pretty_print.hpp>
 
@@ -25,15 +26,31 @@ Planner::Planner( const ErrorFunctionType& error_fn,
                   const double dt )
     : error_fn_( error_fn )
     , dt_( dt )
+    , last_model_used_( -1 )
+    , generator_( 0xa8710913d2b5df6c ) // a30cd67f3860ddb3 ) // MD5 sum of "Dale McConachie"
+//    , generator_( std::chrono::system_clock::now().time_since_epoch().count() )
     , vis_( vis )
 {}
 
 void Planner::addModel( DeformableModel::Ptr model )
 {
-    assert( model_list_.size() == model_utility_.size() );
+//    assert( model_list_.size() == model_utility_.size() );
 
     model_list_.push_back( model );
-    model_utility_.push_back( 0 );
+//    model_utility_.push_back( 0 );
+}
+
+void Planner::createBandits()
+{
+    model_utility_bandit_ = KalmanFilterMultiarmBandit< std::mt19937_64 >(
+                std::vector< double >( model_list_.size(), 0 ),
+                std::vector< double >( model_list_.size(), 100 )
+                );
+}
+
+size_t Planner::getLastModelUsed()
+{
+    return last_model_used_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -53,28 +70,16 @@ AllGrippersPoseTrajectory Planner::getNextTrajectory(
         const WorldState& world_current_state,
         const int planning_horizion,
         const double max_gripper_velocity,
-        const double obstacle_avoidance_scale ) const
+        const double obstacle_avoidance_scale )
 {
-    // Find the one with the lowest utility
-    double min_weighted_cost = std::numeric_limits< double >::infinity();
-    size_t min_weighted_cost_ind = 0;
-    for ( size_t model_ind = 0; model_ind < model_utility_.size(); model_ind++ )
-    {
-        double weighted_cost = model_utility_[model_ind];
-//                * error_fn_( suggested_trajectories[model_ind].second.back() );
-        if ( weighted_cost < min_weighted_cost )
-        {
-            min_weighted_cost = weighted_cost;
-            min_weighted_cost_ind = model_ind;
-        }
-    }
+    last_model_used_ = model_utility_bandit_.selectArmToPull( generator_ );
 
     // Querry each model for it's best trajectory
     ROS_INFO_STREAM_NAMED( "planner", "Getting trajectory suggestion for model "
-                           << min_weighted_cost_ind << " of length " << planning_horizion );
+                           << last_model_used_ << " of length " << planning_horizion );
 
     const std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > suggested_trajectory =
-            model_list_[min_weighted_cost_ind]->getSuggestedGrippersTrajectory(
+            model_list_[last_model_used_]->getSuggestedGrippersTrajectory(
                 world_current_state,
                 planning_horizion,
                 dt_,
@@ -101,30 +106,41 @@ void Planner::updateModels(
         const Eigen::VectorXd& weights )
 {
     // TODO: avoid doing all this recalculation
-    const AllGrippersPoseTrajectory grippers_pose_trajectory =
-            GetGripperTrajectories( world_feedback );
-    const AllGrippersPoseDeltaTrajectory grippers_pose_delta_trajectory =
-            CalculateGrippersPoseDeltas( grippers_pose_trajectory );
+//    const AllGrippersPoseTrajectory grippers_pose_trajectory =
+//            GetGripperTrajectories( world_feedback );
+//    const AllGrippersPoseDeltaTrajectory grippers_pose_delta_trajectory =
+//            CalculateGrippersPoseDeltas( grippers_pose_trajectory );
+
+    // TODO: find a better way to do this
+    // check if this update is valid
+    if ( last_model_used_ < model_list_.size() )
+    {
+        const double error_reduction =
+                error_fn_( world_feedback.front().object_configuration_ )
+                - error_fn_( world_feedback.back().object_configuration_ );
+
+        model_utility_bandit_.updateArms( last_model_used_, error_reduction, 0, 0.1 );
+    }
 
     #pragma omp parallel for
     for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
     {
-        // First we evaluate each model for it's new utility
-        const ObjectPointSet prediction =
-                model_list_[model_ind]->getFinalConfiguration(
-                    world_feedback.front(),
-                    grippers_pose_trajectory,
-                    grippers_pose_delta_trajectory,
-                    dt_ );
+//        // First we evaluate each model for it's new utility
+//        const ObjectPointSet prediction =
+//                model_list_[model_ind]->getFinalConfiguration(
+//                    world_feedback.front(),
+//                    grippers_pose_trajectory,
+//                    grippers_pose_delta_trajectory,
+//                    dt_ );
 
-        const double distance = distanceWeighted(
-                    world_feedback.back().object_configuration_,
-                    prediction,
-                    weights );
-        // TODO: use dt here somewhere, plus the number of nodes, etc.
-        const double new_utility = 1.0/(1.0 + std::sqrt( std::sqrt( distance ) ) );
-        #warning "Another magic number here - annealing rate"
-        model_utility_[model_ind] = anneal( model_utility_[model_ind], new_utility, 0.1 );
+//        const double distance = distanceWeighted(
+//                    world_feedback.back().object_configuration_,
+//                    prediction,
+//                    weights );
+//        // TODO: use dt here somewhere, plus the number of nodes, etc.
+//        const double new_utility = 1.0/(1.0 + std::sqrt( std::sqrt( distance ) ) );
+//        #warning "Another magic number here - annealing rate"
+//        model_utility_[model_ind] = anneal( model_utility_[model_ind], new_utility, 0.1 );
 
 
         // Then we allow the model to update itself based on the new data

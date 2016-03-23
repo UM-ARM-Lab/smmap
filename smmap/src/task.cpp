@@ -139,8 +139,8 @@ void Task::execute()
             LOG_COND( loggers.at( "error"), logging_enabled_,
                       task_specification_->calculateError( world_feedback.back().object_configuration_ ) );
 
-//            LOG_COND( loggers.at( "utility"), logging_enabled_,
-//                      planner_.getModelUtility()[0] );
+            LOG_COND( loggers.at( "utility"), logging_enabled_,
+                      planner_.getLastModelUsed() );
         }
 
         if ( task_specification_->maxTime() < world_feedback.back().sim_time_ )
@@ -232,6 +232,8 @@ void Task::initializeModelSet()
 //                                     2 ) ) );
 
     }
+
+    planner_.createBandits();
 }
 
 void Task::initializeLogging()
