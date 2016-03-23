@@ -21,14 +21,9 @@ Task::Task( RobotInterface& robot,
     , vis_( vis )
     , task_specification_( task_specification )
     , error_fn_( createErrorFunction() )
-    , model_prediction_fn_( createModelPredictionFunction() )
-    , model_suggested_grippers_traj_fn_( createModelSuggestedGrippersTrajFunction() )
-    , get_model_utility_fn_( createGetModelUtilityFunction() )
-    , update_model_utility_fn_( createUpdateModelUtilityFunction() )
     , gripper_collision_check_fn_( createGripperCollisionCheckFunction() )
     , task_desired_object_delta_fn_( createTaskDesiredObjectDeltaFunction() )
-    , model_set_( update_model_utility_fn_ )
-    , planner_( error_fn_, model_prediction_fn_, model_suggested_grippers_traj_fn_, get_model_utility_fn_, vis_ )
+    , planner_( error_fn_, vis_, RobotInterface::DT )
 
 {
     initializeModelSet();
@@ -99,7 +94,6 @@ void Task::execute()
         AllGrippersPoseTrajectory next_trajectory = planner_.getNextTrajectory(
                     current_world_state,
                     planning_horizion,
-                    RobotInterface::DT,
                     RobotInterface::MAX_GRIPPER_VELOCITY,
                     task_specification_->getCollisionScalingFactor() );
 
@@ -134,7 +128,7 @@ void Task::execute()
         world_feedback.emplace( world_feedback.begin(), current_world_state );
 
         ROS_INFO_NAMED( "task", "Updating models" );
-        model_set_.updateModels( world_feedback, first_step_desired_motion.second );
+        planner_.updateModels( world_feedback, first_step_desired_motion.second );
 
         // Log stuff if so desired
         {
@@ -145,8 +139,8 @@ void Task::execute()
             LOG_COND( loggers.at( "error"), logging_enabled_,
                       task_specification_->calculateError( world_feedback.back().object_configuration_ ) );
 
-            LOG_COND( loggers.at( "utility"), logging_enabled_,
-                      model_set_.getModelUtility()[0] );
+//            LOG_COND( loggers.at( "utility"), logging_enabled_,
+//                      planner_.getModelUtility()[0] );
         }
 
         if ( task_specification_->maxTime() < world_feedback.back().sim_time_ )
@@ -178,7 +172,7 @@ void Task::initializeModelSet()
                                << translational_deformability << " "
                                << rotational_deformability );
 
-        model_set_.addModel( std::make_shared< DiminishingRigidityModel >(
+        planner_.addModel( std::make_shared< DiminishingRigidityModel >(
                                  DiminishingRigidityModel(
                                      translational_deformability,
                                      rotational_deformability ) ) );
@@ -203,7 +197,7 @@ void Task::initializeModelSet()
         {
             for ( double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step )
             {
-                model_set_.addModel( std::make_shared< DiminishingRigidityModel >(
+                planner_.addModel( std::make_shared< DiminishingRigidityModel >(
                                          DiminishingRigidityModel(
                                              trans_deform,
                                              rot_deform ) ) );
@@ -215,7 +209,7 @@ void Task::initializeModelSet()
         ROS_INFO_STREAM_NAMED( "task", "Using default deformability value of "
                                << task_specification_->getDeformability() );
 
-        model_set_.addModel( std::make_shared< DiminishingRigidityModel >(
+        planner_.addModel( std::make_shared< DiminishingRigidityModel >(
                                  DiminishingRigidityModel(
                                      task_specification_->getDeformability() ) ) );
 
@@ -299,44 +293,6 @@ ErrorFunctionType Task::createErrorFunction()
     return std::bind( &TaskSpecification::calculateError,
                       task_specification_,
                       std::placeholders::_1 );
-}
-
-ModelPredictionFunctionType Task::createModelPredictionFunction()
-{
-    return std::bind( &ModelSet::getPredictions,
-                      &model_set_,
-                      std::placeholders::_1,
-                      std::placeholders::_2,
-                      std::placeholders::_3,
-                      std::placeholders::_4 );
-}
-
-ModelSuggestedGrippersTrajFunctionType Task::createModelSuggestedGrippersTrajFunction()
-{
-    return std::bind( &ModelSet::getSuggestedGrippersTrajectory,
-                      &model_set_,
-                      std::placeholders::_1,
-                      std::placeholders::_2,
-                      std::placeholders::_3,
-                      std::placeholders::_4,
-                      std::placeholders::_5,
-                      std::placeholders::_6 );
-}
-
-GetModelUtilityFunctionType Task::createGetModelUtilityFunction()
-{
-    return std::bind( &ModelSet::getModelUtility,
-                      &model_set_ );
-}
-
-UpdateModelUtilityFunctionType Task::createUpdateModelUtilityFunction()
-{
-    return std::bind( &Planner::UpdateUtility,
-                      std::placeholders::_1,
-                      std::placeholders::_2,
-                      std::placeholders::_3,
-                      std::placeholders::_4,
-                      std::placeholders::_5 );
 }
 
 GripperCollisionCheckFunctionType Task::createGripperCollisionCheckFunction()

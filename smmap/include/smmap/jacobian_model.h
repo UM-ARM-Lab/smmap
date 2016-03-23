@@ -23,20 +23,20 @@ namespace smmap
                     const WorldState& world_initial_state,
                     const AllGrippersPoseTrajectory& grippers_pose_trajectory,
                     const AllGrippersPoseDeltaTrajectory& grippers_pose_delta_trajectory,
-                    const double dt ) const;
+                    const double dt ) const override final;
 
             virtual ObjectPointSet getFinalConfiguration(
                     const WorldState& world_initial_state,
                     const AllGrippersPoseTrajectory& gripper_pose_trajectory,
                     const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
-                    const double dt ) const ;
+                    const double dt ) const override final;
 
             virtual std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > getSuggestedGrippersTrajectory(
                     const WorldState& world_initial_state,
                     const int planning_horizion,
                     const double dt,
                     const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale ) const;
+                    const double obstacle_avoidance_scale ) const override final;
 
         protected:
 

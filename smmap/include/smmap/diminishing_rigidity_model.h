@@ -57,7 +57,7 @@ namespace smmap
 
             virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration ) const;
+                    const ObjectPointSet& current_configuration ) const override;
 
             ////////////////////////////////////////////////////////////////////
             // Static members

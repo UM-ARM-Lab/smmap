@@ -5,7 +5,7 @@
 
 namespace smmap
 {
-    class LeastSquaresJacobianModel : public JacobianModel
+    class LeastSquaresJacobianModel final : public JacobianModel
     {
         public:
             ////////////////////////////////////////////////////////////////////
@@ -19,9 +19,9 @@ namespace smmap
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            virtual void updateModel( const std::vector< WorldState >& feedback );
+            virtual void updateModel( const std::vector< WorldState >& feedback ) override;
 
-            void perturbModel( std::mt19937_64& generator );
+            virtual void perturbModel( std::mt19937_64& generator ) override;
 
         private:
 
@@ -31,7 +31,7 @@ namespace smmap
 
             virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration ) const;
+                    const ObjectPointSet& current_configuration ) const override;
 
             ////////////////////////////////////////////////////////////////////
             // Private members

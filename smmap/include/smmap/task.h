@@ -6,7 +6,6 @@
 
 #include "smmap/robot_interface.hpp"
 
-#include "smmap/model_set.h"
 #include "smmap/planner.h"
 #include "smmap/task_specification.h"
 #include "smmap/task_function_pointer_types.h"
@@ -57,10 +56,6 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             const ErrorFunctionType error_fn_;
-            const ModelPredictionFunctionType model_prediction_fn_;
-            const ModelSuggestedGrippersTrajFunctionType model_suggested_grippers_traj_fn_;
-            const GetModelUtilityFunctionType get_model_utility_fn_;
-            const UpdateModelUtilityFunctionType update_model_utility_fn_;
             const GripperCollisionCheckFunctionType gripper_collision_check_fn_;
             const TaskDesiredObjectDeltaFunctionType task_desired_object_delta_fn_;
 
@@ -71,18 +66,13 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             ErrorFunctionType createErrorFunction();
-            ModelPredictionFunctionType createModelPredictionFunction();
-            ModelSuggestedGrippersTrajFunctionType createModelSuggestedGrippersTrajFunction();
-            GetModelUtilityFunctionType createGetModelUtilityFunction();
-            UpdateModelUtilityFunctionType createUpdateModelUtilityFunction();
             GripperCollisionCheckFunctionType createGripperCollisionCheckFunction();
             TaskDesiredObjectDeltaFunctionType createTaskDesiredObjectDeltaFunction();
 
             ////////////////////////////////////////////////////////////////////
-            //
+            // The planner itself
             ////////////////////////////////////////////////////////////////////
 
-            ModelSet model_set_;
             Planner planner_;
 
     };

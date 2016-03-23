@@ -102,9 +102,6 @@ add_library( ${PROJECT_NAME}
     include/${PROJECT_NAME}/diminishing_rigidity_model.h
     src/diminishing_rigidity_model.cpp
 
-    include/${PROJECT_NAME}/model_set.h
-    src/model_set.cpp
-
     include/${PROJECT_NAME}/planner.h
     src/planner.cpp
 )

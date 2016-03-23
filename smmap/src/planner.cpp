@@ -9,7 +9,7 @@ using namespace smmap;
 using namespace EigenHelpersConversions;
 
 ////////////////////////////////////////////////////////////////////////////////
-// Constructor
+// Constructor and model list builder
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -21,37 +21,46 @@ using namespace EigenHelpersConversions;
  * @param vis
  */
 Planner::Planner( const ErrorFunctionType& error_fn,
-                  const ModelPredictionFunctionType& model_prediction_fn,
-                  const ModelSuggestedGrippersTrajFunctionType& model_suggested_grippers_traj_fn,
-                  const GetModelUtilityFunctionType& get_model_utility_fn,
-                  Visualizer& vis )
+                  Visualizer& vis,
+                  const double dt )
     : error_fn_( error_fn )
-    , model_prediction_fn_( model_prediction_fn )
-    , model_suggested_grippers_traj_fn_( model_suggested_grippers_traj_fn )
-    , get_model_utility_fn_( get_model_utility_fn )
+    , dt_( dt )
     , vis_( vis )
 {}
 
+void Planner::addModel( DeformableModel::Ptr model )
+{
+    assert( model_list_.size() == model_utility_.size() );
+
+    model_list_.push_back( model );
+    model_utility_.push_back( 0 );
+}
+
 ////////////////////////////////////////////////////////////////////////////////
-// The one function that gets invoked externally
+// The two functions that gets invoked externally
 ////////////////////////////////////////////////////////////////////////////////
 
+/**
+ * @brief Planner::getNextTrajectory
+ * @param world_current_state
+ * @param planning_horizion
+ * @param dt
+ * @param max_gripper_velocity
+ * @param obstacle_avoidance_scale
+ * @return
+ */
 AllGrippersPoseTrajectory Planner::getNextTrajectory(
         const WorldState& world_current_state,
         const int planning_horizion,
-        const double dt,
         const double max_gripper_velocity,
         const double obstacle_avoidance_scale ) const
 {
-    // Get the utility of each model
-    const std::vector< double >& model_utility = get_model_utility_fn_();
-
     // Find the one with the lowest utility
     double min_weighted_cost = std::numeric_limits< double >::infinity();
     size_t min_weighted_cost_ind = 0;
-    for ( size_t model_ind = 0; model_ind < model_utility.size(); model_ind++ )
+    for ( size_t model_ind = 0; model_ind < model_utility_.size(); model_ind++ )
     {
-        double weighted_cost = model_utility[model_ind];
+        double weighted_cost = model_utility_[model_ind];
 //                * error_fn_( suggested_trajectories[model_ind].second.back() );
         if ( weighted_cost < min_weighted_cost )
         {
@@ -65,11 +74,10 @@ AllGrippersPoseTrajectory Planner::getNextTrajectory(
                            << min_weighted_cost_ind << " of length " << planning_horizion );
 
     const std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > suggested_trajectory =
-            model_suggested_grippers_traj_fn_(
-                min_weighted_cost_ind,
+            model_list_[min_weighted_cost_ind]->getSuggestedGrippersTrajectory(
                 world_current_state,
                 planning_horizion,
-                dt,
+                dt_,
                 max_gripper_velocity,
                 obstacle_avoidance_scale );
 
@@ -78,45 +86,57 @@ AllGrippersPoseTrajectory Planner::getNextTrajectory(
 //            optimizeTrajectoryDirectShooting(
 //                world_feedback.back(),
 //                suggested_trajectories.first,
-//                dt );
+//                dt_ );
 
     return best_trajectory;
 }
 
 /**
- * @brief Planner::UpdateUtility
- * @param old_utility
- * @param world_state
- * @param prediction
+ * @brief Planner::updateModels
+ * @param world_feedback
  * @param weights
- * @return
  */
-double Planner::UpdateUtility(
-        const size_t model_index,
-        const double old_utility,
-        const WorldState& world_state,
-        const ObjectPointSet& prediction,
+void Planner::updateModels(
+        const std::vector< WorldState >& world_feedback,
         const Eigen::VectorXd& weights )
 {
-    const double distance = distanceWeighted(
-                world_state.object_configuration_,
-                prediction,
-                weights );
-    // TODO: use dt here somewhere, plus the number of nodes, etc.
-    const double new_utility = 1.0/(1.0 + std::sqrt( std::sqrt( distance ) ) );
-    #warning "Another magic number here - annealing rate"
-    return anneal( old_utility, new_utility, 0.1 );
+    // TODO: avoid doing all this recalculation
+    const AllGrippersPoseTrajectory grippers_pose_trajectory =
+            GetGripperTrajectories( world_feedback );
+    const AllGrippersPoseDeltaTrajectory grippers_pose_delta_trajectory =
+            CalculateGrippersPoseDeltas( grippers_pose_trajectory );
+
+    #pragma omp parallel for
+    for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
+    {
+        // First we evaluate each model for it's new utility
+        const ObjectPointSet prediction =
+                model_list_[model_ind]->getFinalConfiguration(
+                    world_feedback.front(),
+                    grippers_pose_trajectory,
+                    grippers_pose_delta_trajectory,
+                    dt_ );
+
+        const double distance = distanceWeighted(
+                    world_feedback.back().object_configuration_,
+                    prediction,
+                    weights );
+        // TODO: use dt here somewhere, plus the number of nodes, etc.
+        const double new_utility = 1.0/(1.0 + std::sqrt( std::sqrt( distance ) ) );
+        #warning "Another magic number here - annealing rate"
+        model_utility_[model_ind] = anneal( model_utility_[model_ind], new_utility, 0.1 );
+
+
+        // Then we allow the model to update itself based on the new data
+        model_list_[model_ind]->updateModel( world_feedback );
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Internal helpers for the getNextTrajectory() function
 ////////////////////////////////////////////////////////////////////////////////
 
-/**
- * @brief Planner::combineModelPredictions
- * @param model_predictions
- * @return
- */
+/*
 ObjectTrajectory Planner::combineModelPredictions(
         const VectorObjectTrajectory& model_predictions ) const
 {
@@ -143,11 +163,6 @@ ObjectTrajectory Planner::combineModelPredictions(
     return weighted_average_trajectory;
 }
 
-/**
- * @brief Planner::combineModelPredictionsLastTimestep
- * @param model_predictions
- * @return
- */
 ObjectPointSet Planner::combineModelPredictionsLastTimestep(
         const VectorObjectTrajectory& model_predictions ) const
 {
@@ -172,11 +187,6 @@ ObjectPointSet Planner::combineModelPredictionsLastTimestep(
     return weighted_average_configuration;
 }
 
-/**
- * @brief Planner::combineModelDerivitives
- * @param model_derivitives
- * @return
- */
 Eigen::VectorXd Planner::combineModelDerivitives(
         const std::vector< Eigen::VectorXd >& model_derivitives ) const
 {
@@ -197,11 +207,6 @@ Eigen::VectorXd Planner::combineModelDerivitives(
     return weighted_average_derivitive;
 }
 
-/**
- * @brief Planner::combineModelDerivitives
- * @param model_derivitives
- * @return
- */
 std::pair< Eigen::VectorXd, Eigen::MatrixXd > Planner::combineModelDerivitives(
         const std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > >& model_derivitives ) const
 {
@@ -227,7 +232,6 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > Planner::combineModelDerivitives(
     return weighted_average_derivitive;
 }
 
-/*
 std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
         const WorldFeedback& current_world_configuration,
         std::vector< AllGrippersSinglePose > grippers_trajectory,
