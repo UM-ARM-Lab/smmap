@@ -6,13 +6,15 @@ function calc {
 
 function multi_model_trial
 {
-    roslaunch smmap $base_environment.launch test_id:=$base_experiment"_multi_model" multi_model:=1 planning_horizion:=$planning_horizion
+    roslaunch smmap $base_environment.launch test_id:=$base_experiment"/multi_model" \
+        multi_model:=1 planning_horizion:=$planning_horizion
 }
 
 function single_model_trial_baseline_noise
 {
     covariance=$1
-    roslaunch smmap $base_environment.launch test_id:=$base_experiment"_noise_"$covariance multi_model:=0 planning_horizion:=$planning_horizion feedback_covariance:=$covariance
+    roslaunch smmap $base_environment.launch test_id:=$base_experiment"/noise_"$covariance \
+        multi_model:=0 planning_horizion:=$planning_horizion feedback_covariance:=$covariance
 }
 
 function single_model_trial_multiple_deform_values
@@ -26,9 +28,11 @@ function single_model_trial_multiple_deform_values
         for rot in `seq $min $max`;
         do
             rot_deform=`calc $rot*$3`
-            test_id=$base_experiment"_single_model/trans_"$trans_deform"_rot_"$rot_deform
+            test_id=$base_experiment"/single_model/trans_"$trans_deform"_rot_"$rot_deform
             echo $test_id
-            roslaunch smmap $base_environment.launch test_id:=$test_id deformability_override:=1 translational_deformability:=$trans_deform rotational_deformability:=$rot_deform multi_model:=0 planning_horizion:=$planning_horizion
+            roslaunch smmap $base_environment.launch test_id:=$test_id \
+                deformability_override:=1 translational_deformability:=$trans_deform rotational_deformability:=$rot_deform \
+                multi_model:=0 planning_horizion:=$planning_horizion
         done
     done
 }

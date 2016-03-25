@@ -6,6 +6,8 @@
 #include <random>
 #include <utility>
 
+#include <arc_utilities/pretty_print.hpp>
+
 namespace smmap
 {
     template<typename Generator>
@@ -84,6 +86,10 @@ namespace smmap
                         arm_var_[arm_ind] += tr_var;
                     }
                 }
+
+                std::cerr << "    Arm chosen: " << arm_pulled << std::endl;
+                std::cerr << PrettyPrint::PrettyPrint( arm_mean_ ) << std::endl << std::endl;
+                std::cerr << PrettyPrint::PrettyPrint( arm_var_ ) << std::endl << std::endl << std::endl;
             }
 
         private:
