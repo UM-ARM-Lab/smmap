@@ -94,6 +94,13 @@ std::pair< Eigen::VectorXd, Eigen::VectorXd > TaskSpecification::calculateObject
     return calculateObjectErrorCorrectionDelta_impl( world_state );
 }
 
+Eigen::VectorXd TaskSpecification::projectObjectDelta(
+        const ObjectPointSet& object_configuration,
+        Eigen::VectorXd object_delta ) const
+{
+    return projectObjectDelta_impl( object_configuration, object_delta );
+}
+
 /**
  * @brief TaskSpecification::calculateStretchingCorrectionDelta
  * @param world_state

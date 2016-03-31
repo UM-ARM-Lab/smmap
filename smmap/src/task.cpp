@@ -24,6 +24,7 @@ Task::Task( RobotInterface& robot,
     , update_model_utility_fn_( createUpdateModelUtilityFunction() )
     , gripper_collision_check_fn_( createGripperCollisionCheckFunction() )
     , task_desired_object_delta_fn_( createTaskDesiredObjectDeltaFunction() )
+    , task_object_delta_projection_fn_( createTaskObjectDeltaProjectionFunction() )
     , model_set_( update_model_utility_fn_ )
     , planner_( error_fn_, model_prediction_fn_, model_suggested_grippers_traj_fn_, get_model_utility_fn_, vis_ )
 
@@ -91,7 +92,8 @@ void Task::execute()
             }
         };
         DeformableModel::SetCallbackFunctions( gripper_collision_check_fn_,
-                                               caching_task_desired_object_delta_fn );
+                                               caching_task_desired_object_delta_fn,
+                                               task_object_delta_projection_fn_ );
 
         AllGrippersPoseTrajectory next_trajectory = planner_.getNextTrajectory(
                     current_world_state,
@@ -162,7 +164,8 @@ void Task::initializeModelSet()
     // Initialze each model type with the shared data
     DeformableModel::SetGrippersData( robot_.getGrippersData() );
     DeformableModel::SetCallbackFunctions( gripper_collision_check_fn_,
-                                           task_desired_object_delta_fn_ );
+                                           task_desired_object_delta_fn_,
+                                           task_object_delta_projection_fn_ );
 
     DiminishingRigidityModel::SetInitialObjectConfiguration( GetObjectInitialConfiguration( nh_) );
 
@@ -328,4 +331,12 @@ TaskDesiredObjectDeltaFunctionType Task::createTaskDesiredObjectDeltaFunction()
     return std::bind( &TaskSpecification::calculateObjectErrorCorrectionDelta,
                       task_specification_,
                       std::placeholders::_1 );
+}
+
+TaskObjectDeltaProjectionFunctionType Task::createTaskObjectDeltaProjectionFunction()
+{
+    return std::bind( &TaskSpecification::projectObjectDelta,
+                      task_specification_,
+                      std::placeholders::_1,
+                      std::placeholders::_2 );
 }

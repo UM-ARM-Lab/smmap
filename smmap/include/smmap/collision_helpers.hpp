@@ -2,6 +2,7 @@
 #define COLLISION_HELPERS_HPP
 
 #include <arc_utilities/eigen_helpers.hpp>
+#include "smmap/gripper_helpers.hpp"
 
 namespace smmap
 {
@@ -102,8 +103,8 @@ namespace smmap
             const Eigen::Vector3d& avoid_collision_delta = collision_data.obstacle_surface_normal_;
 
             collision_avoidance_result.velocity =  J_collision_inv * avoid_collision_delta;
-            collision_avoidance_result.velocity /= collision_avoidance_result.velocity.norm();
-            collision_avoidance_result.velocity *= max_step_size;
+            collision_avoidance_result.velocity *=
+                    max_step_size / GripperVelocity6dNorm( collision_avoidance_result.velocity );
 
             collision_avoidance_result.nullspace_projector =
                     Eigen::Matrix< double, 6, 6 >::Identity() - J_collision_inv * J_collision;

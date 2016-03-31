@@ -54,6 +54,12 @@ namespace smmap
             const WorldState&                       /* current world state */
             ) >
     TaskDesiredObjectDeltaFunctionType;
+
+    typedef std::function< Eigen::MatrixXd(
+            const ObjectPointSet&,                  /* current object state */
+            Eigen::VectorXd                         /* object delta */
+    ) >
+    TaskObjectDeltaProjectionFunctionType;
 }
 
 #endif // TASK_FUNCTION_POINTER_TYPES_H

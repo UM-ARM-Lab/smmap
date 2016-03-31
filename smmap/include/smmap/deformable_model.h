@@ -66,7 +66,8 @@ namespace smmap
 
             static void SetCallbackFunctions(
                     const GripperCollisionCheckFunctionType& gripper_collision_check_fn,
-                    const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn );
+                    const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn,
+                    const TaskObjectDeltaProjectionFunctionType& task_object_delta_projection_fn );
 
         protected:
 
@@ -86,6 +87,7 @@ namespace smmap
             static std::atomic_bool function_pointers_initialized_;
             static GripperCollisionCheckFunctionType gripper_collision_check_fn_;
             static TaskDesiredObjectDeltaFunctionType task_desired_object_delta_fn_;
+            static TaskObjectDeltaProjectionFunctionType task_object_delta_projection_fn_;
     };
 }
 

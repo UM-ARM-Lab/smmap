@@ -140,6 +140,13 @@ namespace smmap
                 return desired_rope_delta;
             }
 
+            virtual Eigen::VectorXd projectObjectDelta_impl(
+                    const ObjectPointSet& object_configuration,
+                    Eigen::VectorXd object_delta ) const
+            {
+                return object_delta;
+            }
+
         private:
             /// Stores the points that we are trying to cover with the rope
             const ObjectPointSet cover_points_;
@@ -276,6 +283,14 @@ namespace smmap
                 return desired_cloth_delta;
             }
 
+            virtual Eigen::VectorXd projectObjectDelta_impl(
+                    const ObjectPointSet& object_configuration,
+                    Eigen::VectorXd object_delta ) const
+            {
+                //TODO: do
+                return object_delta;
+            }
+
         private:
             /// Stores the points that we are trying to cover with the cloth
             const ObjectPointSet cover_points_;
@@ -371,6 +386,14 @@ namespace smmap
                 desired_cloth_delta.second /= sum;
 
                 return desired_cloth_delta;
+            }
+
+            virtual Eigen::VectorXd projectObjectDelta_impl(
+                    const ObjectPointSet& object_configuration,
+                    Eigen::VectorXd object_delta ) const
+            {
+                (void)object_configuration;
+                return object_delta;
             }
 
         private:

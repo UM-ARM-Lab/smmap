@@ -63,6 +63,7 @@ namespace smmap
             const UpdateModelUtilityFunctionType update_model_utility_fn_;
             const GripperCollisionCheckFunctionType gripper_collision_check_fn_;
             const TaskDesiredObjectDeltaFunctionType task_desired_object_delta_fn_;
+            const TaskObjectDeltaProjectionFunctionType task_object_delta_projection_fn_;
 
             ////////////////////////////////////////////////////////////////////
             // Functions that are used to initialize function pointers in the
@@ -77,6 +78,7 @@ namespace smmap
             UpdateModelUtilityFunctionType createUpdateModelUtilityFunction();
             GripperCollisionCheckFunctionType createGripperCollisionCheckFunction();
             TaskDesiredObjectDeltaFunctionType createTaskDesiredObjectDeltaFunction();
+            TaskObjectDeltaProjectionFunctionType createTaskObjectDeltaProjectionFunction();
 
             ////////////////////////////////////////////////////////////////////
             //

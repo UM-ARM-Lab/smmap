@@ -58,15 +58,32 @@ namespace smmap
         return names;
     }
 
-    inline double GripperVelocity6dNorm( const kinematics::Vector6d& velocity )
+    inline double GripperVelocity6dNorm( const Eigen::VectorXd& velocities )
     {
-        kinematics::Matrix6d weight = kinematics::Matrix6d::Identity();
+        assert( velocities.size() % 6 == 0 );
 
-        weight(3,3) = 1./20;
-        weight(4,4) = 1./20;
-        weight(5,5) = 1./20;
+        kinematics::Vector6d weights;
+        weights << 1, 1, 1, 1.0/20.0, 1.0/20.0, 1.0/20.0;
 
-        return (weight * velocity).norm();
+        double norm = 0;
+        for ( long gripper_ind = 0; gripper_ind < velocities.size(); gripper_ind += 6 )
+        {
+            norm += weights.dot( velocities.segment< 6 >( gripper_ind ).cwiseAbs2() );
+        }
+        return std::sqrt( norm );
+    }
+
+    inline double GripperVelocity6dNorm( const std::vector< kinematics::Vector6d >& velocities )
+    {
+        kinematics::Vector6d weights;
+        weights << 1, 1, 1, 1.0/20.0, 1.0/20.0, 1.0/20.0;
+
+        double norm = 0;
+        for ( auto& vel: velocities )
+        {
+            norm += norm += weights.dot( vel.cwiseAbs2() );
+        }
+        return std::sqrt( norm );
     }
 
     /**

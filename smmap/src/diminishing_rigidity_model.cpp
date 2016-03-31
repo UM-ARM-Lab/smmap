@@ -186,7 +186,7 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
                 = task_desired_object_delta_fn_( world_current_state );
 
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
-        const Eigen::MatrixXd jacobian = computeGrippersToObjectJacobian(
+        Eigen::MatrixXd jacobian = computeGrippersToObjectJacobian(
                 suggested_traj.first[(size_t)traj_step-1],
                 suggested_traj.second[(size_t)traj_step-1] );
 
@@ -199,6 +199,52 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
                     desired_object_velocity.second,
                     1e-3,
                     1e-2 );
+
+        ////////////////////////////////////////////////////////////////////////
+        // TODO: find a better spot for this if it works
+        ////////////////////////////////////////////////////////////////////////
+
+        int ind = 0;
+        double gripper_velocity_change = 0;
+        while ( ind == 0 || ( ind < 100 && gripper_velocity_change > 1e-6 ) )
+        {
+            // Assume that our Jacobian is correct, and predict where we will end up
+            const Eigen::VectorXd predicted_object_delta =
+                    jacobian * grippers_velocity_achieve_goal;
+
+            // project the move into the constraints of the world
+            const Eigen::VectorXd true_object_delta =
+                    task_object_delta_projection_fn_(
+                        world_current_state.object_configuration_,
+                        predicted_object_delta );
+
+            const Eigen::VectorXd misalignment = (true_object_delta - predicted_object_delta).cwiseAbs();
+
+            // update the jacobian to be consisent
+            for ( long j_ind = 0; j_ind < jacobian.rows(); j_ind++ )
+            {
+                if ( misalignment( j_ind ) > 1e-7 )
+                {
+                    jacobian.row( j_ind ) *= true_object_delta( j_ind ) / predicted_object_delta( j_ind );
+                }
+            }
+
+            // find a new gripper movement
+            Eigen::VectorXd new_grippers_velocity_achieve_goal =
+                    EigenHelpers::WeightedLeastSquaresSolver(
+                        jacobian,
+                        desired_object_velocity.first,
+                        desired_object_velocity.second,
+                        1e-3,
+                        1e-2 );
+
+            // set values for the terminating check
+            ind++;
+        }
+
+        ////////////////////////////////////////////////////////////////////////
+        // End Jacobian updating
+        ////////////////////////////////////////////////////////////////////////
 
         // Find the collision avoidance data that we'll need
         std::vector< CollisionAvoidanceResult > grippers_collision_avoidance_result
