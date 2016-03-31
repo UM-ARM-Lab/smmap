@@ -160,6 +160,7 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
     WorldState world_current_state = world_initial_state;
 
     const double max_step_size = max_gripper_velocity * dt;
+    const size_t num_grippers = grippers_data_.size();
 
     auto suggested_traj =
             std::make_pair< AllGrippersPoseTrajectory, ObjectTrajectory >(
@@ -199,14 +200,13 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
                     desired_object_velocity.second,
                     1e-3,
                     1e-2 );
-
-        ////////////////////////////////////////////////////////////////////////
-        // TODO: find a better spot for this if it works
-        ////////////////////////////////////////////////////////////////////////
+        ClampGripperVelocities( grippers_velocity_achieve_goal, max_step_size );
+        std::cerr << "\n\n\nInitial singular values\n    " << jacobian.jacobiSvd().singularValues().transpose() << std::endl;
+        std::cerr << "Gripper vel:\n    " << grippers_velocity_achieve_goal.transpose() << std::endl;
 
         int ind = 0;
         double gripper_velocity_change = 0;
-        while ( ind == 0 || ( ind < 100 && gripper_velocity_change > 1e-6 ) )
+        do
         {
             // Assume that our Jacobian is correct, and predict where we will end up
             const Eigen::VectorXd predicted_object_delta =
@@ -218,29 +218,39 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
                         world_current_state.object_configuration_,
                         predicted_object_delta );
 
+            // update the jacobian to be locally consisent
             const Eigen::VectorXd misalignment = (true_object_delta - predicted_object_delta).cwiseAbs();
-
-            // update the jacobian to be consisent
             for ( long j_ind = 0; j_ind < jacobian.rows(); j_ind++ )
             {
+                #warning "Magic number: missalignment threshold"
                 if ( misalignment( j_ind ) > 1e-7 )
                 {
                     jacobian.row( j_ind ) *= true_object_delta( j_ind ) / predicted_object_delta( j_ind );
                 }
             }
 
+            #warning "More magic numbers - damping threshold and damping coefficient"
             // find a new gripper movement
-            Eigen::VectorXd new_grippers_velocity_achieve_goal =
+            // Find the least-squares fitting to the desired object velocity
+            Eigen::VectorXd next_grippers_velocity_achieve_goal =
                     EigenHelpers::WeightedLeastSquaresSolver(
                         jacobian,
                         desired_object_velocity.first,
                         desired_object_velocity.second,
                         1e-3,
                         1e-2 );
+            std::cerr << "Singular values\n    " << jacobian.jacobiSvd().singularValues().transpose() << std::endl;
+            ClampGripperVelocities( next_grippers_velocity_achieve_goal, max_step_size );
 
-            // set values for the terminating check
+            gripper_velocity_change = GripperVelocity6dNorm( next_grippers_velocity_achieve_goal - grippers_velocity_achieve_goal );
+            grippers_velocity_achieve_goal = next_grippers_velocity_achieve_goal;
+            std::cerr << "grippers_vel_change: " << gripper_velocity_change << std::endl;
+            std::cerr << "Gripper vel:\n    " << grippers_velocity_achieve_goal.transpose() << std::endl;
+            std::cerr << std::endl;
+
             ind++;
         }
+        while ( ind == 0 || ( ind < 100 && gripper_velocity_change > 1e-6 ) );
 
         ////////////////////////////////////////////////////////////////////////
         // End Jacobian updating
@@ -258,18 +268,11 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
         ////////////////////////////////////////////////////////////////////////
         // Combine the velocities into a single command velocity
         ////////////////////////////////////////////////////////////////////////
-        for ( long gripper_ind = 0; gripper_ind < (long)grippers_data_.size(); gripper_ind++ )
+        for ( ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++ )
         {
             kinematics::Vector6d actual_gripper_velocity;
-            kinematics::Vector6d desired_gripper_vel =
+            const kinematics::Vector6d desired_gripper_vel =
                     grippers_velocity_achieve_goal.segment< 6 >( gripper_ind * 6 );
-
-            // normalize the achive goal velocity
-            const double velocity_norm = GripperVelocity6dNorm( desired_gripper_vel );
-            if ( velocity_norm > max_step_size )
-            {
-                desired_gripper_vel *= max_step_size / velocity_norm;
-            }
 
             // If we need to avoid an obstacle, then use the sliding scale
             const CollisionAvoidanceResult& collision_result =

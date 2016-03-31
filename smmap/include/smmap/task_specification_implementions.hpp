@@ -287,7 +287,35 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     Eigen::VectorXd object_delta ) const
             {
-                //TODO: do
+                static const double table_min_x = TABLE_X - ROPE_TABLE_HALF_SIDE_LENGTH;
+                static const double table_max_x = TABLE_X + ROPE_TABLE_HALF_SIDE_LENGTH;
+                static const double table_min_y = TABLE_Y - ROPE_TABLE_HALF_SIDE_LENGTH;
+                static const double table_max_y = TABLE_Y + ROPE_TABLE_HALF_SIDE_LENGTH;
+
+                #pragma omp parallel for
+                for ( ssize_t point_ind = 0; point_ind < object_configuration.cols(); point_ind++ )
+                {
+                    const Eigen::Vector3d new_pos = object_configuration.col( point_ind )
+                            + object_delta.segment< 3 >( point_ind * 3 );
+
+                    #warning "Cloth Table projection function makes a lot of assumptions"
+                    // TODO: move out of the table sideways?
+                    // TODO: use Calder's SDF/collision resolution stuff?
+
+                    // check if the new positition is in the same "vertical column" as the table
+                    if ( table_min_x <= new_pos(0) && new_pos(0) <= table_max_x
+                         && table_min_y <= new_pos(1) && new_pos(1) <= table_max_y )
+                    {
+                        // Check if the new point position penetrated the object
+                        // Note that I am only checking "downwards" penetratraion as this task should never even consider having the other type
+                        if ( new_pos(2) < TABLE_Z )
+                        {
+                            object_delta( point_ind * 3 + 2 ) = TABLE_Z - object_configuration( 2, point_ind );
+                        }
+                    }
+
+                }
+
                 return object_delta;
             }
 

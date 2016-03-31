@@ -81,9 +81,24 @@ namespace smmap
         double norm = 0;
         for ( auto& vel: velocities )
         {
-            norm += norm += weights.dot( vel.cwiseAbs2() );
+            norm += weights.dot( vel.cwiseAbs2() );
         }
         return std::sqrt( norm );
+    }
+
+    inline void ClampGripperVelocities( Eigen::VectorXd& velocities, const double max_vel )
+    {
+        assert( velocities.size() % 6 == 0 );
+
+        for ( long gripper_ind = 0; gripper_ind < velocities.size(); gripper_ind += 6 )
+        {
+            const double velocity_norm = GripperVelocity6dNorm( velocities.segment< 6 >( gripper_ind ) );
+            if ( velocity_norm > max_vel )
+            {
+                velocities.segment< 6 >( gripper_ind ) *= max_vel / velocity_norm;
+            }
+        }
+
     }
 
     /**
