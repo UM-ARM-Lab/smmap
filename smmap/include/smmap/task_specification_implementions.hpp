@@ -144,6 +144,28 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     Eigen::VectorXd object_delta ) const
             {
+                #warning "Rope cylinder projection function makes a lot of assumptions - movements are small, will only penetrate the sides, etc."
+                Eigen::Vector2d cylinder_com;
+                #warning "Cylinder location needs to be properly parameterized"
+                cylinder_com << 0, ROPE_CYLINDER_RADIUS*5.0f/3.0f;
+
+                #pragma omp parallel for
+                for ( ssize_t point_ind = 0; point_ind < object_configuration.cols(); point_ind++ )
+                {
+                    const Eigen::Vector2d new_pos = object_configuration.block< 2, 1 >( 0, point_ind )
+                            + object_delta.segment< 2 >( point_ind * 3 );
+
+                    const Eigen::Vector2d vector_from_com = new_pos - cylinder_com;
+                    if ( vector_from_com.norm() < ROPE_CYLINDER_RADIUS + ROPE_RADIUS )
+                    {
+                        const Eigen::Vector2d adjusted_pos = cylinder_com +
+                                vector_from_com.normalized() * ( ROPE_CYLINDER_RADIUS + ROPE_RADIUS );
+
+                        object_delta.segment< 2 >( point_ind * 3 ) =
+                                adjusted_pos - object_configuration.block< 2, 1 >( 0, point_ind );
+                    }
+                }
+
                 return object_delta;
             }
 
@@ -287,6 +309,7 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     Eigen::VectorXd object_delta ) const
             {
+                #warning "Cloth Table projection function makes a lot of assumptions - movements are small, will only penetrate the top, etc."
                 static const double table_min_x = TABLE_X - ROPE_TABLE_HALF_SIDE_LENGTH;
                 static const double table_max_x = TABLE_X + ROPE_TABLE_HALF_SIDE_LENGTH;
                 static const double table_min_y = TABLE_Y - ROPE_TABLE_HALF_SIDE_LENGTH;
@@ -298,7 +321,6 @@ namespace smmap
                     const Eigen::Vector3d new_pos = object_configuration.col( point_ind )
                             + object_delta.segment< 3 >( point_ind * 3 );
 
-                    #warning "Cloth Table projection function makes a lot of assumptions"
                     // TODO: move out of the table sideways?
                     // TODO: use Calder's SDF/collision resolution stuff?
 
