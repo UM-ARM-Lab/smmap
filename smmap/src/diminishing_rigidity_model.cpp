@@ -242,7 +242,7 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
             std::cerr << "Singular values\n    " << jacobian.jacobiSvd().singularValues().transpose() << std::endl;
             ClampGripperVelocities( next_grippers_velocity_achieve_goal, max_step_size );
 
-            gripper_velocity_change = GripperVelocity6dNorm( next_grippers_velocity_achieve_goal - grippers_velocity_achieve_goal );
+            gripper_velocity_change = VectorGripperVelocity6dNorm( next_grippers_velocity_achieve_goal - grippers_velocity_achieve_goal );
             grippers_velocity_achieve_goal = next_grippers_velocity_achieve_goal;
             std::cerr << "grippers_vel_change: " << gripper_velocity_change << std::endl;
             std::cerr << "Gripper vel:\n    " << grippers_velocity_achieve_goal.transpose() << std::endl;
