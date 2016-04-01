@@ -204,45 +204,40 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
                     damping_thresh,
                     damping_ratio );
         ClampGripperVelocities( grippers_velocity_achieve_goal, max_step_size );
-        std::cerr << "\n\n\nInitial singular values\n    " << jacobian.jacobiSvd().singularValues().transpose() << std::endl;
-        std::cerr << "Gripper vel:\n    " << grippers_velocity_achieve_goal.transpose() << std::endl;
+//        std::cerr << "\n\n\nInitial singular values\n    " << jacobian.jacobiSvd().singularValues().transpose() << std::endl;
+        std::cerr << "\n\n\n Initial Gripper vel:\n    " << grippers_velocity_achieve_goal.transpose() << std::endl;
 
         int ind = 0;
         double gripper_velocity_change = 0;
         do
         {
-            // Assume that our Jacobian is correct, and predict where we will end up
             const Eigen::VectorXd predicted_object_delta =
                     jacobian * grippers_velocity_achieve_goal;
 
-            // project the move into the constraints of the world
-            const Eigen::VectorXd true_object_delta =
+            // project the movement into the constraints of the world
+            const Eigen::VectorXd projected_object_delta =
                     task_object_delta_projection_fn_(
                         world_current_state.object_configuration_,
                         predicted_object_delta );
 
-            // update the jacobian to be locally consisent
-            const Eigen::VectorXd misalignment = (true_object_delta - predicted_object_delta).cwiseAbs();
-            for ( long j_ind = 0; j_ind < jacobian.rows(); j_ind++ )
-            {
-                #warning "Magic number: missalignment threshold"
-                if ( misalignment( j_ind ) > 1e-7 )
-                {
-                    jacobian.row( j_ind ) *= true_object_delta( j_ind ) / predicted_object_delta( j_ind );
-                }
-            }
+           const Eigen::MatrixXd projection_function_gradient =
+                   computeNonlinearProjectionGradient(
+                       world_current_state.object_configuration_,
+                       projected_object_delta,
+                       jacobian,
+                       grippers_velocity_achieve_goal );
 
-            #warning "More magic numbers - damping threshold and damping coefficient"
             // find a new gripper movement
-            // Find the least-squares fitting to the desired object velocity
-            Eigen::VectorXd next_grippers_velocity_achieve_goal =
+            // Find the least-squares fitting to the "missing" desired object velocity
+            const Eigen::VectorXd grippers_velocity_delta =
                     EigenHelpers::WeightedLeastSquaresSolver(
-                        jacobian,
-                        desired_object_velocity.first,
+                        projection_function_gradient,
+                        desired_object_velocity.first - projected_object_delta,
                         desired_object_velocity.second,
                         damping_thresh,
                         damping_ratio );
-            std::cerr << "Singular values\n    " << jacobian.jacobiSvd().singularValues().transpose() << std::endl;
+            Eigen::VectorXd next_grippers_velocity_achieve_goal = grippers_velocity_achieve_goal + grippers_velocity_delta;
+//            std::cerr << "Singular values\n    " << jacobian.jacobiSvd().singularValues().transpose() << std::endl;
             ClampGripperVelocities( next_grippers_velocity_achieve_goal, max_step_size );
 
             gripper_velocity_change = VectorGripperVelocity6dNorm( next_grippers_velocity_achieve_goal - grippers_velocity_achieve_goal );
@@ -253,7 +248,7 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
 
             ind++;
         }
-        while ( ind < 100 && gripper_velocity_change > 1e-6 );
+        while ( ind < 100 && gripper_velocity_change > 1e-9 );
 
         ////////////////////////////////////////////////////////////////////////
         // End Jacobian updating
@@ -432,4 +427,43 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(
     }
 
     return J;
+}
+
+/**
+ * @brief DiminishingRigidityModel::computeNonlinearProjectionGradient
+ * @param jacobian
+ * @param grippers_velocity
+ * @return
+ */
+Eigen::MatrixXd DiminishingRigidityModel::computeNonlinearProjectionGradient(
+        const ObjectPointSet& current_object_configuration,
+        const Eigen::VectorXd& current_object_velocity,
+        const Eigen::MatrixXd& jacobian,
+        Eigen::VectorXd current_grippers_velocity ) const
+{
+    Eigen::MatrixXd projection_function_jacobian;
+    projection_function_jacobian.resizeLike( jacobian );
+
+    // roughly on the order of 1e-5 smaller than expected gripper velocities
+    const double h = 1e-10;
+
+    // Lets try the central difference first;
+
+    for ( ssize_t col_ind = 0; col_ind < current_grippers_velocity.rows(); col_ind++ )
+    {
+        current_grippers_velocity( col_ind ) += h;
+
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wconversion"
+        const Eigen::VectorXd next_object_delta =
+                task_object_delta_projection_fn_(
+                    current_object_configuration,
+                    jacobian * current_grippers_velocity );
+        #pragma GCC diagnostic pop
+        projection_function_jacobian.col( col_ind ) = ( next_object_delta - current_object_velocity ) / h;
+
+        current_grippers_velocity( col_ind ) -= h;
+    }
+
+    return projection_function_jacobian;
 }

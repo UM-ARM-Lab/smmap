@@ -74,6 +74,12 @@ namespace smmap
                     const AllGrippersSinglePose& grippers_pose,
                     const ObjectPointSet& current_configuration ) const;
 
+            Eigen::MatrixXd computeNonlinearProjectionGradient(
+                    const ObjectPointSet& current_object_configuration,
+                    const Eigen::VectorXd& current_object_velocity,
+                    const Eigen::MatrixXd& jacobian,
+                    Eigen::VectorXd current_grippers_velocity ) const;
+
             ////////////////////////////////////////////////////////////////////
             // Static members
             ////////////////////////////////////////////////////////////////////
