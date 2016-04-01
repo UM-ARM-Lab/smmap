@@ -193,13 +193,16 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
 
         // Find the least-squares fitting to the desired object velocity
         #warning "More magic numbers - damping threshold and damping coefficient"
+        const double damping_thresh = 1e-3;
+        const double damping_ratio = 1e-2;
+
         Eigen::VectorXd grippers_velocity_achieve_goal =
                 EigenHelpers::WeightedLeastSquaresSolver(
                     jacobian,
                     desired_object_velocity.first,
                     desired_object_velocity.second,
-                    1e-3,
-                    1e-2 );
+                    damping_thresh,
+                    damping_ratio );
         ClampGripperVelocities( grippers_velocity_achieve_goal, max_step_size );
         std::cerr << "\n\n\nInitial singular values\n    " << jacobian.jacobiSvd().singularValues().transpose() << std::endl;
         std::cerr << "Gripper vel:\n    " << grippers_velocity_achieve_goal.transpose() << std::endl;
@@ -237,8 +240,8 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
                         jacobian,
                         desired_object_velocity.first,
                         desired_object_velocity.second,
-                        1e-3,
-                        1e-2 );
+                        damping_thresh,
+                        damping_ratio );
             std::cerr << "Singular values\n    " << jacobian.jacobiSvd().singularValues().transpose() << std::endl;
             ClampGripperVelocities( next_grippers_velocity_achieve_goal, max_step_size );
 
@@ -250,7 +253,7 @@ DiminishingRigidityModel::getSuggestedGrippersTrajectory(
 
             ind++;
         }
-        while ( ind == 0 || ( ind < 100 && gripper_velocity_change > 1e-6 ) );
+        while ( ind < 100 && gripper_velocity_change > 1e-6 );
 
         ////////////////////////////////////////////////////////////////////////
         // End Jacobian updating
