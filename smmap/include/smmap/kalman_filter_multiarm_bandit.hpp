@@ -6,21 +6,24 @@
 #include <random>
 #include <utility>
 
+#include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/pretty_print.hpp>
+#include <arc_utilities/eigen_helpers.hpp>
 
 namespace smmap
 {
-    template<typename Generator>
+    template< typename Generator = std::mt19937_64 >
     class KalmanFilterMultiarmBandit
     {
         public:
             KalmanFilterMultiarmBandit(
-                    const std::vector < double >& prior_mean = std::vector< double >(),
-                    const std::vector < double >& prior_var = std::vector< double >() )
+                    const Eigen::VectorXd& prior_mean = Eigen::VectorXd::Zero( 1 ),
+                    const Eigen::MatrixXd& prior_covar = Eigen::MatrixXd::Identity( 1, 1 ) )
                 : arm_mean_( prior_mean )
-                , arm_var_( prior_var )
+                , arm_covar_( prior_covar )
             {
-                assert( arm_mean_.size() == arm_var_.size() );
+                assert( arm_mean_.rows() == arm_covar_.cols() );
+                assert( arm_covar_.cols() == arm_covar_.rows() );
             }
 
             /**
@@ -29,72 +32,55 @@ namespace smmap
              * @param generator
              * @return
              */
-            size_t selectArmToPull( Generator& generator )
+            ssize_t selectArmToPull( Generator& generator )
             {
-                assert( arm_mean_.size() == arm_var_.size() );
-                assert( arm_mean_.size() > 0 );
+                // Sample from the current distribuition
+                arc_helpers::MultivariteGaussianDistribution distribution(
+                            arm_mean_, arm_covar_ );
+                const Eigen::VectorXd sample = distribution( generator );
 
-                size_t best_arm = -1;
-                double best_sample = -std::numeric_limits< double >::infinity();
-
-                for ( size_t arm_ind = 0; arm_ind < arm_mean_.size(); arm_ind++ )
-                {
-                    std::normal_distribution< double > distribution(
-                                arm_mean_[arm_ind], std::sqrt( arm_var_[arm_ind] ) );
-                    double sample = distribution( generator );
-
-                    if ( sample > best_sample )
-                    {
-                        best_sample = sample;
-                        best_arm = arm_ind;
-                    }
-                }
+                // Find the arm with the highest sample
+                ssize_t best_arm = -1;
+                sample.maxCoeff( &best_arm );
 
                 return best_arm;
             }
 
             /**
              * @brief updateArms
+             * @param transition_covariance
              * @param arm_pulled
-             * @param reward
+             * @param obs_reward
              * @param obs_var
-             * @param tr_var
              */
             void updateArms(
-                    size_t arm_pulled,
-                    double reward,
-                    double obs_var,
-                    double tr_var )
+                    const Eigen::MatrixXd& transition_covariance,
+                    ssize_t arm_pulled,
+                    double obs_reward,
+                    double obs_var )
             {
-                assert( arm_pulled < arm_mean_.size() );
+                assert( arm_pulled >= 0 && arm_pulled < arm_mean_.rows() );
 
-                for ( size_t arm_ind = 0; arm_ind < arm_mean_.size(); arm_ind++ )
-                {
-                    if ( arm_ind == arm_pulled )
-                    {
-                        arm_mean_[arm_ind] =
-                                ( ( arm_var_[arm_ind] + tr_var ) * reward
-                                  + obs_var * arm_mean_[arm_ind] )
-                                / ( arm_var_[arm_ind] + tr_var + obs_var );
+                // Construct the observation matrix based on the arm pulled
+                Eigen::RowVectorXd C = Eigen::RowVectorXd::Zero( arm_mean_.rows() );
+                C( arm_pulled ) = 1;
 
-                        arm_var_[arm_ind] =
-                                ( arm_var_[arm_ind] + tr_var ) * obs_var
-                                / ( arm_var_[arm_ind] + tr_var + obs_var );
-                    }
-                    else
-                    {
-                        arm_var_[arm_ind] += tr_var;
-                    }
-                }
 
-                std::cerr << "    Arm chosen: " << arm_pulled << std::endl;
-                std::cerr << PrettyPrint::PrettyPrint( arm_mean_ ) << std::endl << std::endl;
-                std::cerr << PrettyPrint::PrettyPrint( arm_var_ ) << std::endl << std::endl << std::endl;
+                // Kalman predict
+                const Eigen::VectorXd& predicted_mean = arm_mean_;                                  // No change to mean
+                const Eigen::MatrixXd& predicted_covariance = arm_covar_ + transition_covariance;   // Add process noise
+
+                // Kalman update - symbols from wikipedia article
+                const double innovation = obs_reward - C * predicted_mean;                                          // tilde y_k
+                const double innovation_covariance = C * predicted_covariance * C.transpose() + obs_var;            // S_k
+                const Eigen::MatrixXd kalman_gain = predicted_covariance * C.transpose() / innovation_covariance;   // K_k
+                arm_mean_ = predicted_mean + kalman_gain * innovation;                                              // hat x_k|k
+                arm_covar_ = predicted_covariance - kalman_gain * C * predicted_covariance;                         // P_k|k
             }
 
         private:
-            std::vector < double > arm_mean_;
-            std::vector < double > arm_var_;
+            Eigen::VectorXd arm_mean_;
+            Eigen::MatrixXd arm_covar_;
     };
 }
 

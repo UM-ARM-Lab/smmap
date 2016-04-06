@@ -34,27 +34,14 @@ Planner::Planner( const ErrorFunctionType& error_fn,
 
 void Planner::addModel( DeformableModel::Ptr model )
 {
-//    assert( model_list_.size() == model_utility_.size() );
-
     model_list_.push_back( model );
-//    model_utility_.push_back( 0 );
 }
 
 void Planner::createBandits()
 {
-//    std::vector< double > arm_means = {
-//            0.331063, 0.290895, 0.286453, 0.324662, 0.286826, 0.230991, 0.278005, 0.293138, 0.149215, 0.325641, 0.0823528, 0.281227, 0.32308, 0.285917, 0.324592, 0.28492, 0.318086, 0.293989, 0.317062, 0.337411, 0.25816, 0.321884, 0.303238, 0.117384, 0.204372
-//    };
-
-//    std::vector< double > arm_vars = {
-//        0.00900999, 0.05101, 0.04401, 0.00801, 0.01901, 0.00400999, 0.02201, 0.02301, 0.00200999, 0.01001, 9.99287e-06, 0.02101, 0.01501, 0.02001, 0.00701, 0.02401, 0.01601, 0.01801, 0.00601, 0.01201, 0.00501, 0.02901, 0.01701, 0.00101, 0.00301
-//    };
-
-
     model_utility_bandit_ = KalmanFilterMultiarmBandit< std::mt19937_64 >(
-//                arm_means, arm_vars );
-                std::vector< double >( model_list_.size(), 0 ),
-                std::vector< double >( model_list_.size(), 100 ) );
+                Eigen::VectorXd::Zero( model_list_.size() ),
+                Eigen::MatrixXd::Identity( model_list_.size(), model_list_.size() ) );
 }
 
 size_t Planner::getLastModelUsed()
@@ -114,50 +101,24 @@ void Planner::updateModels(
         const std::vector< WorldState >& world_feedback,
         const Eigen::VectorXd& weights )
 {
-    // TODO: avoid doing all this recalculation
-//    const AllGrippersPoseTrajectory grippers_pose_trajectory =
-//            GetGripperTrajectories( world_feedback );
-//    const AllGrippersPoseDeltaTrajectory grippers_pose_delta_trajectory =
-//            CalculateGrippersPoseDeltas( grippers_pose_trajectory );
-
-    // TODO: find a better way to do this
-    // check if this update is valid
     if ( last_model_used_ < model_list_.size() )
     {
         const double error_reduction =
                 error_fn_( world_feedback.front().object_configuration_ )
                 - error_fn_( world_feedback.back().object_configuration_ );
 
-        #warning "Bandit variance magic numbers here"
+        #warning "Bandit variance prior magic numbers here"
         model_utility_bandit_.updateArms(
+                    0.1 * std::abs( error_reduction ) * Eigen::MatrixXd::Identity( model_list_.size(), model_list_.size() ),
                     last_model_used_,
                     error_reduction,
-                    0.0 * std::abs( error_reduction ),
-                    1.0 * std::pow( std::abs( error_reduction ), 2 ) );
+                    0.0 * std::abs( error_reduction ) );
     }
 
+    // Then we allow the model to update itself based on the new data
     #pragma omp parallel for
     for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
     {
-//        // First we evaluate each model for it's new utility
-//        const ObjectPointSet prediction =
-//                model_list_[model_ind]->getFinalConfiguration(
-//                    world_feedback.front(),
-//                    grippers_pose_trajectory,
-//                    grippers_pose_delta_trajectory,
-//                    dt_ );
-
-//        const double distance = distanceWeighted(
-//                    world_feedback.back().object_configuration_,
-//                    prediction,
-//                    weights );
-//        // TODO: use dt here somewhere, plus the number of nodes, etc.
-//        const double new_utility = 1.0/(1.0 + std::sqrt( std::sqrt( distance ) ) );
-//        #warning "Another magic number here - annealing rate"
-//        model_utility_[model_ind] = anneal( model_utility_[model_ind], new_utility, 0.1 );
-
-
-        // Then we allow the model to update itself based on the new data
         model_list_[model_ind]->updateModel( world_feedback );
     }
 }
