@@ -16,17 +16,19 @@ using namespace EigenHelpersConversions;
 /**
  * @brief Planner::Planner
  * @param error_fn
- * @param model_prediction_fn
- * @param model_suggested_traj_fn
- * @param model_utility_fn
+ * @param execute_trajectory_fn
  * @param vis
+ * @param dt
  */
 Planner::Planner( const ErrorFunctionType& error_fn,
+                  const TaskExecuteGripperTrajectoryFunctionType& execute_trajectory_fn,
+                  const LoggingFunctionType& logging_fn,
                   Visualizer& vis,
                   const double dt )
     : error_fn_( error_fn )
+    , execute_trajectory_fn_( execute_trajectory_fn )
+    , logging_fn_( logging_fn )
     , dt_( dt )
-    , last_model_used_( -1 )
     , generator_( 0xa8710913d2b5df6c ) // a30cd67f3860ddb3 ) // MD5 sum of "Dale McConachie"
 //    , generator_( std::chrono::system_clock::now().time_since_epoch().count() )
     , vis_( vis )
@@ -44,13 +46,8 @@ void Planner::createBandits()
                 Eigen::MatrixXd::Identity( model_list_.size(), model_list_.size() ) );
 }
 
-size_t Planner::getLastModelUsed()
-{
-    return last_model_used_;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
-// The two functions that gets invoked externally
+// The one function that gets invoked externally
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -62,58 +59,95 @@ size_t Planner::getLastModelUsed()
  * @param obstacle_avoidance_scale
  * @return
  */
-AllGrippersPoseTrajectory Planner::getNextTrajectory(
-        const WorldState& world_current_state,
+std::vector< WorldState > Planner::sendNextTrajectory(
+        const WorldState& current_world_state,
         const int planning_horizion,
         const double max_gripper_velocity,
         const double obstacle_avoidance_scale )
 {
-    last_model_used_ = model_utility_bandit_.selectArmToPull( generator_ );
-
     // Querry each model for it's best trajectory
-    ROS_INFO_STREAM_NAMED( "planner", "Getting trajectory suggestion for model "
-                           << last_model_used_ << " of length " << planning_horizion );
+    ROS_INFO_STREAM_NAMED( "planner", "Getting trajectory suggestions for eachmodel  of length " << planning_horizion );
 
-    const std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > suggested_trajectory =
-            model_list_[last_model_used_]->getSuggestedGrippersTrajectory(
-                world_current_state,
+    std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > > suggested_trajectories( model_list_.size() );
+    for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
+    {
+        suggested_trajectories[model_ind] =
+            model_list_[model_ind]->getSuggestedGrippersTrajectory(
+                current_world_state,
                 planning_horizion,
                 dt_,
                 max_gripper_velocity,
                 obstacle_avoidance_scale );
+    }
 
-    AllGrippersPoseTrajectory best_trajectory =
-            suggested_trajectory.first;
-//            optimizeTrajectoryDirectShooting(
-//                world_feedback.back(),
-//                suggested_trajectories.first,
-//                dt_ );
+    // Pick an arm to use
+    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull( generator_ );
+    AllGrippersPoseTrajectory best_trajectory = suggested_trajectories[model_to_use].first;
+    best_trajectory.erase( best_trajectory.begin() );
+    // Execute the trajectory
+    std::vector< WorldState > world_feedback = execute_trajectory_fn_( best_trajectory );
+    // Get feedback
+    world_feedback.emplace( world_feedback.begin(), current_world_state );
+    updateModels( current_world_state, suggested_trajectories, model_to_use, world_feedback );
+    logging_fn_( world_feedback.back(), model_utility_bandit_.getMean(), model_utility_bandit_.getCovariance(), model_to_use );
 
-    return best_trajectory;
+    return world_feedback;
 }
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Internal helpers for the getNextTrajectory() function
+////////////////////////////////////////////////////////////////////////////////
 
 /**
  * @brief Planner::updateModels
+ * @param suggested_trajectories
+ * @param model_used
  * @param world_feedback
- * @param weights
  */
 void Planner::updateModels(
-        const std::vector< WorldState >& world_feedback,
-        const Eigen::VectorXd& weights )
+        const WorldState& starting_world_state,
+        const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >& suggested_trajectories,
+        ssize_t model_used,
+        const std::vector< WorldState >& world_feedback )
 {
-    if ( last_model_used_ < model_list_.size() )
-    {
-        const double error_reduction =
-                error_fn_( world_feedback.front().object_configuration_ )
-                - error_fn_( world_feedback.back().object_configuration_ );
+    const double error_reduction =
+            error_fn_( starting_world_state.object_configuration_ )
+            - error_fn_( world_feedback.back().object_configuration_ );
 
-        #warning "Bandit variance prior magic numbers here"
-        model_utility_bandit_.updateArms(
-                    0.1 * std::abs( error_reduction ) * Eigen::MatrixXd::Identity( model_list_.size(), model_list_.size() ),
-                    last_model_used_,
-                    error_reduction,
-                    0.0 * std::abs( error_reduction ) );
+    std::vector< double > grippers_velocity_norms( model_list_.size() );
+    std::vector< AllGrippersPoseDeltaTrajectory > grippers_suggested_pose_deltas( model_list_.size() );
+    for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
+    {
+        grippers_suggested_pose_deltas[model_ind] = CalculateGrippersPoseDeltas( suggested_trajectories[model_ind].first );
+        grippers_velocity_norms[model_ind] = MultipleGrippersVelocityTrajectory6dNorm( grippers_suggested_pose_deltas[model_ind] );
     }
+
+    Eigen::MatrixXd process_noise = Eigen::MatrixXd::Identity( model_list_.size(), model_list_.size() );
+    for ( size_t i = 0; i < model_list_.size(); i++ )
+    {
+        for ( size_t j = i+1; j < model_list_.size(); j++ )
+        {
+            process_noise( (ssize_t)i,(ssize_t)j ) =
+                    MultipleGrippersVelocityTrajectoryDotProduct(
+                        grippers_suggested_pose_deltas[i],
+                        grippers_suggested_pose_deltas[j] )
+                    / ( grippers_velocity_norms[i] * grippers_velocity_norms[j] );
+
+            process_noise( (ssize_t)j,(ssize_t)i ) = process_noise( (ssize_t)i,(ssize_t)j );
+        }
+    }
+
+    std::cerr.precision(3);
+    std::cerr << std::endl << std::fixed << process_noise << std::endl;
+
+    #warning "Bandit variance magic numbers here"
+    model_utility_bandit_.updateArms(
+//                0.001 * std::abs( error_reduction ) * process_noise,
+                0.001 * std::abs( error_reduction ) * Eigen::MatrixXd::Identity( model_list_.size(), model_list_.size() ),
+                model_used,
+                error_reduction,
+                0.1 * std::abs( error_reduction ) );
 
     // Then we allow the model to update itself based on the new data
     #pragma omp parallel for
@@ -122,10 +156,6 @@ void Planner::updateModels(
         model_list_[model_ind]->updateModel( world_feedback );
     }
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// Internal helpers for the getNextTrajectory() function
-////////////////////////////////////////////////////////////////////////////////
 
 /*
 ObjectTrajectory Planner::combineModelPredictions(

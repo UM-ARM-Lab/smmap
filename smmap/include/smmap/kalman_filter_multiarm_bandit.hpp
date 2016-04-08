@@ -65,7 +65,6 @@ namespace smmap
                 Eigen::RowVectorXd C = Eigen::RowVectorXd::Zero( arm_mean_.rows() );
                 C( arm_pulled ) = 1;
 
-
                 // Kalman predict
                 const Eigen::VectorXd& predicted_mean = arm_mean_;                                  // No change to mean
                 const Eigen::MatrixXd& predicted_covariance = arm_covar_ + transition_covariance;   // Add process noise
@@ -76,6 +75,26 @@ namespace smmap
                 const Eigen::MatrixXd kalman_gain = predicted_covariance * C.transpose() / innovation_covariance;   // K_k
                 arm_mean_ = predicted_mean + kalman_gain * innovation;                                              // hat x_k|k
                 arm_covar_ = predicted_covariance - kalman_gain * C * predicted_covariance;                         // P_k|k
+            }
+
+            const Eigen::VectorXd& getMean() const
+            {
+                return arm_mean_;
+            }
+
+            Eigen::VectorXd getMean()
+            {
+                return arm_mean_;
+            }
+
+            const Eigen::MatrixXd& getCovariance() const
+            {
+                return arm_covar_;
+            }
+
+            Eigen::MatrixXd getCovariance()
+            {
+                return arm_covar_;
             }
 
         private:

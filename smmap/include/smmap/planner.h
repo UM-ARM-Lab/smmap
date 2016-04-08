@@ -18,6 +18,8 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             Planner( const ErrorFunctionType& error_fn,
+                     const TaskExecuteGripperTrajectoryFunctionType& execute_trajectory_fn,
+                     const LoggingFunctionType& logging_fn,
                      Visualizer& vis,
                      const double dt );
 
@@ -30,19 +32,16 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             // TODO: move/replace this default for obstacle_avoidance_scale
-            AllGrippersPoseTrajectory getNextTrajectory(
-                    const WorldState& world_current_state,
+            std::vector< WorldState > sendNextTrajectory(
+                    const WorldState& current_world_state,
                     const int planning_horizion = 1,
                     const double max_gripper_velocity = 0.05/20.0/0.01,
                     const double obstacle_avoidance_scale = 100.0*20.0 );
 
-            // TODO: should this be moved inside of getNextTrajectory?
-            void updateModels(
-                    const std::vector< WorldState >& world_feedback,
-                    const Eigen::VectorXd& weights );
-
         private:
             const ErrorFunctionType error_fn_;
+            const TaskExecuteGripperTrajectoryFunctionType execute_trajectory_fn_;
+            const LoggingFunctionType logging_fn_;
 
             ////////////////////////////////////////////////////////////////////
             // Model list management
@@ -52,8 +51,13 @@ namespace smmap
             const double dt_;
             std::vector< DeformableModel::Ptr > model_list_;
             KalmanFilterMultiarmBandit< std::mt19937_64 > model_utility_bandit_;
-            size_t last_model_used_;
             std::mt19937_64 generator_;
+
+            void updateModels(
+                    const WorldState& starting_world_state,
+                    const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory> >& suggested_trajectories,
+                    ssize_t model_used,
+                    const std::vector< WorldState >& world_feedback );
 
             VectorObjectTrajectory getPredictions(
                     const WorldState& starting_world_state,

@@ -89,7 +89,7 @@ JacobianModel::getSuggestedGrippersTrajectory(
     const double max_step_size = max_gripper_velocity * dt;
     const long num_nodes = world_current_state.object_configuration_.cols();
 
-    auto suggested_traj =
+    std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > suggested_traj =
             std::make_pair< AllGrippersPoseTrajectory, ObjectTrajectory >(
                 AllGrippersPoseTrajectory(
                     (size_t)planning_horizion + 1,

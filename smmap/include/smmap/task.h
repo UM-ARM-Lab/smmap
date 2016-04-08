@@ -49,6 +49,11 @@ namespace smmap
 
             bool logging_enabled_;
             std::map< std::string, Log::Log > loggers;
+            void logData(
+                    const WorldState& current_world_state,
+                    const Eigen::VectorXd& model_utility_mean,
+                    const Eigen::MatrixXd& model_utility_covariance,
+                    const ssize_t model_used );
 
             ////////////////////////////////////////////////////////////////////
             // Function pointers that are created in the construtor that are
@@ -57,7 +62,8 @@ namespace smmap
 
             const ErrorFunctionType error_fn_;
             const GripperCollisionCheckFunctionType gripper_collision_check_fn_;
-            const TaskDesiredObjectDeltaFunctionType task_desired_object_delta_fn_;
+            const TaskExecuteGripperTrajectoryFunctionType execute_trajectory_fn_;
+            const LoggingFunctionType logging_fn_;
 
             ////////////////////////////////////////////////////////////////////
             // Functions that are used to initialize function pointers in the
@@ -67,7 +73,8 @@ namespace smmap
 
             ErrorFunctionType createErrorFunction();
             GripperCollisionCheckFunctionType createGripperCollisionCheckFunction();
-            TaskDesiredObjectDeltaFunctionType createTaskDesiredObjectDeltaFunction();
+            TaskExecuteGripperTrajectoryFunctionType createExecuteGripperTrajectoryFunction();
+            LoggingFunctionType createLoggingFunction();
 
             ////////////////////////////////////////////////////////////////////
             // The planner itself

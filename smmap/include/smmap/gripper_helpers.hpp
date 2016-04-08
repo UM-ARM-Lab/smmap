@@ -7,6 +7,8 @@
 #include <limits>
 #include <memory>
 
+#include <assert.h>
+
 namespace smmap
 {
     struct GripperData
@@ -58,17 +60,6 @@ namespace smmap
         return names;
     }
 
-    inline double GripperVelocity6dNorm( const kinematics::Vector6d& velocity )
-    {
-        kinematics::Matrix6d weight = kinematics::Matrix6d::Identity();
-
-        weight(3,3) = 1./20;
-        weight(4,4) = 1./20;
-        weight(5,5) = 1./20;
-
-        return (weight * velocity).norm();
-    }
-
     /**
      * @brief getMinimumDistanceToGripper
      * @param gripper_indices The indices of the nodes that the gripper is in contact with
@@ -93,6 +84,99 @@ namespace smmap
         }
 
         return std::pair< long, double>( min_ind, min_dist );
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Dot products
+    ////////////////////////////////////////////////////////////////////////////
+
+    inline double GripperVelocityDotProduct(
+            const kinematics::Vector6d& vel1,
+            const kinematics::Vector6d& vel2 )
+    {
+        kinematics::Matrix6d weight_squared = kinematics::Matrix6d::Identity();
+        weight_squared(3,3) = 1.0/20.0;
+        weight_squared(4,4) = 1.0/20.0;
+        weight_squared(5,5) = 1.0/20.0;
+        weight_squared = weight_squared * weight_squared;
+
+        return vel1.transpose() * weight_squared * vel2;
+    }
+
+    inline double MultipleGrippersVelocityDotProduct(
+            const AllGrippersSinglePoseDelta& vel1,
+            const AllGrippersSinglePoseDelta& vel2 )
+    {
+        assert( vel1.size() == vel2.size() );
+
+        double dot_product = 0;
+        for ( size_t vel_ind = 0; vel_ind < vel1.size(); vel_ind++ )
+        {
+            dot_product += GripperVelocityDotProduct( vel1[vel_ind], vel2[vel_ind] );
+        }
+
+        return dot_product;
+    }
+
+    inline double MultipleGrippersVelocityTrajectoryDotProduct(
+            const AllGrippersVelocityTrajectory& traj1,
+            const AllGrippersVelocityTrajectory& traj2 )
+    {
+        assert( traj1.size() == traj2.size() );
+
+        double dot_product = 0;
+        for ( size_t time_ind = 0; time_ind < traj1.size(); time_ind++ )
+        {
+            dot_product += MultipleGrippersVelocityDotProduct( traj1[time_ind], traj2[time_ind] );
+        }
+
+        return dot_product;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Norms induced by said dot products
+    ////////////////////////////////////////////////////////////////////////////
+
+    inline double GripperVelocity6dSquaredNorm( const kinematics::Vector6d& gripper_velocity )
+    {
+        return GripperVelocityDotProduct( gripper_velocity, gripper_velocity );
+    }
+
+    inline double GripperVelocity6dNorm( const kinematics::Vector6d& gripper_velocity )
+    {
+        return std::sqrt( GripperVelocity6dSquaredNorm( gripper_velocity ) );
+    }
+
+    inline double MultipleGrippersVelocity6dSquaredNorm( const AllGrippersSingleVelocity& grippers_velocity )
+    {
+        double squared_norm = 0;
+        for ( size_t gripper_ind = 0; gripper_ind < grippers_velocity.size(); gripper_ind++ )
+        {
+            squared_norm += GripperVelocity6dSquaredNorm( grippers_velocity[gripper_ind] );
+        }
+
+        return squared_norm;
+    }
+
+    inline double MultipleGrippersVelocity6dNorm( const AllGrippersSingleVelocity& grippers_velocity )
+    {
+        return std::sqrt( MultipleGrippersVelocity6dSquaredNorm( grippers_velocity ) );
+    }
+
+    inline double MultipleGrippersVelocityTrajectory6dSquaredNorm( const AllGrippersVelocityTrajectory& grippers_trajectory )
+    {
+        double squared_norm = 0;
+        for ( size_t time_ind = 0; time_ind < grippers_trajectory.size(); time_ind++ )
+        {
+            squared_norm += MultipleGrippersVelocity6dSquaredNorm( grippers_trajectory[time_ind] );
+        }
+
+        return squared_norm;
+    }
+
+    inline double MultipleGrippersVelocityTrajectory6dNorm( const AllGrippersVelocityTrajectory& grippers_trajectory )
+    {
+        return std::sqrt( MultipleGrippersVelocityTrajectory6dSquaredNorm( grippers_trajectory ) );
     }
 }
 

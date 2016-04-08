@@ -40,7 +40,7 @@ namespace smmap
                 cmd_grippers_traj_client_.waitForServer();
 
                 ROS_INFO_NAMED( "robot_bridge", "Kickstarting the planner with a no-op" );
-                return sendGripperTrajectory( noOpTrajectoryGoal( 1 ) );
+                return sendGripperTrajectory_impl( noOpTrajectoryGoal( 1 ) );
             }
 
             bool ok() const
@@ -87,7 +87,7 @@ namespace smmap
             std::vector< WorldState > sendGripperTrajectory(
                     const AllGrippersPoseTrajectory& trajectory )
             {
-                return sendGripperTrajectory( toRosGoal( trajectory) );
+                return sendGripperTrajectory_impl( toRosGoal( trajectory) );
             }
 
             std::vector< CollisionData > checkGripperCollision(
@@ -166,7 +166,7 @@ namespace smmap
                 return goal;
             }
 
-            std::vector< WorldState > sendGripperTrajectory(
+            std::vector< WorldState > sendGripperTrajectory_impl(
                     const smmap_msgs::CmdGrippersTrajectoryGoal& goal )
             {
                 std::vector< WorldState > feedback;
