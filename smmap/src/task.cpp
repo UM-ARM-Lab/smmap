@@ -95,6 +95,7 @@ void Task::execute()
 
         world_feedback = planner_.sendNextTrajectory(
                     current_world_state,
+                    caching_task_desired_object_delta_fn,
                     planning_horizion,
                     RobotInterface::MAX_GRIPPER_VELOCITY,
                     task_specification_->getCollisionScalingFactor() );

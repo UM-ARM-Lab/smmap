@@ -34,6 +34,7 @@ namespace smmap
             // TODO: move/replace this default for obstacle_avoidance_scale
             std::vector< WorldState > sendNextTrajectory(
                     const WorldState& current_world_state,
+                    const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn,
                     const int planning_horizion = 1,
                     const double max_gripper_velocity = 0.05/20.0/0.01,
                     const double obstacle_avoidance_scale = 100.0*20.0 );
@@ -41,7 +42,6 @@ namespace smmap
         private:
             const ErrorFunctionType error_fn_;
             const TaskExecuteGripperTrajectoryFunctionType execute_trajectory_fn_;
-            const LoggingFunctionType logging_fn_;
 
             ////////////////////////////////////////////////////////////////////
             // Model list management
@@ -55,6 +55,7 @@ namespace smmap
 
             void updateModels(
                     const WorldState& starting_world_state,
+                    std::pair< Eigen::VectorXd, Eigen::VectorXd > task_desired_motion,
                     const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory> >& suggested_trajectories,
                     ssize_t model_used,
                     const std::vector< WorldState >& world_feedback );
@@ -69,8 +70,7 @@ namespace smmap
             // Logging and visualization functionality
             ////////////////////////////////////////////////////////////////////
 
-//            const bool logging_enabled_;
-//            std::map< std::string, Log::Log > loggers;
+            const LoggingFunctionType logging_fn_;
             Visualizer& vis_;
 
             ////////////////////////////////////////////////////////////////////

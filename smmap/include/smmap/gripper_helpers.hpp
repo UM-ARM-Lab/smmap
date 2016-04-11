@@ -94,13 +94,13 @@ namespace smmap
             const kinematics::Vector6d& vel1,
             const kinematics::Vector6d& vel2 )
     {
-        kinematics::Matrix6d weight_squared = kinematics::Matrix6d::Identity();
-        weight_squared(3,3) = 1.0/20.0;
-        weight_squared(4,4) = 1.0/20.0;
-        weight_squared(5,5) = 1.0/20.0;
-        weight_squared = weight_squared * weight_squared;
+        kinematics::Vector6d weight = kinematics::Vector6d::Ones();
+        weight(3) = 1.0/20.0;
+        weight(4) = 1.0/20.0;
+        weight(5) = 1.0/20.0;
+        weight.array() = weight.array().square();
 
-        return vel1.transpose() * weight_squared * vel2;
+        return EigenHelpers::WeightedDotProduct( vel1, vel2, weight );
     }
 
     inline double MultipleGrippersVelocityDotProduct(

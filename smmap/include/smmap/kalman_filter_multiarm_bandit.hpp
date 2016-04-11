@@ -55,26 +55,25 @@ namespace smmap
              */
             void updateArms(
                     const Eigen::MatrixXd& transition_covariance,
-                    ssize_t arm_pulled,
-                    double obs_reward,
-                    double obs_var )
+                    const Eigen::MatrixXd& observation_matrix,
+                    const Eigen::VectorXd& observed_reward,
+                    const Eigen::MatrixXd& observation_covariance )
             {
-                assert( arm_pulled >= 0 && arm_pulled < arm_mean_.rows() );
-
-                // Construct the observation matrix based on the arm pulled
-                Eigen::RowVectorXd C = Eigen::RowVectorXd::Zero( arm_mean_.rows() );
-                C( arm_pulled ) = 1;
+                #pragma GCC diagnostic push
+                #pragma GCC diagnostic ignored "-Wconversion"
+                const Eigen::MatrixXd& C = observation_matrix;
 
                 // Kalman predict
                 const Eigen::VectorXd& predicted_mean = arm_mean_;                                  // No change to mean
                 const Eigen::MatrixXd& predicted_covariance = arm_covar_ + transition_covariance;   // Add process noise
 
                 // Kalman update - symbols from wikipedia article
-                const double innovation = obs_reward - C * predicted_mean;                                          // tilde y_k
-                const double innovation_covariance = C * predicted_covariance * C.transpose() + obs_var;            // S_k
-                const Eigen::MatrixXd kalman_gain = predicted_covariance * C.transpose() / innovation_covariance;   // K_k
-                arm_mean_ = predicted_mean + kalman_gain * innovation;                                              // hat x_k|k
-                arm_covar_ = predicted_covariance - kalman_gain * C * predicted_covariance;                         // P_k|k
+                const Eigen::VectorXd innovation = observed_reward - C * predicted_mean;                                            // tilde y_k
+                const Eigen::MatrixXd innovation_covariance = C * predicted_covariance * C.transpose() + observation_covariance;    // S_k
+                const Eigen::MatrixXd kalman_gain = predicted_covariance * C.transpose() * innovation_covariance.inverse();         // K_k
+                arm_mean_ = predicted_mean + kalman_gain * innovation;                                                              // hat x_k|k
+                arm_covar_ = predicted_covariance - kalman_gain * C * predicted_covariance;                                         // P_k|k
+                #pragma GCC diagnostic pop
             }
 
             const Eigen::VectorXd& getMean() const

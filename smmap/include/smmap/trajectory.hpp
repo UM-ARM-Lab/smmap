@@ -170,6 +170,15 @@ namespace smmap
         return grippers_pose_trajectory;
     }
 
+    inline Eigen::VectorXd CalculateObjectDeltaAsVector(
+            const ObjectPointSet& start,
+            const ObjectPointSet& end )
+    {
+        Eigen::MatrixXd diff = end - start;
+        diff.resize( diff.rows() * diff.cols(), 1 );
+        return diff;
+    }
+
     inline double anneal( const double old_val, const double new_val, const double annealing_rate )
     {
         return ( 1 - annealing_rate ) * old_val +  annealing_rate * new_val;
