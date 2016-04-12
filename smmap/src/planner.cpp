@@ -193,11 +193,12 @@ void Planner::updateModels(
 
     // Perform the Kalman update
     #warning "Bandit variance magic numbers here"
+    ros::NodeHandle ph( "~" );
     model_utility_bandit_.updateArms(
-                0.01 * std::abs( true_error_reduction ) * process_noise,
+                ROSHelpers::GetParam( ph, "process_noise_factor", 0.01 ) * std::abs( true_error_reduction ) * process_noise,
                 observation_matrix,
                 observed_reward,
-                0.1 * std::abs( true_error_reduction ) * observation_noise );
+                ROSHelpers::GetParam( ph, "observation_noise_factor", 0.1 ) * std::abs( true_error_reduction ) * observation_noise );
 
     // Then we allow the model to update itself based on the new data
     #pragma omp parallel for

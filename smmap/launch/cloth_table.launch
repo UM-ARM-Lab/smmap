@@ -5,6 +5,7 @@
     <arg name="multi_model" default="0"/>
     <arg name="planning_horizion" default="1"/>
     <arg name="feedback_covariance" default="0.0"/>
+    <arg name="kalman_parameters_override" default="0"/>
     
     <include file="$(find smmap)/launch/cloth_table_params.launch">
         <arg name="logging_enabled" value="$(arg logging_enabled)"/>
@@ -20,5 +21,7 @@
         <param name="planning_horizion" value="$(arg planning_horizion)" type="int"/>
         <param if="$(arg deformability_override)" name="translational_deformability" value="$(arg translational_deformability)"/>
         <param if="$(arg deformability_override)" name="rotational_deformability" value="$(arg rotational_deformability)"/>
+        <param if="$(arg kalman_parameters_override)" name="process_noise_factor" value="$(arg process_noise_factor)"/>
+        <param if="$(arg kalman_parameters_override)" name="observation_noise_factor" value="$(arg observation_noise_factor)"/>
     </node>
 </launch>
