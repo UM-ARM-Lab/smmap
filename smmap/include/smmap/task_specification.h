@@ -41,14 +41,13 @@ namespace smmap
             // Constants used in SMMAP and the simulator - cloth world
             ////////////////////////////////////////////////////////////////////
 
-            static constexpr float CLOTH_HALF_SIDE_LENGTH = 0.25f; // METERS
-            static constexpr float CLOTH_X = TABLE_X + CLOTH_HALF_SIDE_LENGTH; // METERS
-            static constexpr float CLOTH_Y = TABLE_Y; // METERS
-            static constexpr float CLOTH_Z = TABLE_Z + 0.01f; // METERS
-
+            static constexpr float CLOTH_HALF_SIDE_LENGTH = 0.25f;              // METERS
+            static constexpr float CLOTH_X = TABLE_X + CLOTH_HALF_SIDE_LENGTH;  // METERS
+            static constexpr float CLOTH_Y = TABLE_Y;                           // METERS
+            static constexpr float CLOTH_Z = TABLE_Z + 0.01f;                   // METERS
             static constexpr int CLOTH_DIVS = 45;
-            static constexpr float CLOTH_GRIPPER_APPERTURE = 0.1f; // METERS
-            static constexpr float CLOTH_TABLE_HALF_SIDE_LENGTH = 0.2f; // METERS
+            static constexpr float CLOTH_GRIPPER_APPERTURE = 0.1f;              // METERS
+            static constexpr float CLOTH_TABLE_HALF_SIDE_LENGTH = 0.2f;         // METERS
 
             ////////////////////////////////////////////////////////////////////
             // Constructor to initialize objects that all TaskSpecifications share

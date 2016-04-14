@@ -3,8 +3,10 @@
 
 //#include <arc_utilities/log.hpp>
 
+#include "smmap/deformable_model.h"
 #include "smmap/task_function_pointer_types.h"
 #include "smmap/visualization_tools.h"
+#include "smmap/kalman_filter_multiarm_bandit.hpp"
 
 namespace smmap
 {
@@ -12,50 +14,76 @@ namespace smmap
     {
         public:
             ////////////////////////////////////////////////////////////////////
-            // Constructor
+            // Constructor and model list builder
             ////////////////////////////////////////////////////////////////////
 
             Planner( const ErrorFunctionType& error_fn,
-                     const ModelPredictionFunctionType& model_prediction_fn,
-                     const ModelSuggestedGrippersTrajFunctionType& model_suggested_grippers_traj_fn,
-                     const GetModelUtilityFunctionType& get_model_utility_fn,
-                     Visualizer& vis );
+                     const TaskExecuteGripperTrajectoryFunctionType& execute_trajectory_fn,
+                     const LoggingFunctionType& logging_fn,
+                     Visualizer& vis,
+                     const double dt );
+
+            void addModel( DeformableModel::Ptr model );
+            void createBandits();
+            size_t getLastModelUsed();
 
             ////////////////////////////////////////////////////////////////////
-            // The one function that gets invoked repeatedly
+            // The two functions that gets invoked repeatedly
             ////////////////////////////////////////////////////////////////////
 
             // TODO: move/replace this default for obstacle_avoidance_scale
-            AllGrippersPoseTrajectory getNextTrajectory(
-                    const WorldState& world_current_state,
+            std::vector< WorldState > sendNextTrajectory(
+                    const WorldState& current_world_state,
+                    const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn,
                     const int planning_horizion = 1,
-                    const double dt = 0.01,
                     const double max_gripper_velocity = 0.05/20.0/0.01,
-                    const double obstacle_avoidance_scale = 100.0*20.0 ) const;
-
-            static double UpdateUtility( const double old_utility,
-                                         const WorldState& world_state,
-                                         const ObjectPointSet& prediction,
-                                         const Eigen::VectorXd& weights );
+                    const double obstacle_avoidance_scale = 100.0*20.0 );
 
         private:
             const ErrorFunctionType error_fn_;
-            const ModelPredictionFunctionType model_prediction_fn_;
-            const ModelSuggestedGrippersTrajFunctionType model_suggested_grippers_traj_fn_;
-            const GetModelUtilityFunctionType get_model_utility_fn_;
+            const TaskExecuteGripperTrajectoryFunctionType execute_trajectory_fn_;
+
+            ////////////////////////////////////////////////////////////////////
+            // Model list management
+            ////////////////////////////////////////////////////////////////////
+
+            // TODO: this is the wrong spot to store this (mentally)
+            const double dt_;
+            std::vector< DeformableModel::Ptr > model_list_;
+            KalmanFilterMultiarmBandit< std::mt19937_64 > model_utility_bandit_;
+            std::mt19937_64 generator_;
+
+            void updateModels(
+                    const WorldState& starting_world_state,
+                    std::pair< Eigen::VectorXd, Eigen::VectorXd > task_desired_motion,
+                    const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory> >& suggested_trajectories,
+                    ssize_t model_used,
+                    const std::vector< WorldState >& world_feedback );
+
+            Eigen::MatrixXd calculateProcessNoise(
+                    const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >& suggested_trajectories );
+
+            Eigen::VectorXd calculateObservedReward(
+                    const WorldState& starting_world_state,
+                    std::pair<Eigen::VectorXd, Eigen::VectorXd> task_desired_motion,
+                    ssize_t model_used,
+                    const std::vector< WorldState >& world_feedback );
+
+            Eigen::MatrixXd calculateObservationNoise(
+                    const Eigen::MatrixXd& process_noise,
+                    ssize_t model_used );
 
             ////////////////////////////////////////////////////////////////////
             // Logging and visualization functionality
             ////////////////////////////////////////////////////////////////////
 
-//            const bool logging_enabled_;
-//            std::map< std::string, Log::Log > loggers;
+            const LoggingFunctionType logging_fn_;
             Visualizer& vis_;
 
             ////////////////////////////////////////////////////////////////////
             // Internal helpers for the getNextTrajectory() function
             ////////////////////////////////////////////////////////////////////
-
+/*
             ObjectTrajectory combineModelPredictions(
                     const VectorObjectTrajectory& model_predictions ) const;
 
@@ -68,7 +96,6 @@ namespace smmap
             std::pair< Eigen::VectorXd, Eigen::MatrixXd > combineModelDerivitives(
                     const std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > >& model_derivitives ) const;
 
-/*
             std::vector< AllGrippersSinglePose > optimizeTrajectoryDirectShooting(
                     const WorldFeedback& current_world_configuration,
                     std::vector<AllGrippersSinglePose> grippers_trajectory,

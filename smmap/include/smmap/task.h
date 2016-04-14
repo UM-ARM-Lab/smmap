@@ -6,7 +6,6 @@
 
 #include "smmap/robot_interface.hpp"
 
-#include "smmap/model_set.h"
 #include "smmap/planner.h"
 #include "smmap/task_specification.h"
 #include "smmap/task_function_pointer_types.h"
@@ -50,6 +49,11 @@ namespace smmap
 
             bool logging_enabled_;
             std::map< std::string, Log::Log > loggers;
+            void logData(
+                    const WorldState& current_world_state,
+                    const Eigen::VectorXd& model_utility_mean,
+                    const Eigen::MatrixXd& model_utility_covariance,
+                    const ssize_t model_used );
 
             ////////////////////////////////////////////////////////////////////
             // Function pointers that are created in the construtor that are
@@ -57,13 +61,10 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             const ErrorFunctionType error_fn_;
-            const ModelPredictionFunctionType model_prediction_fn_;
-            const ModelSuggestedGrippersTrajFunctionType model_suggested_grippers_traj_fn_;
-            const GetModelUtilityFunctionType get_model_utility_fn_;
-            const UpdateModelUtilityFunctionType update_model_utility_fn_;
             const GripperCollisionCheckFunctionType gripper_collision_check_fn_;
-            const TaskDesiredObjectDeltaFunctionType task_desired_object_delta_fn_;
             const TaskObjectDeltaProjectionFunctionType task_object_delta_projection_fn_;
+            const TaskExecuteGripperTrajectoryFunctionType execute_trajectory_fn_;
+            const LoggingFunctionType logging_fn_;
 
             ////////////////////////////////////////////////////////////////////
             // Functions that are used to initialize function pointers in the
@@ -72,19 +73,15 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             ErrorFunctionType createErrorFunction();
-            ModelPredictionFunctionType createModelPredictionFunction();
-            ModelSuggestedGrippersTrajFunctionType createModelSuggestedGrippersTrajFunction();
-            GetModelUtilityFunctionType createGetModelUtilityFunction();
-            UpdateModelUtilityFunctionType createUpdateModelUtilityFunction();
             GripperCollisionCheckFunctionType createGripperCollisionCheckFunction();
-            TaskDesiredObjectDeltaFunctionType createTaskDesiredObjectDeltaFunction();
             TaskObjectDeltaProjectionFunctionType createTaskObjectDeltaProjectionFunction();
+            TaskExecuteGripperTrajectoryFunctionType createExecuteGripperTrajectoryFunction();
+            LoggingFunctionType createLoggingFunction();
 
             ////////////////////////////////////////////////////////////////////
-            //
+            // The planner itself
             ////////////////////////////////////////////////////////////////////
 
-            ModelSet model_set_;
             Planner planner_;
 
     };

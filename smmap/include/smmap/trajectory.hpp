@@ -7,21 +7,13 @@
 #include <smmap_msgs/messages.h>
 
 #include "smmap/collision_helpers.hpp"
+#include "gripper_helpers.hpp"
 
 namespace smmap
 {
-    // Typedefs to help deal with Deformable Object and Gripper tracking
     typedef Eigen::Matrix3Xd ObjectPointSet;
     typedef std::vector< ObjectPointSet > ObjectTrajectory;
     typedef std::vector< ObjectTrajectory > VectorObjectTrajectory;
-
-    typedef EigenHelpers::VectorAffine3d AllGrippersSinglePose;
-    typedef std::vector< AllGrippersSinglePose > AllGrippersPoseTrajectory;
-
-    typedef kinematics::VectorVector6d AllGrippersSingleVelocity;
-    typedef AllGrippersSingleVelocity AllGrippersSinglePoseDelta;
-    typedef std::vector< AllGrippersSingleVelocity > AllGrippersVelocityTrajectory;
-    typedef std::vector< AllGrippersSinglePoseDelta > AllGrippersPoseDeltaTrajectory;
 
     /// World state structure for a single time step
     struct WorldState
@@ -170,105 +162,14 @@ namespace smmap
         return grippers_pose_trajectory;
     }
 
-    inline double anneal( const double old_val, const double new_val, const double annealing_rate )
+    inline Eigen::VectorXd CalculateObjectDeltaAsVector(
+            const ObjectPointSet& start,
+            const ObjectPointSet& end )
     {
-        return ( 1 - annealing_rate ) * old_val +  annealing_rate * new_val;
-    }
-
-
-    /**
-     * @brief Calculates the distance bewtween two deformable object
-     * configurations using an L2 norm.
-     *
-     * @param set1 The first object configuration
-     * @param set2 The second object configuration
-     *
-     * @return The L2 distanace between object configurations
-     */
-    inline double distance( const ObjectPointSet& set1,
-                            const ObjectPointSet& set2 )
-    {
-        return ( set1 - set2 ).norm();
-    }
-
-    /**
-     * @brief Calculates the distance between two deformable object
-     * configurations using a weighted L2 norm.
-     *
-     * @param set1
-     * @param set2
-     * @param weights
-     * @return
-     */
-    inline double distanceWeighted( const ObjectPointSet& set1,
-                                    const ObjectPointSet& set2,
-                                    const Eigen::VectorXd& weights )
-    {
-        Eigen::MatrixXd diff = set1 - set2;
+        Eigen::MatrixXd diff = end - start;
         diff.resize( diff.rows() * diff.cols(), 1 );
-        return std::sqrt( diff.cwiseAbs2().cwiseProduct( weights ).sum() );
+        return diff;
     }
-
-    /**
-     * @brief Calculates the squared distance bewtween two deformable object
-     * configurations using a L2 norm.
-     *
-     * @param set1 The first object configuration
-     * @param set2 The second object configuration
-     *
-     * @return The squared L2 distanace between object configurations
-     */
-    inline double distanceSquared( const ObjectPointSet& set1,
-                                   const ObjectPointSet& set2 )
-    {
-        return ( set1 - set2 ).squaredNorm();
-    }
-
-    /**
-     * @brief Calculates the RMS distance between two object trajectories using
-     * a L2 norm for each time step.
-     *
-     * @param traj1 The first object trajectory
-     * @param traj2 The second object trajectory
-     *
-     * @return The RMS distance between two object trajectories
-     */
-    inline double distanceRMS( const ObjectTrajectory& traj1,
-                               const ObjectTrajectory& traj2 )
-    {
-        assert( traj1.size() == traj2.size() );
-        double dist_squared = 0;
-        for ( size_t ind = 0; ind < traj1.size(); ind++ )
-        {
-            dist_squared += distanceSquared( traj1[ind], traj2[ind]);
-        }
-
-        return std::sqrt( dist_squared / (double)traj1.size() );
-    }
-
-    /**
-     * @brief Calculates the RMS distance between two object trajectories using
-     * an L2 norm for each time step.
-     *
-     * @param traj1 The first object trajectory
-     * @param traj2 The second object trajectory
-     *
-     * @return The RMS distance between two object trajectories
-     */
-    inline double distanceRMS( const std::vector< WorldState >& traj1,
-                               const ObjectTrajectory& traj2 )
-    {
-        assert( traj1.size() == traj2.size() );
-        double dist_squared = 0;
-        for ( size_t ind = 0; ind < traj1.size(); ind++ )
-        {
-            dist_squared += distanceSquared( traj1[ind].object_configuration_,
-                                             traj2[ind] );
-        }
-
-        return std::sqrt( dist_squared / (double)traj1.size() );
-    }
-
 
     /**
      * @brief Computes the distance between each node in the given object

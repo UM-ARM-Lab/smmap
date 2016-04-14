@@ -5,7 +5,7 @@ using namespace smmap;
 int main( int argc, char* argv[] )
 {
     // Read in all ROS parameters
-    ros::init( argc, argv, "smmap_planner", ros::init_options::NoSigintHandler );
+    ros::init( argc, argv, "smmap_planner_node", ros::init_options::NoSigintHandler );
 
     ros::NodeHandle nh;
 

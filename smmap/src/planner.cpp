@@ -1,7 +1,8 @@
 #include "smmap/planner.h"
 
-#include <numeric>
 #include <assert.h>
+#include <chrono>
+#include <numeric>
 
 #include <arc_utilities/pretty_print.hpp>
 
@@ -9,104 +10,245 @@ using namespace smmap;
 using namespace EigenHelpersConversions;
 
 ////////////////////////////////////////////////////////////////////////////////
-// Constructor
+// Constructor and model list builder
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
  * @brief Planner::Planner
  * @param error_fn
- * @param model_prediction_fn
- * @param model_suggested_traj_fn
- * @param model_utility_fn
+ * @param execute_trajectory_fn
  * @param vis
+ * @param dt
  */
 Planner::Planner( const ErrorFunctionType& error_fn,
-                  const ModelPredictionFunctionType& model_prediction_fn,
-                  const ModelSuggestedGrippersTrajFunctionType& model_suggested_grippers_traj_fn,
-                  const GetModelUtilityFunctionType& get_model_utility_fn,
-                  Visualizer& vis )
+                  const TaskExecuteGripperTrajectoryFunctionType& execute_trajectory_fn,
+                  const LoggingFunctionType& logging_fn,
+                  Visualizer& vis,
+                  const double dt )
     : error_fn_( error_fn )
-    , model_prediction_fn_( model_prediction_fn )
-    , model_suggested_grippers_traj_fn_( model_suggested_grippers_traj_fn )
-    , get_model_utility_fn_( get_model_utility_fn )
+    , execute_trajectory_fn_( execute_trajectory_fn )
+    , dt_( dt )
+    , generator_( 0xa8710913d2b5df6c ) // a30cd67f3860ddb3 ) // MD5 sum of "Dale McConachie"
+//    , generator_( std::chrono::system_clock::now().time_since_epoch().count() )
+    , logging_fn_( logging_fn )
     , vis_( vis )
 {}
+
+void Planner::addModel( DeformableModel::Ptr model )
+{
+    model_list_.push_back( model );
+}
+
+void Planner::createBandits()
+{
+    model_utility_bandit_ = KalmanFilterMultiarmBandit< std::mt19937_64 >(
+                Eigen::VectorXd::Zero( (ssize_t)model_list_.size() ),
+                Eigen::MatrixXd::Identity( (ssize_t)model_list_.size(), (ssize_t)model_list_.size() ) );
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // The one function that gets invoked externally
 ////////////////////////////////////////////////////////////////////////////////
 
-AllGrippersPoseTrajectory Planner::getNextTrajectory(
-        const WorldState& world_current_state,
+/**
+ * @brief Planner::getNextTrajectory
+ * @param world_current_state
+ * @param planning_horizion
+ * @param dt
+ * @param max_gripper_velocity
+ * @param obstacle_avoidance_scale
+ * @return
+ */
+std::vector< WorldState > Planner::sendNextTrajectory(
+        const WorldState& current_world_state,
+        const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn,
         const int planning_horizion,
-        const double dt,
         const double max_gripper_velocity,
-        const double obstacle_avoidance_scale ) const
+        const double obstacle_avoidance_scale )
 {
     // Querry each model for it's best trajectory
-    ROS_INFO_STREAM_NAMED( "planner", "Getting trajectory suggestions of length " << planning_horizion );
-    const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > > suggested_trajectories =
-            model_suggested_grippers_traj_fn_(
-                world_current_state,
+    ROS_INFO_STREAM_NAMED( "planner", "Getting trajectory suggestions for each model  of length " << planning_horizion );
+
+    std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > > suggested_trajectories( model_list_.size() );
+    for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
+    {
+        suggested_trajectories[model_ind] =
+            model_list_[model_ind]->getSuggestedGrippersTrajectory(
+                current_world_state,
                 planning_horizion,
-                dt,
+                dt_,
                 max_gripper_velocity,
                 obstacle_avoidance_scale );
-
-    // Get the utility of each model
-    const std::vector< double >& model_utility = get_model_utility_fn_();
-
-    // Confirm that our data sizes match what they are supposed to
-    assert( model_utility.size() == suggested_trajectories.size() );
-
-    size_t min_weighted_cost_ind = 0;
-    double min_weighted_cost = std::numeric_limits< double >::infinity();
-    ROS_INFO_NAMED( "planner" , "Finding 'best' trajectory suggestion for a seed" );
-    for ( size_t model_ind = 0; model_ind < suggested_trajectories.size(); model_ind++ )
-    {
-        double weighted_cost = model_utility[model_ind];
-//                * error_fn_( suggested_trajectories[model_ind].second.back() );
-        if ( weighted_cost < min_weighted_cost )
-        {
-            min_weighted_cost = weighted_cost;
-            min_weighted_cost_ind = model_ind;
-        }
     }
 
-    AllGrippersPoseTrajectory best_trajectory =
-            suggested_trajectories[min_weighted_cost_ind].first;
-//            optimizeTrajectoryDirectShooting(
-//                world_feedback.back(),
-//                suggested_trajectories[min_weighted_cost_ind].first,
-//                dt );
+    // Pick an arm to use
+    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull( generator_ );
+    AllGrippersPoseTrajectory best_trajectory = suggested_trajectories[(size_t)model_to_use].first;
+    best_trajectory.erase( best_trajectory.begin() );
+    // Execute the trajectory
+    std::vector< WorldState > world_feedback = execute_trajectory_fn_( best_trajectory );
+    // Get feedback
+    world_feedback.emplace( world_feedback.begin(), current_world_state );
 
-    return best_trajectory;
+    auto task_desired_motion = task_desired_object_delta_fn( current_world_state );
+
+    updateModels( current_world_state, task_desired_motion, suggested_trajectories, model_to_use, world_feedback );
+    logging_fn_( world_feedback.back(), model_utility_bandit_.getMean(), model_utility_bandit_.getCovariance(), model_to_use );
+
+    return world_feedback;
 }
 
-double Planner::UpdateUtility( const double old_utility,
-                               const WorldState& world_state,
-                               const ObjectPointSet& prediction,
-                               const Eigen::VectorXd& weights )
-{
-    const double distance = distanceWeighted(
-                world_state.object_configuration_,
-                prediction,
-                weights );
-    // TODO: use dt here somewhere, plus the number of nodes, etc.
-    const double new_utility = 1.0/(1.0 + std::sqrt( std::sqrt( distance ) ) );
-    #warning "Another magic number here - annealing rate"
-    return anneal( old_utility, new_utility, 0.1 );
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Internal helpers for the getNextTrajectory() function
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
- * @brief Planner::combineModelPredictions
- * @param model_predictions
- * @return
+ * @brief Planner::updateModels
+ * @param suggested_trajectories
+ * @param model_used
+ * @param world_feedback
  */
+void Planner::updateModels(
+        const WorldState& starting_world_state,
+        std::pair<Eigen::VectorXd, Eigen::VectorXd> task_desired_motion,
+        const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >& suggested_trajectories,
+        ssize_t model_used,
+        const std::vector< WorldState >& world_feedback )
+{
+    const Eigen::MatrixXd process_noise = calculateProcessNoise( suggested_trajectories );
+    const Eigen::VectorXd observed_reward = calculateObservedReward(
+                starting_world_state,
+                task_desired_motion,
+                model_used,
+                world_feedback );
+
+    const Eigen::MatrixXd observation_matrix = Eigen::MatrixXd::Identity( (ssize_t)model_list_.size(), (ssize_t)model_list_.size() );
+    const Eigen::MatrixXd observation_noise = calculateObservationNoise( process_noise, model_used );
+
+    // Perform the Kalman update
+    #warning "Bandit variance magic numbers here"
+    ros::NodeHandle ph( "~" );
+    const double current_reward_scale_factor = std::sqrt( std::abs( observed_reward( model_used ) ) ) + 1e-10;
+    const double process_noise_scaling_factor = ROSHelpers::GetParam( ph, "process_noise_factor", 1 ) * current_reward_scale_factor;
+    const double observation_noise_scaling_factor = ROSHelpers::GetParam( ph, "observation_noise_factor", 1 ) * current_reward_scale_factor;
+    model_utility_bandit_.updateArms(
+                process_noise_scaling_factor * process_noise,
+                observation_matrix,
+                observed_reward,
+                observation_noise_scaling_factor * observation_noise );
+
+    // Then we allow the model to update itself based on the new data
+    #pragma omp parallel for
+    for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
+    {
+        model_list_[model_ind]->updateModel( world_feedback );
+    }
+}
+
+Eigen::MatrixXd Planner::calculateProcessNoise(
+        const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >& suggested_trajectories )
+{
+    const ssize_t num_models = (ssize_t)model_list_.size();
+
+    std::vector< double > grippers_velocity_norms( (size_t)num_models );
+    std::vector< AllGrippersPoseDeltaTrajectory > grippers_suggested_pose_deltas( (size_t)num_models );
+    for ( size_t model_ind = 0; model_ind < (size_t)num_models; model_ind++ )
+    {
+        grippers_suggested_pose_deltas[model_ind] = CalculateGrippersPoseDeltas( suggested_trajectories[model_ind].first );
+        grippers_velocity_norms[model_ind] = MultipleGrippersVelocityTrajectory6dNorm( grippers_suggested_pose_deltas[model_ind] );
+    }
+
+    Eigen::MatrixXd process_noise = Eigen::MatrixXd::Identity( num_models, num_models );
+    for ( ssize_t i = 0; i < num_models; i++ )
+    {
+        for ( ssize_t j = i+1; j < num_models; j++ )
+        {
+            process_noise( i, j ) =
+                    MultipleGrippersVelocityTrajectoryDotProduct(
+                        grippers_suggested_pose_deltas[(size_t)i],
+                        grippers_suggested_pose_deltas[(size_t)j] )
+                    / ( grippers_velocity_norms[(size_t)i] * grippers_velocity_norms[(size_t)j] );
+
+            process_noise( j, i ) = process_noise( i, j );
+        }
+    }
+
+    return process_noise;
+}
+
+Eigen::VectorXd Planner::calculateObservedReward(
+        const WorldState& starting_world_state,
+        std::pair<Eigen::VectorXd, Eigen::VectorXd> task_desired_motion,
+        ssize_t model_used,
+        const std::vector< WorldState >& world_feedback )
+{
+    const ssize_t num_models = (ssize_t)model_list_.size();
+
+    const double starting_error = error_fn_( starting_world_state.object_configuration_ );
+    const double true_error_reduction = starting_error - error_fn_( world_feedback.back().object_configuration_ );
+    const Eigen::VectorXd true_object_diff = CalculateObjectDeltaAsVector( starting_world_state.object_configuration_, world_feedback.back().object_configuration_ );
+
+    // TODO: remove this auto
+    const auto grippers_trajectory = GetGripperTrajectories( world_feedback );
+    const auto grippers_pose_deltas = CalculateGrippersPoseDeltas( grippers_trajectory );
+
+
+    Eigen::VectorXd angle_between_true_and_predicted = Eigen::VectorXd::Zero( num_models );
+    for ( ssize_t model_ind = 0; model_ind < num_models; model_ind++ )
+    {
+        const ObjectPointSet predicted_motion_under_true_gripper_movement = model_list_[(size_t)model_ind]->getFinalConfiguration(
+                    starting_world_state,
+                    grippers_trajectory,
+                    grippers_pose_deltas,
+                    dt_ );
+
+        const Eigen::VectorXd predicted_object_diff = CalculateObjectDeltaAsVector( starting_world_state.object_configuration_, predicted_motion_under_true_gripper_movement );
+        angle_between_true_and_predicted( model_ind ) = EigenHelpers::WeightedAngleBetweenVectors( true_object_diff, predicted_object_diff, task_desired_motion.second );
+    }
+
+    Eigen::VectorXd observed_reward = Eigen::VectorXd::Zero( num_models );
+    const double angle_to_model_chosen = angle_between_true_and_predicted( model_used );
+    for ( ssize_t model_ind = 0; model_ind < num_models; model_ind++ )
+    {
+        const double angle_delta = angle_to_model_chosen - angle_between_true_and_predicted( model_ind );
+        observed_reward( model_ind ) = ( 1.0 + std::cos( angle_delta ) ) / 2.0;
+    }
+    observed_reward *= true_error_reduction;
+
+    return observed_reward;
+}
+
+Eigen::MatrixXd Planner::calculateObservationNoise(
+        const Eigen::MatrixXd& process_noise,
+        ssize_t model_used )
+{
+    const ssize_t num_models = (ssize_t)model_list_.size();
+
+    // Observation noise
+    Eigen::MatrixXd observation_noise;
+    observation_noise.resize( num_models, num_models );
+    for ( ssize_t i = 0; i < num_models; i++ )
+    {
+        // reuse dot products between true gripper movement and suggested gripper movement - as the model_used gripper movement is the same as the true gipper movement (right now)
+        #warning "This term needs to change when we work with a non-perfectly tracking robot"
+        observation_noise( i, i ) = std::exp( -process_noise( i, model_used ) );
+    }
+
+    for ( ssize_t i = 0; i < num_models; i++ )
+    {
+        for ( ssize_t j = i + 1; j < num_models; j++ )
+        {
+            // reuse dot products between true gripper movement and suggested gripper movement
+            observation_noise( i, j ) = process_noise( i, j ) * std::sqrt( observation_noise( i, i ) ) * std::sqrt( observation_noise( j, j ) );
+            observation_noise( j, i ) = observation_noise( i, j );
+        }
+    }
+
+    return observation_noise;
+}
+
+/*
 ObjectTrajectory Planner::combineModelPredictions(
         const VectorObjectTrajectory& model_predictions ) const
 {
@@ -133,11 +275,6 @@ ObjectTrajectory Planner::combineModelPredictions(
     return weighted_average_trajectory;
 }
 
-/**
- * @brief Planner::combineModelPredictionsLastTimestep
- * @param model_predictions
- * @return
- */
 ObjectPointSet Planner::combineModelPredictionsLastTimestep(
         const VectorObjectTrajectory& model_predictions ) const
 {
@@ -162,11 +299,6 @@ ObjectPointSet Planner::combineModelPredictionsLastTimestep(
     return weighted_average_configuration;
 }
 
-/**
- * @brief Planner::combineModelDerivitives
- * @param model_derivitives
- * @return
- */
 Eigen::VectorXd Planner::combineModelDerivitives(
         const std::vector< Eigen::VectorXd >& model_derivitives ) const
 {
@@ -187,11 +319,6 @@ Eigen::VectorXd Planner::combineModelDerivitives(
     return weighted_average_derivitive;
 }
 
-/**
- * @brief Planner::combineModelDerivitives
- * @param model_derivitives
- * @return
- */
 std::pair< Eigen::VectorXd, Eigen::MatrixXd > Planner::combineModelDerivitives(
         const std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > >& model_derivitives ) const
 {
@@ -217,7 +344,6 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > Planner::combineModelDerivitives(
     return weighted_average_derivitive;
 }
 
-/*
 std::vector< AllGrippersSinglePose > Planner::optimizeTrajectoryDirectShooting(
         const WorldFeedback& current_world_configuration,
         std::vector< AllGrippersSinglePose > grippers_trajectory,
