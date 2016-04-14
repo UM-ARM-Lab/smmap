@@ -116,9 +116,41 @@ void Planner::updateModels(
         ssize_t model_used,
         const std::vector< WorldState >& world_feedback )
 {
-    ssize_t num_models = (ssize_t)model_list_.size();
+    const Eigen::MatrixXd process_noise = calculateProcessNoise( suggested_trajectories );
+    const Eigen::VectorXd observed_reward = calculateObservedReward(
+                starting_world_state,
+                task_desired_motion,
+                model_used,
+                world_feedback );
 
-    // Process Noise
+    const Eigen::MatrixXd observation_matrix = Eigen::MatrixXd::Identity( (ssize_t)model_list_.size(), (ssize_t)model_list_.size() );
+    const Eigen::MatrixXd observation_noise = calculateObservationNoise( process_noise, model_used );
+
+    // Perform the Kalman update
+    #warning "Bandit variance magic numbers here"
+    ros::NodeHandle ph( "~" );
+    const double current_reward_scale_factor = std::sqrt( std::abs( observed_reward( model_used ) ) ) + 1e-10;
+    const double process_noise_scaling_factor = ROSHelpers::GetParam( ph, "process_noise_factor", 1 ) * current_reward_scale_factor;
+    const double observation_noise_scaling_factor = ROSHelpers::GetParam( ph, "observation_noise_factor", 1 ) * current_reward_scale_factor;
+    model_utility_bandit_.updateArms(
+                process_noise_scaling_factor * process_noise,
+                observation_matrix,
+                observed_reward,
+                observation_noise_scaling_factor * observation_noise );
+
+    // Then we allow the model to update itself based on the new data
+    #pragma omp parallel for
+    for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
+    {
+        model_list_[model_ind]->updateModel( world_feedback );
+    }
+}
+
+Eigen::MatrixXd Planner::calculateProcessNoise(
+        const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >& suggested_trajectories )
+{
+    const ssize_t num_models = (ssize_t)model_list_.size();
+
     std::vector< double > grippers_velocity_norms( (size_t)num_models );
     std::vector< AllGrippersPoseDeltaTrajectory > grippers_suggested_pose_deltas( (size_t)num_models );
     for ( size_t model_ind = 0; model_ind < (size_t)num_models; model_ind++ )
@@ -127,7 +159,7 @@ void Planner::updateModels(
         grippers_velocity_norms[model_ind] = MultipleGrippersVelocityTrajectory6dNorm( grippers_suggested_pose_deltas[model_ind] );
     }
 
-    Eigen::MatrixXd process_noise = Eigen::MatrixXd::Identity( (ssize_t)model_list_.size(), (ssize_t)model_list_.size() );
+    Eigen::MatrixXd process_noise = Eigen::MatrixXd::Identity( num_models, num_models );
     for ( ssize_t i = 0; i < num_models; i++ )
     {
         for ( ssize_t j = i+1; j < num_models; j++ )
@@ -142,39 +174,58 @@ void Planner::updateModels(
         }
     }
 
+    return process_noise;
+}
 
-    // Observed reward
+Eigen::VectorXd Planner::calculateObservedReward(
+        const WorldState& starting_world_state,
+        std::pair<Eigen::VectorXd, Eigen::VectorXd> task_desired_motion,
+        ssize_t model_used,
+        const std::vector< WorldState >& world_feedback )
+{
+    const ssize_t num_models = (ssize_t)model_list_.size();
+
     const double starting_error = error_fn_( starting_world_state.object_configuration_ );
     const double true_error_reduction = starting_error - error_fn_( world_feedback.back().object_configuration_ );
     const Eigen::VectorXd true_object_diff = CalculateObjectDeltaAsVector( starting_world_state.object_configuration_, world_feedback.back().object_configuration_ );
 
-    Eigen::VectorXd cosine_of_angle_between_true_and_predicted = Eigen::VectorXd::Zero( num_models );
+    // TODO: remove this auto
+    const auto grippers_trajectory = GetGripperTrajectories( world_feedback );
+    const auto grippers_pose_deltas = CalculateGrippersPoseDeltas( grippers_trajectory );
+
+
+    Eigen::VectorXd angle_between_true_and_predicted = Eigen::VectorXd::Zero( num_models );
     for ( ssize_t model_ind = 0; model_ind < num_models; model_ind++ )
     {
-
         const ObjectPointSet predicted_motion_under_true_gripper_movement = model_list_[(size_t)model_ind]->getFinalConfiguration(
                     starting_world_state,
-                    GetGripperTrajectories( world_feedback ),
-                    CalculateGrippersPoseDeltas( GetGripperTrajectories( world_feedback ) ),
+                    grippers_trajectory,
+                    grippers_pose_deltas,
                     dt_ );
 
         const Eigen::VectorXd predicted_object_diff = CalculateObjectDeltaAsVector( starting_world_state.object_configuration_, predicted_motion_under_true_gripper_movement );
-        cosine_of_angle_between_true_and_predicted( model_ind ) = EigenHelpers::WeightedCosineAngleBetweenVectors( true_object_diff, predicted_object_diff, task_desired_motion.second );
+        angle_between_true_and_predicted( model_ind ) = EigenHelpers::WeightedAngleBetweenVectors( true_object_diff, predicted_object_diff, task_desired_motion.second );
     }
 
     Eigen::VectorXd observed_reward = Eigen::VectorXd::Zero( num_models );
-    const double angle_to_model_chosen = std::acos( cosine_of_angle_between_true_and_predicted(model_used) );
+    const double angle_to_model_chosen = angle_between_true_and_predicted( model_used );
     for ( ssize_t model_ind = 0; model_ind < num_models; model_ind++ )
     {
-        const double angle_delta = angle_to_model_chosen - std::acos( cosine_of_angle_between_true_and_predicted( model_ind ) );
+        const double angle_delta = angle_to_model_chosen - angle_between_true_and_predicted( model_ind );
         observed_reward( model_ind ) = ( 1.0 + std::cos( angle_delta ) ) / 2.0;
     }
     observed_reward *= true_error_reduction;
 
-    // Observation matrix: C
-    const Eigen::MatrixXd observation_matrix = Eigen::MatrixXd::Identity( num_models, num_models );
+    return observed_reward;
+}
 
-    // Observatoin noise
+Eigen::MatrixXd Planner::calculateObservationNoise(
+        const Eigen::MatrixXd& process_noise,
+        ssize_t model_used )
+{
+    const ssize_t num_models = (ssize_t)model_list_.size();
+
+    // Observation noise
     Eigen::MatrixXd observation_noise;
     observation_noise.resize( num_models, num_models );
     for ( ssize_t i = 0; i < num_models; i++ )
@@ -182,30 +233,19 @@ void Planner::updateModels(
         // reuse dot products between true gripper movement and suggested gripper movement - as the model_used gripper movement is the same as the true gipper movement (right now)
         #warning "This term needs to change when we work with a non-perfectly tracking robot"
         observation_noise( i, i ) = std::exp( -process_noise( i, model_used ) );
+    }
 
+    for ( ssize_t i = 0; i < num_models; i++ )
+    {
         for ( ssize_t j = i + 1; j < num_models; j++ )
         {
             // reuse dot products between true gripper movement and suggested gripper movement
-            observation_noise( i, j ) = process_noise( i, j );
+            observation_noise( i, j ) = process_noise( i, j ) * std::sqrt( observation_noise( i, i ) ) * std::sqrt( observation_noise( j, j ) );
             observation_noise( j, i ) = observation_noise( i, j );
         }
     }
 
-    // Perform the Kalman update
-    #warning "Bandit variance magic numbers here"
-    ros::NodeHandle ph( "~" );
-    model_utility_bandit_.updateArms(
-                ROSHelpers::GetParam( ph, "process_noise_factor", 0.01 ) * std::abs( true_error_reduction ) * process_noise,
-                observation_matrix,
-                observed_reward,
-                ROSHelpers::GetParam( ph, "observation_noise_factor", 0.1 ) * std::abs( true_error_reduction ) * observation_noise );
-
-    // Then we allow the model to update itself based on the new data
-    #pragma omp parallel for
-    for ( size_t model_ind = 0; model_ind < model_list_.size(); model_ind++ )
-    {
-        model_list_[model_ind]->updateModel( world_feedback );
-    }
+    return observation_noise;
 }
 
 /*

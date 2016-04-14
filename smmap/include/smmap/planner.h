@@ -60,11 +60,18 @@ namespace smmap
                     ssize_t model_used,
                     const std::vector< WorldState >& world_feedback );
 
-            VectorObjectTrajectory getPredictions(
+            Eigen::MatrixXd calculateProcessNoise(
+                    const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >& suggested_trajectories );
+
+            Eigen::VectorXd calculateObservedReward(
                     const WorldState& starting_world_state,
-                    const AllGrippersPoseTrajectory& grippers_pose_trajectory,
-                    const AllGrippersPoseDeltaTrajectory& grippers_pose_delta_trajectory,
-                    const double dt ) const;
+                    std::pair<Eigen::VectorXd, Eigen::VectorXd> task_desired_motion,
+                    ssize_t model_used,
+                    const std::vector< WorldState >& world_feedback );
+
+            Eigen::MatrixXd calculateObservationNoise(
+                    const Eigen::MatrixXd& process_noise,
+                    ssize_t model_used );
 
             ////////////////////////////////////////////////////////////////////
             // Logging and visualization functionality
