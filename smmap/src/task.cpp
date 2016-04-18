@@ -101,10 +101,10 @@ void Task::execute()
                     RobotInterface::MAX_GRIPPER_VELOCITY,
                     task_specification_->getCollisionScalingFactor() );
 
-        if ( task_specification_->maxTime() < world_feedback.back().sim_time_ )
-        {
-            robot_.shutdown();
-        }
+//        if ( task_specification_->maxTime() < world_feedback.back().sim_time_ )
+//        {
+//            robot_.shutdown();
+//        }
     }
 }
 

@@ -204,7 +204,16 @@ Eigen::VectorXd Planner::calculateObservedReward(
                     dt_ );
 
         const Eigen::VectorXd predicted_object_diff = CalculateObjectDeltaAsVector( starting_world_state.object_configuration_, predicted_motion_under_true_gripper_movement );
-        angle_between_true_and_predicted( model_ind ) = EigenHelpers::WeightedAngleBetweenVectors( true_object_diff, predicted_object_diff, task_desired_motion.second );
+
+        // Deal with the cloth not moving potentially (i.e. in fake data land)
+        if ( true_object_diff.squaredNorm() > 1e-10 && predicted_object_diff.squaredNorm() > 1e-10 )
+        {
+            angle_between_true_and_predicted( model_ind ) = EigenHelpers::WeightedAngleBetweenVectors( true_object_diff, predicted_object_diff, task_desired_motion.second );
+        }
+        else
+        {
+            angle_between_true_and_predicted( model_ind ) = 0;
+        }
     }
 
     Eigen::VectorXd observed_reward = Eigen::VectorXd::Zero( num_models );

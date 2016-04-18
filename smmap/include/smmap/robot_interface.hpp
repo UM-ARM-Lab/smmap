@@ -23,8 +23,8 @@ namespace smmap
                 : nh_( nh )
                 , grippers_data_( GetGrippersData( nh_ ) )
                 , gripper_collision_checker_( nh_ )
-                // TODO: remove this hardcoded spin rate
                 , cmd_grippers_traj_client_( nh_, GetCommandGripperTrajTopic( nh_ ), false )
+                // TODO: remove this hardcoded spin rate
                 , spin_thread_( spin, 1000 )
             {}
 
