@@ -9,6 +9,7 @@ set( CATKIN_PACKAGES
     image_transport
     cv_bridge
     ${PROJECT_NAME}_msgs
+    ${PROJECT_NAME}_experiment_params
 )
 
 ## Find catkin macros and libraries
@@ -74,7 +75,6 @@ add_library( ${PROJECT_NAME}
 )
 add_dependencies( ${PROJECT_NAME}
     ${catkin_EXPORTED_TARGETS}
-    ${PROJECT_NAME}_gencpp
 )
 
 ## Test files to test specific functionality

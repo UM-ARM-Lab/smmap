@@ -145,9 +145,14 @@ namespace smmap
                     Eigen::VectorXd object_delta ) const
             {
                 #warning "Rope cylinder projection function makes a lot of assumptions - movements are small, will only penetrate the sides, etc."
+
+                #warning "Cylinder location needs to be properly parameterized - constantly looking up ros params"
+                ros::NodeHandle nh;
                 Eigen::Vector2d cylinder_com;
-                #warning "Cylinder location needs to be properly parameterized"
-                cylinder_com << 0, ROPE_CYLINDER_RADIUS*5.0f/3.0f;
+                cylinder_com << GetRopeCylinderCenterOfMassX( nh ), GetRopeCylinderCenterOfMassY( nh );
+
+                const double cylinder_radius = GetRopeCylinderRadius( nh );
+                const double rope_radius = GetRopeRadius( nh );
 
                 #pragma omp parallel for
                 for ( ssize_t point_ind = 0; point_ind < object_configuration.cols(); point_ind++ )
@@ -156,10 +161,10 @@ namespace smmap
                             + object_delta.segment< 2 >( point_ind * 3 );
 
                     const Eigen::Vector2d vector_from_com = new_pos - cylinder_com;
-                    if ( vector_from_com.norm() < ROPE_CYLINDER_RADIUS + ROPE_RADIUS )
+                    if ( vector_from_com.norm() < cylinder_radius + rope_radius )
                     {
                         const Eigen::Vector2d adjusted_pos = cylinder_com +
-                                vector_from_com.normalized() * ( ROPE_CYLINDER_RADIUS + ROPE_RADIUS );
+                                vector_from_com.normalized() * ( cylinder_radius + rope_radius );
 
                         object_delta.segment< 2 >( point_ind * 3 ) =
                                 adjusted_pos - object_configuration.block< 2, 1 >( 0, point_ind );
@@ -310,10 +315,15 @@ namespace smmap
                     Eigen::VectorXd object_delta ) const
             {
                 #warning "Cloth Table projection function makes a lot of assumptions - movements are small, will only penetrate the top, etc."
-                static const double table_min_x = TABLE_X - ROPE_TABLE_HALF_SIDE_LENGTH;
-                static const double table_max_x = TABLE_X + ROPE_TABLE_HALF_SIDE_LENGTH;
-                static const double table_min_y = TABLE_Y - ROPE_TABLE_HALF_SIDE_LENGTH;
-                static const double table_max_y = TABLE_Y + ROPE_TABLE_HALF_SIDE_LENGTH;
+
+                #warning "Table location needs to be properly parameterized - constantly looking up ros params"
+                ros::NodeHandle nh;
+
+                const double table_min_x = GetTableSurfaceX( nh ) - GetTableSizeX( nh );
+                const double table_max_x = GetTableSurfaceX( nh ) + GetTableSizeX( nh );
+                const double table_min_y = GetTableSurfaceY( nh ) - GetTableSizeY( nh );
+                const double table_max_y = GetTableSurfaceY( nh ) + GetTableSizeY( nh );
+                const double table_z = GetTableSurfaceZ( nh );
 
                 #pragma omp parallel for
                 for ( ssize_t point_ind = 0; point_ind < object_configuration.cols(); point_ind++ )
@@ -330,9 +340,9 @@ namespace smmap
                     {
                         // Check if the new point position penetrated the object
                         // Note that I am only checking "downwards" penetratraion as this task should never even consider having the other type
-                        if ( new_pos(2) < TABLE_Z )
+                        if ( new_pos(2) < table_z )
                         {
-                            object_delta( point_ind * 3 + 2 ) = TABLE_Z - object_configuration( 2, point_ind );
+                            object_delta( point_ind * 3 + 2 ) = table_z - object_configuration( 2, point_ind );
                         }
                     }
 

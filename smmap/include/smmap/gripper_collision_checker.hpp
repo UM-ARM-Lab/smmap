@@ -3,10 +3,10 @@
 
 #include <ros/ros.h>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
+#include <smmap_experiment_params/ros_params.hpp>
 #include <smmap_msgs/messages.h>
 
 #include "smmap/collision_helpers.hpp"
-#include "smmap/ros_params.hpp"
 #include "smmap/trajectory.hpp"
 
 namespace smmap

@@ -7,7 +7,7 @@
 #include <smmap_msgs/messages.h>
 
 #include "smmap/collision_helpers.hpp"
-#include "gripper_helpers.hpp"
+#include "smmap/gripper_helpers.hpp"
 
 namespace smmap
 {

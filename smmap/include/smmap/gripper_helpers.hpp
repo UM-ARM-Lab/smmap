@@ -1,12 +1,13 @@
 #ifndef GRIPPER_HELPERS_HPP
 #define GRIPPER_HELPERS_HPP
 
-#include <arc_utilities/eigen_helpers.hpp>
-#include <arc_utilities/pretty_print.hpp>
-#include <kinematics_toolbox/kinematics.h>
 #include <limits>
 #include <memory>
 #include <assert.h>
+
+#include <arc_utilities/eigen_helpers.hpp>
+#include <arc_utilities/pretty_print.hpp>
+#include <kinematics_toolbox/kinematics.h>
 
 namespace smmap
 {
