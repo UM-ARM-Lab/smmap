@@ -3,10 +3,11 @@
 
 #include <ros/ros.h>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
+#include <smmap_experiment_params/task_enums.h>
 #include <smmap_msgs/messages.h>
 
+
 #include "smmap/gripper_helpers.hpp"
-#include "smmap/ros_params.hpp"
 #include "smmap/trajectory.hpp"
 
 namespace smmap

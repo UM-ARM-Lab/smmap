@@ -1,13 +1,13 @@
-#include <boost/filesystem.hpp>
 #include <mutex>
+#include <boost/filesystem.hpp>
+#include <smmap_experiment_params/ros_params.hpp>
 
-#include "smmap/task.h"
-#include "smmap/ros_params.hpp"
 #include "smmap/ros_communication_helpers.hpp"
-
 #include "smmap/diminishing_rigidity_model.h"
 #include "smmap/adaptive_jacobian_model.h"
 #include "smmap/least_squares_jacobian_model.h"
+
+#include "smmap/task.h"
 
 using namespace smmap;
 using namespace EigenHelpersConversions;
@@ -24,7 +24,7 @@ Task::Task( RobotInterface& robot,
     , gripper_collision_check_fn_( createGripperCollisionCheckFunction() )
     , execute_trajectory_fn_( createExecuteGripperTrajectoryFunction() )
     , logging_fn_( createLoggingFunction() )
-    , planner_( error_fn_, execute_trajectory_fn_, logging_fn_, vis_, RobotInterface::DT )
+    , planner_( error_fn_, execute_trajectory_fn_, logging_fn_, vis_, GetRobotControlRate( nh_ ) )
 
 {
     initializeModelSet();

@@ -9,6 +9,7 @@ set( CATKIN_PACKAGES
     image_transport
     cv_bridge
     ${PROJECT_NAME}_msgs
+    ${PROJECT_NAME}_experiment_params
 )
 
 ## Find catkin macros and libraries
@@ -64,52 +65,17 @@ endif( USE_OPEN_MP )
 
 
 ## Library file for the whole project
+FILE( GLOB hpp_SRC "include/${PROJECT_NAME}/*.hpp" )
+FILE( GLOB h_SRC "include/${PROJECT_NAME}/*.h" )
+FILE( GLOB cpp_SRC "src/*.cpp" )
+
 add_library( ${PROJECT_NAME}
-    include/${PROJECT_NAME}/collision_helpers.hpp
-    include/${PROJECT_NAME}/gripper_helpers.hpp
-    include/${PROJECT_NAME}/gripper_collision_checker.hpp
-    include/${PROJECT_NAME}/robot_interface.hpp
-    include/${PROJECT_NAME}/ros_params.hpp
-    include/${PROJECT_NAME}/ros_communication_helpers.hpp
-
-    include/${PROJECT_NAME}/task.h
-    src/task.cpp
-
-    include/${PROJECT_NAME}/task_enums.h
-    include/${PROJECT_NAME}/task_function_pointer_types.h
-    include/${PROJECT_NAME}/task_specification.h
-    include/${PROJECT_NAME}/task_specification_implementions.hpp
-    src/task_specification.cpp
-
-    include/${PROJECT_NAME}/point_reflector.hpp
-    include/${PROJECT_NAME}/trajectory.hpp
-
-    include/${PROJECT_NAME}/visualization_tools.h
-    src/visualization_tools.cpp
-
-    include/${PROJECT_NAME}/deformable_model.h
-    src/deformable_model.cpp
-
-    include/${PROJECT_NAME}/jacobian_model.h
-    src/jacobian_model.cpp
-
-    include/${PROJECT_NAME}/adaptive_jacobian_model.h
-    src/adaptive_jacobian_model.cpp
-
-    include/${PROJECT_NAME}/least_squares_jacobian_model.h
-    src/least_squares_jacobian_model.cpp
-
-    include/${PROJECT_NAME}/diminishing_rigidity_model.h
-    src/diminishing_rigidity_model.cpp
-
-    include/${PROJECT_NAME}/planner.h
-    src/planner.cpp
-
-    include/${PROJECT_NAME}/kalman_filter_multiarm_bandit.hpp
+    ${hpp_SRC}
+    ${h_SRC}
+    ${cpp_SRC}
 )
 add_dependencies( ${PROJECT_NAME}
     ${catkin_EXPORTED_TARGETS}
-    ${PROJECT_NAME}_gencpp
 )
 
 ## Test files to test specific functionality

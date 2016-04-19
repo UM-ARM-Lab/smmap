@@ -5,7 +5,7 @@
 #include <visualization_msgs/MarkerArray.h>
 
 #include "smmap/trajectory.hpp"
-#include "smmap/ros_params.hpp"
+#include "smmap_experiment_params/ros_params.hpp"
 
 namespace smmap
 {

@@ -2,7 +2,7 @@
 #define TASK_SPECIFICATION_H
 
 #include <memory>
-#include "smmap/task_enums.h"
+#include <smmap_experiment_params/task_enums.h>
 #include "smmap/task_function_pointer_types.h"
 #include "smmap/visualization_tools.h"
 
@@ -12,43 +12,6 @@ namespace smmap
     {
         public:
             typedef std::shared_ptr< TaskSpecification > Ptr;
-
-            ////////////////////////////////////////////////////////////////////
-            // Constants used in SMMAP and the simulator - shared world
-            ////////////////////////////////////////////////////////////////////
-
-            // Define the middle of the top of the table
-            static constexpr float TABLE_X = 0.0f; // METERS
-            static constexpr float TABLE_Y = 0.0f; // METERS
-            static constexpr float TABLE_Z = 0.7f; // METERS
-            // Define the thickness of the table
-            static constexpr float TABLE_THICKNESS = 0.05f; // METERS
-
-            ////////////////////////////////////////////////////////////////////
-            // Constants used in SMMAP and the simulator - rope world
-            ////////////////////////////////////////////////////////////////////
-
-            static constexpr float ROPE_SEGMENT_LENGTH = 0.025f;    // METERS
-            static constexpr float ROPE_RADIUS = 0.01f;             // METERS
-            static constexpr int ROPE_NUM_LINKS = 50;
-            // TODO: why did Dmitry's code use 0.5f here?
-            static constexpr float ROPE_GRIPPER_APPERTURE = 0.03f;      // METERS
-            static constexpr float ROPE_TABLE_HALF_SIDE_LENGTH = 1.5f;  // METERS
-            static constexpr float ROPE_CYLINDER_RADIUS = 0.15f;        // METERS
-            static constexpr float ROPE_CYLINDER_HEIGHT = 0.3f;         // METERS
-
-            ////////////////////////////////////////////////////////////////////
-            // Constants used in SMMAP and the simulator - cloth world
-            ////////////////////////////////////////////////////////////////////
-
-            static constexpr float CLOTH_HALF_SIDE_LENGTH = 0.25f;              // METERS
-            static constexpr float CLOTH_X = TABLE_X + CLOTH_HALF_SIDE_LENGTH;  // METERS
-            static constexpr float CLOTH_Y = TABLE_Y;                           // METERS
-            static constexpr float CLOTH_Z = TABLE_Z + 0.01f;                   // METERS
-
-            static constexpr int CLOTH_DIVS = 45;
-            static constexpr float CLOTH_GRIPPER_APPERTURE = 0.1f;      // METERS
-            static constexpr float CLOTH_TABLE_HALF_SIDE_LENGTH = 0.2f; // METERS
 
             ////////////////////////////////////////////////////////////////////
             // Constructor to initialize objects that all TaskSpecifications share
