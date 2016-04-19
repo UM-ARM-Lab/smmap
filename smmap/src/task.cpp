@@ -25,7 +25,7 @@ Task::Task( RobotInterface& robot,
     , task_object_delta_projection_fn_( createTaskObjectDeltaProjectionFunction() )
     , execute_trajectory_fn_( createExecuteGripperTrajectoryFunction() )
     , logging_fn_( createLoggingFunction() )
-    , planner_( error_fn_, execute_trajectory_fn_, logging_fn_, vis_, GetRobotControlRate( nh_ ) )
+    , planner_( error_fn_, execute_trajectory_fn_, logging_fn_, vis_, GetRobotControlPeriod( nh_ ) )
 {
     initializeModelSet();
     initializeLogging();
