@@ -1,6 +1,7 @@
 #include <mutex>
 #include <boost/filesystem.hpp>
 #include <smmap_experiment_params/ros_params.hpp>
+#include <arc_utilities/eigen_helpers_conversions.hpp>
 
 #include "smmap/ros_communication_helpers.hpp"
 #include "smmap/diminishing_rigidity_model.h"
@@ -101,10 +102,10 @@ void Task::execute()
                     RobotInterface::MAX_GRIPPER_VELOCITY,
                     task_specification_->getCollisionScalingFactor() );
 
-//        if ( task_specification_->maxTime() < world_feedback.back().sim_time_ )
-//        {
-//            robot_.shutdown();
-//        }
+        if ( task_specification_->maxTime() < world_feedback.back().sim_time_ )
+        {
+            robot_.shutdown();
+        }
     }
 }
 

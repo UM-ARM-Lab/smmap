@@ -22,13 +22,17 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
     TaskType task_type = GetTaskType( nh );
     DeformableType deformable_type = GetDeformableType( nh );
 
-    if ( deformable_type == DeformableType::ROPE && task_type == TaskType::COVERAGE )
+    if ( deformable_type == DeformableType::ROPE && task_type == TaskType::CYLINDER_COVERAGE )
     {
-        return std::make_shared< RopeCoverage >( RopeCoverage( nh ) );
+        return std::make_shared< RopeCylinderCoverage >( RopeCylinderCoverage( nh ) );
     }
-    else if ( deformable_type == DeformableType::CLOTH && task_type == TaskType::COVERAGE )
+    else if ( deformable_type == DeformableType::CLOTH && task_type == TaskType::TABLE_COVERAGE )
     {
         return std::make_shared< ClothTableCoverage >( ClothTableCoverage( nh ) );
+    }
+    else if ( deformable_type == DeformableType::CLOTH && task_type == TaskType::CYLINDER_COVERAGE )
+    {
+        return std::make_shared< ClothCylinderCoverage >( ClothCylinderCoverage( nh ) );
     }
     else if ( deformable_type == DeformableType::CLOTH && task_type == TaskType::COLAB_FOLDING )
     {

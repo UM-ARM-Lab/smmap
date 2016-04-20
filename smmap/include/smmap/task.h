@@ -5,7 +5,6 @@
 #include <arc_utilities/log.hpp>
 
 #include "smmap/robot_interface.hpp"
-
 #include "smmap/planner.h"
 #include "smmap/task_specification.h"
 #include "smmap/task_function_pointer_types.h"
