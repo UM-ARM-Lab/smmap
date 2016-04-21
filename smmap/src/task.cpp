@@ -40,6 +40,7 @@ void Task::execute()
     // Run the planner at whatever rate we've been given
     ROS_INFO_STREAM_NAMED( "task", "Running our planner with a horizion of " << planning_horizion );
     std::vector< WorldState > world_feedback = robot_.start();
+    const double start_time = world_feedback.back().sim_time_;
 
     while ( robot_.ok() )
     {
@@ -102,7 +103,7 @@ void Task::execute()
                     RobotInterface::MAX_GRIPPER_VELOCITY,
                     task_specification_->getCollisionScalingFactor() );
 
-        if ( task_specification_->maxTime() < world_feedback.back().sim_time_ )
+        if ( task_specification_->maxTime() < world_feedback.back().sim_time_ - start_time )
         {
             robot_.shutdown();
         }
