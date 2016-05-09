@@ -41,6 +41,7 @@ void Planner::addModel( DeformableModel::Ptr model )
 
 void Planner::createBandits()
 {
+    ROS_INFO_STREAM_NAMED( "planner", "Generating bandits for " << model_list_.size() << " bandits" );
     model_utility_bandit_ = KalmanFilterMultiarmBandit< std::mt19937_64 >(
                 Eigen::VectorXd::Zero( (ssize_t)model_list_.size() ),
                 Eigen::MatrixXd::Identity( (ssize_t)model_list_.size(), (ssize_t)model_list_.size() ) );
@@ -129,14 +130,19 @@ void Planner::updateModels(
     // Perform the Kalman update
     #warning "Bandit variance magic numbers here"
     ros::NodeHandle ph( "~" );
-    const double current_reward_scale_factor = std::sqrt( std::abs( observed_reward( model_used ) ) ) + 1e-10;
-    const double process_noise_scaling_factor = ROSHelpers::GetParam( ph, "process_noise_factor", 1 ) * current_reward_scale_factor;
-    const double observation_noise_scaling_factor = ROSHelpers::GetParam( ph, "observation_noise_factor", 1 ) * current_reward_scale_factor;
+//    const double current_reward_scale_factor = std::sqrt( std::abs( observed_reward( model_used ) ) ) + 1e-10;
+
+    // TODO: Make this a low pass filter on abs reward?
+    const double current_reward_scale_factor = std::pow( std::abs( observed_reward( model_used ) ), 1.0 ) + 1e-10;
+    const double process_noise_scaling_factor = ROSHelpers::GetParam( ph, "process_noise_factor", 0.001 ) * current_reward_scale_factor;
+    const double observation_noise_scaling_factor = ROSHelpers::GetParam( ph, "observation_noise_factor", 0.001 ) * current_reward_scale_factor;
     model_utility_bandit_.updateArms(
                 process_noise_scaling_factor * process_noise,
                 observation_matrix,
                 observed_reward,
                 observation_noise_scaling_factor * observation_noise );
+
+//    std::cerr << model_utility_bandit_.getMean().transpose() << std::endl;
 
     // Then we allow the model to update itself based on the new data
     #pragma omp parallel for
@@ -173,6 +179,8 @@ Eigen::MatrixXd Planner::calculateProcessNoise(
             process_noise( j, i ) = process_noise( i, j );
         }
     }
+
+    process_noise += Eigen::MatrixXd::Identity( num_models, num_models );
 
     return process_noise;
 }
@@ -216,14 +224,37 @@ Eigen::VectorXd Planner::calculateObservedReward(
         }
     }
 
+    const Eigen::IOFormat CommaSpaceFmt(Eigen::StreamPrecision, 0, ", ", "\n", "", "", "", "");
+    const Eigen::IOFormat CommaSpaceSpaceFmt(Eigen::StreamPrecision, 0, ",  ", "\n", "", "", "", "");
+
+//    std::cerr << std::fixed << std::setprecision( 6 );
+//    std::cerr << "Model used: " << model_used << std::endl;
+//    std::cerr << "Angles:         " << angle_between_true_and_predicted.transpose().format(CommaSpaceSpaceFmt) << std::endl;
+//    std::cerr << "Angle deltas:  ";
+
     Eigen::VectorXd observed_reward = Eigen::VectorXd::Zero( num_models );
     const double angle_to_model_chosen = angle_between_true_and_predicted( model_used );
     for ( ssize_t model_ind = 0; model_ind < num_models; model_ind++ )
     {
         const double angle_delta = angle_to_model_chosen - angle_between_true_and_predicted( model_ind );
-        observed_reward( model_ind ) = ( 1.0 + std::cos( angle_delta ) ) / 2.0;
+//        observed_reward( model_ind ) = ( 1.0 + std::cos( angle_delta ) ) / 2.0;
+        observed_reward( model_ind ) = true_error_reduction + 1.0 * angle_delta * std::abs( true_error_reduction );
+
+//        if ( angle_delta >= 0 )
+//            std::cerr << " ";
+//        std::cerr << angle_delta << ", ";
     }
-    observed_reward *= true_error_reduction;
+
+//    std::cerr << std::endl;
+
+//    if ( (observed_reward.array() < 0.0).any() )
+//    {
+//        std::cerr << "Rewards:       " << observed_reward.transpose().format(CommaSpaceFmt) << std::endl;
+//    }
+//    else
+//    {
+//        std::cerr << "Rewards:        " << observed_reward.transpose().format(CommaSpaceSpaceFmt) << std::endl;
+//    }
 
     return observed_reward;
 }
@@ -253,6 +284,8 @@ Eigen::MatrixXd Planner::calculateObservationNoise(
             observation_noise( j, i ) = observation_noise( i, j );
         }
     }
+
+    observation_noise += Eigen::MatrixXd::Identity( num_models, num_models );
 
     return observation_noise;
 }

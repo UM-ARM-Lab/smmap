@@ -10,6 +10,8 @@ def run_trial(experiment,
               deformability_override = None,
               translational_deformability = None,
               rotational_deformability = None,
+              use_adaptive_model = None,
+              adaptive_model_learning_rate = None,
               kalman_parameters_override = None,
               process_noise_factor = None,
               observation_noise_factor = None,
@@ -36,6 +38,12 @@ def run_trial(experiment,
         roslaunch_command.append('deformability_override:=' + str(deformability_override))
         roslaunch_command.append('translational_deformability:=' + str(translational_deformability))
         roslaunch_command.append('rotational_deformability:=' + str(rotational_deformability))
+
+    if use_adaptive_model is not None:
+        roslaunch_command.append('use_adaptive_model:=' + str(use_adaptive_model))
+
+    if adaptive_model_learning_rate is not None:
+        roslaunch_command.append('adaptive_model_learning_rate:=' + str(adaptive_model_learning_rate))
 
     # Setup multi-model parameters
     if multi_model is not None:

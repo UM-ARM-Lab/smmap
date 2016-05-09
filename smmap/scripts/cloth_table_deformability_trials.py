@@ -2,13 +2,13 @@
 
 from run_trial import *
 
-# Note that this is 6 to 15 as range does [start, stop)
-deform_range = range(2, 43, 4)
+# Note that this is 10 to 19 as range does [start, stop)
+deform_range = range(10, 19, 4)
 planning_horizion = 1
 
 for translational_deform in deform_range:
     for rotational_deform in deform_range:
-        run_trial(experiment = "rope_cylinder",
+        run_trial(experiment = "cloth_table",
                   logging_enabled = "true",
                   test_id = "presentation_trials_baseline_rigidity"
                         + "trans_" + str(translational_deform)

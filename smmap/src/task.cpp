@@ -140,30 +140,59 @@ void Task::initializeModelSet()
     }
     else if ( GetUseMultiModel( ph_ ) )
     {
-        // TODO: replace this maic number
-        #warning "Magic number here needs to be moved - number of models per parameter"
-        const size_t num_models_per_parameter = 3;
-        const double deform_step = 4;
+        ////////////////////////////////////////////////////////////////////////
+        // Diminishing rigidity models
+        ////////////////////////////////////////////////////////////////////////
 
-        ROS_INFO_STREAM_NAMED( "task", "Creating " << num_models_per_parameter
-                               << " models per parameter " );
+        const double deform_min = 0.0;
+        const double deform_max = 25.0;
+        const double deform_step = 2.0;
 
-        // Center the deformability values on the task specified default
-        const double deform_min = std::max( 0., task_specification_->getDeformability()
-                                      - (num_models_per_parameter - 1) * deform_step / 2.0 );
-        const double deform_max = deform_min + (double)num_models_per_parameter * deform_step;
-
-        // Create a bunch of models
         for ( double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step )
         {
-            for ( double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step )
-            {
+            double rot_deform = trans_deform;
+//            for ( double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step )
+//            {
                 planner_.addModel( std::make_shared< DiminishingRigidityModel >(
                                          DiminishingRigidityModel(
                                              trans_deform,
                                              rot_deform ) ) );
-            }
+//            }
         }
+        ROS_INFO_STREAM_NAMED( "task", "Num diminishing rigidity models: "
+                               << std::floor( ( deform_max - deform_min ) / deform_step ) );
+
+        ////////////////////////////////////////////////////////////////////////
+        // Adaptive jacobian models
+        ////////////////////////////////////////////////////////////////////////
+
+        const double learning_rate_min = 1e-10;
+        const double learning_rate_max = 1.1e0;
+        const double learning_rate_step = 10.0;
+        for ( double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step )
+        {
+                planner_.addModel( std::make_shared< AdaptiveJacobianModel >(
+                                         AdaptiveJacobianModel(
+                                             DiminishingRigidityModel(
+                                                 task_specification_->getDeformability() )
+                                             .getGrippersToObjectJacobian(
+                                                 robot_.getGrippersPose(),
+                                                 GetObjectInitialConfiguration( nh_) ),
+                                             learning_rate ) ) );
+        }
+        ROS_INFO_STREAM_NAMED( "task", "Num adaptive Jacobian models: "
+                               << std::floor( std::log( learning_rate_max / learning_rate_min ) / std::log( learning_rate_step ) ) );
+    }
+    else if ( GetUseAdaptiveModel( ph_ ) )
+    {
+                planner_.addModel( std::make_shared< AdaptiveJacobianModel >(
+                                         AdaptiveJacobianModel(
+                                             DiminishingRigidityModel(
+                                                 task_specification_->getDeformability() )
+                                             .getGrippersToObjectJacobian(
+                                                 robot_.getGrippersPose(),
+                                                 GetObjectInitialConfiguration( nh_) ),
+                                             GetAdaptiveModelLearningRate( ph_ ) ) ) );
     }
     else
     {
@@ -173,15 +202,6 @@ void Task::initializeModelSet()
         planner_.addModel( std::make_shared< DiminishingRigidityModel >(
                                  DiminishingRigidityModel(
                                      task_specification_->getDeformability() ) ) );
-
-//        model_set_.addModel( std::make_shared< AdaptiveJacobianModel >(
-//                                 AdaptiveJacobianModel(
-//                                     DiminishingRigidityModel(
-//                                         task_specification_->getDeformability() )
-//                                     .getGrippersToObjectJacobian(
-//                                         robot_.getGrippersPose(),
-//                                         GetObjectInitialConfiguration( nh_) ),
-//                                     1e-8 ) ) );
 
 //        model_set_.addModel( std::make_shared< LeastSquaresJacobianModel >(
 //                                 LeastSquaresJacobianModel(
