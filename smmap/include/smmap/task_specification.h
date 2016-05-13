@@ -17,7 +17,8 @@ namespace smmap
             // Constructor to initialize objects that all TaskSpecifications share
             ////////////////////////////////////////////////////////////////////
 
-            TaskSpecification( ros::NodeHandle& nh );
+            TaskSpecification( ros::NodeHandle& nh  );
+            TaskSpecification( ros::NodeHandle& nh, Visualizer vis );
 
             ////////////////////////////////////////////////////////////////////
             // Static builder function
@@ -56,7 +57,7 @@ namespace smmap
              * @return return.first is the desired movement of the object
              *         return.second is the importance of that part of the movement
              */
-            std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectErrorCorrectionDelta(
+            ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta(
                     const WorldState& world_state ) const;
 
             Eigen::VectorXd projectObjectDelta(
@@ -73,7 +74,7 @@ namespace smmap
              * @param object_configuration
              * @return
              */
-            std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateStretchingCorrectionDelta(
+            ObjectDeltaAndWeight calculateStretchingCorrectionDelta(
                     const WorldState& world_state ) const;
 
             /**
@@ -82,9 +83,9 @@ namespace smmap
              * @param stretching_correction
              * @return
              */
-            std::pair< Eigen::VectorXd, Eigen::VectorXd > combineErrorCorrectionAndStretchingCorrection(
-                    const std::pair< Eigen::VectorXd, Eigen::VectorXd >& error_correction,
-                    const std::pair< Eigen::VectorXd, Eigen::VectorXd >& stretching_correction ) const;
+            ObjectDeltaAndWeight combineErrorCorrectionAndStretchingCorrection(
+                    const ObjectDeltaAndWeight& error_correction,
+                    const ObjectDeltaAndWeight& stretching_correction ) const;
 
         protected:
             ////////////////////////////////////////////////////////////////////
@@ -97,6 +98,7 @@ namespace smmap
             // Objects shared by all task specifications
             ////////////////////////////////////////////////////////////////////
 
+            Visualizer vis_;
             const Eigen::MatrixXd object_initial_node_distance_;
             const long num_nodes_;
 
@@ -125,7 +127,7 @@ namespace smmap
             virtual double calculateError_impl(
                     const ObjectPointSet& object_configuration ) const = 0;
 
-            virtual std::pair< Eigen::VectorXd, Eigen::VectorXd > calculateObjectErrorCorrectionDelta_impl(
+            virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state ) const = 0;
 
             virtual Eigen::VectorXd projectObjectDelta_impl(

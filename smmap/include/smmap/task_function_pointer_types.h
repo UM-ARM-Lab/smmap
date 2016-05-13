@@ -18,7 +18,7 @@ namespace smmap
             ) >
     GripperCollisionCheckFunctionType;
 
-    typedef std::function< std::pair< Eigen::VectorXd, Eigen::VectorXd >(
+    typedef std::function< ObjectDeltaAndWeight(
             const WorldState&                       /* current world state */
             ) >
     TaskDesiredObjectDeltaFunctionType;

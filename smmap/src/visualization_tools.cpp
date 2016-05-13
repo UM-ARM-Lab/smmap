@@ -15,7 +15,7 @@ Visualizer::Visualizer( ros::NodeHandle& nh )
 void Visualizer::visualizeRope(
         const std::string& marker_name,
         const ObjectPointSet& rope,
-        const std_msgs::ColorRGBA& color )
+        const std_msgs::ColorRGBA& color ) const
 {
     std::vector< std_msgs::ColorRGBA > colors( (size_t)rope.cols(), color );
 
@@ -25,7 +25,7 @@ void Visualizer::visualizeRope(
 void Visualizer::visualizeRope(
         const std::string& marker_name,
         const ObjectPointSet& rope,
-        const std::vector< std_msgs::ColorRGBA >& colors )
+        const std::vector< std_msgs::ColorRGBA >& colors ) const
 {
     visualization_msgs::Marker marker;
 
@@ -46,7 +46,7 @@ void Visualizer::visualizeRope(
 void Visualizer::visualizeCloth(
         const std::string& marker_name,
         const ObjectPointSet& cloth,
-        const std_msgs::ColorRGBA& color )
+        const std_msgs::ColorRGBA& color ) const
 {
     std::vector< std_msgs::ColorRGBA > colors( (size_t)cloth.cols(), color );
 
@@ -56,7 +56,7 @@ void Visualizer::visualizeCloth(
 void Visualizer::visualizeCloth(
         const std::string& marker_name,
         const ObjectPointSet& cloth,
-        const std::vector< std_msgs::ColorRGBA >& colors )
+        const std::vector< std_msgs::ColorRGBA >& colors ) const
 {
     visualization_msgs::Marker marker;
 
@@ -74,7 +74,7 @@ void Visualizer::visualizeCloth(
 void Visualizer::visualizeGripper(
         const std::string& marker_name,
         const geometry_msgs::Pose& pose,
-        const std_msgs::ColorRGBA& color )
+        const std_msgs::ColorRGBA& color ) const
 {
     // TODO: do
     (void)marker_name;
@@ -88,7 +88,7 @@ void Visualizer::visualizeGripper(
 void Visualizer::visualizeObjectDelta(
         const std::string& marker_name,
         const ObjectPointSet& current,
-        const ObjectPointSet& desired)
+        const ObjectPointSet& desired ) const
 {
     visualization_msgs::Marker marker;
     std_msgs::ColorRGBA color;
@@ -119,7 +119,7 @@ void Visualizer::visualizeTranslation(
         const std::string& marker_name,
         const geometry_msgs::Point& start,
         const geometry_msgs::Point& end,
-        const std_msgs::ColorRGBA& color )
+        const std_msgs::ColorRGBA& color ) const
 {
     visualization_msgs::Marker marker;
 
@@ -139,7 +139,7 @@ void Visualizer::visualizeTranslation(
         const std::string& marker_name,
         const Eigen::Vector3d& start,
         const Eigen::Vector3d& end,
-        const std_msgs::ColorRGBA& color )
+        const std_msgs::ColorRGBA& color ) const
 {
     visualizeTranslation( marker_name,
                           EigenHelpersConversions::EigenVector3dToGeometryPoint( start ),
@@ -151,7 +151,7 @@ void Visualizer::visualizeTranslation(
         const std::string& marker_name,
         const Eigen::Affine3d &start,
         const Eigen::Affine3d &end,
-        const std_msgs::ColorRGBA& color )
+        const std_msgs::ColorRGBA& color ) const
 {
     Visualizer::visualizeTranslation( marker_name,
                           start.translation(),
@@ -163,7 +163,7 @@ void Visualizer::visualizeLines(
         const std::string& marker_name,
         const EigenHelpers::VectorVector3d& start,
         const EigenHelpers::VectorVector3d& end,
-        const std_msgs::ColorRGBA& color )
+        const std_msgs::ColorRGBA& color ) const
 {
     visualization_msgs::Marker marker;
 

@@ -51,7 +51,7 @@ include_directories( include
     ${catkin_INCLUDE_DIRS}
 )
 
-set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -Og -g -march=native -Wall -Wextra -Wpedantic -Wconversion" )
+set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O2 -g -march=native -Wall -Wextra -Wpedantic -Wconversion" )
 
 unset( USE_OPEN_MP CACHE )
 option( USE_OPEN_MP "Set to ON if we want to use OpenMP" ON )

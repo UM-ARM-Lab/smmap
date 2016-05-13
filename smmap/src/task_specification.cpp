@@ -7,8 +7,13 @@ using namespace smmap;
 // Constructor to initialize objects that all TaskSpecifications share
 ////////////////////////////////////////////////////////////////////
 
-TaskSpecification::TaskSpecification( ros::NodeHandle& nh )
-    : object_initial_node_distance_( CalculateDistanceMatrix( GetObjectInitialConfiguration( nh ) ) )
+TaskSpecification::TaskSpecification( ros::NodeHandle& nh  )
+    : TaskSpecification( nh, Visualizer( nh ) )
+{}
+
+TaskSpecification::TaskSpecification( ros::NodeHandle& nh, Visualizer vis )
+    : vis_( vis )
+    , object_initial_node_distance_( CalculateDistanceMatrix( GetObjectInitialConfiguration( nh ) ) )
     , num_nodes_( object_initial_node_distance_.cols() )
 {}
 
@@ -38,8 +43,13 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
     {
         return std::make_shared< ClothColabFolding >( ClothColabFolding( nh ) );
     }
+    else if ( deformable_type == DeformableType::CLOTH && task_type == TaskType::WAFR )
+    {
+        return std::make_shared< ClothWAFR >( ClothWAFR( nh ) );
+    }
     else
     {
+        ROS_FATAL( "Invalid task and deformable pair in createErrorFunction(), this should not be possible" );
         throw new std::invalid_argument( "Invalid task and deformable pair in createErrorFunction(), this should not be possible" );
     }
 }
@@ -92,7 +102,7 @@ double TaskSpecification::calculateError(
     return calculateError_impl( object_configuration );
 }
 
-std::pair< Eigen::VectorXd, Eigen::VectorXd > TaskSpecification::calculateObjectErrorCorrectionDelta(
+ObjectDeltaAndWeight TaskSpecification::calculateObjectErrorCorrectionDelta(
         const WorldState& world_state ) const
 {
     return calculateObjectErrorCorrectionDelta_impl( world_state );
@@ -110,18 +120,18 @@ Eigen::VectorXd TaskSpecification::projectObjectDelta(
  * @param world_state
  * @return
  */
-std::pair< Eigen::VectorXd, Eigen::VectorXd > TaskSpecification::calculateStretchingCorrectionDelta(
+ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
         const WorldState& world_state ) const
 {
-    std::pair< Eigen::VectorXd, Eigen::VectorXd > stretching_correction =
-            std::make_pair( Eigen::VectorXd::Zero( num_nodes_ * 3 ),
-                            Eigen::VectorXd::Zero( num_nodes_ * 3 ) );
+    ObjectDeltaAndWeight stretching_correction ( num_nodes_ * 3 );
 
     const Eigen::MatrixXd node_distance_delta =
             CalculateDistanceMatrix( world_state.object_configuration_ )
             - object_initial_node_distance_;
 
     const double stretching_correction_threshold = getStretchingScalingThreshold();
+    EigenHelpers::VectorVector3d start_points;
+    EigenHelpers::VectorVector3d end_points;
 
     for ( long first_node = 0; first_node < num_nodes_; first_node++)
     {
@@ -136,17 +146,33 @@ std::pair< Eigen::VectorXd, Eigen::VectorXd > TaskSpecification::calculateStretc
                         * ( world_state.object_configuration_.block< 3, 1 >( 0, second_node )
                             - world_state.object_configuration_.block< 3, 1 >( 0, first_node ) );
 
-                stretching_correction.first.segment< 3 >( 3 * first_node ) += correction_vector;
-                stretching_correction.first.segment< 3 >( 3 * second_node ) -= correction_vector;
+                stretching_correction.delta.segment< 3 >( 3 * first_node ) += correction_vector;
+                stretching_correction.delta.segment< 3 >( 3 * second_node ) -= correction_vector;
 
-                stretching_correction.second( 3 * first_node ) += 1;
-                stretching_correction.second( 3 * first_node + 1 ) += 1;
-                stretching_correction.second( 3 * first_node + 2 ) += 1;
-                stretching_correction.second( 3 * second_node ) += 1;
-                stretching_correction.second( 3 * second_node + 1 ) += 1;
-                stretching_correction.second( 3 * second_node + 2 ) += 1;
+                stretching_correction.weight( 3 * first_node ) += 1;
+                stretching_correction.weight( 3 * first_node + 1 ) += 1;
+                stretching_correction.weight( 3 * first_node + 2 ) += 1;
+                stretching_correction.weight( 3 * second_node ) += 1;
+                stretching_correction.weight( 3 * second_node + 1 ) += 1;
+                stretching_correction.weight( 3 * second_node + 2 ) += 1;
+
+                start_points.push_back( world_state.object_configuration_.block< 3, 1 >( 0, first_node ) );
+                end_points.push_back( world_state.object_configuration_.block< 3, 1 >( 0, first_node ) + correction_vector );
+
+                start_points.push_back( world_state.object_configuration_.block< 3, 1 >( 0, second_node ) );
+                end_points.push_back( world_state.object_configuration_.block< 3, 1 >( 0, first_node ) - correction_vector );
             }
         }
+    }
+
+    if ( start_points.size() > 0 )
+    {
+        std_msgs::ColorRGBA blue;
+        blue.r = 0.0f;
+        blue.g = 0.0f;
+        blue.b = 1.0f;
+        blue.a = 1.0f;
+        vis_.visualizeLines( "stretching_lines", start_points, end_points, blue );
     }
 
     // Normalize the weights so that changing the number of nodes doesn't affect
@@ -163,13 +189,11 @@ std::pair< Eigen::VectorXd, Eigen::VectorXd > TaskSpecification::calculateStretc
  * @return
  */
 // TODO: this probably doesn't belong in this class
-std::pair< Eigen::VectorXd, Eigen::VectorXd > TaskSpecification::combineErrorCorrectionAndStretchingCorrection(
-        const std::pair< Eigen::VectorXd, Eigen::VectorXd >& error_correction,
-        const std::pair< Eigen::VectorXd, Eigen::VectorXd >& stretching_correction ) const
+ObjectDeltaAndWeight TaskSpecification::combineErrorCorrectionAndStretchingCorrection(
+        const ObjectDeltaAndWeight& error_correction,
+        const ObjectDeltaAndWeight& stretching_correction ) const
 {
-    std::pair< Eigen::VectorXd, Eigen::VectorXd > combined =
-            std::make_pair( Eigen::VectorXd( num_nodes_ * 3 ),
-                            Eigen::VectorXd( num_nodes_ * 3 ) );
+    ObjectDeltaAndWeight combined( num_nodes_ * 3 );
 
 //    std::cout << "Max error:      " << error_correction.second.maxCoeff() << std::endl
 //              << "Sum error:      " << error_correction.second.sum() << std::endl
@@ -180,26 +204,29 @@ std::pair< Eigen::VectorXd, Eigen::VectorXd > TaskSpecification::combineErrorCor
     for ( long ind = 0; ind < num_nodes_ * 3; ind += 3 )
     {
         const double stretching_importance =
-                1.0 - std::exp( -10.0*1e-3 * stretching_correction.second( ind ) );
+                1.0 - std::exp( -10.0*1e-3 * stretching_correction.weight( ind ) );
+
+        assert( stretching_importance >= 0.0 );
+        assert( stretching_importance <= 1.0 );
 
         // Calculate the combined object delta
-        combined.first.segment< 3 >( ind ) =
-                stretching_importance * stretching_correction.first.segment< 3 >( ind )
-                + ( 1.0 - stretching_importance ) * error_correction.first.segment< 3 >( ind );
+        combined.delta.segment< 3 >( ind ) =
+                stretching_importance * stretching_correction.delta.segment< 3 >( ind )
+                + ( 1.0 - stretching_importance ) * error_correction.delta.segment< 3 >( ind );
 
         // Calculate the combined node weights
-        combined.second.segment< 3 >( ind ) =
-                stretching_importance * stretching_correction.second.segment< 3 >( ind )
-                + ( 1.0 - stretching_importance ) * error_correction.second.segment< 3 >( ind );
+        combined.weight.segment< 3 >( ind ) =
+                stretching_importance * stretching_correction.weight.segment< 3 >( ind )
+                + ( 1.0 - stretching_importance ) * error_correction.weight.segment< 3 >( ind );
     }
 
 //    combined.first = error_correction.first + stretching_correction.first;
 //    combined.second = Eigen::VectorXd::Ones( num_nodes_ * 3 );
 
     // Normalize the weights for later use
-    const double combined_normalizer = combined.second.maxCoeff();
+    const double combined_normalizer = combined.weight.maxCoeff();
     assert( combined_normalizer > 0 );
-    combined.second /= combined_normalizer;
+    combined.weight /= combined_normalizer;
 
     return combined;
 }

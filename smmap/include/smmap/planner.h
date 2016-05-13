@@ -53,9 +53,8 @@ namespace smmap
             KalmanFilterMultiarmBandit< std::mt19937_64 > model_utility_bandit_;
             std::mt19937_64 generator_;
 
-            void updateModels(
-                    const WorldState& starting_world_state,
-                    std::pair< Eigen::VectorXd, Eigen::VectorXd > task_desired_motion,
+            void updateModels(const WorldState& starting_world_state,
+                    ObjectDeltaAndWeight task_desired_motion,
                     const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory> >& suggested_trajectories,
                     ssize_t model_used,
                     const std::vector< WorldState >& world_feedback );
@@ -65,7 +64,7 @@ namespace smmap
 
             Eigen::VectorXd calculateObservedReward(
                     const WorldState& starting_world_state,
-                    std::pair<Eigen::VectorXd, Eigen::VectorXd> task_desired_motion,
+                    ObjectDeltaAndWeight task_desired_motion,
                     ssize_t model_used,
                     const std::vector< WorldState >& world_feedback );
 

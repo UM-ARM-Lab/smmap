@@ -15,6 +15,21 @@ namespace smmap
     typedef std::vector< ObjectPointSet > ObjectTrajectory;
     typedef std::vector< ObjectTrajectory > VectorObjectTrajectory;
 
+    struct ObjectDeltaAndWeight
+    {
+        public:
+            ObjectDeltaAndWeight()
+            {}
+
+            ObjectDeltaAndWeight( ssize_t num_elems )
+                : delta( Eigen::VectorXd::Zero( num_elems ) )
+                , weight( Eigen::VectorXd::Zero( num_elems ) )
+            {}
+
+            Eigen::VectorXd delta;
+            Eigen::VectorXd weight;
+    };
+
     /// World state structure for a single time step
     struct WorldState
     {
@@ -169,6 +184,19 @@ namespace smmap
         Eigen::MatrixXd diff = end - start;
         diff.resize( diff.rows() * diff.cols(), 1 );
         return diff;
+    }
+
+    inline ObjectPointSet AddObjectDelta(
+            ObjectPointSet start,
+            const Eigen::VectorXd& delta )
+    {
+        assert( delta.rows() == start.cols() * 3 );
+
+        for ( ssize_t point_ind = 0; point_ind < start.cols(); point_ind++ )
+        {
+            start.col( point_ind ) = start.col( point_ind ) + delta.segment< 3 >( point_ind * 3 );
+        }
+        return start;
     }
 
     /**

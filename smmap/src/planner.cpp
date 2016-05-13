@@ -91,7 +91,7 @@ std::vector< WorldState > Planner::sendNextTrajectory(
     // Get feedback
     world_feedback.emplace( world_feedback.begin(), current_world_state );
 
-    auto task_desired_motion = task_desired_object_delta_fn( current_world_state );
+    ObjectDeltaAndWeight task_desired_motion = task_desired_object_delta_fn( current_world_state );
 
     updateModels( current_world_state, task_desired_motion, suggested_trajectories, model_to_use, world_feedback );
     logging_fn_( world_feedback.back(), model_utility_bandit_.getMean(), model_utility_bandit_.getCovariance(), model_to_use );
@@ -112,7 +112,7 @@ std::vector< WorldState > Planner::sendNextTrajectory(
  */
 void Planner::updateModels(
         const WorldState& starting_world_state,
-        std::pair<Eigen::VectorXd, Eigen::VectorXd> task_desired_motion,
+        ObjectDeltaAndWeight task_desired_motion,
         const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >& suggested_trajectories,
         ssize_t model_used,
         const std::vector< WorldState >& world_feedback )
@@ -187,7 +187,7 @@ Eigen::MatrixXd Planner::calculateProcessNoise(
 
 Eigen::VectorXd Planner::calculateObservedReward(
         const WorldState& starting_world_state,
-        std::pair<Eigen::VectorXd, Eigen::VectorXd> task_desired_motion,
+        ObjectDeltaAndWeight task_desired_motion,
         ssize_t model_used,
         const std::vector< WorldState >& world_feedback )
 {
@@ -216,7 +216,7 @@ Eigen::VectorXd Planner::calculateObservedReward(
         // Deal with the cloth not moving potentially (i.e. in fake data land)
         if ( true_object_diff.squaredNorm() > 1e-10 && predicted_object_diff.squaredNorm() > 1e-10 )
         {
-            angle_between_true_and_predicted( model_ind ) = EigenHelpers::WeightedAngleBetweenVectors( true_object_diff, predicted_object_diff, task_desired_motion.second );
+            angle_between_true_and_predicted( model_ind ) = EigenHelpers::WeightedAngleBetweenVectors( true_object_diff, predicted_object_diff, task_desired_motion.weight );
         }
         else
         {

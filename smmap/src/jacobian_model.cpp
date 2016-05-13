@@ -119,7 +119,7 @@ JacobianModel::getSuggestedGrippersTrajectory(
         ////////////////////////////////////////////////////////////////////////
 
         // Retrieve the desired object velocity (p_dot)
-        const std::pair< Eigen::VectorXd, Eigen::VectorXd > desired_object_velocity
+        const ObjectDeltaAndWeight desired_object_velocity
                 = task_desired_object_delta_fn_( world_current_state );
 
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
@@ -132,8 +132,8 @@ JacobianModel::getSuggestedGrippersTrajectory(
         Eigen::VectorXd grippers_velocity_achieve_goal =
                 EigenHelpers::WeightedLeastSquaresSolver(
                     jacobian,
-                    desired_object_velocity.first,
-                    desired_object_velocity.second,
+                    desired_object_velocity.delta,
+                    desired_object_velocity.weight,
                     1e-3,
                     1e-2 );
 

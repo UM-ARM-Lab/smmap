@@ -46,9 +46,9 @@ void Task::execute()
     {
         const WorldState current_world_state = world_feedback.back();
 
-        std::pair< Eigen::VectorXd, Eigen::VectorXd > first_step_desired_motion;
-        std::pair< Eigen::VectorXd, Eigen::VectorXd > first_step_error_correction;
-        std::pair< Eigen::VectorXd, Eigen::VectorXd > first_step_stretching_correction;
+        ObjectDeltaAndWeight first_step_desired_motion;
+        ObjectDeltaAndWeight first_step_error_correction;
+        ObjectDeltaAndWeight first_step_stretching_correction;
         std::atomic_bool first_step_calculated( false );
         std::mutex first_step_mtx;
 
@@ -103,9 +103,25 @@ void Task::execute()
                     RobotInterface::MAX_GRIPPER_VELOCITY,
                     task_specification_->getCollisionScalingFactor() );
 
+        ssize_t num_nodes = current_world_state.object_configuration_.cols();
+        std::vector< std_msgs::ColorRGBA > colors( num_nodes );
+        for ( size_t node_ind = 0; node_ind < (size_t)num_nodes; node_ind++ )
+        {
+            colors[node_ind].r = (float)first_step_desired_motion.weight( node_ind * 3 );
+            colors[node_ind].g = 0.0f;
+            colors[node_ind].b = 0.0f;
+            colors[node_ind].a = first_step_desired_motion.weight( node_ind * 3 ) > 0 ? 1.0f : 0.0f;
+        }
+        task_specification_->visualizeDeformableObject(
+                vis_,
+                "desired_position",
+                AddObjectDelta( current_world_state.object_configuration_, first_step_desired_motion.delta ),
+                colors );
+
+
         if ( task_specification_->maxTime() < world_feedback.back().sim_time_ - start_time )
         {
-            robot_.shutdown();
+//            robot_.shutdown();
         }
     }
 }
