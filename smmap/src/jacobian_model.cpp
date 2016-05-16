@@ -119,29 +119,18 @@ JacobianModel::getSuggestedGrippersTrajectory(
         ////////////////////////////////////////////////////////////////////////
 
         // Retrieve the desired object velocity (p_dot)
-        const ObjectDeltaAndWeight desired_object_velocity
-                = task_desired_object_delta_fn_( world_current_state );
+        const ObjectDeltaAndWeight desired_object_velocity = task_desired_object_delta_fn_( world_current_state );
 
         // Recalculate the jacobian at each timestep, because of rotations being non-linear
-        const Eigen::MatrixXd jacobian = computeGrippersToObjectJacobian(
-                suggested_traj.first[(size_t)traj_step-1],
-                suggested_traj.second[(size_t)traj_step-1] );
+        const Eigen::MatrixXd jacobian = computeGrippersToObjectJacobian( suggested_traj.first[(size_t)traj_step-1], suggested_traj.second[(size_t)traj_step-1] );
 
         // Find the least-squares fitting to the desired object velocity
         #warning "More magic numbers - damping threshold and damping coefficient"
-        Eigen::VectorXd grippers_velocity_achieve_goal =
-                EigenHelpers::WeightedLeastSquaresSolver(
-                    jacobian,
-                    desired_object_velocity.delta,
-                    desired_object_velocity.weight,
-                    1e-3,
-                    1e-2 );
+        Eigen::VectorXd grippers_velocity_achieve_goal = EigenHelpers::WeightedLeastSquaresSolver( jacobian, desired_object_velocity.delta, desired_object_velocity.weight, 1e-3, 1e-2 );
+        ClampGripperVelocities( grippers_velocity_achieve_goal, max_step_size );
 
         // Find the collision avoidance data that we'll need
-        std::vector< CollisionAvoidanceResult > grippers_collision_avoidance_result
-                = ComputeGripperObjectAvoidance(
-                    world_current_state.gripper_collision_data_,
-                    suggested_traj.first[(size_t)traj_step-1], max_step_size );
+        const std::vector< CollisionAvoidanceResult > grippers_collision_avoidance_result = ComputeGripperObjectAvoidance( world_current_state.gripper_collision_data_, suggested_traj.first[(size_t)traj_step-1], max_step_size );
 
         // Store the predicted object change for use in later loops
         Eigen::MatrixXd object_delta = Eigen::MatrixXd::Zero( num_nodes * 3, 1 );
@@ -155,25 +144,14 @@ JacobianModel::getSuggestedGrippersTrajectory(
             kinematics::Vector6d desired_gripper_vel =
                     grippers_velocity_achieve_goal.segment< 6 >( gripper_ind * 6 );
 
-            // normalize the achive goal velocity
-            const double velocity_norm = GripperVelocity6dNorm( desired_gripper_vel );
-            if ( velocity_norm > max_step_size )
-            {
-                desired_gripper_vel *= max_step_size / velocity_norm;
-            }
-
             // If we need to avoid an obstacle, then use the sliding scale
             const CollisionAvoidanceResult& collision_result =
                     grippers_collision_avoidance_result[(size_t)gripper_ind];
             if ( !std::isinf( collision_result.distance ) )
             {
-                 const double collision_severity =
-                         std::min( 1.0, std::exp( -obstacle_avoidance_scale * collision_result.distance ) );
+                 const double collision_severity = std::min( 1.0, std::exp( -obstacle_avoidance_scale * collision_result.distance ) );
 
-                 actual_gripper_velocity =
-                         collision_severity * ( collision_result.velocity
-                                                + collision_result.nullspace_projector * desired_gripper_vel )
-                         + (1 - collision_severity) * desired_gripper_vel;
+                 actual_gripper_velocity = collision_severity * ( collision_result.velocity + collision_result.nullspace_projector * desired_gripper_vel ) + (1 - collision_severity) * desired_gripper_vel;
             }
             // Otherwise use our desired velocity directly
             else
@@ -200,13 +178,9 @@ JacobianModel::getSuggestedGrippersTrajectory(
 
         if ( traj_step + 1 < planning_horizion )
         {
-            world_current_state.object_configuration_ =
-                    suggested_traj.second[(size_t)traj_step];
-            world_current_state.all_grippers_single_pose_ =
-                    suggested_traj.first[(size_t)traj_step];
-            world_current_state.gripper_collision_data_ =
-                    gripper_collision_check_fn_(
-                        world_current_state.all_grippers_single_pose_ );
+            world_current_state.object_configuration_ = suggested_traj.second[(size_t)traj_step];
+            world_current_state.all_grippers_single_pose_ = suggested_traj.first[(size_t)traj_step];
+            world_current_state.gripper_collision_data_ = gripper_collision_check_fn_(world_current_state.all_grippers_single_pose_);
             world_current_state.sim_time_ += dt;
         }
     }
