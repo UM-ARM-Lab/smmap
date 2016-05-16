@@ -14,25 +14,25 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             static void SetInitialObjectConfiguration(
-                    const ObjectPointSet& object_initial_configuration );
+                    const ObjectPointSet& object_initial_configuration);
 
             ////////////////////////////////////////////////////////////////////
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
-            DiminishingRigidityModel( double deformability );
+            DiminishingRigidityModel(double deformability);
 
             DiminishingRigidityModel(
                     double translation_deformability,
-                    double rotation_deformability );
+                    double rotation_deformability);
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            virtual void updateModel( const std::vector< WorldState >& feedback );
+            virtual void updateModel(const std::vector< WorldState >& feedback);
 
-            void perturbModel( std::mt19937_64& generator );
+            void perturbModel(std::mt19937_64& generator);
 
             ////////////////////////////////////////////////////////////////////
             // Helper used only by AdaptiveJacobian (at the moment)
@@ -41,7 +41,7 @@ namespace smmap
 
             Eigen::MatrixXd getGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration ) const;
+                    const ObjectPointSet& current_configuration) const;
 
         private:
 
@@ -57,7 +57,7 @@ namespace smmap
 
             virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration ) const override;
+                    const ObjectPointSet& current_configuration) const override;
 
             ////////////////////////////////////////////////////////////////////
             // Static members

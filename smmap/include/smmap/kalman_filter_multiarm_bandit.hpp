@@ -17,13 +17,13 @@ namespace smmap
     {
         public:
             KalmanFilterMultiarmBandit(
-                    const Eigen::VectorXd& prior_mean = Eigen::VectorXd::Zero( 1 ),
-                    const Eigen::MatrixXd& prior_covar = Eigen::MatrixXd::Identity( 1, 1 ) )
-                : arm_mean_( prior_mean )
-                , arm_covar_( prior_covar )
+                    const Eigen::VectorXd& prior_mean = Eigen::VectorXd::Zero(1),
+                    const Eigen::MatrixXd& prior_covar = Eigen::MatrixXd::Identity(1, 1))
+                : arm_mean_(prior_mean)
+                , arm_covar_(prior_covar)
             {
-                assert( arm_mean_.rows() == arm_covar_.cols() );
-                assert( arm_covar_.cols() == arm_covar_.rows() );
+                assert(arm_mean_.rows() == arm_covar_.cols());
+                assert(arm_covar_.cols() == arm_covar_.rows());
             }
 
             /**
@@ -32,16 +32,16 @@ namespace smmap
              * @param generator
              * @return
              */
-            ssize_t selectArmToPull( Generator& generator )
+            ssize_t selectArmToPull(Generator& generator)
             {
                 // Sample from the current distribuition
                 arc_helpers::MultivariteGaussianDistribution distribution(
-                            arm_mean_, arm_covar_ );
-                const Eigen::VectorXd sample = distribution( generator );
+                            arm_mean_, arm_covar_);
+                const Eigen::VectorXd sample = distribution(generator);
 
                 // Find the arm with the highest sample
                 ssize_t best_arm = -1;
-                sample.maxCoeff( &best_arm );
+                sample.maxCoeff(&best_arm);
 
                 return best_arm;
             }
@@ -57,7 +57,7 @@ namespace smmap
                     const Eigen::MatrixXd& transition_covariance,
                     const Eigen::MatrixXd& observation_matrix,
                     const Eigen::VectorXd& observed_reward,
-                    const Eigen::MatrixXd& observation_covariance )
+                    const Eigen::MatrixXd& observation_covariance)
             {
 //                std::cout << "Pre Kalman Update:\n"
 //                          << "arm mean\n"
@@ -105,10 +105,10 @@ namespace smmap
 //                std::cout << std::endl;
 
 
-                assert( !(arm_mean_.unaryExpr( [] ( const double &val ) { return std::isnan(val); } ) ).any() && "NaN Found in arm_mean_ in kalman banidt!" );
-                assert( !(arm_mean_.unaryExpr( [] ( const double &val ) { return std::isinf(val); } ) ).any() && "Inf Found in arm_mean_ in kalman banidt!" );
-                assert( !(arm_covar_.unaryExpr( [] ( const double &val ) { return std::isinf(val); } ) ).any() && "NaN Found in arm_covar_ in kalman bandit!" );
-                assert( !(arm_covar_.unaryExpr( [] ( const double &val ) { return std::isinf(val); } ) ).any() && "Inf Found in arm_covar_ in kalman bandit!" );
+                assert(!(arm_mean_.unaryExpr([] (const double &val) { return std::isnan(val); })).any() && "NaN Found in arm_mean_ in kalman banidt!");
+                assert(!(arm_mean_.unaryExpr([] (const double &val) { return std::isinf(val); })).any() && "Inf Found in arm_mean_ in kalman banidt!");
+                assert(!(arm_covar_.unaryExpr([] (const double &val) { return std::isinf(val); })).any() && "NaN Found in arm_covar_ in kalman bandit!");
+                assert(!(arm_covar_.unaryExpr([] (const double &val) { return std::isinf(val); })).any() && "Inf Found in arm_covar_ in kalman bandit!");
             }
 
             const Eigen::VectorXd& getMean() const

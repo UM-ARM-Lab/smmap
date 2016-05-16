@@ -14,9 +14,9 @@ namespace smmap
     class Task
     {
         public:
-            Task( RobotInterface& robot,
+            Task(RobotInterface& robot,
                   Visualizer& vis,
-                  TaskSpecification::Ptr task_specification );
+                  TaskSpecification::Ptr task_specification);
             void execute();
 
         private:
@@ -52,7 +52,7 @@ namespace smmap
                     const WorldState& current_world_state,
                     const Eigen::VectorXd& model_utility_mean,
                     const Eigen::MatrixXd& model_utility_covariance,
-                    const ssize_t model_used );
+                    const ssize_t model_used);
 
             ////////////////////////////////////////////////////////////////////
             // Function pointers that are created in the construtor that are

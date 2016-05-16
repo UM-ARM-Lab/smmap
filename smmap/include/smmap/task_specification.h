@@ -17,15 +17,15 @@ namespace smmap
             // Constructor to initialize objects that all TaskSpecifications share
             ////////////////////////////////////////////////////////////////////
 
-            TaskSpecification( ros::NodeHandle& nh  );
-            TaskSpecification( ros::NodeHandle& nh, Visualizer vis );
+            TaskSpecification(ros::NodeHandle& nh );
+            TaskSpecification(ros::NodeHandle& nh, Visualizer vis);
 
             ////////////////////////////////////////////////////////////////////
             // Static builder function
             ////////////////////////////////////////////////////////////////////
 
             static TaskSpecification::Ptr MakeTaskSpecification(
-                    ros::NodeHandle& nh );
+                    ros::NodeHandle& nh);
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function wrappers
@@ -40,16 +40,16 @@ namespace smmap
                     Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color ) const;
+                    const std_msgs::ColorRGBA& color) const;
 
             void visualizeDeformableObject(
                     Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
-                    const std::vector< std_msgs::ColorRGBA >& colors ) const;
+                    const std::vector< std_msgs::ColorRGBA >& colors) const;
 
             double calculateError(
-                    const ObjectPointSet& object_configuration ) const;
+                    const ObjectPointSet& object_configuration) const;
 
             /**
              * @brief calculateObjectDesiredDelta
@@ -58,11 +58,11 @@ namespace smmap
              *         return.second is the importance of that part of the movement
              */
             ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta(
-                    const WorldState& world_state ) const;
+                    const WorldState& world_state) const;
 
             Eigen::VectorXd projectObjectDelta(
                     const ObjectPointSet& object_configuration,
-                    Eigen::VectorXd object_delta ) const;
+                    Eigen::VectorXd object_delta) const;
 
             ////////////////////////////////////////////////////////////////////
             // Helper functions
@@ -75,7 +75,7 @@ namespace smmap
              * @return
              */
             ObjectDeltaAndWeight calculateStretchingCorrectionDelta(
-                    const WorldState& world_state ) const;
+                    const WorldState& world_state) const;
 
             /**
              * @brief combineErrorCorrectionAndStretchingCorrection
@@ -85,7 +85,7 @@ namespace smmap
              */
             ObjectDeltaAndWeight combineErrorCorrectionAndStretchingCorrection(
                     const ObjectDeltaAndWeight& error_correction,
-                    const ObjectDeltaAndWeight& stretching_correction ) const;
+                    const ObjectDeltaAndWeight& stretching_correction) const;
 
         protected:
             ////////////////////////////////////////////////////////////////////
@@ -116,23 +116,23 @@ namespace smmap
                     Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color ) const = 0;
+                    const std_msgs::ColorRGBA& color) const = 0;
 
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
-                    const std::vector< std_msgs::ColorRGBA >& colors ) const = 0;
+                    const std::vector< std_msgs::ColorRGBA >& colors) const = 0;
 
             virtual double calculateError_impl(
-                    const ObjectPointSet& object_configuration ) const = 0;
+                    const ObjectPointSet& object_configuration) const = 0;
 
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
-                    const WorldState& world_state ) const = 0;
+                    const WorldState& world_state) const = 0;
 
             virtual Eigen::VectorXd projectObjectDelta_impl(
                     const ObjectPointSet& object_configuration,
-                    Eigen::VectorXd object_delta ) const = 0;
+                    Eigen::VectorXd object_delta) const = 0;
 
     };
 }

@@ -17,13 +17,13 @@ namespace smmap
             // Constructor and model list builder
             ////////////////////////////////////////////////////////////////////
 
-            Planner( const ErrorFunctionType& error_fn,
+            Planner(const ErrorFunctionType& error_fn,
                      const TaskExecuteGripperTrajectoryFunctionType& execute_trajectory_fn,
                      const LoggingFunctionType& logging_fn,
                      Visualizer& vis,
-                     const double dt );
+                     const double dt);
 
-            void addModel( DeformableModel::Ptr model );
+            void addModel(DeformableModel::Ptr model);
             void createBandits();
             size_t getLastModelUsed();
 
@@ -37,7 +37,7 @@ namespace smmap
                     const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn,
                     const int planning_horizion = 1,
                     const double max_gripper_velocity = 0.05/20.0/0.01,
-                    const double obstacle_avoidance_scale = 100.0*20.0 );
+                    const double obstacle_avoidance_scale = 100.0*20.0);
 
         private:
             const ErrorFunctionType error_fn_;
@@ -57,20 +57,20 @@ namespace smmap
                     ObjectDeltaAndWeight task_desired_motion,
                     const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory> >& suggested_trajectories,
                     ssize_t model_used,
-                    const std::vector< WorldState >& world_feedback );
+                    const std::vector< WorldState >& world_feedback);
 
             Eigen::MatrixXd calculateProcessNoise(
-                    const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >& suggested_trajectories );
+                    const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >& suggested_trajectories);
 
             Eigen::VectorXd calculateObservedReward(
                     const WorldState& starting_world_state,
                     ObjectDeltaAndWeight task_desired_motion,
                     ssize_t model_used,
-                    const std::vector< WorldState >& world_feedback );
+                    const std::vector< WorldState >& world_feedback);
 
             Eigen::MatrixXd calculateObservationNoise(
                     const Eigen::MatrixXd& process_noise,
-                    ssize_t model_used );
+                    ssize_t model_used);
 
             ////////////////////////////////////////////////////////////////////
             // Logging and visualization functionality
@@ -84,22 +84,22 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 /*
             ObjectTrajectory combineModelPredictions(
-                    const VectorObjectTrajectory& model_predictions ) const;
+                    const VectorObjectTrajectory& model_predictions) const;
 
             ObjectPointSet combineModelPredictionsLastTimestep(
-                    const VectorObjectTrajectory& model_predictions ) const;
+                    const VectorObjectTrajectory& model_predictions) const;
 
             Eigen::VectorXd combineModelDerivitives(
-                    const std::vector< Eigen::VectorXd >& model_derivitives ) const;
+                    const std::vector< Eigen::VectorXd >& model_derivitives) const;
 
             std::pair< Eigen::VectorXd, Eigen::MatrixXd > combineModelDerivitives(
-                    const std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > >& model_derivitives ) const;
+                    const std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > >& model_derivitives) const;
 
             std::vector< AllGrippersSinglePose > optimizeTrajectoryDirectShooting(
                     const WorldFeedback& current_world_configuration,
                     std::vector<AllGrippersSinglePose> grippers_trajectory,
                     double dt,
-                    const double max_gripper_velocity ) const;
+                    const double max_gripper_velocity) const;
 */
     };
 }

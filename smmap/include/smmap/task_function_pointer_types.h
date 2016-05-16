@@ -8,38 +8,38 @@
 
 namespace smmap
 {
-    typedef std::function< double(
+    typedef std::function<double(
             const ObjectPointSet&                   /* Object configuration */
-            ) >
+           )>
     ErrorFunctionType;
 
-    typedef std::function< std::vector< CollisionData >(
+    typedef std::function<std::vector<CollisionData>(
             const AllGrippersSinglePose&            /* Gripper poses to test for collision */
-            ) >
+           )>
     GripperCollisionCheckFunctionType;
 
-    typedef std::function< ObjectDeltaAndWeight(
+    typedef std::function<ObjectDeltaAndWeight(
             const WorldState&                       /* current world state */
-            ) >
+           )>
     TaskDesiredObjectDeltaFunctionType;
 
-    typedef std::function< Eigen::MatrixXd(
+    typedef std::function<Eigen::MatrixXd(
             const ObjectPointSet&,                  /* current object state */
             Eigen::VectorXd                         /* object delta */
-    ) >
+   )>
     TaskObjectDeltaProjectionFunctionType;
 
-    typedef std::function< std::vector< WorldState >(
+    typedef std::function<std::vector<WorldState>(
             const AllGrippersPoseTrajectory&        /* Desired robot trajectory */
-            ) >
+           )>
     TaskExecuteGripperTrajectoryFunctionType;
 
-    typedef std::function< void(
+    typedef std::function<void(
             const WorldState& current_world_state,
             const Eigen::VectorXd& model_utility_mean,
             const Eigen::MatrixXd& model_utility_covariance,
             const ssize_t model_used
-            ) >
+           )>
     LoggingFunctionType;
 }
 
