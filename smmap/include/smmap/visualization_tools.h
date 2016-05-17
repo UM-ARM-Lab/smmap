@@ -22,7 +22,7 @@ namespace smmap
             void visualizeRope(
                     const std::string& marker_name,
                     const ObjectPointSet& rope,
-                    const std::vector< std_msgs::ColorRGBA >& colors) const;
+                    const std::vector<std_msgs::ColorRGBA>& colors) const;
 
             void visualizeCloth(
                     const std::string& marker_name,
@@ -32,7 +32,7 @@ namespace smmap
             void visualizeCloth(
                     const std::string& marker_name,
                     const ObjectPointSet& cloth,
-                    const std::vector< std_msgs::ColorRGBA >& colors) const;
+                    const std::vector<std_msgs::ColorRGBA>& colors) const;
 
             void visualizeGripper(
                     const std::string& marker_name,

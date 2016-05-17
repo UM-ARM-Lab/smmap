@@ -34,7 +34,7 @@ namespace smmap
                 spin_thread_.join();
             }
 
-            std::vector< WorldState > start()
+            std::vector<WorldState> start()
             {
                 ROS_INFO_NAMED("robot_bridge", "Waiting for the robot gripper action server to be available");
                 cmd_grippers_traj_client_.waitForServer();
@@ -54,7 +54,7 @@ namespace smmap
                 ros::shutdown();
             }
 
-            const std::vector< GripperData >& getGrippersData() const
+            const std::vector<GripperData>& getGrippersData() const
             {
                 return grippers_data_;
             }
@@ -66,7 +66,7 @@ namespace smmap
                 for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
                 {
                     ros::ServiceClient gripper_pose_client =
-                        nh_.serviceClient< smmap_msgs::GetGripperPose >(GetGripperPoseTopic(nh_));
+                        nh_.serviceClient<smmap_msgs::GetGripperPose>(GetGripperPoseTopic(nh_));
                     gripper_pose_client.waitForExistence();
 
                     smmap_msgs::GetGripperPose pose_srv_data;
@@ -84,13 +84,13 @@ namespace smmap
                 return grippers_pose;
             }
 
-            std::vector< WorldState > sendGripperTrajectory(
+            std::vector<WorldState> sendGripperTrajectory(
                     const AllGrippersPoseTrajectory& trajectory)
             {
                 return sendGripperTrajectory_impl(toRosGoal(trajectory));
             }
 
-            std::vector< CollisionData > checkGripperCollision(
+            std::vector<CollisionData> checkGripperCollision(
                     const AllGrippersSinglePose& gripper_poses)
             {
                 return gripper_collision_checker_.gripperCollisionCheck(gripper_poses);
@@ -104,9 +104,9 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             ros::NodeHandle nh_;
-            std::vector< GripperData > grippers_data_;
+            std::vector<GripperData> grippers_data_;
             GripperCollisionChecker gripper_collision_checker_;
-            actionlib::SimpleActionClient< smmap_msgs::CmdGrippersTrajectoryAction > cmd_grippers_traj_client_;
+            actionlib::SimpleActionClient<smmap_msgs::CmdGrippersTrajectoryAction> cmd_grippers_traj_client_;
 
             // Our internal version of ros::spin()
             std::thread spin_thread_;
@@ -129,7 +129,7 @@ namespace smmap
                 for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
                 {
                     ros::ServiceClient gripper_pose_client =
-                        nh_.serviceClient< smmap_msgs::GetGripperPose >(GetGripperPoseTopic(nh_));
+                        nh_.serviceClient<smmap_msgs::GetGripperPose>(GetGripperPoseTopic(nh_));
                     gripper_pose_client.waitForExistence();
 
                     smmap_msgs::GetGripperPose pose_srv_data;
@@ -165,10 +165,10 @@ namespace smmap
                 return goal;
             }
 
-            std::vector< WorldState > sendGripperTrajectory_impl(
+            std::vector<WorldState> sendGripperTrajectory_impl(
                     const smmap_msgs::CmdGrippersTrajectoryGoal& goal)
             {
-                std::vector< WorldState > feedback;
+                std::vector<WorldState> feedback;
 
                 cmd_grippers_traj_client_.sendGoalAndWait(goal);
                 if (cmd_grippers_traj_client_.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)

@@ -30,7 +30,7 @@ namespace smmap
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            virtual void updateModel(const std::vector< WorldState >& feedback);
+            virtual void updateModel(const std::vector<WorldState>& feedback);
 
             void perturbModel(std::mt19937_64& generator);
 
@@ -64,7 +64,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             static std::atomic_bool static_data_initialized_;
-            static std::normal_distribution< double > perturbation_distribution_;
+            static std::normal_distribution<double> perturbation_distribution_;
             static Eigen::MatrixXd object_initial_node_distance_;
             static long num_nodes_;
 

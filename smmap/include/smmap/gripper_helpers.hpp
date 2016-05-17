@@ -12,16 +12,16 @@
 namespace smmap
 {
     typedef EigenHelpers::VectorAffine3d AllGrippersSinglePose;
-    typedef std::vector< AllGrippersSinglePose > AllGrippersPoseTrajectory;
+    typedef std::vector<AllGrippersSinglePose> AllGrippersPoseTrajectory;
 
     typedef kinematics::VectorVector6d AllGrippersSingleVelocity;
     typedef AllGrippersSingleVelocity AllGrippersSinglePoseDelta;
-    typedef std::vector< AllGrippersSingleVelocity > AllGrippersVelocityTrajectory;
-    typedef std::vector< AllGrippersSinglePoseDelta > AllGrippersPoseDeltaTrajectory;
+    typedef std::vector<AllGrippersSingleVelocity> AllGrippersVelocityTrajectory;
+    typedef std::vector<AllGrippersSinglePoseDelta> AllGrippersPoseDeltaTrajectory;
 
     struct GripperData
     {
-        GripperData(const std::string& name, const std::vector< long >& node_indices)
+        GripperData(const std::string& name, const std::vector<long>& node_indices)
             : name(name)
             , node_indices(node_indices)
         {}
@@ -30,7 +30,7 @@ namespace smmap
         std::string name;
 
         /// Vector of the indices of the nodes that are grasped by the gripper
-        std::vector< long > node_indices;
+        std::vector<long> node_indices;
 
         /**
          * @brief operator <<
@@ -45,10 +45,10 @@ namespace smmap
         }
     };
 
-    template< typename T >
-    inline std::vector< long > VectorAnytypeToVectorLong(const std::vector< T >& vector_anytype)
+    template<typename T>
+    inline std::vector<long > VectorAnytypeToVectorLong(const std::vector< T>& vector_anytype)
     {
-        std::vector< long > vector_signed(vector_anytype.size());
+        std::vector<long> vector_signed(vector_anytype.size());
         for (size_t ind = 0; ind < vector_anytype.size(); ind++)
         {
             vector_signed[ind] = (long)(vector_anytype[ind]);
@@ -56,9 +56,9 @@ namespace smmap
         return vector_signed;
     }
 
-    inline std::vector< std::string > GetGripperNames(const std::vector< GripperData > grippers_data)
+    inline std::vector<std::string> GetGripperNames(const std::vector<GripperData> grippers_data)
     {
-        std::vector< std::string > names(grippers_data.size());
+        std::vector<std::string> names(grippers_data.size());
 
         for (size_t gripper_ind = 0; gripper_ind < grippers_data.size(); gripper_ind++)
         {
@@ -75,11 +75,11 @@ namespace smmap
      * @param object_initial_node_distance The matrix of distances between nodes
      * @return The index of the closest node grasped by the gripper and the distance to that node
      */
-    inline std::pair< long, double > getMinimumDistanceToGripper(
-            const std::vector< long >& gripper_indices, long node_index,
+    inline std::pair<long, double> getMinimumDistanceToGripper(
+            const std::vector<long>& gripper_indices, long node_index,
             const Eigen::MatrixXd& object_initial_node_distance)
     {
-        double min_dist = std::numeric_limits< double >::infinity();
+        double min_dist = std::numeric_limits<double>::infinity();
         long min_ind = -1;
 
         for (long ind: gripper_indices)
@@ -172,7 +172,7 @@ namespace smmap
         double squared_norm = 0;
         for (long gripper_ind = 0; gripper_ind < grippers_velocity.size(); gripper_ind += 6)
         {
-            squared_norm += GripperVelocity6dSquaredNorm(grippers_velocity.segment< 6 >(gripper_ind));
+            squared_norm += GripperVelocity6dSquaredNorm(grippers_velocity.segment<6>(gripper_ind));
         }
         return squared_norm;
     }
@@ -209,10 +209,10 @@ namespace smmap
 
         for (long gripper_ind = 0; gripper_ind < velocities.size(); gripper_ind += 6)
         {
-            const double velocity_norm = GripperVelocity6dNorm(velocities.segment< 6 >(gripper_ind));
+            const double velocity_norm = GripperVelocity6dNorm(velocities.segment<6>(gripper_ind));
             if (velocity_norm > max_vel)
             {
-                velocities.segment< 6 >(gripper_ind) *= max_vel / velocity_norm;
+                velocities.segment<6>(gripper_ind) *= max_vel / velocity_norm;
             }
         }
 

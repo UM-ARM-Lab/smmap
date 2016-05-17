@@ -17,12 +17,12 @@ namespace smmap
             GripperCollisionChecker(ros::NodeHandle& nh)
             {
                 collision_checker_client_ =
-                    nh.serviceClient< smmap_msgs::GetGripperCollisionReport >(GetGripperCollisionCheckTopic(nh));
+                    nh.serviceClient<smmap_msgs::GetGripperCollisionReport>(GetGripperCollisionCheckTopic(nh));
 
                 collision_checker_client_.waitForExistence();
             }
 
-            std::vector< CollisionData > gripperCollisionCheck(
+            std::vector<CollisionData> gripperCollisionCheck(
                     const AllGrippersSinglePose& gripper_poses)
             {
                 smmap_msgs::GetGripperCollisionReport collision_report_ros;
@@ -34,7 +34,7 @@ namespace smmap
                     ROS_FATAL_NAMED("gripper collision check", "Unabled to retrieve gripper collision report.");
                 }
 
-                std::vector< CollisionData > collision_report_eigen;
+                std::vector<CollisionData> collision_report_eigen;
                 collision_report_eigen.reserve(gripper_poses.size());
 
                 for (size_t gripper_ind = 0; gripper_ind < gripper_poses.size(); gripper_ind++)

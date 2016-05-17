@@ -32,7 +32,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             // TODO: move/replace this default for obstacle_avoidance_scale
-            std::vector< WorldState > sendNextTrajectory(
+            std::vector<WorldState> sendNextTrajectory(
                     const WorldState& current_world_state,
                     const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn,
                     const int planning_horizion = 1,
@@ -49,24 +49,24 @@ namespace smmap
 
             // TODO: this is the wrong spot to store this (mentally)
             const double dt_;
-            std::vector< DeformableModel::Ptr > model_list_;
-            KalmanFilterMultiarmBandit< std::mt19937_64 > model_utility_bandit_;
+            std::vector<DeformableModel::Ptr> model_list_;
+            KalmanFilterMultiarmBandit<std::mt19937_64> model_utility_bandit_;
             std::mt19937_64 generator_;
 
             void updateModels(const WorldState& starting_world_state,
                     ObjectDeltaAndWeight task_desired_motion,
-                    const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory> >& suggested_trajectories,
+                    const std::vector<std::pair< AllGrippersPoseTrajectory, ObjectTrajectory>>& suggested_trajectories,
                     ssize_t model_used,
-                    const std::vector< WorldState >& world_feedback);
+                    const std::vector<WorldState>& world_feedback);
 
             Eigen::MatrixXd calculateProcessNoise(
-                    const std::vector< std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > >& suggested_trajectories);
+                    const std::vector<std::pair<AllGrippersPoseTrajectory, ObjectTrajectory>>& suggested_trajectories);
 
             Eigen::VectorXd calculateObservedReward(
                     const WorldState& starting_world_state,
                     ObjectDeltaAndWeight task_desired_motion,
                     ssize_t model_used,
-                    const std::vector< WorldState >& world_feedback);
+                    const std::vector<WorldState>& world_feedback);
 
             Eigen::MatrixXd calculateObservationNoise(
                     const Eigen::MatrixXd& process_noise,
@@ -90,12 +90,12 @@ namespace smmap
                     const VectorObjectTrajectory& model_predictions) const;
 
             Eigen::VectorXd combineModelDerivitives(
-                    const std::vector< Eigen::VectorXd >& model_derivitives) const;
+                    const std::vector<Eigen::VectorXd>& model_derivitives) const;
 
-            std::pair< Eigen::VectorXd, Eigen::MatrixXd > combineModelDerivitives(
-                    const std::vector< std::pair< Eigen::VectorXd, Eigen::MatrixXd > >& model_derivitives) const;
+            std::pair<Eigen::VectorXd, Eigen::MatrixXd> combineModelDerivitives(
+                    const std::vector<std::pair<Eigen::VectorXd, Eigen::MatrixXd>>& model_derivitives) const;
 
-            std::vector< AllGrippersSinglePose > optimizeTrajectoryDirectShooting(
+            std::vector<AllGrippersSinglePose> optimizeTrajectoryDirectShooting(
                     const WorldFeedback& current_world_configuration,
                     std::vector<AllGrippersSinglePose> grippers_trajectory,
                     double dt,

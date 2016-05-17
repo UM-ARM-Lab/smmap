@@ -12,7 +12,7 @@
 
 namespace smmap
 {
-    template< typename Generator = std::mt19937_64 >
+    template<typename Generator = std::mt19937_64>
     class KalmanFilterMultiarmBandit
     {
         public:

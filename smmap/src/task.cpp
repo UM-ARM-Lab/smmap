@@ -39,7 +39,7 @@ void Task::execute()
 
     // Run the planner at whatever rate we've been given
     ROS_INFO_STREAM_NAMED("task", "Running our planner with a horizion of " << planning_horizion);
-    std::vector< WorldState > world_feedback = robot_.start();
+    std::vector<WorldState> world_feedback = robot_.start();
     const double start_time = world_feedback.back().sim_time_;
 
     while (robot_.ok())
@@ -64,7 +64,7 @@ void Task::execute()
                 }
                 else
                 {
-                    std::lock_guard< std::mutex > lock(first_step_mtx);
+                    std::lock_guard<std::mutex> lock(first_step_mtx);
                     if (first_step_calculated.load())
                     {
                         return first_step_desired_motion;
@@ -104,7 +104,7 @@ void Task::execute()
                     task_specification_->getCollisionScalingFactor());
 
         ssize_t num_nodes = current_world_state.object_configuration_.cols();
-        std::vector< std_msgs::ColorRGBA > colors(num_nodes);
+        std::vector<std_msgs::ColorRGBA> colors(num_nodes);
         for (size_t node_ind = 0; node_ind < (size_t)num_nodes; node_ind++)
         {
             colors[node_ind].r = (float)first_step_desired_motion.weight(node_ind * 3);
@@ -149,7 +149,7 @@ void Task::initializeModelSet()
                                << translational_deformability << " "
                                << rotational_deformability);
 
-        planner_.addModel(std::make_shared< DiminishingRigidityModel >(
+        planner_.addModel(std::make_shared<DiminishingRigidityModel>(
                                  DiminishingRigidityModel(
                                      translational_deformability,
                                      rotational_deformability)));
@@ -169,7 +169,7 @@ void Task::initializeModelSet()
             double rot_deform = trans_deform;
 //            for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
 //            {
-                planner_.addModel(std::make_shared< DiminishingRigidityModel >(
+                planner_.addModel(std::make_shared<DiminishingRigidityModel>(
                                          DiminishingRigidityModel(
                                              trans_deform,
                                              rot_deform)));
@@ -187,7 +187,7 @@ void Task::initializeModelSet()
         const double learning_rate_step = 10.0;
         for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
         {
-                planner_.addModel(std::make_shared< AdaptiveJacobianModel >(
+                planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
                                          AdaptiveJacobianModel(
                                              DiminishingRigidityModel(
                                                  task_specification_->getDeformability())
@@ -201,7 +201,7 @@ void Task::initializeModelSet()
     }
     else if (GetUseAdaptiveModel(ph_))
     {
-                planner_.addModel(std::make_shared< AdaptiveJacobianModel >(
+                planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
                                          AdaptiveJacobianModel(
                                              DiminishingRigidityModel(
                                                  task_specification_->getDeformability())
@@ -215,11 +215,11 @@ void Task::initializeModelSet()
         ROS_INFO_STREAM_NAMED("task", "Using default deformability value of "
                                << task_specification_->getDeformability());
 
-        planner_.addModel(std::make_shared< DiminishingRigidityModel >(
+        planner_.addModel(std::make_shared<DiminishingRigidityModel>(
                                  DiminishingRigidityModel(
                                      task_specification_->getDeformability())));
 
-//        model_set_.addModel(std::make_shared< LeastSquaresJacobianModel >(
+//        model_set_.addModel(std::make_shared<LeastSquaresJacobianModel>(
 //                                 LeastSquaresJacobianModel(
 //                                     DiminishingRigidityModel(
 //                                         task_specification_->getDeformability())
@@ -267,23 +267,23 @@ void Task::initializeLogging()
 
         ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
 
-        loggers.insert(std::make_pair< std::string, Log::Log > (
+        loggers.insert(std::make_pair<std::string, Log::Log> (
                             "time",
                             Log::Log(log_folder + "time.txt", false))) ;
 
-        loggers.insert(std::make_pair< std::string, Log::Log > (
+        loggers.insert(std::make_pair<std::string, Log::Log> (
                             "error",
                             Log::Log(log_folder + "error.txt", false))) ;
 
-        loggers.insert(std::make_pair< std::string, Log::Log > (
+        loggers.insert(std::make_pair<std::string, Log::Log> (
                             "utility_mean",
                             Log::Log(log_folder + "utility_mean.txt", false))) ;
 
-        loggers.insert(std::make_pair< std::string, Log::Log > (
+        loggers.insert(std::make_pair<std::string, Log::Log> (
                             "utility_covariance",
                             Log::Log(log_folder + "utility_covariance.txt", false))) ;
 
-        loggers.insert(std::make_pair< std::string, Log::Log > (
+        loggers.insert(std::make_pair<std::string, Log::Log> (
                             "model_chosen",
                             Log::Log(log_folder + "model_chosen.txt", false))) ;
     }

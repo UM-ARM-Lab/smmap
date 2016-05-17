@@ -11,13 +11,13 @@ namespace smmap
     class TaskSpecification
     {
         public:
-            typedef std::shared_ptr< TaskSpecification > Ptr;
+            typedef std::shared_ptr<TaskSpecification> Ptr;
 
             ////////////////////////////////////////////////////////////////////
             // Constructor to initialize objects that all TaskSpecifications share
             ////////////////////////////////////////////////////////////////////
 
-            TaskSpecification(ros::NodeHandle& nh );
+            TaskSpecification(ros::NodeHandle& nh);
             TaskSpecification(ros::NodeHandle& nh, Visualizer vis);
 
             ////////////////////////////////////////////////////////////////////
@@ -46,7 +46,7 @@ namespace smmap
                     Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
-                    const std::vector< std_msgs::ColorRGBA >& colors) const;
+                    const std::vector<std_msgs::ColorRGBA>& colors) const;
 
             double calculateError(
                     const ObjectPointSet& object_configuration) const;
@@ -122,7 +122,7 @@ namespace smmap
                     Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
-                    const std::vector< std_msgs::ColorRGBA >& colors) const = 0;
+                    const std::vector<std_msgs::ColorRGBA>& colors) const = 0;
 
             virtual double calculateError_impl(
                     const ObjectPointSet& object_configuration) const = 0;

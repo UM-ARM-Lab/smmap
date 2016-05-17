@@ -6,10 +6,10 @@ Visualizer::Visualizer(ros::NodeHandle& nh)
 {
     // Publish visualization request markers
     visualization_marker_pub_ =
-            nh.advertise< visualization_msgs::Marker >(GetVisualizationMarkerTopic(nh), 10);
+            nh.advertise<visualization_msgs::Marker>(GetVisualizationMarkerTopic(nh), 10);
 
     visualization_marker_array_pub_ =
-            nh.advertise< visualization_msgs::MarkerArray >(GetVisualizationMarkerArrayTopic(nh), 10);
+            nh.advertise<visualization_msgs::MarkerArray>(GetVisualizationMarkerArrayTopic(nh), 10);
 }
 
 void Visualizer::visualizeRope(
@@ -17,7 +17,7 @@ void Visualizer::visualizeRope(
         const ObjectPointSet& rope,
         const std_msgs::ColorRGBA& color) const
 {
-    std::vector< std_msgs::ColorRGBA > colors((size_t)rope.cols(), color);
+    std::vector<std_msgs::ColorRGBA> colors((size_t)rope.cols(), color);
 
     visualizeRope(marker_name, rope, colors);
 }
@@ -25,7 +25,7 @@ void Visualizer::visualizeRope(
 void Visualizer::visualizeRope(
         const std::string& marker_name,
         const ObjectPointSet& rope,
-        const std::vector< std_msgs::ColorRGBA >& colors) const
+        const std::vector<std_msgs::ColorRGBA>& colors) const
 {
     visualization_msgs::Marker marker;
 
@@ -48,7 +48,7 @@ void Visualizer::visualizeCloth(
         const ObjectPointSet& cloth,
         const std_msgs::ColorRGBA& color) const
 {
-    std::vector< std_msgs::ColorRGBA > colors((size_t)cloth.cols(), color);
+    std::vector<std_msgs::ColorRGBA> colors((size_t)cloth.cols(), color);
 
     visualizeCloth(marker_name, cloth, colors);
 }
@@ -56,7 +56,7 @@ void Visualizer::visualizeCloth(
 void Visualizer::visualizeCloth(
         const std::string& marker_name,
         const ObjectPointSet& cloth,
-        const std::vector< std_msgs::ColorRGBA >& colors) const
+        const std::vector<std_msgs::ColorRGBA>& colors) const
 {
     visualization_msgs::Marker marker;
 
@@ -106,8 +106,8 @@ void Visualizer::visualizeObjectDelta(
         color.b = 0;//(1.0 + std::cos(2*M_PI*double(col+10)/15.0)) / 3;
         color.a = 1;
 
-        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(current.block< 3, 1 >(0, col)));
-        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(desired.block< 3, 1 >(0, col)));
+        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(current.block<3, 1>(0, col)));
+        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(desired.block<3, 1>(0, col)));
         marker.colors.push_back(color);
         marker.colors.push_back(color);
     }

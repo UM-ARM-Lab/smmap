@@ -12,8 +12,8 @@
 namespace smmap
 {
     typedef Eigen::Matrix3Xd ObjectPointSet;
-    typedef std::vector< ObjectPointSet > ObjectTrajectory;
-    typedef std::vector< ObjectTrajectory > VectorObjectTrajectory;
+    typedef std::vector<ObjectPointSet> ObjectTrajectory;
+    typedef std::vector<ObjectTrajectory> VectorObjectTrajectory;
 
     struct ObjectDeltaAndWeight
     {
@@ -35,7 +35,7 @@ namespace smmap
     {
         ObjectPointSet object_configuration_;
         AllGrippersSinglePose all_grippers_single_pose_;
-        std::vector< CollisionData > gripper_collision_data_;
+        std::vector<CollisionData> gripper_collision_data_;
         double sim_time_;
     };
 
@@ -81,11 +81,11 @@ namespace smmap
      * @param result
      * @return
      */
-    inline std::vector< WorldState > ParseGripperActionResult(
+    inline std::vector<WorldState> ParseGripperActionResult(
             const smmap_msgs::CmdGrippersTrajectoryResultConstPtr& result)
     {
         assert(result->sim_state_trajectory.size() > 0);
-        std::vector< WorldState > world_feedback(result->sim_state_trajectory.size());
+        std::vector<WorldState> world_feedback(result->sim_state_trajectory.size());
 
         for (size_t time_ind = 0; time_ind < result->sim_state_trajectory.size(); time_ind++)
         {
@@ -102,7 +102,7 @@ namespace smmap
      * @return
      */
     inline AllGrippersPoseTrajectory GetGripperTrajectories(
-            const std::vector< WorldState >& feedback)
+            const std::vector<WorldState>& feedback)
     {
         AllGrippersPoseTrajectory grippers_trajectories(feedback.size());
 
@@ -194,7 +194,7 @@ namespace smmap
 
         for (ssize_t point_ind = 0; point_ind < start.cols(); point_ind++)
         {
-            start.col(point_ind) = start.col(point_ind) + delta.segment< 3 >(point_ind * 3);
+            start.col(point_ind) = start.col(point_ind) + delta.segment<3>(point_ind * 3);
         }
         return start;
     }
@@ -233,11 +233,11 @@ namespace smmap
     {
         assert (obj.cols() > 0);
         long min_ind = 0;
-        double min_dist = (obj.block< 3, 1 >(0, 0) - point).norm();
+        double min_dist = (obj.block<3, 1>(0, 0) - point).norm();
 
         for (long ind = 1; ind < obj.cols(); ind++)
         {
-            double dist = (obj.block< 3, 1 >(0, ind) - point).norm();
+            double dist = (obj.block<3, 1>(0, ind) - point).norm();
             if (dist < min_dist)
             {
                 min_ind = ind;
@@ -255,11 +255,11 @@ namespace smmap
     {
         assert (obj.cols() > 0);
         long min_ind = 0;
-        double min_dist = (obj.block< 3, 1 >(0, 0) - point).norm();
+        double min_dist = (obj.block<3, 1>(0, 0) - point).norm();
 
         for (long ind = 1; ind < obj.cols(); ind++)
         {
-            double dist = (obj.block< 3, 1 >(0, ind) - point).norm();
+            double dist = (obj.block<3, 1>(0, ind) - point).norm();
             if (dist < min_dist)
             {
                 min_ind = ind;

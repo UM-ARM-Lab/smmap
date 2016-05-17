@@ -7,7 +7,7 @@ using namespace smmap;
 // Constructor to initialize objects that all TaskSpecifications share
 ////////////////////////////////////////////////////////////////////
 
-TaskSpecification::TaskSpecification(ros::NodeHandle& nh )
+TaskSpecification::TaskSpecification(ros::NodeHandle& nh)
     : TaskSpecification(nh, Visualizer(nh))
 {}
 
@@ -29,23 +29,23 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
 
     if (deformable_type == DeformableType::ROPE && task_type == TaskType::CYLINDER_COVERAGE)
     {
-        return std::make_shared< RopeCylinderCoverage >(RopeCylinderCoverage(nh));
+        return std::make_shared<RopeCylinderCoverage>(RopeCylinderCoverage(nh));
     }
     else if (deformable_type == DeformableType::CLOTH && task_type == TaskType::TABLE_COVERAGE)
     {
-        return std::make_shared< ClothTableCoverage >(ClothTableCoverage(nh));
+        return std::make_shared<ClothTableCoverage>(ClothTableCoverage(nh));
     }
     else if (deformable_type == DeformableType::CLOTH && task_type == TaskType::CYLINDER_COVERAGE)
     {
-        return std::make_shared< ClothCylinderCoverage >(ClothCylinderCoverage(nh));
+        return std::make_shared<ClothCylinderCoverage>(ClothCylinderCoverage(nh));
     }
     else if (deformable_type == DeformableType::CLOTH && task_type == TaskType::COLAB_FOLDING)
     {
-        return std::make_shared< ClothColabFolding >(ClothColabFolding(nh));
+        return std::make_shared<ClothColabFolding>(ClothColabFolding(nh));
     }
     else if (deformable_type == DeformableType::CLOTH && task_type == TaskType::WAFR)
     {
-        return std::make_shared< ClothWAFR >(ClothWAFR(nh));
+        return std::make_shared<ClothWAFR>(ClothWAFR(nh));
     }
     else
     {
@@ -91,7 +91,7 @@ void TaskSpecification::visualizeDeformableObject(
         Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
-        const std::vector< std_msgs::ColorRGBA >& colors) const
+        const std::vector<std_msgs::ColorRGBA>& colors) const
 {
     visualizeDeformableObject_impl(vis, marker_name, object_configuration, colors);
 }
@@ -143,11 +143,11 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
                 // and is half the length of the "extra" distance
                 const Eigen::Vector3d correction_vector = 0.5
                         * node_distance_delta(first_node, second_node)
-                        * (world_state.object_configuration_.block< 3, 1 >(0, second_node)
-                            - world_state.object_configuration_.block< 3, 1 >(0, first_node));
+                        * (world_state.object_configuration_.block<3, 1>(0, second_node)
+                            - world_state.object_configuration_.block<3, 1>(0, first_node));
 
-                stretching_correction.delta.segment< 3 >(3 * first_node) += correction_vector;
-                stretching_correction.delta.segment< 3 >(3 * second_node) -= correction_vector;
+                stretching_correction.delta.segment<3>(3 * first_node) += correction_vector;
+                stretching_correction.delta.segment<3>(3 * second_node) -= correction_vector;
 
                 stretching_correction.weight(3 * first_node) += 1;
                 stretching_correction.weight(3 * first_node + 1) += 1;
@@ -156,11 +156,11 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
                 stretching_correction.weight(3 * second_node + 1) += 1;
                 stretching_correction.weight(3 * second_node + 2) += 1;
 
-                start_points.push_back(world_state.object_configuration_.block< 3, 1 >(0, first_node));
-                end_points.push_back(world_state.object_configuration_.block< 3, 1 >(0, first_node) + correction_vector);
+                start_points.push_back(world_state.object_configuration_.block<3, 1>(0, first_node));
+                end_points.push_back(world_state.object_configuration_.block<3, 1>(0, first_node) + correction_vector);
 
-                start_points.push_back(world_state.object_configuration_.block< 3, 1 >(0, second_node));
-                end_points.push_back(world_state.object_configuration_.block< 3, 1 >(0, first_node) - correction_vector);
+                start_points.push_back(world_state.object_configuration_.block<3, 1>(0, second_node));
+                end_points.push_back(world_state.object_configuration_.block<3, 1>(0, first_node) - correction_vector);
             }
         }
     }
@@ -210,14 +210,14 @@ ObjectDeltaAndWeight TaskSpecification::combineErrorCorrectionAndStretchingCorre
         assert(stretching_importance <= 1.0);
 
         // Calculate the combined object delta
-        combined.delta.segment< 3 >(ind) =
-                stretching_importance * stretching_correction.delta.segment< 3 >(ind)
-                + (1.0 - stretching_importance) * error_correction.delta.segment< 3 >(ind);
+        combined.delta.segment<3>(ind) =
+                stretching_importance * stretching_correction.delta.segment<3>(ind)
+                + (1.0 - stretching_importance) * error_correction.delta.segment<3>(ind);
 
         // Calculate the combined node weights
-        combined.weight.segment< 3 >(ind) =
-                stretching_importance * stretching_correction.weight.segment< 3 >(ind)
-                + (1.0 - stretching_importance) * error_correction.weight.segment< 3 >(ind);
+        combined.weight.segment<3>(ind) =
+                stretching_importance * stretching_correction.weight.segment<3>(ind)
+                + (1.0 - stretching_importance) * error_correction.weight.segment<3>(ind);
     }
 
 //    combined.first = error_correction.first + stretching_correction.first;

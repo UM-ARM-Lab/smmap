@@ -19,7 +19,7 @@ namespace smmap
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            virtual void updateModel(const std::vector< WorldState >& feedback) override;
+            virtual void updateModel(const std::vector<WorldState>& feedback) override;
 
             virtual void perturbModel(std::mt19937_64& generator) override;
 

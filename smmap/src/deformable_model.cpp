@@ -28,10 +28,10 @@ DeformableModel::DeformableModel()
 /*
 Eigen::VectorXd DeformableModel::getObjectiveFunction1stDerivitive(
         const WorldFeedback& current_world_configuration,
-        const std::vector< AllGrippersSinglePose >& grippers_trajectory,
-        const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+        const std::vector<AllGrippersSinglePose>& grippers_trajectory,
+        const std::vector<AllGrippersSingleVelocity>& grippers_velocities,
         const double dt,
-        const std::function< double(const ObjectPointSet&) > objective_function) const
+        const std::function<double(const ObjectPointSet&)> objective_function) const
 {
     const double h = 0.1; // arbitrary step size for numeric differencing
     const size_t num_grippers = grippers_data_.size();
@@ -52,8 +52,8 @@ Eigen::VectorXd DeformableModel::getObjectiveFunction1stDerivitive(
         const long time_ind = ind / (num_grippers * 6);
         const long vel_ind = ind % (num_grippers * 6);
 
-        std::vector< AllGrippersSingleVelocity > new_grippers_velocities(grippers_velocities);
-        std::vector< AllGrippersSinglePose > new_grippers_trajectory;
+        std::vector<AllGrippersSingleVelocity> new_grippers_velocities(grippers_velocities);
+        std::vector<AllGrippersSinglePose> new_grippers_trajectory;
 
         // f(x + h, y)
         new_grippers_velocities[time_ind][vel_ind / 6](vel_ind  % 6) += h;
@@ -83,12 +83,12 @@ Eigen::VectorXd DeformableModel::getObjectiveFunction1stDerivitive(
     return derivitives;
 }
 
-std::pair< Eigen::VectorXd, Eigen::MatrixXd > DeformableModel::getObjectiveFunction2ndDerivitive(
+std::pair<Eigen::VectorXd, Eigen::MatrixXd> DeformableModel::getObjectiveFunction2ndDerivitive(
         const WorldFeedback& current_world_configuration,
-        const std::vector< AllGrippersSinglePose >& grippers_trajectory,
-        const std::vector< AllGrippersSingleVelocity >& grippers_velocities,
+        const std::vector<AllGrippersSinglePose>& grippers_trajectory,
+        const std::vector<AllGrippersSingleVelocity>& grippers_velocities,
         const double dt,
-        const std::function< double(const ObjectPointSet&) > objective_function) const
+        const std::function<double(const ObjectPointSet&)> objective_function) const
 {
     const double h = 0.1; // arbitrary step size for numeric differencing
     const size_t num_grippers = grippers_data_.size();
@@ -104,7 +104,7 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > DeformableModel::getObjectiveFunct
                                        dt));
 
     // Allocate some space to store the results of the differencing.
-    std::pair< Eigen::VectorXd, Eigen::MatrixXd > derivitives (
+    std::pair<Eigen::VectorXd, Eigen::MatrixXd> derivitives (
                 Eigen::VectorXd(num_grippers * 6 * num_timesteps),
                 Eigen::MatrixXd(num_grippers * 6 * num_timesteps, num_grippers * 6 * num_timesteps));
 
@@ -114,7 +114,7 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > DeformableModel::getObjectiveFunct
     // First calculate all of the perturbations for a single variable
     Eigen::VectorXd objective_value_x_plus_h(num_grippers * 6 * num_timesteps);
     Eigen::VectorXd objective_value_x_minus_h(num_grippers * 6 * num_timesteps);
-    std::vector< AllGrippersSingleVelocity > new_grippers_velocities(grippers_velocities);
+    std::vector<AllGrippersSingleVelocity> new_grippers_velocities(grippers_velocities);
 
     // This loop fills out the Jacobian (first derivitive) of the objective function
     #pragma omp parallel for
@@ -123,7 +123,7 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > DeformableModel::getObjectiveFunct
         const long time_ind = ind / (num_grippers * 6);
         const long vel_ind = ind % (num_grippers * 6);
 
-        std::vector< AllGrippersSinglePose > new_grippers_trajectory;
+        std::vector<AllGrippersSinglePose> new_grippers_trajectory;
 
         // f(x + h, y)
         new_grippers_velocities[time_ind][vel_ind / 6](vel_ind  % 6) += h;
@@ -152,7 +152,7 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > DeformableModel::getObjectiveFunct
         new_grippers_velocities[time_ind][vel_ind / 6](vel_ind  % 6) += h;
 
         // f_x = [f(x + h, y) - f(x - h, y)] / (2h)
-        derivitives.first(ind) = (  objective_value_x_plus_h(ind)
+        derivitives.first(ind) = (objective_value_x_plus_h(ind)
                                      - objective_value_x_minus_h(ind))
                 / (2*h);
     }
@@ -169,7 +169,7 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > DeformableModel::getObjectiveFunct
         const double objective_value_row_minus_h = objective_value_x_minus_h(row_ind);
 
         // f_xx = [f(x + h, y) - 2 f(x,y) + f(x - h, y)] / h^2
-        derivitives.second(row_ind, row_ind) = (  objective_value_row_plus_h
+        derivitives.second(row_ind, row_ind) = (objective_value_row_plus_h
                                                    - 2*initial_objective_value
                                                    + objective_value_row_minus_h)
                 / std::pow(h, 2);
@@ -185,7 +185,7 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > DeformableModel::getObjectiveFunct
             // f(x, y - h)
             const double objective_value_col_minus_h = objective_value_x_minus_h(col_ind);;
 
-            std::vector< AllGrippersSinglePose > new_grippers_trajectory;
+            std::vector<AllGrippersSinglePose> new_grippers_trajectory;
 
             // f(x + h, y + h)
             new_grippers_velocities[row_time_ind][row_vel_ind / 6](row_vel_ind  % 6) += h;
@@ -218,7 +218,7 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > DeformableModel::getObjectiveFunct
             new_grippers_velocities[col_time_ind][col_vel_ind / 6](col_vel_ind  % 6) += h;
 
             // f_xy = [f(x + h, y + h) - f(x + h, y) - f(x, y + h) + 2f(x, y) - f(x - h, y) - f(x, y - h) + f(x - h, y - h)] / (2 h^2)
-            derivitives.second(row_ind, col_ind) = (  objective_value_row_col_plus_h
+            derivitives.second(row_ind, col_ind) = (objective_value_row_col_plus_h
                                                        - objective_value_row_plus_h
                                                        - objective_value_col_plus_h
                                                        + 2*initial_objective_value
@@ -240,10 +240,10 @@ std::pair< Eigen::VectorXd, Eigen::MatrixXd > DeformableModel::getObjectiveFunct
 ////////////////////////////////////////////////////////////////////////////////
 
 std::atomic_bool DeformableModel::grippers_data_initialized_(false);
-std::vector< GripperData > DeformableModel::grippers_data_;
+std::vector<GripperData> DeformableModel::grippers_data_;
 
 void DeformableModel::SetGrippersData(
-        const std::vector< GripperData >& grippers_data)
+        const std::vector<GripperData>& grippers_data)
 {
     grippers_data_ = grippers_data;
 

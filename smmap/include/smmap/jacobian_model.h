@@ -31,7 +31,7 @@ namespace smmap
                     const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
                     const double dt) const override final;
 
-            virtual std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > getSuggestedGrippersTrajectory(
+            virtual std::pair<AllGrippersPoseTrajectory, ObjectTrajectory> getSuggestedGrippersTrajectory(
                     const WorldState& world_initial_state,
                     const int planning_horizion,
                     const double dt,

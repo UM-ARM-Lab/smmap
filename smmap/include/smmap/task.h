@@ -40,14 +40,14 @@ namespace smmap
             // Task specific data
             ////////////////////////////////////////////////////////////////////
 
-            std::shared_ptr< TaskSpecification > task_specification_;
+            std::shared_ptr<TaskSpecification> task_specification_;
 
             ////////////////////////////////////////////////////////////////////
             // Logging objects
             ////////////////////////////////////////////////////////////////////
 
             bool logging_enabled_;
-            std::map< std::string, Log::Log > loggers;
+            std::map<std::string, Log::Log> loggers;
             void logData(
                     const WorldState& current_world_state,
                     const Eigen::VectorXd& model_utility_mean,

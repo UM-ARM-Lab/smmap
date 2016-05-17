@@ -12,14 +12,14 @@
 
 namespace smmap
 {
-    inline std::vector< GripperData > GetGrippersData(ros::NodeHandle& nh)
+    inline std::vector<GripperData> GetGrippersData(ros::NodeHandle& nh)
     {
         ROS_INFO_NAMED("grippers_data" , "Getting grippers data");
-        std::vector< GripperData > grippers_data;
+        std::vector<GripperData> grippers_data;
 
         // Service client to get the names of each gripper
         ros::ServiceClient gripper_names_client =
-            nh.serviceClient< smmap_msgs::GetGripperNames >(GetGripperNamesTopic(nh));
+            nh.serviceClient<smmap_msgs::GetGripperNames>(GetGripperNamesTopic(nh));
         gripper_names_client.waitForExistence();
 
         smmap_msgs::GetGripperNames names_srv_data;
@@ -27,11 +27,11 @@ namespace smmap
         {
             ROS_FATAL_NAMED("grippers_data", "Unabled to retrieve gripper names.");
         }
-        std::vector< std::string > gripper_names = names_srv_data.response.names;
+        std::vector<std::string> gripper_names = names_srv_data.response.names;
 
         // Service client to get the attached nodes and transform for each gripper
         ros::ServiceClient gripper_node_indices_client =
-            nh.serviceClient< smmap_msgs::GetGripperAttachedNodeIndices >(GetGripperAttachedNodeIndicesTopic(nh));
+            nh.serviceClient<smmap_msgs::GetGripperAttachedNodeIndices>(GetGripperAttachedNodeIndicesTopic(nh));
         gripper_node_indices_client.waitForExistence();
 
         grippers_data.reserve(gripper_names.size());
@@ -60,7 +60,7 @@ namespace smmap
 
         // Get the initial configuration of the object
         ros::ServiceClient object_initial_configuration_client =
-            nh.serviceClient< smmap_msgs::GetPointSet >(GetObjectInitialConfigurationTopic(nh));
+            nh.serviceClient<smmap_msgs::GetPointSet>(GetObjectInitialConfigurationTopic(nh));
 
         object_initial_configuration_client.waitForExistence();
 
@@ -78,7 +78,7 @@ namespace smmap
 
         // Get the initial configuration of the object
         ros::ServiceClient cover_points_client =
-            nh.serviceClient< smmap_msgs::GetPointSet >(GetCoverPointsTopic(nh));
+            nh.serviceClient<smmap_msgs::GetPointSet>(GetCoverPointsTopic(nh));
 
         cover_points_client.waitForExistence();
 

@@ -22,7 +22,7 @@ AdaptiveJacobianModel::AdaptiveJacobianModel(
 // Virtual function overrides
 ////////////////////////////////////////////////////////////////////
 
-void AdaptiveJacobianModel::updateModel(const std::vector< WorldState >& feedback)
+void AdaptiveJacobianModel::updateModel(const std::vector<WorldState>& feedback)
 {
     const AllGrippersPoseDeltaTrajectory grippers_pose_deltas =
             CalculateGrippersPoseDeltas(GetGripperTrajectories(feedback));
@@ -33,7 +33,7 @@ void AdaptiveJacobianModel::updateModel(const std::vector< WorldState >& feedbac
         Eigen::VectorXd grippers_delta(current_jacobian_.cols());
         for (size_t gripper_ind = 0; gripper_ind < grippers_pose_deltas[ind].size(); gripper_ind++)
         {
-            grippers_delta.segment< 6 >((long)gripper_ind * 6 ) =
+            grippers_delta.segment<6>((long)gripper_ind * 6) =
                     grippers_pose_deltas[ind][gripper_ind];
         }
 
