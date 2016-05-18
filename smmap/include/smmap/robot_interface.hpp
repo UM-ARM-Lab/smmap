@@ -2,16 +2,15 @@
 #define ROBOT_INTERFACE_HPP
 
 #include <thread>
-#include <arc_utilities/eigen_helpers_conversions.hpp>
 
 #include <ros/ros.h>
 #include <ros/callback_queue.h>
 #include <actionlib/client/simple_action_client.h>
+#include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <smmap_msgs/messages.h>
 
-#include "smmap/gripper_collision_checker.hpp"
-#include "smmap/gripper_helpers.hpp"
 #include "smmap/ros_communication_helpers.hpp"
+#include "smmap/grippers.hpp"
 
 
 namespace smmap

@@ -5,7 +5,7 @@
 #include <random>
 
 #include "smmap/task_function_pointer_types.h"
-#include "smmap/gripper_helpers.hpp"
+#include "smmap/grippers.hpp"
 
 namespace smmap
 {

@@ -6,8 +6,7 @@
 #include <kinematics_toolbox/kinematics.h>
 #include <smmap_msgs/messages.h>
 
-#include "smmap/collision_helpers.hpp"
-#include "smmap/gripper_helpers.hpp"
+#include "smmap/grippers.hpp"
 
 namespace smmap
 {

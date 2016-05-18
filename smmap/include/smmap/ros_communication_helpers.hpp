@@ -6,8 +6,7 @@
 #include <smmap_experiment_params/task_enums.h>
 #include <smmap_msgs/messages.h>
 
-
-#include "smmap/gripper_helpers.hpp"
+#include "smmap/grippers.hpp"
 #include "smmap/trajectory.hpp"
 
 namespace smmap

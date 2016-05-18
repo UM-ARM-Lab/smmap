@@ -1,5 +1,4 @@
 #include "smmap/jacobian_model.h"
-#include "smmap/gripper_helpers.hpp"
 
 using namespace smmap;
 
@@ -142,26 +141,13 @@ JacobianModel::getSuggestedGrippersTrajectory(
         ////////////////////////////////////////////////////////////////////////
         // Combine the velocities into a single command velocity
         ////////////////////////////////////////////////////////////////////////
-        for (long gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+        for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
         {
-            kinematics::Vector6d actual_gripper_velocity;
-            kinematics::Vector6d desired_gripper_vel =
-                    grippers_velocity_achieve_goal.segment<6>(gripper_ind * 6);
-
-            // If we need to avoid an obstacle, then use the sliding scale
-            const CollisionAvoidanceResult& collision_result =
-                    grippers_collision_avoidance_result[(size_t)gripper_ind];
-            if (!std::isinf(collision_result.distance))
-            {
-                 const double collision_severity = std::min(1.0, std::exp(-obstacle_avoidance_scale * collision_result.distance));
-
-                 actual_gripper_velocity = collision_severity * (collision_result.velocity + collision_result.nullspace_projector * desired_gripper_vel) + (1 - collision_severity) * desired_gripper_vel;
-            }
-            // Otherwise use our desired velocity directly
-            else
-            {
-                 actual_gripper_velocity = desired_gripper_vel;
-            }
+            const kinematics::Vector6d actual_gripper_velocity =
+                    CombineDesiredAndObjectAvoidance(
+                        grippers_velocity_achieve_goal.segment<6>(gripper_ind * 6),
+                        grippers_collision_avoidance_result[(size_t)gripper_ind],
+                        obstacle_avoidance_scale);
 
             suggested_traj.first[(size_t)traj_step][(size_t)gripper_ind] =
                         suggested_traj.first[(size_t)traj_step - 1][(size_t)gripper_ind] *

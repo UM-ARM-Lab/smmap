@@ -56,6 +56,8 @@ namespace smmap
                             LEARNING_RATE * velocity_update),
                         max_gripper_delta);
 
+
+
             // Update the trajectory of the grippers based on the new velocities
             const AllGrippersPoseTrajectory test_grippers_pose_trajectory =
                     CalculateGrippersTrajectory(
