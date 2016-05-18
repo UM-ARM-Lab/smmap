@@ -14,9 +14,7 @@ namespace smmap
     typedef EigenHelpers::VectorAffine3d AllGrippersSinglePose;
     typedef std::vector<AllGrippersSinglePose> AllGrippersPoseTrajectory;
 
-    typedef kinematics::VectorVector6d AllGrippersSingleVelocity;
-    typedef AllGrippersSingleVelocity AllGrippersSinglePoseDelta;
-    typedef std::vector<AllGrippersSingleVelocity> AllGrippersVelocityTrajectory;
+    typedef kinematics::VectorVector6d AllGrippersSinglePoseDelta;
     typedef std::vector<AllGrippersSinglePoseDelta> AllGrippersPoseDeltaTrajectory;
 
     struct GripperData
@@ -95,6 +93,30 @@ namespace smmap
     }
 
     ////////////////////////////////////////////////////////////////////////////
+    // Basic Math
+    ////////////////////////////////////////////////////////////////////////////
+
+    inline AllGrippersPoseDeltaTrajectory AddGripperPoseDeltas(
+            AllGrippersPoseDeltaTrajectory lhs, const Eigen::VectorXd& rhs)
+    {
+        const size_t num_timesteps = lhs.size();
+        assert(num_timesteps > 0);
+        const size_t num_grippers = lhs[0].size();
+        assert(num_grippers > 0);
+        assert(num_timesteps * num_grippers * 6 == (size_t)rhs.rows());
+
+        for (size_t time_ind = 0; time_ind < num_timesteps; time_ind++)
+        {
+            for (size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+            {
+                lhs[time_ind][gripper_ind] += rhs.segment<6>((ssize_t)(time_ind * num_grippers * 6 + gripper_ind * 6));
+            }
+        }
+
+        return lhs;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
     // Dot products
     ////////////////////////////////////////////////////////////////////////////
 
@@ -127,8 +149,8 @@ namespace smmap
     }
 
     inline double MultipleGrippersVelocityTrajectoryDotProduct(
-            const AllGrippersVelocityTrajectory& traj1,
-            const AllGrippersVelocityTrajectory& traj2)
+            const AllGrippersPoseDeltaTrajectory& traj1,
+            const AllGrippersPoseDeltaTrajectory& traj2)
     {
         assert(traj1.size() == traj2.size());
 
@@ -155,7 +177,7 @@ namespace smmap
         return std::sqrt(GripperVelocity6dSquaredNorm(gripper_velocity));
     }
 
-    inline double MultipleGrippersVelocity6dSquaredNorm(const AllGrippersSingleVelocity& grippers_velocity)
+    inline double MultipleGrippersVelocity6dSquaredNorm(const AllGrippersSinglePoseDelta& grippers_velocity)
     {
         double squared_norm = 0;
         for (size_t gripper_ind = 0; gripper_ind < grippers_velocity.size(); gripper_ind++)
@@ -177,7 +199,7 @@ namespace smmap
         return squared_norm;
     }
 
-    inline double MultipleGrippersVelocity6dNorm(const AllGrippersSingleVelocity& grippers_velocity)
+    inline double MultipleGrippersVelocity6dNorm(const AllGrippersSinglePoseDelta& grippers_velocity)
     {
         return std::sqrt(MultipleGrippersVelocity6dSquaredNorm(grippers_velocity));
     }
@@ -187,7 +209,7 @@ namespace smmap
         return std::sqrt(MultipleGrippersVelocity6dSquaredNorm(grippers_velocity));
     }
 
-    inline double MultipleGrippersVelocityTrajectory6dSquaredNorm(const AllGrippersVelocityTrajectory& grippers_trajectory)
+    inline double MultipleGrippersVelocityTrajectory6dSquaredNorm(const AllGrippersPoseDeltaTrajectory& grippers_trajectory)
     {
         double squared_norm = 0;
         for (size_t time_ind = 0; time_ind < grippers_trajectory.size(); time_ind++)
@@ -198,24 +220,41 @@ namespace smmap
         return squared_norm;
     }
 
-    inline double MultipleGrippersVelocityTrajectory6dNorm(const AllGrippersVelocityTrajectory& grippers_trajectory)
+    inline double MultipleGrippersVelocityTrajectory6dNorm(const AllGrippersPoseDeltaTrajectory& grippers_trajectory)
     {
         return std::sqrt(MultipleGrippersVelocityTrajectory6dSquaredNorm(grippers_trajectory));
     }
 
-    inline void ClampGripperVelocities(Eigen::VectorXd& velocities, const double max_vel)
+    inline Eigen::VectorXd ClampGripperPoseDeltas(Eigen::VectorXd velocities, const double max_pose_delta)
     {
         assert(velocities.size() % 6 == 0);
-
-        for (long gripper_ind = 0; gripper_ind < velocities.size(); gripper_ind += 6)
+        for (ssize_t vel_ind = 0; vel_ind < velocities.size(); vel_ind += 6)
         {
-            const double velocity_norm = GripperVelocity6dNorm(velocities.segment<6>(gripper_ind));
-            if (velocity_norm > max_vel)
+            const double velocity_norm = GripperVelocity6dNorm(velocities.segment<6>(vel_ind));
+            if (velocity_norm > max_pose_delta)
             {
-                velocities.segment<6>(gripper_ind) *= max_vel / velocity_norm;
+                velocities.segment<6>(vel_ind) *= max_pose_delta / velocity_norm;
             }
         }
+        return velocities;
+    }
 
+    inline AllGrippersSinglePoseDelta ClampGripperPoseDeltas(AllGrippersSinglePoseDelta pose_deltas, const double max_delta)
+    {
+        for (size_t gripper_ind = 0; gripper_ind < pose_deltas.size(); gripper_ind++)
+        {
+            pose_deltas[gripper_ind] = ClampGripperPoseDeltas(pose_deltas[gripper_ind], max_delta);
+        }
+        return pose_deltas;
+    }
+
+    inline AllGrippersPoseDeltaTrajectory ClampGripperPoseDeltas(AllGrippersPoseDeltaTrajectory pose_deltas, const double max_delta)
+    {
+        for (size_t time_ind = 0; time_ind < pose_deltas.size(); time_ind++)
+        {
+            pose_deltas[time_ind] = ClampGripperPoseDeltas(pose_deltas[time_ind], max_delta);
+        }
+        return pose_deltas;
     }
 }
 

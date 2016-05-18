@@ -44,6 +44,14 @@ namespace smmap
             const TaskExecuteGripperTrajectoryFunctionType execute_trajectory_fn_;
 
             ////////////////////////////////////////////////////////////////////
+            // Logging and visualization functionality
+            ////////////////////////////////////////////////////////////////////
+
+            ros::NodeHandle ph_;
+            const LoggingFunctionType logging_fn_;
+            Visualizer& vis_;
+
+            ////////////////////////////////////////////////////////////////////
             // Model list management
             ////////////////////////////////////////////////////////////////////
 
@@ -51,6 +59,8 @@ namespace smmap
             const double dt_;
             std::vector<DeformableModel::Ptr> model_list_;
             KalmanFilterMultiarmBandit<std::mt19937_64> model_utility_bandit_;
+            const double process_noise_factor_;
+            const double observation_noise_factor_;
             std::mt19937_64 generator_;
 
             void updateModels(const WorldState& starting_world_state,
@@ -71,13 +81,6 @@ namespace smmap
             Eigen::MatrixXd calculateObservationNoise(
                     const Eigen::MatrixXd& process_noise,
                     ssize_t model_used);
-
-            ////////////////////////////////////////////////////////////////////
-            // Logging and visualization functionality
-            ////////////////////////////////////////////////////////////////////
-
-            const LoggingFunctionType logging_fn_;
-            Visualizer& vis_;
 
             ////////////////////////////////////////////////////////////////////
             // Internal helpers for the getNextTrajectory() function

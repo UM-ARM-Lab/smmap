@@ -9,9 +9,18 @@
 namespace smmap
 {
     typedef std::function<double(
-            const ObjectPointSet&                   /* Object configuration */
+            const ObjectPointSet& object_current_state
             )>
     ErrorFunctionType;
+
+    /* Derivitive of error with respect to grippers pose deltas */
+    typedef std::function<Eigen::VectorXd(
+            const WorldState& world_initial_state,
+            const AllGrippersPoseTrajectory& gripper_pose_trajectory,
+            const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
+            const double dt
+            )>
+    ErrorFunctionDerivitiveType;
 
     typedef std::function<std::vector<CollisionData>(
             const AllGrippersSinglePose&            /* Gripper poses to test for collision */
@@ -22,6 +31,14 @@ namespace smmap
             const WorldState&                       /* current world state */
             )>
     TaskDesiredObjectDeltaFunctionType;
+
+    typedef std::function<ObjectPointSet(
+            const WorldState& world_initial_state,
+            const AllGrippersPoseTrajectory& gripper_pose_trajectory,
+            const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
+            const double dt
+            )>
+    ObjectFinalConfigurationPredictionFunctionType;
 
     typedef std::function<Eigen::MatrixXd(
             const ObjectPointSet&,                  /* current object state */

@@ -6,6 +6,8 @@
 
 #include <arc_utilities/pretty_print.hpp>
 
+#include "smmap/optimization.hpp"
+
 using namespace smmap;
 using namespace EigenHelpersConversions;
 
@@ -20,18 +22,22 @@ using namespace EigenHelpersConversions;
  * @param vis
  * @param dt
  */
-Planner::Planner(const ErrorFunctionType& error_fn,
-                  const TaskExecuteGripperTrajectoryFunctionType& execute_trajectory_fn,
-                  const LoggingFunctionType& logging_fn,
-                  Visualizer& vis,
-                  const double dt)
+Planner::Planner(
+        const ErrorFunctionType& error_fn,
+        const TaskExecuteGripperTrajectoryFunctionType& execute_trajectory_fn,
+        const LoggingFunctionType& logging_fn,
+        Visualizer& vis,
+        const double dt)
     : error_fn_(error_fn)
     , execute_trajectory_fn_(execute_trajectory_fn)
-    , dt_(dt)
-    , generator_(0xa8710913d2b5df6c) // a30cd67f3860ddb3) // MD5 sum of "Dale McConachie"
-//    , generator_(std::chrono::system_clock::now().time_since_epoch().count())
+    , ph_("~")
     , logging_fn_(logging_fn)
     , vis_(vis)
+    , dt_(dt)
+    , process_noise_factor_(GetProcessNoiseFactor(ph_))
+    , observation_noise_factor_(GetObservationNoiseFactor(ph_))
+    , generator_(0xa8710913d2b5df6c) // a30cd67f3860ddb3) // MD5 sum of "Dale McConachie"
+//    , generator_(std::chrono::system_clock::now().time_since_epoch().count())
 {}
 
 void Planner::addModel(DeformableModel::Ptr model)
@@ -80,6 +86,40 @@ std::vector<WorldState> Planner::sendNextTrajectory(
                 dt_,
                 max_gripper_velocity,
                 obstacle_avoidance_scale);
+
+        ObjectFinalConfigurationPredictionFunctionType prediction_fn = std::bind(
+                    &DeformableModel::getFinalConfiguration,
+                    model_list_[model_ind],
+                    std::placeholders::_1,
+                    std::placeholders::_2,
+                    std::placeholders::_3,
+                    std::placeholders::_4);
+
+        ErrorFunctionDerivitiveType derivitive_fn = std::bind(
+                    &ErrorFunctionNumericalDerivitive,
+                    std::placeholders::_1,
+                    std::placeholders::_2,
+                    std::placeholders::_3,
+                    error_fn_,
+                    prediction_fn,
+                    std::placeholders::_4);
+
+        AllGrippersPoseTrajectory optimized_grippers_pose_traj =
+                OptimizeTrajectoryDirectShooting(
+                    current_world_state,
+                    suggested_trajectories[model_ind].first,
+                    error_fn_,
+                    derivitive_fn,
+                    prediction_fn,
+                    max_gripper_velocity * dt_,
+                    dt_ );
+
+        suggested_trajectories[model_ind].first = optimized_grippers_pose_traj;
+        suggested_trajectories[model_ind].second = model_list_[model_ind]->getPrediction(
+                    current_world_state,
+                    optimized_grippers_pose_traj,
+                    CalculateGrippersPoseDeltas(optimized_grippers_pose_traj),
+                    dt_);
     }
 
     // Pick an arm to use
@@ -127,15 +167,10 @@ void Planner::updateModels(
     const Eigen::MatrixXd observation_matrix = Eigen::MatrixXd::Identity((ssize_t)model_list_.size(), (ssize_t)model_list_.size());
     const Eigen::MatrixXd observation_noise = calculateObservationNoise(process_noise, model_used);
 
-    // Perform the Kalman update
-    #warning "Bandit variance magic numbers here"
-    ros::NodeHandle ph("~");
-//    const double current_reward_scale_factor = std::sqrt(std::abs(observed_reward(model_used))) + 1e-10;
-
     // TODO: Make this a low pass filter on abs reward?
     const double current_reward_scale_factor = std::pow(std::abs(observed_reward(model_used)), 1.0) + 1e-10;
-    const double process_noise_scaling_factor = ROSHelpers::GetParam(ph, "process_noise_factor", 0.001) * current_reward_scale_factor;
-    const double observation_noise_scaling_factor = ROSHelpers::GetParam(ph, "observation_noise_factor", 0.001) * current_reward_scale_factor;
+    const double process_noise_scaling_factor = process_noise_factor_ * current_reward_scale_factor;
+    const double observation_noise_scaling_factor = observation_noise_factor_ * current_reward_scale_factor;
     model_utility_bandit_.updateArms(
                 process_noise_scaling_factor * process_noise,
                 observation_matrix,
@@ -384,118 +419,5 @@ std::pair<Eigen::VectorXd, Eigen::MatrixXd> Planner::combineModelDerivitives(
     }
 
     return weighted_average_derivitive;
-}
-
-std::vector<AllGrippersSinglePose> Planner::optimizeTrajectoryDirectShooting(
-        const WorldFeedback& current_world_configuration,
-        std::vector<AllGrippersSinglePose> grippers_trajectory,
-        double dt) const
-{
-    ROS_INFO_NAMED("planner" , "Using direct shooting to optimize the trajectory");
-
-    // TODO: move these magic numbers elsewhere
-    #warning "Magic numbers here need to be moved elsewhere"
-    const int MAX_ITTR = 1000;
-    const double LEARNING_RATE = 0.1;
-    const double TOLERANCE = 1e-6;
-
-    double objective_delta = std::numeric_limits<double>::infinity();
-
-    std::vector<AllGrippersSingleVelocity> grippers_velocities =
-            CalculateGrippersVelocities(grippers_trajectory, dt);
-
-    std::function<double(const ObjectPointSet&)> objective_function =
-            std::bind(&Task::calculateError, task_.get(), std::placeholders::_1);
-
-    double objective_value = objective_function(
-                combineModelPredictionsLastTimestep(
-                     model_set_->makePredictions(
-                         current_world_configuration,
-                         grippers_trajectory,
-                         grippers_velocities,
-                         dt)));
-
-    int ittr = 0;
-    do
-    {
-        ROS_INFO_STREAM_NAMED("planner" , "  Direct shooting itteration " << ittr << ". Current objective value " << objective_value);
-
-        // Find the first derivitive of the objective function with
-        // respect to the gripper velocities
-        Eigen::VectorXd derivitive =
-                combineModelDerivitives(
-                    model_set_->getObjectiveFunction1stDerivitive(
-                        current_world_configuration,
-                        grippers_trajectory,
-                        grippers_velocities,
-                        dt,
-                        objective_function));
-
-        Eigen::VectorXd velocity_update = -derivitive;
-
-//        auto derivitives =
-//                model_set_->getObjectiveFunction2ndDerivitive(
-//                    current_world_configuration,
-//                    grippers_trajectory,
-//                    grippers_velocities,
-//                    dt,
-//                    objective_function)[0];
-
-//        // Update the gripper velocities based on a Newton style gradient descent
-//        Eigen::VectorXd velocity_update = derivitives.second.colPivHouseholderQr().solve(-derivitives.first);
-
-        // create a new velocity and trajectory to test
-        std::vector<AllGrippersSingleVelocity> test_grippers_velocities = grippers_velocities;
-        for (size_t time_ind = 0; time_ind < test_grippers_velocities.size(); time_ind++)
-        {
-            for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
-            {
-                test_grippers_velocities[time_ind][gripper_ind] += LEARNING_RATE *
-                        velocity_update.segment<6>(
-                            (long)(time_ind * grippers_data_.size() * 6 +
-                                    gripper_ind * 6));
-
-                if (GripperVelocity6dNorm(test_grippers_velocities[time_ind][gripper_ind]) > MAX_GRIPPER_VELOCITY)
-                {
-                    test_grippers_velocities[time_ind][gripper_ind] *=
-                            MAX_GRIPPER_VELOCITY / GripperVelocity6dNorm(test_grippers_velocities[time_ind][gripper_ind]);
-                }
-            }
-        }
-
-        // Update the trajectory of the grippers based on the new velocities
-        std::vector<AllGrippersSinglePose> test_grippers_trajectory = CalculateGrippersTrajectory(
-                    grippers_trajectory[0],
-                    test_grippers_velocities,
-                    dt);
-
-        // Calculate the new value of the objective function at the updated velocity
-        // locations
-        double new_objective_value = objective_function(
-                    combineModelPredictionsLastTimestep(
-                        model_set_->makePredictions(
-                            current_world_configuration,
-                            test_grippers_trajectory,
-                            test_grippers_velocities,
-                            dt)));
-
-        objective_delta = new_objective_value - objective_value;
-        objective_value = new_objective_value;
-
-        // TODO: clean up this code to be more efficient
-        //       only need to update the result traj after the last step
-        if (objective_delta < TOLERANCE)
-        {
-            grippers_velocities = test_grippers_velocities;
-            grippers_trajectory = test_grippers_trajectory;
-        }
-
-        ittr++;
-    }
-    while (ittr < MAX_ITTR  && objective_delta < TOLERANCE && std::abs(objective_delta) > objective_value * TOLERANCE);
-
-    ROS_INFO_STREAM_NAMED("planner" , "  Direct shooting final objective value " << objective_value);
-
-    return grippers_trajectory;
 }
 */

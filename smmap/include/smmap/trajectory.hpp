@@ -128,7 +128,7 @@ namespace smmap
 
         AllGrippersPoseDeltaTrajectory grippers_pose_delta_traj(
                     grippers_trajectory.size() - 1,
-                    AllGrippersSingleVelocity(num_grippers));
+                    AllGrippersSinglePoseDelta(num_grippers));
 
         for (size_t time_ind = 0; time_ind < grippers_pose_delta_traj.size(); time_ind++)
         {
@@ -147,30 +147,28 @@ namespace smmap
     /**
      * @brief CalculateGrippersTrajectory
      * @param grippers_initial_pose
-     * @param grippers_velocities
-     * @param dt
+     * @param grippers_pose_deltas
      * @return
      */
     inline AllGrippersPoseTrajectory CalculateGrippersTrajectory(
             const AllGrippersSinglePose& grippers_initial_pose,
-            const AllGrippersVelocityTrajectory& grippers_velocities,
-            const double dt)
+            const AllGrippersPoseDeltaTrajectory& grippers_pose_deltas)
     {
         const size_t num_grippers = grippers_initial_pose.size();
 
         AllGrippersPoseTrajectory grippers_pose_trajectory(
-                    grippers_velocities.size() + 1,
+                    grippers_pose_deltas.size() + 1,
                     AllGrippersSinglePose(num_grippers));
 
         grippers_pose_trajectory[0] = grippers_initial_pose;
 
-        for (size_t time_ind = 0; time_ind < grippers_velocities.size(); time_ind++)
+        for (size_t time_ind = 0; time_ind < grippers_pose_deltas.size(); time_ind++)
         {
             for (size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind ++)
             {
                 grippers_pose_trajectory[time_ind+1][gripper_ind] =
                         grippers_pose_trajectory[time_ind][gripper_ind] *
-                        kinematics::expTwistAffine3d(grippers_velocities[time_ind][gripper_ind], dt);
+                        kinematics::expTwistAffine3d(grippers_pose_deltas[time_ind][gripper_ind], 1);
             }
         }
 
