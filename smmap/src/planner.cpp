@@ -87,43 +87,45 @@ std::vector<WorldState> Planner::sendNextTrajectory(
                 max_gripper_velocity,
                 obstacle_avoidance_scale);
 
-        ObjectFinalConfigurationPredictionFunctionType prediction_fn = std::bind(
-                    &DeformableModel::getFinalConfiguration,
-                    model_list_[model_ind],
-                    std::placeholders::_1,
-                    std::placeholders::_2,
-                    std::placeholders::_3,
-                    std::placeholders::_4);
+//        ObjectFinalConfigurationPredictionFunctionType prediction_fn = std::bind(
+//                    &DeformableModel::getFinalConfiguration,
+//                    model_list_[model_ind],
+//                    std::placeholders::_1,
+//                    std::placeholders::_2,
+//                    std::placeholders::_3,
+//                    std::placeholders::_4);
 
-        ErrorFunctionDerivitiveType derivitive_fn = std::bind(
-                    &ErrorFunctionNumericalDerivitive,
-                    std::placeholders::_1,
-                    std::placeholders::_2,
-                    std::placeholders::_3,
-                    error_fn_,
-                    prediction_fn,
-                    std::placeholders::_4);
+//        ErrorFunctionDerivitiveType derivitive_fn = std::bind(
+//                    &ErrorFunctionNumericalDerivitive,
+//                    std::placeholders::_1,
+//                    std::placeholders::_2,
+//                    std::placeholders::_3,
+//                    error_fn_,
+//                    prediction_fn,
+//                    std::placeholders::_4);
 
-        AllGrippersPoseTrajectory optimized_grippers_pose_traj =
-                OptimizeTrajectoryDirectShooting(
-                    current_world_state,
-                    suggested_trajectories[model_ind].first,
-                    error_fn_,
-                    derivitive_fn,
-                    prediction_fn,
-                    max_gripper_velocity * dt_,
-                    dt_ );
+//        AllGrippersPoseTrajectory optimized_grippers_pose_traj =
+//                OptimizeTrajectoryDirectShooting(
+//                    current_world_state,
+//                    suggested_trajectories[model_ind].first,
+//                    error_fn_,
+//                    derivitive_fn,
+//                    prediction_fn,
+//                    max_gripper_velocity * dt_,
+//                    dt_ );
 
-        suggested_trajectories[model_ind].first = optimized_grippers_pose_traj;
-        suggested_trajectories[model_ind].second = model_list_[model_ind]->getPrediction(
-                    current_world_state,
-                    optimized_grippers_pose_traj,
-                    CalculateGrippersPoseDeltas(optimized_grippers_pose_traj),
-                    dt_);
+//        suggested_trajectories[model_ind].first = optimized_grippers_pose_traj;
+//        suggested_trajectories[model_ind].second = model_list_[model_ind]->getPrediction(
+//                    current_world_state,
+//                    optimized_grippers_pose_traj,
+//                    CalculateGrippersPoseDeltas(optimized_grippers_pose_traj),
+//                    dt_);
     }
 
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
+    ROS_INFO_STREAM_NAMED("planner", "Using model index " << model_to_use);
+
     AllGrippersPoseTrajectory best_trajectory = suggested_trajectories[(size_t)model_to_use].first;
     best_trajectory.erase(best_trajectory.begin());
     // Execute the trajectory

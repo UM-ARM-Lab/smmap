@@ -6,6 +6,17 @@
 
 namespace smmap
 {
+    /**
+     * @brief OptimizeTrajectoryDirectShooting
+     * @param world_initial_state
+     * @param grippers_pose_trajectory
+     * @param error_fn_
+     * @param derivitive_fn_
+     * @param prediction_fn_
+     * @param max_gripper_delta
+     * @param dt
+     * @return
+     */
     inline AllGrippersPoseTrajectory OptimizeTrajectoryDirectShooting(
             const WorldState& world_initial_state,
             AllGrippersPoseTrajectory grippers_pose_trajectory,
@@ -15,12 +26,35 @@ namespace smmap
             const double max_gripper_delta,
             const double dt)
     {
+
+
+
+
+
+
+
+        // Disable optimization
+        return grippers_pose_trajectory;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         ROS_INFO_NAMED("optimization" , "Using direct shooting to optimize the trajectory");
 
         // TODO: move these magic numbers elsewhere
         #warning "direction shooting magic numbers here need to be moved elsewhere"
         const int MAX_ITTR = 1000;
-        const double LEARNING_RATE = 0.1;
+        const double LEARNING_RATE = 0.05;
         const double TOLERANCE = 1e-6;
 
         AllGrippersPoseDeltaTrajectory grippers_pose_deltas_trajectory =
@@ -56,8 +90,6 @@ namespace smmap
                             LEARNING_RATE * velocity_update),
                         max_gripper_delta);
 
-
-
             // Update the trajectory of the grippers based on the new velocities
             const AllGrippersPoseTrajectory test_grippers_pose_trajectory =
                     CalculateGrippersTrajectory(
@@ -66,7 +98,7 @@ namespace smmap
 
             // Calculate the new value of the objective function at the updated velocity
             // locations
-            const double new_objective_value =
+            const double new_error_value =
                     error_fn_(
                         prediction_fn_(
                             world_initial_state,
@@ -74,26 +106,36 @@ namespace smmap
                             test_grippers_pose_deltas_trajectory,
                             dt));
 
-            error_improvement = error_value - new_objective_value;
-            error_value = new_objective_value;
+            error_improvement = error_value - new_error_value;
 
-            // If we've reduced error (within some threshold), use the new velocity
-            if (error_improvement > -std::abs(error_value) * TOLERANCE)
+            // If we've reduced error, use the new trajectory
+            if (error_improvement > 0)
             {
                 grippers_pose_trajectory = test_grippers_pose_trajectory;
                 grippers_pose_deltas_trajectory = test_grippers_pose_deltas_trajectory;
+                error_value = new_error_value;
             }
 
             ittr++;
         }
         // Continue while we are still making meaningful improvement
-        while (ittr < MAX_ITTR  && std::abs(error_improvement) > std::abs(error_value) * TOLERANCE && error_improvement > -std::abs(error_value) * TOLERANCE );
+        while (ittr < MAX_ITTR  && error_improvement > std::abs(error_value) * TOLERANCE);
 
-        ROS_INFO_STREAM_NAMED("planner" , "  Direct shooting final objective value " << error_value);
+        ROS_INFO_STREAM_NAMED("planner" , "  Direct shooting final objective value                  " << error_value);
 
         return grippers_pose_trajectory;
     }
 
+    /**
+     * @brief ErrorFunctionNumericalDerivitive
+     * @param world_initial_state
+     * @param grippers_pose_trajectory
+     * @param grippers_pose_deltas_trajectory
+     * @param error_fn_
+     * @param prediction_fn_
+     * @param dt
+     * @return
+     */
     inline Eigen::VectorXd ErrorFunctionNumericalDerivitive(
             const WorldState& world_initial_state,
             AllGrippersPoseTrajectory grippers_pose_trajectory,
@@ -112,20 +154,20 @@ namespace smmap
         const double h = 1e-6;
 
         // Allocate some space to store the results of the differencing.
-        Eigen::VectorXd derivitives(num_timesteps * num_grippers * 6);
+        Eigen::VectorXd derivitives((ssize_t)(num_timesteps * num_grippers * 6));
 
         // Note that I am following the math found on the Finite difference page of
         // Wikipedia for "finite difference in several variables"
         // This loop fills out the Jacobian (first derivitive) of the objective function
         for (ssize_t ind = 0; ind < (ssize_t)(num_grippers * 6 * num_timesteps); ind++)
         {
-            const ssize_t time_ind = ind / (num_grippers * 6);
-            const ssize_t vel_ind = ind % (num_grippers * 6);
+            const ssize_t time_ind = ind / (ssize_t)(num_grippers * 6);
+            const ssize_t vel_ind = ind % (ssize_t)(num_grippers * 6);
             AllGrippersPoseDeltaTrajectory new_grippers_pose_deltas_trajectory(grippers_pose_deltas_trajectory);
             AllGrippersPoseTrajectory new_grippers_pose_trajectory;
 
             // f(x + h, y)
-            new_grippers_pose_deltas_trajectory[time_ind][vel_ind / 6](vel_ind  % 6) += h;
+            new_grippers_pose_deltas_trajectory[(size_t)time_ind][(size_t)vel_ind / 6](vel_ind  % 6) += h;
             new_grippers_pose_trajectory = CalculateGrippersTrajectory(grippers_pose_trajectory[0], new_grippers_pose_deltas_trajectory);
             const ObjectPointSet object_config_x_plus_h =
                     prediction_fn_(world_initial_state,
@@ -136,7 +178,7 @@ namespace smmap
             new_grippers_pose_deltas_trajectory = grippers_pose_deltas_trajectory;
 
             // f(x - h, y)
-            new_grippers_pose_deltas_trajectory[time_ind][vel_ind / 6](vel_ind  % 6) -= h;
+            new_grippers_pose_deltas_trajectory[(size_t)time_ind][(size_t)vel_ind / 6](vel_ind  % 6) -= h;
             new_grippers_pose_trajectory = CalculateGrippersTrajectory(grippers_pose_trajectory[0], new_grippers_pose_deltas_trajectory);
             const ObjectPointSet object_config_x_minus_h =
                     prediction_fn_(world_initial_state,

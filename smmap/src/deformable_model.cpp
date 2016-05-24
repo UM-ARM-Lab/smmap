@@ -251,15 +251,18 @@ void DeformableModel::SetGrippersData(
 }
 
 std::atomic_bool DeformableModel::function_pointers_initialized_(false);
+ErrorFunctionType DeformableModel::error_fn_;
 GripperCollisionCheckFunctionType DeformableModel::gripper_collision_check_fn_;
 TaskDesiredObjectDeltaFunctionType DeformableModel::task_desired_object_delta_fn_;
 TaskObjectDeltaProjectionFunctionType DeformableModel::task_object_delta_projection_fn_;
 
 void DeformableModel::SetCallbackFunctions(
+        const ErrorFunctionType& error_fn,
         const GripperCollisionCheckFunctionType& gripper_collision_check_fn,
         const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn,
         const TaskObjectDeltaProjectionFunctionType& task_object_delta_projection_fn)
 {
+    error_fn_                           = error_fn;
     gripper_collision_check_fn_         = gripper_collision_check_fn;
     task_desired_object_delta_fn_       = task_desired_object_delta_fn;
     task_object_delta_projection_fn_    = task_object_delta_projection_fn;

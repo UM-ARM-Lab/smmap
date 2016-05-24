@@ -1,4 +1,5 @@
 #include "smmap/jacobian_model.h"
+#include "smmap/optimization.hpp"
 
 using namespace smmap;
 
@@ -126,10 +127,40 @@ JacobianModel::getSuggestedGrippersTrajectory(
 
         // Find the least-squares fitting to the desired object velocity
         #warning "More magic numbers - damping threshold and damping coefficient"
-        const Eigen::VectorXd grippers_velocity_achieve_goal =
+        Eigen::VectorXd grippers_delta_achieve_goal =
                 ClampGripperPoseDeltas(
                     EigenHelpers::WeightedLeastSquaresSolver(jacobian, desired_object_velocity.delta, desired_object_velocity.weight, 1e-3, 1e-2),
                     max_step_size);
+
+        ObjectFinalConfigurationPredictionFunctionType prediction_fn = std::bind(
+                    &DeformableModel::getFinalConfiguration,
+                    this,
+                    std::placeholders::_1,
+                    std::placeholders::_2,
+                    std::placeholders::_3,
+                    std::placeholders::_4);
+
+        ErrorFunctionDerivitiveType derivitive_fn = std::bind(
+                    &ErrorFunctionNumericalDerivitive,
+                    std::placeholders::_1,
+                    std::placeholders::_2,
+                    std::placeholders::_3,
+                    error_fn_,
+                    prediction_fn,
+                    std::placeholders::_4);
+
+        // Optimize using the least squares result as the seed
+        AllGrippersPoseTrajectory optimized_grippers_delta_traj = OptimizeTrajectoryDirectShooting(
+                    world_current_state,
+                    CalculateGrippersTrajectory(world_current_state.all_grippers_single_pose_, grippers_delta_achieve_goal),
+                    error_fn_,
+                    derivitive_fn,
+                    prediction_fn,
+                    max_step_size,
+                    dt);
+        // Confirm that we get only a single timestep output as we are only passing a single timestep in
+        assert(optimized_grippers_delta_traj.size() == 2);
+        Eigen::VectorXd optimized_grippers_delta = EigenHelpersConversions::VectorEigenVectorToEigenVectorX(CalculateGrippersPoseDeltas(optimized_grippers_delta_traj)[0]);
 
         // Find the collision avoidance data that we'll need
         const std::vector<CollisionAvoidanceResult> grippers_collision_avoidance_result =
@@ -143,17 +174,18 @@ JacobianModel::getSuggestedGrippersTrajectory(
         ////////////////////////////////////////////////////////////////////////
         for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
         {
-            const kinematics::Vector6d actual_gripper_velocity =
+            const kinematics::Vector6d actual_gripper_delta =
                     CombineDesiredAndObjectAvoidance(
-                        grippers_velocity_achieve_goal.segment<6>(gripper_ind * 6),
+//                        grippers_delta_achieve_goal.segment<6>(gripper_ind * 6),
+                        optimized_grippers_delta.segment<6>(gripper_ind * 6),
                         grippers_collision_avoidance_result[(size_t)gripper_ind],
                         obstacle_avoidance_scale);
 
             suggested_traj.first[(size_t)traj_step][(size_t)gripper_ind] =
                         suggested_traj.first[(size_t)traj_step - 1][(size_t)gripper_ind] *
-                        kinematics::expTwistAffine3d(actual_gripper_velocity, 1);
+                        kinematics::expTwistAffine3d(actual_gripper_delta, 1);
 
-            object_delta += jacobian.block(0, 6 * gripper_ind, num_nodes * 3, 6) * actual_gripper_velocity;
+            object_delta += jacobian.block(0, 6 * gripper_ind, num_nodes * 3, 6) * actual_gripper_delta;
         }
 
         // Store our prediction in the output data structure

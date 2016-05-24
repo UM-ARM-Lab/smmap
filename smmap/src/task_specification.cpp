@@ -117,19 +117,20 @@ Eigen::VectorXd TaskSpecification::projectObjectDelta(
 
 /**
  * @brief TaskSpecification::calculateStretchingCorrectionDelta
- * @param world_state
+ * @param object_configuration
  * @return
  */
 ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
-        const WorldState& world_state) const
+        const ObjectPointSet& object_configuration,
+        bool visualize) const
 {
     ObjectDeltaAndWeight stretching_correction (num_nodes_ * 3);
 
-    const Eigen::MatrixXd node_distance_delta =
-            CalculateDistanceMatrix(world_state.object_configuration_)
-            - object_initial_node_distance_;
+    const Eigen::MatrixXd node_squared_distance =
+            CalculateSquaredDistanceMatrix(object_configuration);
 
     const double stretching_correction_threshold = getStretchingScalingThreshold();
+
     EigenHelpers::VectorVector3d start_points;
     EigenHelpers::VectorVector3d end_points;
 
@@ -137,14 +138,15 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
     {
         for (long second_node = first_node + 1; second_node < num_nodes_; second_node++)
         {
-            if (node_distance_delta(first_node, second_node) > stretching_correction_threshold)
+            const double max_distance = stretching_correction_threshold + object_initial_node_distance_(first_node, second_node);
+            if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
             {
+                const double node_distance_delta = std::sqrt(node_squared_distance(first_node, second_node)) - object_initial_node_distance_(first_node, second_node);
                 // The correction vector points from the first node to the second node,
                 // and is half the length of the "extra" distance
-                const Eigen::Vector3d correction_vector = 0.5
-                        * node_distance_delta(first_node, second_node)
-                        * (world_state.object_configuration_.block<3, 1>(0, second_node)
-                            - world_state.object_configuration_.block<3, 1>(0, first_node));
+                const Eigen::Vector3d correction_vector = 0.5 * node_distance_delta
+                        * (object_configuration.block<3, 1>(0, second_node)
+                            - object_configuration.block<3, 1>(0, first_node));
 
                 stretching_correction.delta.segment<3>(3 * first_node) += correction_vector;
                 stretching_correction.delta.segment<3>(3 * second_node) -= correction_vector;
@@ -156,16 +158,19 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
                 stretching_correction.weight(3 * second_node + 1) += 1;
                 stretching_correction.weight(3 * second_node + 2) += 1;
 
-                start_points.push_back(world_state.object_configuration_.block<3, 1>(0, first_node));
-                end_points.push_back(world_state.object_configuration_.block<3, 1>(0, first_node) + correction_vector);
+                if (visualize)
+                {
+                    start_points.push_back(object_configuration.block<3, 1>(0, first_node));
+                    end_points.push_back(object_configuration.block<3, 1>(0, first_node) + correction_vector);
 
-                start_points.push_back(world_state.object_configuration_.block<3, 1>(0, second_node));
-                end_points.push_back(world_state.object_configuration_.block<3, 1>(0, first_node) - correction_vector);
+                    start_points.push_back(object_configuration.block<3, 1>(0, second_node));
+                    end_points.push_back(object_configuration.block<3, 1>(0, first_node) - correction_vector);
+                }
             }
         }
     }
 
-    if (start_points.size() > 0)
+    if (visualize && start_points.size() > 0)
     {
         std_msgs::ColorRGBA blue;
         blue.r = 0.0f;
@@ -180,6 +185,65 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
 //    stretching_correction.second /= (double)num_nodes_;
 
     return stretching_correction;
+}
+
+/**
+ * @brief TaskSpecification::calculateStretchingCorrectionDelta
+ * @param world_state
+ * @return
+ */
+ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
+        const WorldState& world_state,
+        bool visualize) const
+{
+    return calculateStretchingCorrectionDelta(world_state.object_configuration_, visualize);
+}
+
+/**
+ * @brief TaskSpecification::calculateStretchingError
+ * @param object_configuration
+ * @return
+ */
+double TaskSpecification::calculateStretchingError(
+        const ObjectPointSet& object_configuration) const
+{
+    const Eigen::MatrixXd node_squared_distance =
+            CalculateSquaredDistanceMatrix(object_configuration);
+
+    const double stretching_correction_threshold = getStretchingScalingThreshold();
+
+    ssize_t squared_error = 0;
+    #pragma omp parallel for reduction(+ : squared_error)
+    for (ssize_t first_node = 0; first_node < num_nodes_; first_node++)
+    {
+        // A node is never overstretched relative to itself, so we can start at the next node
+        int node_overstretches = 0;
+        for (ssize_t second_node = 0; second_node < num_nodes_; second_node++)
+        {
+            if (first_node != second_node)
+            {
+                const double max_distance = stretching_correction_threshold + object_initial_node_distance_(first_node, second_node);
+                if (node_squared_distance(first_node, second_node) > (max_distance * max_distance))
+                {
+                    node_overstretches++;
+                }
+            }
+        }
+        squared_error += node_overstretches * node_overstretches;
+    }
+
+    return std::sqrt((double)squared_error) / (double)(num_nodes_ * num_nodes_);
+}
+
+/**
+ * @brief TaskSpecification::calculateStretchingError
+ * @param world_state
+ * @return
+ */
+double TaskSpecification::calculateStretchingError(
+        const WorldState& world_state) const
+{
+    return calculateStretchingError(world_state.object_configuration_);
 }
 
 /**

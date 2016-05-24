@@ -70,11 +70,37 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             /**
+             * @brief calculateStretchingCorrectionDelta
+             * @param world_state
+             * @return
+             */
+            ObjectDeltaAndWeight calculateStretchingCorrectionDelta(
+                    const ObjectPointSet& object_configuration,
+                    bool visualize) const;
+
+            /**
              * @brief computeStretchingCorrection
              * @param object_configuration
              * @return
              */
             ObjectDeltaAndWeight calculateStretchingCorrectionDelta(
+                    const WorldState& world_state,
+                    bool visualize) const;
+
+            /**
+             * @brief calculateStretchingError
+             * @param object_configuration
+             * @return
+             */
+            double calculateStretchingError(
+                    const ObjectPointSet& object_configuration) const;
+
+            /**
+             * @brief calculateStretchingError
+             * @param world_state
+             * @return
+             */
+            double calculateStretchingError(
                     const WorldState& world_state) const;
 
             /**
@@ -100,7 +126,7 @@ namespace smmap
 
             Visualizer vis_;
             const Eigen::MatrixXd object_initial_node_distance_;
-            const long num_nodes_;
+            const ssize_t num_nodes_;
 
         private:
             ////////////////////////////////////////////////////////////////////////////////

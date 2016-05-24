@@ -174,6 +174,110 @@ namespace smmap
     }
 
     ////////////////////////////////////////////////////////////////////////////
+    // Conversion functions
+    ////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * @brief CalculateGrippersPoseDeltas
+     * @param grippers_trajectory
+     * @return
+     */
+    inline AllGrippersPoseDeltaTrajectory CalculateGrippersPoseDeltas(
+            const AllGrippersPoseTrajectory& grippers_trajectory)
+    {
+        assert(grippers_trajectory.size() > 1);
+        const size_t num_grippers = grippers_trajectory[0].size();
+
+        AllGrippersPoseDeltaTrajectory grippers_pose_delta_traj(
+                    grippers_trajectory.size() - 1,
+                    AllGrippersSinglePoseDelta(num_grippers));
+
+        for (size_t time_ind = 0; time_ind < grippers_pose_delta_traj.size(); time_ind++)
+        {
+            for (size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+            {
+                grippers_pose_delta_traj[time_ind][gripper_ind] =
+                        kinematics::calculateError(
+                            grippers_trajectory[time_ind][gripper_ind],
+                            grippers_trajectory[time_ind + 1][gripper_ind]);
+            }
+        }
+
+        return grippers_pose_delta_traj;
+    }
+
+    /**
+     * @brief CalculateGrippersTrajectory
+     * @param grippers_initial_pose
+     * @param grippers_pose_deltas
+     * @return
+     */
+    inline AllGrippersPoseTrajectory CalculateGrippersTrajectory(
+            const AllGrippersSinglePose& grippers_initial_pose,
+            const AllGrippersPoseDeltaTrajectory& grippers_pose_deltas)
+    {
+        const size_t num_grippers = grippers_initial_pose.size();
+        const size_t num_timesteps = grippers_pose_deltas.size();
+
+        AllGrippersPoseTrajectory grippers_pose_trajectory(
+                    num_timesteps + 1,
+                    AllGrippersSinglePose(num_grippers));
+
+        grippers_pose_trajectory[0] = grippers_initial_pose;
+
+        for (size_t time_ind = 0; time_ind < num_timesteps; time_ind++)
+        {
+            for (size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind ++)
+            {
+                grippers_pose_trajectory[time_ind+1][gripper_ind] =
+                        grippers_pose_trajectory[time_ind][gripper_ind] *
+                        kinematics::expTwistAffine3d(grippers_pose_deltas[time_ind][gripper_ind], 1);
+            }
+        }
+
+        return grippers_pose_trajectory;
+    }
+
+    /**
+     * @brief CalculateGrippersTrajectory
+     * @param grippers_initial_pose
+     * @param grippers_pose_deltas
+     * @return
+     */
+    inline AllGrippersPoseTrajectory CalculateGrippersTrajectory(
+            const AllGrippersSinglePose &grippers_initial_pose,
+            const Eigen::VectorXd &grippers_pose_deltas)
+    {
+        const size_t num_grippers = grippers_initial_pose.size();
+        const size_t num_timesteps = (size_t)grippers_pose_deltas.size() / (num_grippers * 6);
+        assert((size_t)grippers_pose_deltas.size() % num_timesteps == 0);
+
+        AllGrippersPoseTrajectory grippers_pose_trajectory(
+                    num_timesteps + 1,
+                    AllGrippersSinglePose(num_grippers));
+
+        grippers_pose_trajectory[0] = grippers_initial_pose;
+
+        for (size_t time_ind = 0; time_ind < num_timesteps; time_ind++)
+        {
+            for (size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind ++)
+            {
+                const kinematics::Vector6d gripper_delta =
+                        grippers_pose_deltas.segment<6>(
+                            (ssize_t)(time_ind * num_grippers * 6 + gripper_ind * 6));
+
+                grippers_pose_trajectory[time_ind+1][gripper_ind] =
+                        grippers_pose_trajectory[time_ind][gripper_ind] *
+                        kinematics::expTwistAffine3d(gripper_delta, 1);
+            }
+        }
+
+        return grippers_pose_trajectory;
+    }
+
+
+
+    ////////////////////////////////////////////////////////////////////////////
     // Norms induced by said dot products
     ////////////////////////////////////////////////////////////////////////////
 
@@ -480,13 +584,6 @@ namespace smmap
         }
         return result;
     }
-
-    inline AllGrippersPoseDeltaTrajectory EntireTrajectoryGripperAvoidance(
-            const WorldState& world_initial_state,
-            AllGrippersPoseDeltaTrajectory grippers_pose_deltas)
-    {
-    }
-
 }
 
 #endif // GRIPPERS_HPP

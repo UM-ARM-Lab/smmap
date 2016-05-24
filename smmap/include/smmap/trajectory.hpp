@@ -114,66 +114,6 @@ namespace smmap
         return grippers_trajectories;
     }
 
-    /**
-     * @brief CalculateGrippersPoseDeltas
-     * @param grippers_trajectory
-     * @return
-     */
-    inline AllGrippersPoseDeltaTrajectory CalculateGrippersPoseDeltas(
-            const AllGrippersPoseTrajectory& grippers_trajectory)
-    {
-        assert(grippers_trajectory.size() > 1);
-        const size_t num_grippers = grippers_trajectory[0].size();
-
-        AllGrippersPoseDeltaTrajectory grippers_pose_delta_traj(
-                    grippers_trajectory.size() - 1,
-                    AllGrippersSinglePoseDelta(num_grippers));
-
-        for (size_t time_ind = 0; time_ind < grippers_pose_delta_traj.size(); time_ind++)
-        {
-            for (size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
-            {
-                grippers_pose_delta_traj[time_ind][gripper_ind] =
-                        kinematics::calculateError(
-                            grippers_trajectory[time_ind][gripper_ind],
-                            grippers_trajectory[time_ind + 1][gripper_ind]);
-            }
-        }
-
-        return grippers_pose_delta_traj;
-    }
-
-    /**
-     * @brief CalculateGrippersTrajectory
-     * @param grippers_initial_pose
-     * @param grippers_pose_deltas
-     * @return
-     */
-    inline AllGrippersPoseTrajectory CalculateGrippersTrajectory(
-            const AllGrippersSinglePose& grippers_initial_pose,
-            const AllGrippersPoseDeltaTrajectory& grippers_pose_deltas)
-    {
-        const size_t num_grippers = grippers_initial_pose.size();
-
-        AllGrippersPoseTrajectory grippers_pose_trajectory(
-                    grippers_pose_deltas.size() + 1,
-                    AllGrippersSinglePose(num_grippers));
-
-        grippers_pose_trajectory[0] = grippers_initial_pose;
-
-        for (size_t time_ind = 0; time_ind < grippers_pose_deltas.size(); time_ind++)
-        {
-            for (size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind ++)
-            {
-                grippers_pose_trajectory[time_ind+1][gripper_ind] =
-                        grippers_pose_trajectory[time_ind][gripper_ind] *
-                        kinematics::expTwistAffine3d(grippers_pose_deltas[time_ind][gripper_ind], 1);
-            }
-        }
-
-        return grippers_pose_trajectory;
-    }
-
     inline Eigen::VectorXd CalculateObjectDeltaAsVector(
             const ObjectPointSet& start,
             const ObjectPointSet& end)
@@ -197,35 +137,49 @@ namespace smmap
     }
 
     /**
+     * @brief Computes the squared distance between each node in the given object
+     *
+     * @param obj The object to compute distances on
+     *
+     * @return The distances between each pair of nodes
+     */
+    // TODO: This is in the wrong spot
+    inline Eigen::MatrixXd CalculateSquaredDistanceMatrix(const ObjectPointSet& obj)
+    {
+        assert (obj.cols() > 0);
+        const ssize_t num_nodes = obj.cols();
+        Eigen::MatrixXd squared_dist(num_nodes, num_nodes);
+
+        #pragma omp parallel for schedule(guided)
+        for (ssize_t i = 0; i < num_nodes; i++)
+        {
+            for (ssize_t j = i; j < num_nodes; j++)
+            {
+                const double sq_dist = (obj.block< 3, 1>(0, i) - obj.block< 3, 1>(0, j)).squaredNorm();
+                squared_dist(i, j) = sq_dist;
+                squared_dist(j, i) = sq_dist;
+            }
+        }
+
+        return squared_dist;
+    }
+
+    /**
      * @brief Computes the distance between each node in the given object
      *
      * @param obj The object to compute distances on
      *
      * @return The distances between each pair of nodes
      */
+    // TODO: This is in the wrong spot
     inline Eigen::MatrixXd CalculateDistanceMatrix(const ObjectPointSet& obj)
     {
-        assert (obj.cols() > 0);
-        const long num_nodes = obj.cols();
-        Eigen::MatrixXd dist(num_nodes, num_nodes);
-
-        #pragma omp parallel for
-        for (long i = 0; i < num_nodes; i++)
-        {
-            for (long j = i; j < num_nodes; j++)
-            {
-                dist(i, j) =
-                    (obj.block< 3, 1>(0, i) - obj.block< 3, 1>(0, j)).squaredNorm();
-                dist(j, i) = dist(i, j);
-            }
-        }
-
-        return dist.cwiseSqrt();
+        return CalculateSquaredDistanceMatrix(obj).cwiseSqrt();
     }
 
     // TODO: vectorize this
     // TODO: use this for the coverage task error functions?
-    inline long closestPointInSet(const ObjectPointSet& obj,
+    inline ssize_t closestPointInSet(const ObjectPointSet& obj,
                                    const Eigen::Vector3d& point)
     {
         assert (obj.cols() > 0);
@@ -247,8 +201,8 @@ namespace smmap
 
     // TODO: vectorize this
     // TODO: use this for the coverage task error functions?
-    inline long closestPointInSet(const ObjectPointSet& obj,
-                                   Eigen::Vector3d&& point)
+    inline ssize_t closestPointInSet(const ObjectPointSet& obj,
+                                     Eigen::Vector3d&& point)
     {
         assert (obj.cols() > 0);
         long min_ind = 0;

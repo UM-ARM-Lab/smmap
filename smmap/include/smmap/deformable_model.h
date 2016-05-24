@@ -65,6 +65,7 @@ namespace smmap
             static void SetGrippersData(const std::vector<GripperData>& grippers_data);
 
             static void SetCallbackFunctions(
+                    const ErrorFunctionType& error_fn,
                     const GripperCollisionCheckFunctionType& gripper_collision_check_fn,
                     const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn,
                     const TaskObjectDeltaProjectionFunctionType& task_object_delta_projection_fn);
@@ -85,6 +86,7 @@ namespace smmap
             static std::vector<GripperData> grippers_data_;
 
             static std::atomic_bool function_pointers_initialized_;
+            static ErrorFunctionType error_fn_;
             static GripperCollisionCheckFunctionType gripper_collision_check_fn_;
             static TaskDesiredObjectDeltaFunctionType task_desired_object_delta_fn_;
             static TaskObjectDeltaProjectionFunctionType task_object_delta_projection_fn_;

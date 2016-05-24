@@ -167,7 +167,7 @@ namespace smmap
                 const double rope_radius = GetRopeRadius(nh);
 
                 #pragma omp parallel for
-                for (ssize_t point_ind = 0; point_ind < object_configuration.cols(); point_ind++)
+                for (ssize_t point_ind = 0; point_ind < num_nodes_; point_ind++)
                 {
                     const Eigen::Vector2d new_pos = object_configuration.block<2, 1>(0, point_ind)
                             + object_delta.segment<2>(point_ind * 3);
@@ -338,7 +338,7 @@ namespace smmap
                 const double table_z = GetTableSurfaceZ(nh);
 
                 #pragma omp parallel for
-                for (ssize_t point_ind = 0; point_ind < object_configuration.cols(); point_ind++)
+                for (ssize_t point_ind = 0; point_ind < num_nodes_; point_ind++)
                 {
                     const Eigen::Vector3d new_pos = object_configuration.col(point_ind)
                             + object_delta.segment<3>(point_ind * 3);
@@ -423,13 +423,14 @@ namespace smmap
             {
                 // for every cover point, find the nearest deformable object point
                 Eigen::VectorXd error(cover_points_.cols());
+                ssize_t num_nodes = current_configuration.cols();
                 #pragma omp parallel for
-                for (long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++)
+                for (ssize_t cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++)
                 {
                     const Eigen::Vector3d& cover_point = cover_points_.block<3, 1>(0, cover_ind);
 
                     double min_dist_squared = std::numeric_limits<double>::infinity();
-                    for (long cloth_ind = 0; cloth_ind < current_configuration.cols(); cloth_ind++)
+                    for (ssize_t cloth_ind = 0; cloth_ind < num_nodes; cloth_ind++)
                     {
                         const Eigen::Vector3d& cloth_point = current_configuration.block<3, 1>(0, cloth_ind);
                         const double new_dist_squared = (cover_point - cloth_point).squaredNorm();
@@ -446,7 +447,9 @@ namespace smmap
                     }
                 }
 
-                return error.sum();
+                const double stretching_error = 0;//calculateStretchingError(current_configuration);
+
+                return error.sum() + 1000000.0 * stretching_error;
             }
 
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
@@ -837,7 +840,7 @@ namespace smmap
                 const double table_z = GetTableSurfaceZ(nh);
 
                 #pragma omp parallel for
-                for (ssize_t point_ind = 0; point_ind < object_configuration.cols(); point_ind++)
+                for (ssize_t point_ind = 0; point_ind < num_nodes_; point_ind++)
                 {
                     const Eigen::Vector3d new_pos = object_configuration.col(point_ind)
                             + object_delta.segment<3>(point_ind * 3);

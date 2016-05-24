@@ -53,8 +53,7 @@ void Task::execute()
         std::mutex first_step_mtx;
 
         // Update our function callbacks for the models
-        TaskDesiredObjectDeltaFunctionType caching_task_desired_object_delta_fn =
-                [&](const WorldState& state)
+        TaskDesiredObjectDeltaFunctionType caching_task_desired_object_delta_fn = [&](const WorldState& state)
         {
             if (state.sim_time_ == current_world_state.sim_time_)
             {
@@ -75,7 +74,7 @@ void Task::execute()
                                 task_specification_->calculateObjectErrorCorrectionDelta(state);
 
                         first_step_stretching_correction =
-                                task_specification_->calculateStretchingCorrectionDelta(state);
+                                task_specification_->calculateStretchingCorrectionDelta(state, true);
 
                         first_step_desired_motion =
                                 task_specification_->combineErrorCorrectionAndStretchingCorrection(
@@ -92,9 +91,10 @@ void Task::execute()
             }
         };
 
-        DeformableModel::SetCallbackFunctions(gripper_collision_check_fn_,
-                                               caching_task_desired_object_delta_fn,
-                                               task_object_delta_projection_fn_);
+        DeformableModel::SetCallbackFunctions(error_fn_,
+                                              gripper_collision_check_fn_,
+                                              caching_task_desired_object_delta_fn,
+                                              task_object_delta_projection_fn_);
 
         world_feedback = planner_.sendNextTrajectory(
                     current_world_state,
@@ -119,9 +119,10 @@ void Task::execute()
                 colors);
 
 
-        if (task_specification_->maxTime() < world_feedback.back().sim_time_ - start_time)
+        if (world_feedback.back().sim_time_ - start_time > task_specification_->maxTime() )
+//        if (world_feedback.back().sim_time_ - start_time > 0.04)
         {
-//            robot_.shutdown();
+            robot_.shutdown();
         }
     }
 }
@@ -135,9 +136,10 @@ void Task::initializeModelSet()
     // Initialze each model type with the shared data
     DeformableModel::SetGrippersData(robot_.getGrippersData());
     // TODO: fix this interface so that I'm not passing a null ptr here
-    DeformableModel::SetCallbackFunctions(gripper_collision_check_fn_,
-                                           TaskDesiredObjectDeltaFunctionType(nullptr),
-                                           task_object_delta_projection_fn_);
+    DeformableModel::SetCallbackFunctions(error_fn_,
+                                          gripper_collision_check_fn_,
+                                          TaskDesiredObjectDeltaFunctionType(nullptr),
+                                          task_object_delta_projection_fn_);
     DiminishingRigidityModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
 
     // Create some models and add them to the model set
@@ -359,7 +361,6 @@ LoggingFunctionType Task::createLoggingFunction()
                       std::placeholders::_3,
                       std::placeholders::_4);
 }
-
 
 TaskObjectDeltaProjectionFunctionType Task::createTaskObjectDeltaProjectionFunction()
 {
