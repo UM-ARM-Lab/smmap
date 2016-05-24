@@ -722,7 +722,7 @@ namespace smmap
 
             virtual double maxTime_impl() const
             {
-                return 6.0;
+                return 24.0;
             }
 
             virtual void visualizeDeformableObject_impl(

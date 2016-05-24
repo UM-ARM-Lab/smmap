@@ -13,7 +13,7 @@ namespace smmap
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
-            JacobianModel();
+            JacobianModel(bool optimize);
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function overrides
@@ -72,6 +72,9 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
             // Private members
             ////////////////////////////////////////////////////////////////////
+
+            // Controls if we perform an optimization pass between the weighted pseudo inverse and the gripper collision avoidance
+            bool optimize_;
     };
 }
 

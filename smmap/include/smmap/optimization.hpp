@@ -26,29 +26,6 @@ namespace smmap
             const double max_gripper_delta,
             const double dt)
     {
-
-
-
-
-
-
-
-        // Disable optimization
-        return grippers_pose_trajectory;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         ROS_INFO_NAMED("optimization" , "Using direct shooting to optimize the trajectory");
 
         // TODO: move these magic numbers elsewhere

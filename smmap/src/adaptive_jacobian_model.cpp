@@ -11,8 +11,10 @@ using namespace smmap;
 
 AdaptiveJacobianModel::AdaptiveJacobianModel(
         const Eigen::MatrixXd& initial_jacobian,
-        const double learning_rate)
-    : current_jacobian_(initial_jacobian)
+        const double learning_rate,
+        const bool optimize)
+    : JacobianModel(optimize)
+    , current_jacobian_(initial_jacobian)
     , learning_rate_(learning_rate)
 {
     ROS_INFO_STREAM_NAMED("adaptive_jacobian", "Creating adaptive jacobian with learning rate " << learning_rate_);

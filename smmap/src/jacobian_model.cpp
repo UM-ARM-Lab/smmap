@@ -7,7 +7,8 @@ using namespace smmap;
 // Constructors and Destructor
 ////////////////////////////////////////////////////////////////////////////////
 
-JacobianModel::JacobianModel()
+JacobianModel::JacobianModel(bool optimize)
+    : optimize_(optimize)
 {}
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -44,6 +45,8 @@ ObjectTrajectory JacobianModel::getPrediction(
 
     return object_traj;
 }
+
+
 
 
 
@@ -149,18 +152,21 @@ JacobianModel::getSuggestedGrippersTrajectory(
                     prediction_fn,
                     std::placeholders::_4);
 
-        // Optimize using the least squares result as the seed
-        AllGrippersPoseTrajectory optimized_grippers_delta_traj = OptimizeTrajectoryDirectShooting(
-                    world_current_state,
-                    CalculateGrippersTrajectory(world_current_state.all_grippers_single_pose_, grippers_delta_achieve_goal),
-                    error_fn_,
-                    derivitive_fn,
-                    prediction_fn,
-                    max_step_size,
-                    dt);
-        // Confirm that we get only a single timestep output as we are only passing a single timestep in
-        assert(optimized_grippers_delta_traj.size() == 2);
-        Eigen::VectorXd optimized_grippers_delta = EigenHelpersConversions::VectorEigenVectorToEigenVectorX(CalculateGrippersPoseDeltas(optimized_grippers_delta_traj)[0]);
+        if (optimize_)
+        {
+            // Optimize using the least squares result as the seed
+            AllGrippersPoseTrajectory optimized_grippers_delta_traj = OptimizeTrajectoryDirectShooting(
+                        world_current_state,
+                        CalculateGrippersTrajectory(world_current_state.all_grippers_single_pose_, grippers_delta_achieve_goal),
+                        error_fn_,
+                        derivitive_fn,
+                        prediction_fn,
+                        max_step_size,
+                        dt);
+            // Confirm that we get only a single timestep output as we are only passing a single timestep in
+            assert(optimized_grippers_delta_traj.size() == 2);
+            grippers_delta_achieve_goal = EigenHelpersConversions::VectorEigenVectorToEigenVectorX(CalculateGrippersPoseDeltas(optimized_grippers_delta_traj)[0]);
+        }
 
         // Find the collision avoidance data that we'll need
         const std::vector<CollisionAvoidanceResult> grippers_collision_avoidance_result =
@@ -176,8 +182,7 @@ JacobianModel::getSuggestedGrippersTrajectory(
         {
             const kinematics::Vector6d actual_gripper_delta =
                     CombineDesiredAndObjectAvoidance(
-//                        grippers_delta_achieve_goal.segment<6>(gripper_ind * 6),
-                        optimized_grippers_delta.segment<6>(gripper_ind * 6),
+                        grippers_delta_achieve_goal.segment<6>(gripper_ind * 6),
                         grippers_collision_avoidance_result[(size_t)gripper_ind],
                         obstacle_avoidance_scale);
 

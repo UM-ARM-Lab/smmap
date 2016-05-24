@@ -168,13 +168,14 @@ void Task::initializeModelSet()
 
         for (double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step)
         {
-            double rot_deform = trans_deform;
+            const double rot_deform = trans_deform;
 //            for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
 //            {
                 planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-                                         DiminishingRigidityModel(
-                                             trans_deform,
-                                             rot_deform)));
+                                      DiminishingRigidityModel(
+                                          trans_deform,
+                                          rot_deform,
+                                          GetOptimizationEnabled(nh_))));
 //            }
         }
         ROS_INFO_STREAM_NAMED("task", "Num diminishing rigidity models: "
@@ -190,13 +191,10 @@ void Task::initializeModelSet()
         for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
         {
                 planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
-                                         AdaptiveJacobianModel(
-                                             DiminishingRigidityModel(
-                                                 task_specification_->getDeformability())
-                                             .getGrippersToObjectJacobian(
-                                                 robot_.getGrippersPose(),
-                                                 GetObjectInitialConfiguration(nh_)),
-                                             learning_rate)));
+                                      AdaptiveJacobianModel(
+                                          DiminishingRigidityModel(task_specification_->getDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+                                          learning_rate,
+                                          GetOptimizationEnabled(nh_))));
         }
         ROS_INFO_STREAM_NAMED("task", "Num adaptive Jacobian models: "
                                << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
@@ -204,13 +202,10 @@ void Task::initializeModelSet()
     else if (GetUseAdaptiveModel(ph_))
     {
                 planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
-                                         AdaptiveJacobianModel(
-                                             DiminishingRigidityModel(
-                                                 task_specification_->getDeformability())
-                                             .getGrippersToObjectJacobian(
-                                                 robot_.getGrippersPose(),
-                                                 GetObjectInitialConfiguration(nh_)),
-                                             GetAdaptiveModelLearningRate(ph_))));
+                                      AdaptiveJacobianModel(
+                                          DiminishingRigidityModel(task_specification_->getDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+                                          GetAdaptiveModelLearningRate(ph_),
+                                          GetOptimizationEnabled(nh_))));
     }
     else
     {
@@ -218,8 +213,9 @@ void Task::initializeModelSet()
                                << task_specification_->getDeformability());
 
         planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-                                 DiminishingRigidityModel(
-                                     task_specification_->getDeformability())));
+                              DiminishingRigidityModel(
+                                  task_specification_->getDeformability(),
+                                  GetOptimizationEnabled(nh_))));
 
 //        model_set_.addModel(std::make_shared<LeastSquaresJacobianModel>(
 //                                 LeastSquaresJacobianModel(

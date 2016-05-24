@@ -13,7 +13,8 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             LeastSquaresJacobianModel(const Eigen::MatrixXd& initial_jacobian,
-                                       const long extra_samples);
+                                      const long extra_samples,
+                                      const bool optimize);
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function overrides

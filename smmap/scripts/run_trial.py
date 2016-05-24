@@ -20,7 +20,7 @@ def run_trial(experiment,
     roslaunch_command = ["roslaunch", "smmap"]
 
     # Use the correct launch file
-    roslaunch_command.append(experiment + ".launch")
+    roslaunch_command.append("generic_experiment.launch task_type:=" + experiment)
 
     # Setup logging parameters
     if logging_enabled is not None:

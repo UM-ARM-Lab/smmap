@@ -1,3 +1,5 @@
+#include <arc_utilities/arc_exceptions.hpp>
+
 #include "smmap/task_specification.h"
 #include "smmap/task_specification_implementions.hpp"
 
@@ -49,8 +51,7 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
     }
     else
     {
-        ROS_FATAL("Invalid task and deformable pair in createErrorFunction(), this should not be possible");
-        throw new std::invalid_argument("Invalid task and deformable pair in createErrorFunction(), this should not be possible");
+        throw new arc_exceptions::invalid_argument("Invalid task and deformable pair in createErrorFunction(), this should not be possible", __FILE__, __LINE__);
     }
 }
 

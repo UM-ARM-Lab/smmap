@@ -20,11 +20,14 @@ namespace smmap
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
-            DiminishingRigidityModel(double deformability);
+            DiminishingRigidityModel(
+                    const double deformability,
+                    const bool optimize);
 
             DiminishingRigidityModel(
-                    double translation_deformability,
-                    double rotation_deformability);
+                    const double translation_deformability,
+                    const double rotation_deformability,
+                    const bool optimize);
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function overrides

@@ -1,7 +1,7 @@
 #include "smmap/diminishing_rigidity_model.h"
 
 #include <cmath>
-#include <stdexcept>
+#include <arc_utilities/arc_exceptions.hpp>
 
 using namespace smmap;
 
@@ -38,29 +38,32 @@ void DiminishingRigidityModel::SetInitialObjectConfiguration(
 // Constructors and Destructor
 ////////////////////////////////////////////////////////////////////////////////
 
-DiminishingRigidityModel::DiminishingRigidityModel(double deformability)
-    : DiminishingRigidityModel(deformability, deformability)
+DiminishingRigidityModel::DiminishingRigidityModel(
+        const double deformability,
+        const bool optimize)
+    : DiminishingRigidityModel(deformability, deformability, optimize)
 {}
 
 DiminishingRigidityModel::DiminishingRigidityModel(
-        double translation_deformability,
-        double rotation_deformability)
-    : translation_deformability_(translation_deformability)
+        const double translation_deformability,
+        const double rotation_deformability,
+        const bool optimize)
+    : JacobianModel(optimize)
+    , translation_deformability_(translation_deformability)
     , rotation_deformability_(rotation_deformability)
 {
     if (!static_data_initialized_.load())
     {
-        throw new std::runtime_error(
-                    "You must call SetInitialObjectConfiguration before constructing a DiminishingRigidityModel");
+        throw new arc_exceptions::runtime_error("You must call SetInitialObjectConfiguration before constructing a DiminishingRigidityModel", __FILE__, __LINE__);
     }
 
     if (translation_deformability < 0)
     {
-        throw new std::invalid_argument("translation_deformability must be >= 0");
+        throw new arc_exceptions::invalid_argument("translation_deformability must be >= 0", __FILE__, __LINE__);
     }
     if (rotation_deformability < 0)
     {
-        throw new std::invalid_argument("rotation_deformability must be >= 0");
+        throw new arc_exceptions::invalid_argument("rotation_deformability must be >= 0", __FILE__, __LINE__);
     }
 }
 

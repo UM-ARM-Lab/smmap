@@ -13,7 +13,8 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             AdaptiveJacobianModel(const Eigen::MatrixXd& initial_jacobian,
-                                   const double learning_rate);
+                                  const double learning_rate,
+                                  const bool optimize);
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function overrides
