@@ -17,6 +17,9 @@ namespace smmap
             RopeCylinderCoverage(ros::NodeHandle& nh)
                 : TaskSpecification(nh)
                 , cover_points_(GetCoverPoints(nh))
+                , cylinder_com_(GetCylinderCenterOfMassX(nh), GetCylinderCenterOfMassY(nh))
+                , cylinder_radius_(GetCylinderRadius(nh))
+                , rope_radius_(GetRopeRadius(nh))
             {}
 
         private:
@@ -156,15 +159,7 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     Eigen::VectorXd object_delta) const
             {
-                #warning "Rope cylinder projection function makes a lot of assumptions - movements are small, will only penetrate the sides, etc."
-
-                #warning "Cylinder location needs to be properly parameterized - constantly looking up ros params"
-                ros::NodeHandle nh;
-                Eigen::Vector2d cylinder_com;
-                cylinder_com << GetCylinderCenterOfMassX(nh), GetCylinderCenterOfMassY(nh);
-
-                const double cylinder_radius = GetCylinderRadius(nh);
-                const double rope_radius = GetRopeRadius(nh);
+                #pragma message "Rope cylinder projection function makes a lot of assumptions - movements are small, will only penetrate the sides, etc."
 
                 #pragma omp parallel for
                 for (ssize_t point_ind = 0; point_ind < num_nodes_; point_ind++)
@@ -172,11 +167,11 @@ namespace smmap
                     const Eigen::Vector2d new_pos = object_configuration.block<2, 1>(0, point_ind)
                             + object_delta.segment<2>(point_ind * 3);
 
-                    const Eigen::Vector2d vector_from_com = new_pos - cylinder_com;
-                    if (vector_from_com.norm() < cylinder_radius + rope_radius)
+                    const Eigen::Vector2d vector_from_com = new_pos - cylinder_com_;
+                    if (vector_from_com.norm() < cylinder_radius_ + rope_radius_)
                     {
-                        const Eigen::Vector2d adjusted_pos = cylinder_com +
-                                vector_from_com.normalized() * (cylinder_radius + rope_radius);
+                        const Eigen::Vector2d adjusted_pos = cylinder_com_ +
+                                vector_from_com.normalized() * (cylinder_radius_ + rope_radius_);
 
                         object_delta.segment<2>(point_ind * 3) =
                                 adjusted_pos - object_configuration.block<2, 1>(0, point_ind);
@@ -189,6 +184,15 @@ namespace smmap
         private:
             /// Stores the points that we are trying to cover with the rope
             const ObjectPointSet cover_points_;
+
+            /// Center of the cylinder in the plane defined by the table
+            const Eigen::Vector2d cylinder_com_;
+
+            /// Radious of the cylinder
+            const double cylinder_radius_;
+
+            /// Radius of the rope
+            const double rope_radius_;
     };
 
     /**
@@ -200,6 +204,11 @@ namespace smmap
             ClothCylinderCoverage(ros::NodeHandle& nh)
                 : TaskSpecification(nh)
                 , cover_points_(GetCoverPoints(nh))
+                , table_min_x_(GetTableSurfaceX(nh) - GetTableHalfExtentsX(nh))
+                , table_max_x_(GetTableSurfaceX(nh) + GetTableHalfExtentsX(nh))
+                , table_min_y_(GetTableSurfaceY(nh) - GetTableHalfExtentsY(nh))
+                , table_max_y_(GetTableSurfaceY(nh) + GetTableHalfExtentsY(nh))
+                , table_z_(GetTableSurfaceZ(nh))
             {}
 
         private:
@@ -324,18 +333,9 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     Eigen::VectorXd object_delta) const
             {
-                #warning "ClothCylinderCoverage projectOjbectDelta function is not written yet"
+                #pragma message "ClothCylinderCoverage projectOjbectDelta function is not written yet"
                 assert(false && "This function is not modified for this experiment yet");
-                #warning "Cloth Table projection function makes a lot of assumptions - movements are small, will only penetrate the top, etc."
-
-                #warning "Table location needs to be properly parameterized - constantly looking up ros params"
-                ros::NodeHandle nh;
-
-                const double table_min_x = GetTableSurfaceX(nh) - GetTableSizeX(nh);
-                const double table_max_x = GetTableSurfaceX(nh) + GetTableSizeX(nh);
-                const double table_min_y = GetTableSurfaceY(nh) - GetTableSizeY(nh);
-                const double table_max_y = GetTableSurfaceY(nh) + GetTableSizeY(nh);
-                const double table_z = GetTableSurfaceZ(nh);
+                #pragma message "Cloth Table projection function makes a lot of assumptions - movements are small, will only penetrate the top, etc."
 
                 #pragma omp parallel for
                 for (ssize_t point_ind = 0; point_ind < num_nodes_; point_ind++)
@@ -347,14 +347,14 @@ namespace smmap
                     // TODO: use Calder's SDF/collision resolution stuff?
 
                     // check if the new positition is in the same "vertical column" as the table
-                    if (table_min_x <= new_pos(0) && new_pos(0) <= table_max_x
-                         && table_min_y <= new_pos(1) && new_pos(1) <= table_max_y)
+                    if (table_min_x_ <= new_pos(0) && new_pos(0) <= table_max_x_
+                         && table_min_y_ <= new_pos(1) && new_pos(1) <= table_max_y_)
                     {
                         // Check if the new point position penetrated the object
                         // Note that I am only checking "downwards" penetratraion as this task should never even consider having the other type
-                        if (new_pos(2) < table_z)
+                        if (new_pos(2) < table_z_)
                         {
-                            object_delta(point_ind * 3 + 2) = table_z - object_configuration(2, point_ind);
+                            object_delta(point_ind * 3 + 2) = table_z_ - object_configuration(2, point_ind);
                         }
                     }
 
@@ -366,6 +366,12 @@ namespace smmap
         private:
             /// Stores the points that we are trying to cover with the cloth
             const ObjectPointSet cover_points_;
+
+            const double table_min_x_;
+            const double table_max_x_;
+            const double table_min_y_;
+            const double table_max_y_;
+            const double table_z_;
     };
 
     /**
@@ -377,6 +383,11 @@ namespace smmap
             ClothTableCoverage(ros::NodeHandle& nh)
                 : TaskSpecification(nh)
                 , cover_points_(GetCoverPoints(nh))
+                , table_min_x_(GetTableSurfaceX(nh) - GetTableHalfExtentsX(nh))
+                , table_max_x_(GetTableSurfaceX(nh) + GetTableHalfExtentsX(nh))
+                , table_min_y_(GetTableSurfaceY(nh) - GetTableHalfExtentsY(nh))
+                , table_max_y_(GetTableSurfaceY(nh) + GetTableHalfExtentsY(nh))
+                , table_z_(GetTableSurfaceZ(nh))
             {}
 
         private:
@@ -504,16 +515,7 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     Eigen::VectorXd object_delta) const
             {
-                #warning "Cloth Table projection function makes a lot of assumptions - movements are small, will only penetrate the top, etc."
-
-                #warning "Table location needs to be properly parameterized - constantly looking up ros params"
-                ros::NodeHandle nh;
-
-                const double table_min_x = GetTableSurfaceX(nh) - GetTableSizeX(nh);
-                const double table_max_x = GetTableSurfaceX(nh) + GetTableSizeX(nh);
-                const double table_min_y = GetTableSurfaceY(nh) - GetTableSizeY(nh);
-                const double table_max_y = GetTableSurfaceY(nh) + GetTableSizeY(nh);
-                const double table_z = GetTableSurfaceZ(nh);
+                #pragma message "Cloth Table projection function makes a lot of assumptions - movements are small, will only penetrate the top, etc."
 
                 #pragma omp parallel for
                 for (ssize_t point_ind = 0; point_ind < object_configuration.cols(); point_ind++)
@@ -525,14 +527,14 @@ namespace smmap
                     // TODO: use Calder's SDF/collision resolution stuff?
 
                     // check if the new positition is in the same "vertical column" as the table
-                    if (table_min_x <= new_pos(0) && new_pos(0) <= table_max_x
-                         && table_min_y <= new_pos(1) && new_pos(1) <= table_max_y)
+                    if (table_min_x_ <= new_pos(0) && new_pos(0) <= table_max_x_
+                         && table_min_y_ <= new_pos(1) && new_pos(1) <= table_max_y_)
                     {
                         // Check if the new point position penetrated the object
                         // Note that I am only checking "downwards" penetratraion as this task should never even consider having the other type
-                        if (new_pos(2) < table_z)
+                        if (new_pos(2) < table_z_)
                         {
-                            object_delta(point_ind * 3 + 2) = table_z - object_configuration(2, point_ind);
+                            object_delta(point_ind * 3 + 2) = table_z_ - object_configuration(2, point_ind);
                         }
                     }
 
@@ -544,6 +546,12 @@ namespace smmap
         private:
             /// Stores the points that we are trying to cover with the cloth
             const ObjectPointSet cover_points_;
+
+            const double table_min_x_;
+            const double table_max_x_;
+            const double table_min_y_;
+            const double table_max_y_;
+            const double table_z_;
     };
 
     /**
@@ -826,43 +834,10 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     Eigen::VectorXd object_delta) const
             {
-                #warning "ClothCylinderCoverage projectOjbectDelta function is not written yet"
+                #pragma message "ClothCylinderCoverage projectOjbectDelta function is not written yet"
                 assert(false && "This function is not modified for this experiment yet");
-                #warning "Cloth Table projection function makes a lot of assumptions - movements are small, will only penetrate the top, etc."
-
-                #warning "Table location needs to be properly parameterized - constantly looking up ros params"
-                ros::NodeHandle nh;
-
-                const double table_min_x = GetTableSurfaceX(nh) - GetTableSizeX(nh);
-                const double table_max_x = GetTableSurfaceX(nh) + GetTableSizeX(nh);
-                const double table_min_y = GetTableSurfaceY(nh) - GetTableSizeY(nh);
-                const double table_max_y = GetTableSurfaceY(nh) + GetTableSizeY(nh);
-                const double table_z = GetTableSurfaceZ(nh);
-
-                #pragma omp parallel for
-                for (ssize_t point_ind = 0; point_ind < num_nodes_; point_ind++)
-                {
-                    const Eigen::Vector3d new_pos = object_configuration.col(point_ind)
-                            + object_delta.segment<3>(point_ind * 3);
-
-                    // TODO: move out of the table sideways?
-                    // TODO: use Calder's SDF/collision resolution stuff?
-
-                    // check if the new positition is in the same "vertical column" as the table
-                    if (table_min_x <= new_pos(0) && new_pos(0) <= table_max_x
-                         && table_min_y <= new_pos(1) && new_pos(1) <= table_max_y)
-                    {
-                        // Check if the new point position penetrated the object
-                        // Note that I am only checking "downwards" penetratraion as this task should never even consider having the other type
-                        if (new_pos(2) < table_z)
-                        {
-                            object_delta(point_ind * 3 + 2) = table_z - object_configuration(2, point_ind);
-                        }
-                    }
-
-                }
-
-                return object_delta;
+                (void)object_delta;
+                (void)object_configuration;
             }
 
         private:

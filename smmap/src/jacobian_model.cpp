@@ -129,7 +129,7 @@ JacobianModel::getSuggestedGrippersTrajectory(
                 computeGrippersToObjectJacobian(suggested_traj.first[(size_t)traj_step-1], suggested_traj.second[(size_t)traj_step-1]);
 
         // Find the least-squares fitting to the desired object velocity
-        #warning "More magic numbers - damping threshold and damping coefficient"
+        #pragma message "More magic numbers - damping threshold and damping coefficient"
         Eigen::VectorXd grippers_delta_achieve_goal =
                 ClampGripperPoseDeltas(
                     EigenHelpers::WeightedLeastSquaresSolver(jacobian, desired_object_velocity.delta, desired_object_velocity.weight, 1e-3, 1e-2),

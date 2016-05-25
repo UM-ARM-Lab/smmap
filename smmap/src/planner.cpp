@@ -308,7 +308,7 @@ Eigen::MatrixXd Planner::calculateObservationNoise(
     for (ssize_t i = 0; i < num_models; i++)
     {
         // reuse dot products between true gripper movement and suggested gripper movement - as the model_used gripper movement is the same as the true gipper movement (right now)
-        #warning "This term needs to change when we work with a non-perfectly tracking robot"
+        #pragma message "This term needs to change when we work with a non-perfectly tracking robot"
         observation_noise(i, i) = std::exp(-process_noise(i, model_used));
     }
 

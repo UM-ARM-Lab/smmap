@@ -80,8 +80,7 @@ void Visualizer::visualizeGripper(
     (void)marker_name;
     (void)pose;
     (void)color;
-    #warning "Function not implemented here"
-    assert(false && "THIS IS NOT YET IMPLEMENTED");
+    assert(false && "Visualizer::visualizeGripper is not yet implemented.");
 }
 
 
