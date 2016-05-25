@@ -204,11 +204,6 @@ namespace smmap
             ClothCylinderCoverage(ros::NodeHandle& nh)
                 : TaskSpecification(nh)
                 , cover_points_(GetCoverPoints(nh))
-                , table_min_x_(GetTableSurfaceX(nh) - GetTableHalfExtentsX(nh))
-                , table_max_x_(GetTableSurfaceX(nh) + GetTableHalfExtentsX(nh))
-                , table_min_y_(GetTableSurfaceY(nh) - GetTableHalfExtentsY(nh))
-                , table_max_y_(GetTableSurfaceY(nh) + GetTableHalfExtentsY(nh))
-                , table_z_(GetTableSurfaceZ(nh))
             {}
 
         private:
@@ -335,43 +330,13 @@ namespace smmap
             {
                 #pragma message "ClothCylinderCoverage projectOjbectDelta function is not written yet"
                 assert(false && "This function is not modified for this experiment yet");
-                #pragma message "Cloth Table projection function makes a lot of assumptions - movements are small, will only penetrate the top, etc."
-
-                #pragma omp parallel for
-                for (ssize_t point_ind = 0; point_ind < num_nodes_; point_ind++)
-                {
-                    const Eigen::Vector3d new_pos = object_configuration.col(point_ind)
-                            + object_delta.segment<3>(point_ind * 3);
-
-                    // TODO: move out of the table sideways?
-                    // TODO: use Calder's SDF/collision resolution stuff?
-
-                    // check if the new positition is in the same "vertical column" as the table
-                    if (table_min_x_ <= new_pos(0) && new_pos(0) <= table_max_x_
-                         && table_min_y_ <= new_pos(1) && new_pos(1) <= table_max_y_)
-                    {
-                        // Check if the new point position penetrated the object
-                        // Note that I am only checking "downwards" penetratraion as this task should never even consider having the other type
-                        if (new_pos(2) < table_z_)
-                        {
-                            object_delta(point_ind * 3 + 2) = table_z_ - object_configuration(2, point_ind);
-                        }
-                    }
-
-                }
-
-                return object_delta;
+                (void)object_configuration;
+                (void)object_delta;
             }
 
         private:
             /// Stores the points that we are trying to cover with the cloth
             const ObjectPointSet cover_points_;
-
-            const double table_min_x_;
-            const double table_max_x_;
-            const double table_min_y_;
-            const double table_max_y_;
-            const double table_z_;
     };
 
     /**
@@ -834,7 +799,7 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     Eigen::VectorXd object_delta) const
             {
-                #pragma message "ClothCylinderCoverage projectOjbectDelta function is not written yet"
+                #pragma message "ClothWAFR projectOjbectDelta function is not written yet"
                 assert(false && "This function is not modified for this experiment yet");
                 (void)object_delta;
                 (void)object_configuration;

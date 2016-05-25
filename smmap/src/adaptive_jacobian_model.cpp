@@ -65,7 +65,10 @@ void AdaptiveJacobianModel::updateModel(const std::vector<WorldState>& feedback)
 }
 
 void AdaptiveJacobianModel::perturbModel(std::mt19937_64& generator)
-{}
+{
+    #pragma message "AdaptiveJacobianModel::perturbModel does nothing.  Is this correct?"
+    (void)generator;
+}
 
 ////////////////////////////////////////////////////////////////////
 // Computation helpers

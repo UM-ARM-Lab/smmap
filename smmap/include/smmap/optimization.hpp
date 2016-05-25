@@ -29,7 +29,7 @@ namespace smmap
         ROS_INFO_NAMED("optimization" , "Using direct shooting to optimize the trajectory");
 
         // TODO: move these magic numbers elsewhere
-        #pragma message "direction shooting magic numbers here need to be moved elsewhere"
+        #pragma message "Direct shooting magic numbers here need to be moved elsewhere"
         const int MAX_ITTR = 1000;
         const double LEARNING_RATE = 0.05;
         const double TOLERANCE = 1e-6;
@@ -127,7 +127,7 @@ namespace smmap
         const size_t num_grippers = grippers_pose_trajectory[0].size();
         assert(num_grippers > 0);
 
-        #pragma message "arbitrary step size for numeric differencing"
+        #pragma message "Arbitrary step size for numeric differencing"
         const double h = 1e-6;
 
         // Allocate some space to store the results of the differencing.

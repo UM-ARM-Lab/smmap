@@ -104,13 +104,13 @@ void Task::execute()
                     task_specification_->getCollisionScalingFactor());
 
         ssize_t num_nodes = current_world_state.object_configuration_.cols();
-        std::vector<std_msgs::ColorRGBA> colors(num_nodes);
+        std::vector<std_msgs::ColorRGBA> colors((size_t)num_nodes);
         for (size_t node_ind = 0; node_ind < (size_t)num_nodes; node_ind++)
         {
-            colors[node_ind].r = (float)first_step_desired_motion.weight(node_ind * 3);
+            colors[node_ind].r = (float)first_step_desired_motion.weight((ssize_t)node_ind * 3);
             colors[node_ind].g = 0.0f;
             colors[node_ind].b = 0.0f;
-            colors[node_ind].a = first_step_desired_motion.weight(node_ind * 3) > 0 ? 1.0f : 0.0f;
+            colors[node_ind].a = first_step_desired_motion.weight((ssize_t)node_ind * 3) > 0 ? 1.0f : 0.0f;
         }
         task_specification_->visualizeDeformableObject(
                 vis_,
@@ -152,9 +152,10 @@ void Task::initializeModelSet()
                                << rotational_deformability);
 
         planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-                                 DiminishingRigidityModel(
-                                     translational_deformability,
-                                     rotational_deformability)));
+                              DiminishingRigidityModel(
+                                  translational_deformability,
+                                  rotational_deformability,
+                                  GetOptimizationEnabled(nh_))));
     }
     else if (GetUseMultiModel(ph_))
     {

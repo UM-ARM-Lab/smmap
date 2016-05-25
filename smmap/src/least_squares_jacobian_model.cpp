@@ -81,7 +81,10 @@ void LeastSquaresJacobianModel::updateModel(const std::vector<WorldState>& feedb
 }
 
 void LeastSquaresJacobianModel::perturbModel(std::mt19937_64& generator)
-{}
+{
+    #pragma message "LeastSquaresJacobianModel::perturbModel does nothing.  Is this correct?"
+    (void)generator;
+}
 
 ////////////////////////////////////////////////////////////////////
 // Computation helpers
