@@ -15,7 +15,8 @@ def run_trial(experiment,
               kalman_parameters_override = None,
               process_noise_factor = None,
               observation_noise_factor = None,
-              feedback_covariance = None):
+              feedback_covariance = None,
+              start_bullet_viewer = "false"):
     # Constant values that we need
     roslaunch_command = ["roslaunch", "smmap"]
 
@@ -58,8 +59,11 @@ def run_trial(experiment,
     if feedback_covariance is not None:
         roslaunch_command.append('feedback_covariance:=' + str(feedback_covariance))
 
+    if start_bullet_viewer is not None:
+        roslaunch_command.append('start_bullet_viewer:=' + str(start_bullet_viewer))
+
     # Add any extra parameters that have been added
     roslaunch_command += sys.argv[1:]
     print " ".join(roslaunch_command), "\n"
 
-    subprocess.call(roslaunch_command)
+    subprocess.call(args=" ".join(roslaunch_command), shell=True)
