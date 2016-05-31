@@ -43,6 +43,7 @@ void Visualizer::visualizeRope(
     visualization_marker_pub_.publish(marker);
 }
 
+
 void Visualizer::visualizeCloth(
         const std::string& marker_name,
         const ObjectPointSet& cloth,
@@ -98,15 +99,15 @@ void Visualizer::visualizeObjectDelta(
     marker.scale.x = 0.1;
     marker.points.reserve((size_t)current.cols() * 2);
     marker.colors.reserve((size_t)current.cols() * 2);
-    for (long col = 0; col < current.cols(); col++)
+    for (ssize_t col = 0; col < current.cols(); col++)
     {
         color.r = 0;//(1.0 + std::cos(2*M_PI*(double)col/15.0)) / 3;
         color.g = 1;//(1.0 + std::cos(2*M_PI*(double)(col+5)/15.0)) / 3;
         color.b = 0;//(1.0 + std::cos(2*M_PI*double(col+10)/15.0)) / 3;
         color.a = 1;
 
-        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(current.block<3, 1>(0, col)));
-        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(desired.block<3, 1>(0, col)));
+        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(current.col(col)));
+        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(desired.col(col)));
         marker.colors.push_back(color);
         marker.colors.push_back(color);
     }

@@ -32,7 +32,6 @@ Task::Task(RobotInterface& robot,
     initializeLogging();
 }
 
-
 void Task::execute()
 {
     const int planning_horizion = GetPlanningHorizon(ph_);
@@ -127,9 +126,9 @@ void Task::execute()
     }
 }
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // Internal initialization helpers
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 void Task::initializeModelSet()
 {
@@ -165,7 +164,7 @@ void Task::initializeModelSet()
 
         const double deform_min = 0.0;
         const double deform_max = 25.0;
-        const double deform_step = 2.0;
+        const double deform_step = 4.0;
 
         for (double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step)
         {

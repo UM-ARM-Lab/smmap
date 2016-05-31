@@ -183,7 +183,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
 
     // Normalize the weights so that changing the number of nodes doesn't affect
     // the weights too much; i.e. minimize the effect of the level of discretization
-//    stretching_correction.second /= (double)num_nodes_;
+//    stretching_correction.weight /= (double)num_nodes_ / 20.0;
 
     return stretching_correction;
 }
@@ -269,7 +269,7 @@ ObjectDeltaAndWeight TaskSpecification::combineErrorCorrectionAndStretchingCorre
     for (long ind = 0; ind < num_nodes_ * 3; ind += 3)
     {
         const double stretching_importance =
-                1.0 - std::exp(-10.0*1e-3 * stretching_correction.weight(ind));
+                1.0 - std::exp(-10.0 * 1e-3 * stretching_correction.weight(ind));
 
         assert(stretching_importance >= 0.0);
         assert(stretching_importance <= 1.0);

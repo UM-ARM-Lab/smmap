@@ -33,7 +33,7 @@ namespace smmap
 
             virtual std::pair<AllGrippersPoseTrajectory, ObjectTrajectory> getSuggestedGrippersTrajectory(
                     const WorldState& world_initial_state,
-                    const int planning_horizion,
+                    const size_t planning_horizion,
                     const double dt,
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale) const override final;
