@@ -119,43 +119,43 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(
         const AllGrippersSinglePose& grippers_pose,
         const ObjectPointSet& current_configuration) const
 {
-    const long num_grippers = (long)grippers_pose.size();
-    const long num_Jcols = num_grippers * 6;
-    const long num_Jrows = num_nodes_ * 3;
+    const ssize_t num_grippers = (ssize_t)grippers_pose.size();
+    const ssize_t num_Jcols = num_grippers * 6;
+    const ssize_t num_Jrows = num_nodes_ * 3;
 
     Eigen::MatrixXd J(num_Jrows, num_Jcols);
 
     // for each gripper
-    for (long gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+    for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
     {
         // Get all the data we need for a given gripper
         const Eigen::Matrix3d& gripper_rot = grippers_pose[(size_t)gripper_ind].rotation();
 
-        for (long node_ind = 0; node_ind < num_nodes_; node_ind++)
+        for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
         {
-            // TODO: do I need to use the gripper_node_index that is returned by this function?
-            const std::pair<long, double> dist_to_gripper
-                = getMinimumDistanceToGripper(grippers_data_[(size_t)gripper_ind].node_indices,
+            const double dist_to_gripper =
+                    getMinimumDistanceToGripper(
+                        grippers_data_[(size_t)gripper_ind].node_indices,
                         node_ind, object_initial_node_distance_);
 
             const Eigen::Matrix3d& J_trans = gripper_rot;
 
             J.block<3, 3>(node_ind * 3, gripper_ind * 6) =
-                    std::exp(-translation_deformability_ * dist_to_gripper.second) * J_trans;
+                    std::exp(-translation_deformability_ * dist_to_gripper) * J_trans;
 
-            Eigen::Matrix3d J_rot;
-
-            // Vector from gripper to node
+            // Calculate the cross product between the grippers x, y, and z axes
+            // and the vector from the gripper to the node
             const Eigen::Vector3d gripper_to_node =
-                    current_configuration.block<3, 1>(0, node_ind) -
+                    current_configuration.col(node_ind) -
                     grippers_pose[(size_t)gripper_ind].translation();
 
-            J_rot.block<3, 1>(0, 0) = gripper_rot.block<3, 1>(0, 0).cross(gripper_to_node);
-            J_rot.block<3, 1>(0, 1) = gripper_rot.block<3, 1>(0, 1).cross(gripper_to_node);
-            J_rot.block<3, 1>(0, 2) = gripper_rot.block<3, 1>(0, 2).cross(gripper_to_node);
+            Eigen::Matrix3d J_rot;
+            J_rot.col(0) = gripper_rot.col(0).cross(gripper_to_node);
+            J_rot.col(1) = gripper_rot.col(1).cross(gripper_to_node);
+            J_rot.col(2) = gripper_rot.col(2).cross(gripper_to_node);
 
             J.block<3, 3>(node_ind * 3, gripper_ind * 6 + 3) =
-                    std::exp(-rotation_deformability_ * dist_to_gripper.second) * J_rot;
+                    std::exp(-rotation_deformability_ * dist_to_gripper) * J_rot;
         }
     }
 

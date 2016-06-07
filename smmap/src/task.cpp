@@ -73,7 +73,7 @@ void Task::execute()
                                 task_specification_->calculateObjectErrorCorrectionDelta(state);
 
                         first_step_stretching_correction =
-                                task_specification_->calculateStretchingCorrectionDelta(state, true);
+                                task_specification_->calculateStretchingCorrectionDelta(state, false);
 
                         first_step_desired_motion =
                                 task_specification_->combineErrorCorrectionAndStretchingCorrection(
@@ -117,8 +117,17 @@ void Task::execute()
                 AddObjectDelta(current_world_state.object_configuration_, first_step_desired_motion.delta),
                 colors);
 
+//        if (task_specification_->deformable_type_ == DeformableType::CLOTH)
+//        {
+            vis_.visualizeObjectDelta(
+                        "desired_position",
+                        current_world_state.object_configuration_,
+                        AddObjectDelta(current_world_state.object_configuration_, first_step_desired_motion.delta),
+                        Visualizer::Green());
+//        }
 
-        if (world_feedback.back().sim_time_ - start_time > task_specification_->maxTime() )
+
+        if (unlikely(world_feedback.back().sim_time_ - start_time > task_specification_->maxTime()))
 //        if (world_feedback.back().sim_time_ - start_time > 0.04)
         {
             robot_.shutdown();
@@ -168,15 +177,15 @@ void Task::initializeModelSet()
 
         for (double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step)
         {
-            const double rot_deform = trans_deform;
-//            for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
-//            {
+//            const double rot_deform = trans_deform;
+            for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
+            {
                 planner_.addModel(std::make_shared<DiminishingRigidityModel>(
                                       DiminishingRigidityModel(
                                           trans_deform,
                                           rot_deform,
                                           GetOptimizationEnabled(nh_))));
-//            }
+            }
         }
         ROS_INFO_STREAM_NAMED("task", "Num diminishing rigidity models: "
                                << std::floor((deform_max - deform_min) / deform_step));
@@ -185,19 +194,19 @@ void Task::initializeModelSet()
         // Adaptive jacobian models
         ////////////////////////////////////////////////////////////////////////
 
-        const double learning_rate_min = 1e-10;
-        const double learning_rate_max = 1.1e0;
-        const double learning_rate_step = 10.0;
-        for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
-        {
-                planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
-                                      AdaptiveJacobianModel(
-                                          DiminishingRigidityModel(task_specification_->getDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
-                                          learning_rate,
-                                          GetOptimizationEnabled(nh_))));
-        }
-        ROS_INFO_STREAM_NAMED("task", "Num adaptive Jacobian models: "
-                               << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
+//        const double learning_rate_min = 1e-10;
+//        const double learning_rate_max = 1.1e0;
+//        const double learning_rate_step = 10.0;
+//        for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
+//        {
+//                planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
+//                                      AdaptiveJacobianModel(
+//                                          DiminishingRigidityModel(task_specification_->getDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+//                                          learning_rate,
+//                                          GetOptimizationEnabled(nh_))));
+//        }
+//        ROS_INFO_STREAM_NAMED("task", "Num adaptive Jacobian models: "
+//                               << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
     }
     else if (GetUseAdaptiveModel(ph_))
     {

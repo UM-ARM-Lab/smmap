@@ -95,7 +95,7 @@ namespace smmap
                 return gripper_collision_checker_.gripperCollisionCheck(gripper_poses);
             }
 
-            static constexpr double MAX_GRIPPER_VELOCITY = 0.05/20.0/0.01;
+            static constexpr double MAX_GRIPPER_VELOCITY = 0.2;
 
         private:
             ////////////////////////////////////////////////////////////////////

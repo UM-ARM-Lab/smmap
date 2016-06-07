@@ -2,8 +2,85 @@
 
 using namespace smmap;
 
+////////////////////////////////////////////////////////////////////////////////
+//
+////////////////////////////////////////////////////////////////////////////////
+
+bool Visualizer::standard_colors_initialized_ = false;
+std_msgs::ColorRGBA Visualizer::red_;
+std_msgs::ColorRGBA Visualizer::green_;
+std_msgs::ColorRGBA Visualizer::blue_;
+std_msgs::ColorRGBA Visualizer::black_;
+std_msgs::ColorRGBA Visualizer::magenta_;
+
+void Visualizer::InitializeStandardColors()
+{
+    red_.r = 1.0;
+    red_.g = 0.0;
+    red_.b = 0.0;
+    red_.a = 1.0;
+
+    green_.r = 0.0;
+    green_.g = 1.0;
+    green_.b = 0.0;
+    green_.a = 1.0;
+
+    blue_.r = 0.0;
+    blue_.g = 0.0;
+    blue_.b = 1.0;
+    blue_.a = 1.0;
+
+    black_.r = 0.0;
+    black_.g = 0.0;
+    black_.b = 0.0;
+    black_.a = 1.0;
+
+    magenta_.r = 1.0f;
+    magenta_.g = 0.0f;
+    magenta_.b = 1.0f;
+    magenta_.a = 1.0f;
+
+    standard_colors_initialized_ = true;
+}
+
+std_msgs::ColorRGBA Visualizer::Red()
+{
+    assert(standard_colors_initialized_);
+    return red_;
+}
+
+std_msgs::ColorRGBA Visualizer::Green()
+{
+    assert(standard_colors_initialized_);
+    return green_;
+}
+
+std_msgs::ColorRGBA Visualizer::Blue()
+{
+    assert(standard_colors_initialized_);
+    return blue_;
+}
+
+std_msgs::ColorRGBA Visualizer::Black()
+{
+    assert(standard_colors_initialized_);
+    return black_;
+}
+
+std_msgs::ColorRGBA Visualizer::Magenta()
+{
+    assert(standard_colors_initialized_);
+    return magenta_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+////////////////////////////////////////////////////////////////////////////////
+
 Visualizer::Visualizer(ros::NodeHandle& nh)
 {
+    InitializeStandardColors();
+
     // Publish visualization request markers
     visualization_marker_pub_ =
             nh.advertise<visualization_msgs::Marker>(GetVisualizationMarkerTopic(nh), 10);
@@ -88,10 +165,10 @@ void Visualizer::visualizeGripper(
 void Visualizer::visualizeObjectDelta(
         const std::string& marker_name,
         const ObjectPointSet& current,
-        const ObjectPointSet& desired) const
+        const ObjectPointSet& desired,
+        const std_msgs::ColorRGBA& color) const
 {
     visualization_msgs::Marker marker;
-    std_msgs::ColorRGBA color;
 
     marker.type = visualization_msgs::Marker::LINE_LIST;
     marker.ns = marker_name;
@@ -101,11 +178,6 @@ void Visualizer::visualizeObjectDelta(
     marker.colors.reserve((size_t)current.cols() * 2);
     for (ssize_t col = 0; col < current.cols(); col++)
     {
-        color.r = 0;//(1.0 + std::cos(2*M_PI*(double)col/15.0)) / 3;
-        color.g = 1;//(1.0 + std::cos(2*M_PI*(double)(col+5)/15.0)) / 3;
-        color.b = 0;//(1.0 + std::cos(2*M_PI*double(col+10)/15.0)) / 3;
-        color.a = 1;
-
         marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(current.col(col)));
         marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(desired.col(col)));
         marker.colors.push_back(color);

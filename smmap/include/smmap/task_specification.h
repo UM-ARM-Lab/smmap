@@ -10,6 +10,23 @@ namespace smmap
 {
     class TaskSpecification
     {
+
+        public:
+            ////////////////////////////////////////////////////////////////////
+            // Static helper functions - could be private given how they are
+            // used but making public as they are static
+            ////////////////////////////////////////////////////////////////////
+
+            static double CalculateErrorWithTheshold(
+                    const ObjectPointSet& target_points,
+                    const ObjectPointSet& deformable_object,
+                    const double minimum_threshold);
+
+            static ObjectDeltaAndWeight CalculateObjectErrorCorrectionDeltaWithThreshold(
+                    const ObjectPointSet& target_points,
+                    const ObjectPointSet& deformable_object,
+                    const double minimum_threshold);
+
         public:
             typedef std::shared_ptr<TaskSpecification> Ptr;
 
@@ -17,8 +34,8 @@ namespace smmap
             // Constructor to initialize objects that all TaskSpecifications share
             ////////////////////////////////////////////////////////////////////
 
-            TaskSpecification(ros::NodeHandle& nh);
-            TaskSpecification(ros::NodeHandle& nh, Visualizer vis);
+            TaskSpecification(ros::NodeHandle& nh, DeformableType deformable_type, TaskType task_type);
+            TaskSpecification(ros::NodeHandle& nh, Visualizer vis, DeformableType deformable_type, TaskType task_type);
 
             ////////////////////////////////////////////////////////////////////
             // Static builder function
@@ -112,6 +129,10 @@ namespace smmap
             ObjectDeltaAndWeight combineErrorCorrectionAndStretchingCorrection(
                     const ObjectDeltaAndWeight& error_correction,
                     const ObjectDeltaAndWeight& stretching_correction) const;
+
+            // Records of task and deformable type if various visualizers or whatever need them
+            const DeformableType deformable_type_;
+            const TaskType task_type_;
 
         protected:
             ////////////////////////////////////////////////////////////////////

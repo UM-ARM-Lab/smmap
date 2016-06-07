@@ -15,7 +15,7 @@ namespace smmap
     {
         public:
             RopeCylinderCoverage(ros::NodeHandle& nh)
-                : TaskSpecification(nh)
+                : TaskSpecification(nh, DeformableType::ROPE, TaskType::CYLINDER_COVERAGE)
                 , cover_points_(GetCoverPoints(nh))
                 , cylinder_com_(GetCylinderCenterOfMassX(nh), GetCylinderCenterOfMassY(nh))
                 , cylinder_radius_(GetCylinderRadius(nh))
@@ -25,17 +25,17 @@ namespace smmap
         private:
             virtual double getDeformability_impl() const
             {
-                return 0.5*20.0; // k
+                return 10.0; // k
             }
 
             virtual double getCollisionScalingFactor_impl() const
             {
-                return  10.0*20.0; // beta
+                return  200.0; // beta
             }
 
             virtual double getStretchingScalingThreshold_impl() const
             {
-                return 0.1/20.0; // lambda
+                return 0.005; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -64,95 +64,15 @@ namespace smmap
             virtual double calculateError_impl(
                     const ObjectPointSet& current_configuration) const
             {
-                Eigen::VectorXd error(cover_points_.cols());
-
-                // for every cover point, find the nearest deformable object point
-                #pragma omp parallel for
-                for (long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++)
-                {
-                    const Eigen::Vector3d& cover_point = cover_points_.block<3, 1>(0, cover_ind);
-
-                    // find the closest deformable object point
-                    double min_dist_squared = std::numeric_limits<double>::infinity();
-                    for (long rope_ind = 0; rope_ind < current_configuration.cols(); rope_ind++)
-                    {
-                        const Eigen::Vector3d& rope_point = current_configuration.block<3, 1>(0, rope_ind);
-                        const double new_dist_squared = (cover_point - rope_point).squaredNorm();
-                        min_dist_squared = std::min(new_dist_squared, min_dist_squared);
-                    }
-
-                    if (std::sqrt(min_dist_squared) >= 0.2/20.)
-                    {
-                        error(cover_ind) = std::sqrt(min_dist_squared);
-                    }
-                    else
-                    {
-                        error(cover_ind) = 0;
-                    }
-                }
-
-                return error.sum();
+                return CalculateErrorWithTheshold(cover_points_, current_configuration, 0.01);
             }
 
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state) const
             {
                 ROS_INFO_NAMED("rope_coverage_task" , "Finding 'best' object delta");
-                const ObjectPointSet& object_configuration = world_state.object_configuration_;
-
-                ObjectDeltaAndWeight desired_rope_delta(object_configuration.cols() * 3);
-
-                EigenHelpers::VectorVector3d start_points;
-                EigenHelpers::VectorVector3d end_points;
-
-                // for every cover point, find the nearest deformable object point
-                for (long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++)
-                {
-                    const Eigen::Vector3d& cover_point = cover_points_.block<3, 1>(0, cover_ind);
-
-                    // find the closest deformable object point
-                    long min_ind = -1;
-                    double min_dist_squared = std::numeric_limits<double>::infinity();
-                    // Note that this cannot be done in parallel (without locks) due to the desired_velocity object
-                    for (long rope_ind = 0; rope_ind < object_configuration.cols(); rope_ind++)
-                    {
-                        const Eigen::Vector3d& rope_point = object_configuration.block<3, 1>(0, rope_ind);
-                        const double new_dist_squared = (cover_point - rope_point).squaredNorm();
-                        if (new_dist_squared < min_dist_squared)
-                        {
-                            min_dist_squared = new_dist_squared;
-                            min_ind = rope_ind;
-                        }
-                    }
-
-                    if (std::sqrt(min_dist_squared) >= 0.2/20.0)
-                    {
-                        desired_rope_delta.delta.segment<3>(min_ind * 3) =
-                                desired_rope_delta.delta.segment<3>(min_ind * 3)
-                                + (cover_point - object_configuration.block<3, 1>(0, min_ind));
-
-                        desired_rope_delta.weight(min_ind * 3) += 1.0;
-                        desired_rope_delta.weight(min_ind * 3 + 1) += 1.0;
-                        desired_rope_delta.weight(min_ind * 3 + 2) += 1.0;
-
-                        start_points.push_back(object_configuration.block<3, 1>(0, min_ind));
-                        end_points.push_back(cover_point);
-                    }
-                }
-
-                std_msgs::ColorRGBA magenta;
-                magenta.r = 1.0f;
-                magenta.g = 0.0f;
-                magenta.b = 1.0f;
-                magenta.a = 1.0f;
-                vis_.visualizeLines("target_lines", start_points, end_points, magenta);
-
-                // Normalize weight - note that all weights are positive, so this is an L1 norm
-                const double sum = desired_rope_delta.weight.sum();
-                assert(sum > 0);
-                desired_rope_delta.weight /= sum;
-
-                return desired_rope_delta;
+                return CalculateObjectErrorCorrectionDeltaWithThreshold(
+                            cover_points_, world_state.object_configuration_, 0.01);
             }
 
             virtual Eigen::VectorXd projectObjectDelta_impl(
@@ -196,30 +116,30 @@ namespace smmap
     };
 
     /**
-     * @brief The ClothTableCoverage class
+     * @brief The ClothCylinderCoverage class
      */
     class ClothCylinderCoverage : public TaskSpecification
     {
         public:
             ClothCylinderCoverage(ros::NodeHandle& nh)
-                : TaskSpecification(nh)
+                : TaskSpecification(nh, DeformableType::CLOTH, TaskType::CYLINDER_COVERAGE)
                 , cover_points_(GetCoverPoints(nh))
             {}
 
         private:
             virtual double getDeformability_impl() const
             {
-                return 0.7*20.0; // k
+                return 14.0; // k
             }
 
             virtual double getCollisionScalingFactor_impl() const
             {
-                return  100.0*20.0; // beta
+                return  1000.0; // beta
             }
 
             virtual double getStretchingScalingThreshold_impl() const
             {
-                return 0.1/20.0; // lambda
+                return 0.03; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -248,80 +168,15 @@ namespace smmap
             virtual double calculateError_impl(
                     const ObjectPointSet &current_configuration) const
             {
-                // for every cover point, find the nearest deformable object point
-                Eigen::VectorXd error(cover_points_.cols());
-                #pragma omp parallel for
-                for (long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++)
-                {
-                    const Eigen::Vector3d& cover_point = cover_points_.block<3, 1>(0, cover_ind);
-
-                    double min_dist_squared = std::numeric_limits<double>::infinity();
-                    for (long cloth_ind = 0; cloth_ind < current_configuration.cols(); cloth_ind++)
-                    {
-                        const Eigen::Vector3d& cloth_point = current_configuration.block<3, 1>(0, cloth_ind);
-                        const double new_dist_squared = (cover_point - cloth_point).squaredNorm();
-                        min_dist_squared = std::min(new_dist_squared, min_dist_squared);
-                    }
-
-                    if (std::sqrt(min_dist_squared) > 0.04/20.0)
-                    {
-                        error(cover_ind) = std::sqrt(min_dist_squared);
-                    }
-                    else
-                    {
-                        error(cover_ind) = 0;
-                    }
-                }
-
-                return error.sum();
+                return CalculateErrorWithTheshold(cover_points_, current_configuration, 0.002);
             }
 
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state) const
             {
                 ROS_INFO_NAMED("cloth_cylinder_coverage" , "Finding 'best' cloth delta");
-
-                const ObjectPointSet& object_configuration = world_state.object_configuration_;
-
-                ObjectDeltaAndWeight desired_cloth_delta(object_configuration.cols() * 3);
-
-                // for every cover point, find the nearest deformable object point
-                for (long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++)
-                {
-                    const Eigen::Vector3d& cover_point = cover_points_.block<3, 1>(0, cover_ind);
-
-                    // find the closest deformable object point
-                    long min_ind = -1;
-                    double min_dist_squared = std::numeric_limits<double>::infinity();
-                    for (long cloth_ind = 0; cloth_ind < object_configuration.cols(); cloth_ind++)
-                    {
-                        const Eigen::Vector3d& cloth_point = object_configuration.block<3, 1>(0, cloth_ind);
-                        const double new_dist_squared = (cover_point - cloth_point).squaredNorm();
-                        if (new_dist_squared < min_dist_squared)
-                        {
-                            min_dist_squared = new_dist_squared;
-                            min_ind = cloth_ind;
-                        }
-                    }
-
-                    if (std::sqrt(min_dist_squared) > 0.04/20.0)
-                    {
-                        desired_cloth_delta.delta.segment<3>(min_ind * 3) =
-                                desired_cloth_delta.delta.segment<3>(min_ind * 3)
-                                + (cover_point - object_configuration.block<3, 1>(0, min_ind));
-
-                        desired_cloth_delta.weight(min_ind * 3) += 1.0;
-                        desired_cloth_delta.weight(min_ind * 3 + 1) += 1.0;
-                        desired_cloth_delta.weight(min_ind * 3 + 2) += 1.0;
-                    }
-                }
-
-                // Normalize weight - note that all weights are positive, so this is an L1 norm
-                const double sum = desired_cloth_delta.weight.sum();
-                assert(sum > 0);
-                desired_cloth_delta.weight /= sum;
-
-                return desired_cloth_delta;
+                return CalculateObjectErrorCorrectionDeltaWithThreshold(
+                            cover_points_, world_state.object_configuration_, 0.002);
             }
 
             virtual Eigen::VectorXd projectObjectDelta_impl(
@@ -346,7 +201,7 @@ namespace smmap
     {
         public:
             ClothTableCoverage(ros::NodeHandle& nh)
-                : TaskSpecification(nh)
+                : TaskSpecification(nh, DeformableType::CLOTH, TaskType::TABLE_COVERAGE)
                 , cover_points_(GetCoverPoints(nh))
                 , table_min_x_(GetTableSurfaceX(nh) - GetTableHalfExtentsX(nh))
                 , table_max_x_(GetTableSurfaceX(nh) + GetTableHalfExtentsX(nh))
@@ -363,12 +218,12 @@ namespace smmap
 
             virtual double getCollisionScalingFactor_impl() const
             {
-                return  100.0*20.0; // beta
+                return  1000.0; // beta
             }
 
             virtual double getStretchingScalingThreshold_impl() const
             {
-                return 0.1/20.0; // lambda
+                return 0.03; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -397,83 +252,15 @@ namespace smmap
             virtual double calculateError_impl(
                     const ObjectPointSet &current_configuration) const
             {
-                // for every cover point, find the nearest deformable object point
-                Eigen::VectorXd error(cover_points_.cols());
-                ssize_t num_nodes = current_configuration.cols();
-                #pragma omp parallel for
-                for (ssize_t cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++)
-                {
-                    const Eigen::Vector3d& cover_point = cover_points_.block<3, 1>(0, cover_ind);
-
-                    double min_dist_squared = std::numeric_limits<double>::infinity();
-                    for (ssize_t cloth_ind = 0; cloth_ind < num_nodes; cloth_ind++)
-                    {
-                        const Eigen::Vector3d& cloth_point = current_configuration.block<3, 1>(0, cloth_ind);
-                        const double new_dist_squared = (cover_point - cloth_point).squaredNorm();
-                        min_dist_squared = std::min(new_dist_squared, min_dist_squared);
-                    }
-
-                    if (std::sqrt(min_dist_squared) > 0.04/20.0)
-                    {
-                        error(cover_ind) = std::sqrt(min_dist_squared);
-                    }
-                    else
-                    {
-                        error(cover_ind) = 0;
-                    }
-                }
-
-                const double stretching_error = 0;//calculateStretchingError(current_configuration);
-
-                return error.sum() + 1000000.0 * stretching_error;
+                return CalculateErrorWithTheshold(cover_points_, current_configuration, 0.002);
             }
 
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state) const
             {
                 ROS_INFO_NAMED("cloth_table_coverage" , "Finding 'best' cloth delta");
-
-                const ObjectPointSet& object_configuration = world_state.object_configuration_;
-
-                ObjectDeltaAndWeight desired_cloth_delta(object_configuration.cols() * 3);
-
-                // for every cover point, find the nearest deformable object point
-                for (long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++)
-                {
-                    const Eigen::Vector3d& cover_point = cover_points_.block<3, 1>(0, cover_ind);
-
-                    // find the closest deformable object point
-                    long min_ind = -1;
-                    double min_dist_squared = std::numeric_limits<double>::infinity();
-                    for (long cloth_ind = 0; cloth_ind < object_configuration.cols(); cloth_ind++)
-                    {
-                        const Eigen::Vector3d& cloth_point = object_configuration.block<3, 1>(0, cloth_ind);
-                        const double new_dist_squared = (cover_point - cloth_point).squaredNorm();
-                        if (new_dist_squared < min_dist_squared)
-                        {
-                            min_dist_squared = new_dist_squared;
-                            min_ind = cloth_ind;
-                        }
-                    }
-
-                    if (std::sqrt(min_dist_squared) > 0.04/20.0)
-                    {
-                        desired_cloth_delta.delta.segment<3>(min_ind * 3) =
-                                desired_cloth_delta.delta.segment<3>(min_ind * 3)
-                                + (cover_point - object_configuration.block<3, 1>(0, min_ind));
-
-                        desired_cloth_delta.weight(min_ind * 3) += 1.0;
-                        desired_cloth_delta.weight(min_ind * 3 + 1) += 1.0;
-                        desired_cloth_delta.weight(min_ind * 3 + 2) += 1.0;
-                    }
-                }
-
-                // Normalize weight - note that all weights are positive, so this is an L1 norm
-                const double sum = desired_cloth_delta.weight.sum();
-                assert(sum > 0);
-                desired_cloth_delta.weight /= sum;
-
-                return desired_cloth_delta;
+                return CalculateObjectErrorCorrectionDeltaWithThreshold(
+                            cover_points_, world_state.object_configuration_, 0.002);
             }
 
             virtual Eigen::VectorXd projectObjectDelta_impl(
@@ -526,7 +313,7 @@ namespace smmap
     {
         public:
             ClothColabFolding(ros::NodeHandle& nh)
-                : TaskSpecification(nh)
+                : TaskSpecification(nh, DeformableType::CLOTH, TaskType::COLAB_FOLDING)
                 , point_reflector_(createPointReflector(nh))
                 , mirror_map_(createMirrorMap(nh, point_reflector_))
             {}
@@ -539,12 +326,12 @@ namespace smmap
 
             virtual double getCollisionScalingFactor_impl() const
             {
-                return  100.0*20.0; // beta
+                return 1000.0; // beta
             }
 
             virtual double getStretchingScalingThreshold_impl() const
             {
-                return 0.1/20.0; // lambda
+                return 0.03; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -577,8 +364,8 @@ namespace smmap
 
                 for (std::map<long, long>::const_iterator ittr = mirror_map_.begin(); ittr != mirror_map_.end(); ittr++)
                 {
-                    error += (current_configuration.block<3, 1>(0, ittr->second) -
-                               point_reflector_.reflect(current_configuration.block<3, 1>(0, ittr->first))).norm();
+                    error += (current_configuration.col(ittr->second) -
+                               point_reflector_.reflect(current_configuration.col(ittr->first))).norm();
                 }
 
                 return error;
@@ -599,13 +386,12 @@ namespace smmap
                     desired_cloth_delta.delta.segment<3>(ittr->second * 3) =
                             point_reflector_.reflect(object_configuration.block<3, 1>(0, ittr->first))
                             - object_configuration.block<3, 1>(0, ittr->second);
-                }
 
-                // Normalize weight - note that all weights are positive, so this is an L1 norm
-                desired_cloth_delta.weight = Eigen::VectorXd::Ones(object_configuration.cols() * 3);
-                const double sum = desired_cloth_delta.weight.sum();
-                assert(sum > 0);
-                desired_cloth_delta.weight /= sum;
+                    const double weight = desired_cloth_delta.delta.segment<3>(ittr->second * 3).norm();
+                    desired_cloth_delta.weight(ittr->second * 3) = weight;
+                    desired_cloth_delta.weight(ittr->second * 3 + 1) = weight;
+                    desired_cloth_delta.weight(ittr->second * 3 + 2) = weight;
+                }
 
                 return desired_cloth_delta;
             }
@@ -673,24 +459,24 @@ namespace smmap
     {
         public:
             ClothWAFR(ros::NodeHandle& nh)
-                : TaskSpecification(nh)
+                : TaskSpecification(nh, DeformableType::CLOTH, TaskType::WAFR)
                 , cover_points_(GetCoverPoints(nh))
             {}
 
         private:
             virtual double getDeformability_impl() const
             {
-                return 0.7*20.0; // k
+                return 14.0; // k
             }
 
             virtual double getCollisionScalingFactor_impl() const
             {
-                return  100.0*20.0; // beta
+                return  1000.0; // beta
             }
 
             virtual double getStretchingScalingThreshold_impl() const
             {
-                return 0.2/20.0; // lambda
+                return 0.03; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -719,80 +505,15 @@ namespace smmap
             virtual double calculateError_impl(
                     const ObjectPointSet &current_configuration) const
             {
-                // for every cover point, find the nearest deformable object point
-                Eigen::VectorXd error(cover_points_.cols());
-                #pragma omp parallel for
-                for (long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++)
-                {
-                    const Eigen::Vector3d& cover_point = cover_points_.block<3, 1>(0, cover_ind);
-
-                    double min_dist_squared = std::numeric_limits<double>::infinity();
-                    for (long cloth_ind = 0; cloth_ind < current_configuration.cols(); cloth_ind++)
-                    {
-                        const Eigen::Vector3d& cloth_point = current_configuration.block<3, 1>(0, cloth_ind);
-                        const double new_dist_squared = (cover_point - cloth_point).squaredNorm();
-                        min_dist_squared = std::min(new_dist_squared, min_dist_squared);
-                    }
-
-                    if (std::sqrt(min_dist_squared) > 0.04/20.0)
-                    {
-                        error(cover_ind) = std::sqrt(min_dist_squared);
-                    }
-                    else
-                    {
-                        error(cover_ind) = 0;
-                    }
-                }
-
-                return error.sum();
+                return CalculateErrorWithTheshold(cover_points_, current_configuration, 0.002);
             }
 
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state) const
             {
-                ROS_INFO_NAMED("cloth_cylinder_coverage" , "Finding 'best' cloth delta");
-
-                const ObjectPointSet& object_configuration = world_state.object_configuration_;
-
-                ObjectDeltaAndWeight desired_cloth_delta(object_configuration.cols() * 3);
-
-                // for every cover point, find the nearest deformable object point
-                for (long cover_ind = 0; cover_ind < cover_points_.cols(); cover_ind++)
-                {
-                    const Eigen::Vector3d& cover_point = cover_points_.block<3, 1>(0, cover_ind);
-
-                    // find the closest deformable object point
-                    long min_ind = -1;
-                    double min_dist_squared = std::numeric_limits<double>::infinity();
-                    for (long cloth_ind = 0; cloth_ind < object_configuration.cols(); cloth_ind++)
-                    {
-                        const Eigen::Vector3d& cloth_point = object_configuration.block<3, 1>(0, cloth_ind);
-                        const double new_dist_squared = (cover_point - cloth_point).squaredNorm();
-                        if (new_dist_squared < min_dist_squared)
-                        {
-                            min_dist_squared = new_dist_squared;
-                            min_ind = cloth_ind;
-                        }
-                    }
-
-                    if (std::sqrt(min_dist_squared) > 0.04/20.0)
-                    {
-                        desired_cloth_delta.delta.segment<3>(min_ind * 3) =
-                                desired_cloth_delta.delta.segment<3>(min_ind * 3)
-                                + (cover_point - object_configuration.block<3, 1>(0, min_ind));
-
-                        desired_cloth_delta.weight(min_ind * 3) += 1.0;
-                        desired_cloth_delta.weight(min_ind * 3 + 1) += 1.0;
-                        desired_cloth_delta.weight(min_ind * 3 + 2) += 1.0;
-                    }
-                }
-
-                // Normalize weight - note that all weights are positive, so this is an L1 norm
-                const double sum = desired_cloth_delta.weight.sum();
-                assert(sum > 0);
-                desired_cloth_delta.weight /= sum;
-
-                return desired_cloth_delta;
+                ROS_INFO_NAMED("cloth_wafr_coverage" , "Finding 'best' cloth delta");
+                return CalculateObjectErrorCorrectionDeltaWithThreshold(
+                            cover_points_, world_state.object_configuration_, 0.002);
             }
 
             virtual Eigen::VectorXd projectObjectDelta_impl(

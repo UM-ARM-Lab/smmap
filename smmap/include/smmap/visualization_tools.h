@@ -12,6 +12,14 @@ namespace smmap
     class Visualizer
     {
         public:
+            static void InitializeStandardColors();
+            static std_msgs::ColorRGBA Red();
+            static std_msgs::ColorRGBA Green();
+            static std_msgs::ColorRGBA Blue();
+            static std_msgs::ColorRGBA Black();
+            static std_msgs::ColorRGBA Magenta();
+
+        public:
             Visualizer(ros::NodeHandle& nh);
 
             void visualizeRope(
@@ -39,11 +47,11 @@ namespace smmap
                     const geometry_msgs::Pose& pose,
                     const std_msgs::ColorRGBA& color) const;
 
-
             void visualizeObjectDelta(
                     const std::string& marker_name,
                     const ObjectPointSet& current,
-                    const ObjectPointSet& desired) const;
+                    const ObjectPointSet& desired,
+                    const std_msgs::ColorRGBA& color) const;
 
             void visualizeTranslation(
                     const std::string& marker_name,
@@ -73,6 +81,12 @@ namespace smmap
             mutable ros::Publisher visualization_marker_pub_;
             mutable ros::Publisher visualization_marker_array_pub_;
 
+            static bool standard_colors_initialized_;
+            static std_msgs::ColorRGBA red_;
+            static std_msgs::ColorRGBA green_;
+            static std_msgs::ColorRGBA blue_;
+            static std_msgs::ColorRGBA black_;
+            static std_msgs::ColorRGBA magenta_;
     };
 }
 

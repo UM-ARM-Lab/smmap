@@ -81,25 +81,19 @@ namespace smmap
      * @param gripper_indices The indices of the nodes that the gripper is in contact with
      * @param node_index The index of the node that we want to get the distance to
      * @param object_initial_node_distance The matrix of distances between nodes
-     * @return The index of the closest node grasped by the gripper and the distance to that node
+     * @return The the distance between given node, and the closest node grasped by the gripper
      */
-    inline std::pair<long, double> getMinimumDistanceToGripper(
+    inline double getMinimumDistanceToGripper(
             const std::vector<long>& gripper_indices, long node_index,
             const Eigen::MatrixXd& object_initial_node_distance)
     {
         double min_dist = std::numeric_limits<double>::infinity();
-        long min_ind = -1;
-
         for (long ind: gripper_indices)
         {
-            if (object_initial_node_distance(ind, node_index) < min_dist)
-            {
-                min_dist = object_initial_node_distance(ind, node_index);
-                min_ind = ind;
-            }
+            min_dist = std::min(min_dist, object_initial_node_distance(ind, node_index));
         }
 
-        return std::pair< long, double>(min_ind, min_dist);
+        return min_dist;
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -556,8 +550,9 @@ namespace smmap
     {
         if (!std::isinf(collision_result.distance))
         {
-             const double collision_severity = std::min(1.0, std::exp(-obstacle_avoidance_scale * (collision_result.distance - 0.01)));
-             return collision_severity * (collision_result.velocity + collision_result.nullspace_projector * desired_motion) + (1 - collision_severity) * desired_motion;
+             #warning "Magic number changing collision behaviour - assues that everything is closer than it is"
+             const double collision_severity = std::min(1.0, std::exp(-obstacle_avoidance_scale * (collision_result.distance - 0.005)));
+             return collision_severity * (collision_result.velocity + collision_result.nullspace_projector * desired_motion) + (1.0 - collision_severity) * desired_motion;
         }
         // Otherwise use our desired velocity directly
         else
