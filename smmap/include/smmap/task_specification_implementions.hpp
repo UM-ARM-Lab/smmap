@@ -213,7 +213,7 @@ namespace smmap
         private:
             virtual double getDeformability_impl() const
             {
-                return 0.7*20.0; // k
+                return 14.0; // k
             }
 
             virtual double getCollisionScalingFactor_impl() const

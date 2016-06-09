@@ -117,14 +117,14 @@ void Task::execute()
                 AddObjectDelta(current_world_state.object_configuration_, first_step_desired_motion.delta),
                 colors);
 
-//        if (task_specification_->deformable_type_ == DeformableType::CLOTH)
-//        {
+        if (task_specification_->deformable_type_ == DeformableType::CLOTH)
+        {
             vis_.visualizeObjectDelta(
                         "desired_position",
                         current_world_state.object_configuration_,
                         AddObjectDelta(current_world_state.object_configuration_, first_step_desired_motion.delta),
                         Visualizer::Green());
-//        }
+        }
 
 
         if (unlikely(world_feedback.back().sim_time_ - start_time > task_specification_->maxTime()))
@@ -194,19 +194,19 @@ void Task::initializeModelSet()
         // Adaptive jacobian models
         ////////////////////////////////////////////////////////////////////////
 
-//        const double learning_rate_min = 1e-10;
-//        const double learning_rate_max = 1.1e0;
-//        const double learning_rate_step = 10.0;
-//        for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
-//        {
-//                planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
-//                                      AdaptiveJacobianModel(
-//                                          DiminishingRigidityModel(task_specification_->getDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
-//                                          learning_rate,
-//                                          GetOptimizationEnabled(nh_))));
-//        }
-//        ROS_INFO_STREAM_NAMED("task", "Num adaptive Jacobian models: "
-//                               << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
+        const double learning_rate_min = 1e-10;
+        const double learning_rate_max = 1.1e0;
+        const double learning_rate_step = 10.0;
+        for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
+        {
+                planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
+                                      AdaptiveJacobianModel(
+                                          DiminishingRigidityModel(task_specification_->getDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+                                          learning_rate,
+                                          GetOptimizationEnabled(nh_))));
+        }
+        ROS_INFO_STREAM_NAMED("task", "Num adaptive Jacobian models: "
+                               << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
     }
     else if (GetUseAdaptiveModel(ph_))
     {
