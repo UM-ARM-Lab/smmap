@@ -550,8 +550,7 @@ namespace smmap
     {
         if (!std::isinf(collision_result.distance))
         {
-             #warning "Magic number changing collision behaviour - assues that everything is closer than it is"
-             const double collision_severity = std::min(1.0, std::exp(-obstacle_avoidance_scale * (collision_result.distance - 0.005)));
+             const double collision_severity = std::min(1.0, std::exp(-obstacle_avoidance_scale * (collision_result.distance - GetRobotMinGripperDistance())));
              return collision_severity * (collision_result.velocity + collision_result.nullspace_projector * desired_motion) + (1.0 - collision_severity) * desired_motion;
         }
         // Otherwise use our desired velocity directly

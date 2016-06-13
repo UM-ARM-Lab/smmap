@@ -117,23 +117,23 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
 
     if (deformable_type == DeformableType::ROPE && task_type == TaskType::CYLINDER_COVERAGE)
     {
-        return std::make_shared<RopeCylinderCoverage>(RopeCylinderCoverage(nh));
+        return std::make_shared<RopeCylinderCoverage>(nh);
     }
     else if (deformable_type == DeformableType::CLOTH && task_type == TaskType::TABLE_COVERAGE)
     {
-        return std::make_shared<ClothTableCoverage>(ClothTableCoverage(nh));
+        return std::make_shared<ClothTableCoverage>(nh);
     }
     else if (deformable_type == DeformableType::CLOTH && task_type == TaskType::CYLINDER_COVERAGE)
     {
-        return std::make_shared<ClothCylinderCoverage>(ClothCylinderCoverage(nh));
+        return std::make_shared<ClothCylinderCoverage>(nh);
     }
     else if (deformable_type == DeformableType::CLOTH && task_type == TaskType::COLAB_FOLDING)
     {
-        return std::make_shared<ClothColabFolding>(ClothColabFolding(nh));
+        return std::make_shared<ClothColabFolding>(nh);
     }
     else if (deformable_type == DeformableType::CLOTH && task_type == TaskType::WAFR)
     {
-        return std::make_shared<ClothWAFR>(ClothWAFR(nh));
+        return std::make_shared<ClothWAFR>(nh);
     }
     else
     {
@@ -343,14 +343,13 @@ ObjectDeltaAndWeight TaskSpecification::combineErrorCorrectionAndStretchingCorre
 {
     ObjectDeltaAndWeight combined(num_nodes_ * 3);
 
-    std::cout << "Max error:      " << error_correction.weight.maxCoeff() << std::endl
-              << "Avg error:      " << error_correction.weight.sum() / (double)(num_nodes_ * 3) << std::endl
-              << "Sum error:      " << error_correction.weight.sum() << std::endl
-              << "Max stretching: " << stretching_correction.weight.maxCoeff() << std::endl
-              << "Avg stretching: " << stretching_correction.weight.sum() / (double)(num_nodes_ * 3) << std::endl
-              << "Sum stretching: " << stretching_correction.weight.sum() << std::endl;
-    std::cout << std::endl;
-
+//    std::cout << "Max error:      " << error_correction.weight.maxCoeff() << std::endl
+//              << "Avg error:      " << error_correction.weight.sum() / (double)(num_nodes_ * 3) << std::endl
+//              << "Sum error:      " << error_correction.weight.sum() << std::endl
+//              << "Max stretching: " << stretching_correction.weight.maxCoeff() << std::endl
+//              << "Avg stretching: " << stretching_correction.weight.sum() / (double)(num_nodes_ * 3) << std::endl
+//              << "Sum stretching: " << stretching_correction.weight.sum() << std::endl;
+//    std::cout << std::endl;
 
     for (ssize_t ind = 0; ind < num_nodes_ * 3; ind += 3)
     {
@@ -359,21 +358,8 @@ ObjectDeltaAndWeight TaskSpecification::combineErrorCorrectionAndStretchingCorre
                                                error_correction.delta.segment<3>(ind) );
 
         combined.delta.segment<3>(ind) = stretching_correction.delta.segment<3>(ind) + error_correction_perpendicular;
-        combined.weight.segment<3>(ind) = 1.0*stretching_correction.weight.segment<3>(ind) + error_correction.weight.segment<3>(ind);
-
-        // Calculate the combined object delta
-//        combined.delta.segment<3>(ind) =
-//                stretching_importance * stretching_correction.delta.segment<3>(ind)
-//                + (1.0 - stretching_importance) * error_correction.delta.segment<3>(ind);
-
-        // Calculate the combined node weights
-//        combined.weight.segment<3>(ind) =
-//                stretching_importance * stretching_correction.weight.segment<3>(ind)
-//                + (1.0 - stretching_importance) * error_correction.weight.segment<3>(ind);
+        combined.weight.segment<3>(ind) = stretching_correction.weight.segment<3>(ind) + error_correction.weight.segment<3>(ind);
     }
-
-//    combined.first = error_correction.first + stretching_correction.first;
-//    combined.second = Eigen::VectorXd::Ones(num_nodes_ * 3);
 
     // Normalize the weights for later use
     const double combined_normalizer = combined.weight.maxCoeff();

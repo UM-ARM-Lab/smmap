@@ -95,6 +95,8 @@ void Task::execute()
                                               caching_task_desired_object_delta_fn,
                                               task_object_delta_projection_fn_);
 
+        ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << task_specification_->calculateError(current_world_state.object_configuration_));
+
         world_feedback = planner_.sendNextTrajectory(
                     current_world_state,
                     caching_task_desired_object_delta_fn,
@@ -127,8 +129,7 @@ void Task::execute()
         }
 
 
-        if (unlikely(world_feedback.back().sim_time_ - start_time > task_specification_->maxTime()))
-//        if (world_feedback.back().sim_time_ - start_time > 0.04)
+        if (unlikely(world_feedback.back().sim_time_ - start_time >= task_specification_->maxTime()))
         {
             robot_.shutdown();
         }

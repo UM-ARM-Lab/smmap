@@ -183,8 +183,7 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     Eigen::VectorXd object_delta) const
             {
-                #pragma message "ClothCylinderCoverage projectOjbectDelta function is not written yet"
-                assert(false && "This function is not modified for this experiment yet");
+                assert(false && "This function is not specified for this experiment yet");
                 (void)object_configuration;
                 (void)object_delta;
             }
@@ -481,7 +480,7 @@ namespace smmap
 
             virtual double maxTime_impl() const
             {
-                return 24.0;
+                return 15.0;
             }
 
             virtual void visualizeDeformableObject_impl(
@@ -520,8 +519,7 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     Eigen::VectorXd object_delta) const
             {
-                #pragma message "ClothWAFR projectOjbectDelta function is not written yet"
-                assert(false && "This function is not modified for this experiment yet");
+                assert(false && "This function is not specified for this experiment yet");
                 (void)object_delta;
                 (void)object_configuration;
             }

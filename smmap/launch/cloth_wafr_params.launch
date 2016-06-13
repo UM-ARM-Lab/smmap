@@ -1,4 +1,6 @@
 <launch>
     <param name="deformable_type" value="cloth"/>
     <param name="task_type" value="wafr"/>
+    <param name="cloth_com_x" value="-0.2"/>
+    <param name="cloth_com_z" value="0.78"/>
 </launch>

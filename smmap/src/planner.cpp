@@ -36,8 +36,8 @@ Planner::Planner(
     , dt_(dt)
     , process_noise_factor_(GetProcessNoiseFactor(ph_))
     , observation_noise_factor_(GetObservationNoiseFactor(ph_))
-//    , generator_(0xa8710913d2b5df6c) // a30cd67f3860ddb3) // MD5 sum of "Dale McConachie"
-    , generator_(std::chrono::system_clock::now().time_since_epoch().count())
+    , generator_(0xa8710913d2b5df6c) // a30cd67f3860ddb3) // MD5 sum of "Dale McConachie"
+//    , generator_(std::chrono::system_clock::now().time_since_epoch().count())
 {}
 
 void Planner::addModel(DeformableModel::Ptr model)
@@ -124,7 +124,7 @@ std::vector<WorldState> Planner::sendNextTrajectory(
 
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
-    ROS_INFO_STREAM_NAMED("planner", "Using model index " << model_to_use);
+    ROS_INFO_STREAM_COND_NAMED(model_list_.size() > 1, "planner", "Using model index " << model_to_use);
 
     AllGrippersPoseTrajectory best_trajectory = suggested_trajectories[(size_t)model_to_use].first;
     best_trajectory.erase(best_trajectory.begin());
@@ -170,7 +170,8 @@ void Planner::updateModels(
     const Eigen::MatrixXd observation_noise = calculateObservationNoise(process_noise, model_used);
 
     // TODO: Make this a low pass filter on abs reward?
-    const double current_reward_scale_factor = std::pow(std::abs(observed_reward(model_used)), 1.0) + 1e-10;
+    #pragma message "Need to do low-pass/annealing filter on abs(reward)"
+    const double current_reward_scale_factor = 100 * std::pow(std::abs(observed_reward(model_used)), 2.0) + 1e-10;
     const double process_noise_scaling_factor = process_noise_factor_ * current_reward_scale_factor;
     const double observation_noise_scaling_factor = observation_noise_factor_ * current_reward_scale_factor;
     model_utility_bandit_.updateArms(
