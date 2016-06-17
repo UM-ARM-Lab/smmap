@@ -137,7 +137,8 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
     }
     else
     {
-        throw new arc_exceptions::invalid_argument("Invalid task and deformable pair in createErrorFunction(), this should not be possible", __FILE__, __LINE__);
+        throw_arc_exception(std::invalid_argument, "Invalid task and deformable pair in MakeTaskSpecification(), this should not be possible");
+        return nullptr;
     }
 }
 

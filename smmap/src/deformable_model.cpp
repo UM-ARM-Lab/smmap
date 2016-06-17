@@ -12,12 +12,12 @@ DeformableModel::DeformableModel()
 {
     if (!grippers_data_initialized_.load())
     {
-        throw new arc_exceptions::runtime_error("You must call SetGrippersData before constructing a DeformableObjectModel", __FILE__, __LINE__);
+        throw_arc_exception(std::runtime_error, "You must call SetGrippersData before constructing a DeformableObjectModel");
     }
 
     if (!function_pointers_initialized_.load())
     {
-        throw new arc_exceptions::runtime_error("You must call SetCallbackFunctions before constructing a DeformableObjectModel", __FILE__, __LINE__);
+        throw_arc_exception(std::runtime_error, "You must call SetCallbackFunctions before constructing a DeformableObjectModel");
     }
 }
 

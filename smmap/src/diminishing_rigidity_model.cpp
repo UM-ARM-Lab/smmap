@@ -54,16 +54,16 @@ DiminishingRigidityModel::DiminishingRigidityModel(
 {
     if (!static_data_initialized_.load())
     {
-        throw new arc_exceptions::runtime_error("You must call SetInitialObjectConfiguration before constructing a DiminishingRigidityModel", __FILE__, __LINE__);
+        throw_arc_exception(std::runtime_error, "You must call SetInitialObjectConfiguration before constructing a DiminishingRigidityModel");
     }
 
     if (translation_deformability < 0)
     {
-        throw new arc_exceptions::invalid_argument("translation_deformability must be >= 0", __FILE__, __LINE__);
+        throw_arc_exception(std::invalid_argument, "translation_deformability must be >= 0");
     }
     if (rotation_deformability < 0)
     {
-        throw new arc_exceptions::invalid_argument("rotation_deformability must be >= 0", __FILE__, __LINE__);
+        throw_arc_exception(std::invalid_argument, "rotation_deformability must be >= 0");
     }
 }
 
