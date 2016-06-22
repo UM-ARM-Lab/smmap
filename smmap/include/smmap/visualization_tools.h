@@ -22,6 +22,16 @@ namespace smmap
         public:
             Visualizer(ros::NodeHandle& nh);
 
+            void visualizePoints(
+                    const std::string& marker_name,
+                    EigenHelpers::VectorVector3d points,
+                    const std_msgs::ColorRGBA& color) const;
+
+            void visualizePoints(
+                    const std::string& marker_name,
+                    const EigenHelpers::VectorVector3d points,
+                    const std::vector<std_msgs::ColorRGBA>& colors) const;
+
             void visualizeRope(
                     const std::string& marker_name,
                     const ObjectPointSet& rope,

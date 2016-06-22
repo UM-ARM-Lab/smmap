@@ -22,6 +22,15 @@ def run_wafr_trials(experiment):
                       translational_deformability=translational_deform,
                       rotational_deformability=rotational_deform)
 
+    # Run the single manually tuned version
+    run_trial(experiment=experiment,
+              logging_enabled="true",
+              test_id="wafr_paper_trials/"
+                      + "single_model_baseline/"
+                      + "manually_tuned",
+              planning_horizion=1,
+              multi_model="false")
+
     # Note that this is 0 to 16 as range does [start, stop), thus we get 0:1:10 in Matlab speak
     adaptive_range = range(0, 11, 1)
 

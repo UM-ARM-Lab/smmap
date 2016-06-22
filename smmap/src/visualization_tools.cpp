@@ -89,6 +89,34 @@ Visualizer::Visualizer(ros::NodeHandle& nh)
             nh.advertise<visualization_msgs::MarkerArray>(GetVisualizationMarkerArrayTopic(nh), 10);
 }
 
+void Visualizer::visualizePoints(
+        const std::string& marker_name,
+        EigenHelpers::VectorVector3d points,
+        const std_msgs::ColorRGBA& color) const
+{
+    std::vector<std_msgs::ColorRGBA> colors(points.size(), color);
+
+    visualizePoints(marker_name, points, colors);
+}
+
+void Visualizer::visualizePoints(
+        const std::string& marker_name,
+        const EigenHelpers::VectorVector3d points,
+        const std::vector<std_msgs::ColorRGBA>& colors) const
+{
+    visualization_msgs::Marker marker;
+
+    marker.type = visualization_msgs::Marker::POINTS;
+    marker.ns = marker_name;
+    marker.id = 0;
+    marker.scale.x = 0.005;
+    marker.scale.y = 0.005;
+    marker.points = EigenHelpersConversions::VectorEigenVector3dToVectorGeometryPoint(points);
+    marker.colors = colors;
+
+    visualization_marker_pub_.publish(marker);
+}
+
 void Visualizer::visualizeRope(
         const std::string& marker_name,
         const ObjectPointSet& rope,

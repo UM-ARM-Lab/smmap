@@ -3,6 +3,7 @@
 
 #include <ros/ros.h>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
+#include <arc_utilities/dijkstras.hpp>
 #include <smmap_experiment_params/task_enums.h>
 #include <smmap_msgs/messages.h>
 
@@ -89,6 +90,53 @@ namespace smmap
         ROS_INFO_NAMED("cover_points_helper" , "Number of cover points: %zu", srv_data.response.points.size());
 
         return cover_points;
+    }
+
+    // TODO: replace these out params with something else
+    inline void GetFreeSpaceGraph(ros::NodeHandle& nh, arc_dijkstras::Graph<Eigen::Vector3d>& free_space_graph, std::vector<int64_t>& cover_ind_to_free_space_graph_ind)
+    {
+        ROS_INFO_NAMED("get_free_space_graph_helper", "Getting free space graph");
+
+        // First we collect the data in serialzed form
+        ros::ServiceClient free_space_graph_client =
+            nh.serviceClient<smmap_msgs::GetFreeSpaceGraph>(GetFreeSpaceGraphTopic(nh));
+
+        free_space_graph_client.waitForExistence();
+
+        smmap_msgs::GetFreeSpaceGraph srv_data;
+        free_space_graph_client.call(srv_data);
+
+        // Next we deserialize the graph itself
+        {
+            // Define the graph value deserialization function
+            const auto value_deserializer_fn = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
+            {
+                uint64_t current_position = current;
+
+                // Deserialze 3 floats, converting into doubles afterwards
+                std::pair<float, uint64_t> x = arc_helpers::DeserializeFixedSizePOD<float>(buffer, current_position);
+                current_position += x.second;
+                std::pair<float, uint64_t> y = arc_helpers::DeserializeFixedSizePOD<float>(buffer, current_position);
+                current_position += y.second;
+                std::pair<float, uint64_t> z = arc_helpers::DeserializeFixedSizePOD<float>(buffer, current_position);
+                current_position += z.second;
+
+                const Eigen::Vector3d deserialized(x.first, y.first, z.first);
+
+                // Figure out how many bytes were read
+                const uint64_t bytes_read = current_position - current;
+                return std::make_pair(deserialized, bytes_read);
+            };
+
+            uint64_t current_position = 0;
+            current_position += free_space_graph.DeserializeSelf(srv_data.response.graph_data_buffer, current_position, value_deserializer_fn);
+            assert(current_position == srv_data.response.graph_data_buffer.size());
+            assert(free_space_graph.CheckGraphLinkage());
+            ROS_INFO_STREAM_NAMED("ros_communications_helpers", "Recieved " << free_space_graph.GetNodesImmutable().size() << " graph nodes");
+        }
+
+        // Last we copy the map between cover point indices and graph indices
+        cover_ind_to_free_space_graph_ind = srv_data.response.cover_point_ind_to_graph_ind;
     }
 }
 

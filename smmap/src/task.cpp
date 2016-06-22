@@ -208,6 +208,15 @@ void Task::initializeModelSet()
         }
         ROS_INFO_STREAM_NAMED("task", "Num adaptive Jacobian models: "
                                << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
+
+        ////////////////////////////////////////////////////////////////////////
+        // Single manually tuned model
+        ////////////////////////////////////////////////////////////////////////
+
+        planner_.addModel(std::make_shared<DiminishingRigidityModel>(
+                              DiminishingRigidityModel(
+                                  task_specification_->getDeformability(),
+                                  GetOptimizationEnabled(nh_))));
     }
     else if (GetUseAdaptiveModel(ph_))
     {

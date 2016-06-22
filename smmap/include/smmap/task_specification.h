@@ -34,8 +34,8 @@ namespace smmap
             // Constructor to initialize objects that all TaskSpecifications share
             ////////////////////////////////////////////////////////////////////
 
-            TaskSpecification(ros::NodeHandle& nh, DeformableType deformable_type, TaskType task_type);
-            TaskSpecification(ros::NodeHandle& nh, Visualizer vis, DeformableType deformable_type, TaskType task_type);
+            TaskSpecification(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type);
+            TaskSpecification(ros::NodeHandle& nh, Visualizer vis, const DeformableType deformable_type, const TaskType task_type);
 
             ////////////////////////////////////////////////////////////////////
             // Static builder function

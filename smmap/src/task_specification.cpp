@@ -93,11 +93,11 @@ ObjectDeltaAndWeight TaskSpecification::CalculateObjectErrorCorrectionDeltaWithT
 // Constructor to initialize objects that all TaskSpecifications share
 ////////////////////////////////////////////////////////////////////
 
-TaskSpecification::TaskSpecification(ros::NodeHandle& nh, DeformableType deformable_type, TaskType task_type)
+TaskSpecification::TaskSpecification(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type)
     : TaskSpecification(nh, Visualizer(nh), deformable_type, task_type)
 {}
 
-TaskSpecification::TaskSpecification(ros::NodeHandle& nh, Visualizer vis,DeformableType deformable_type, TaskType task_type)
+TaskSpecification::TaskSpecification(ros::NodeHandle& nh, Visualizer vis, const DeformableType deformable_type, const TaskType task_type)
     : deformable_type_(deformable_type)
     , task_type_(task_type)
     , vis_(vis)
