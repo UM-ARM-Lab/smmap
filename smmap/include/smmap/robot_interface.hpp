@@ -47,7 +47,6 @@ namespace smmap
                 return ros::ok();
             }
 
-            // TODO: rename this to "burn in a fire and die"
             void shutdown()
             {
                 ros::shutdown();

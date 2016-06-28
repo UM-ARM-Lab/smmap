@@ -15,7 +15,6 @@ namespace smmap
 {
     class TaskSpecification
     {
-
         public:
             ////////////////////////////////////////////////////////////////////
             // Static helper functions - could be private given how they are
@@ -53,10 +52,13 @@ namespace smmap
             // Virtual function wrappers
             ////////////////////////////////////////////////////////////////////
 
-            double getDeformability() const;                // k
-            double getCollisionScalingFactor() const;       // beta (or k2)
-            double getStretchingScalingThreshold() const;   // lambda
-            double maxTime() const;                         // max simulation time when scripting things
+            double defaultDeformability() const;        // k
+            double collisionScalingFactor() const;      // beta (or k2)
+            double stretchingScalingThreshold() const;  // lambda
+            double maxTime() const;                     // max simulation time when scripting things
+            double errorHistoryThreshold() const;
+
+            bool terminateTask(const WorldState& world_state, const double error);
 
             void visualizeDeformableObject(
                     Visualizer& vis,
@@ -150,19 +152,26 @@ namespace smmap
             // Objects shared by all task specifications
             ////////////////////////////////////////////////////////////////////
 
+            ros::NodeHandle nh_;
             Visualizer vis_;
             const Eigen::MatrixXd object_initial_node_distance_;
             const ssize_t num_nodes_;
+
+            Eigen::VectorXd error_history_;
+            ssize_t next_error_history_ind_;
+            bool error_history_buffer_full_;
+            bool task_done_;
 
         private:
             ////////////////////////////////////////////////////////////////////////////////
             // Virtual functions that each task specification must provide
             ////////////////////////////////////////////////////////////////////////////////
 
-            virtual double getDeformability_impl() const = 0;                // k
-            virtual double getCollisionScalingFactor_impl() const = 0;       // beta (or k2)
-            virtual double getStretchingScalingThreshold_impl() const = 0;   // lambda
-            virtual double maxTime_impl() const = 0;                         // max simulation time when scripting things
+            virtual double deformability_impl() const = 0;              // k
+            virtual double collisionScalingFactor_impl() const = 0;     // beta (or k2)
+            virtual double stretchingScalingThreshold_impl() const = 0; // lambda
+            virtual double maxTime_impl() const = 0;                    // max simulation time when scripting things
+            virtual double errorHistoryThreshold_impl() const = 0;
 
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,

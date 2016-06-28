@@ -18,10 +18,10 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             Planner(const ErrorFunctionType& error_fn,
-                     const TaskExecuteGripperTrajectoryFunctionType& execute_trajectory_fn,
-                     const LoggingFunctionType& logging_fn,
-                     Visualizer& vis,
-                     const double dt);
+                    const TaskExecuteGripperTrajectoryFunctionType& execute_trajectory_fn,
+                    const LoggingFunctionType& logging_fn,
+                    Visualizer& vis,
+                    const double dt);
 
             void addModel(DeformableModel::Ptr model);
             void createBandits();
@@ -59,14 +59,16 @@ namespace smmap
             const double dt_;
             std::vector<DeformableModel::Ptr> model_list_;
             KalmanFilterRDB<std::mt19937_64> model_utility_bandit_;
+            double reward_std_dev_scale_factor_;
             const double process_noise_factor_;
             const double observation_noise_factor_;
             std::mt19937_64 generator_;
 
-            void updateModels(const WorldState& starting_world_state,
-                    ObjectDeltaAndWeight task_desired_motion,
+            void updateModels(
+                    const WorldState& starting_world_state,
+                    const ObjectDeltaAndWeight& task_desired_motion,
                     const std::vector<std::pair< AllGrippersPoseTrajectory, ObjectTrajectory>>& suggested_trajectories,
-                    ssize_t model_used,
+                    const ssize_t model_used,
                     const std::vector<WorldState>& world_feedback);
 
             Eigen::MatrixXd calculateProcessNoise(
@@ -74,13 +76,13 @@ namespace smmap
 
             Eigen::VectorXd calculateObservedReward(
                     const WorldState& starting_world_state,
-                    ObjectDeltaAndWeight task_desired_motion,
-                    ssize_t model_used,
+                    const ObjectDeltaAndWeight& task_desired_motion,
+                    const ssize_t model_used,
                     const std::vector<WorldState>& world_feedback);
 
             Eigen::MatrixXd calculateObservationNoise(
                     const Eigen::MatrixXd& process_noise,
-                    ssize_t model_used);
+                    const ssize_t model_used);
 
             ////////////////////////////////////////////////////////////////////
             // Internal helpers for the getNextTrajectory() function

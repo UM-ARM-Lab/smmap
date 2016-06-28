@@ -20,17 +20,17 @@ namespace smmap
             {}
 
         private:
-            virtual double getDeformability_impl() const
+            virtual double deformability_impl() const
             {
                 return 10.0; // k
             }
 
-            virtual double getCollisionScalingFactor_impl() const
+            virtual double collisionScalingFactor_impl() const
             {
                 return  200.0; // beta
             }
 
-            virtual double getStretchingScalingThreshold_impl() const
+            virtual double stretchingScalingThreshold_impl() const
             {
                 return 0.005; // lambda
             }
@@ -38,6 +38,11 @@ namespace smmap
             virtual double maxTime_impl() const
             {
                 return 15.0;
+            }
+
+            virtual double errorHistoryThreshold_impl() const
+            {
+                return 0.01;
             }
 
             virtual void visualizeDeformableObject_impl(
@@ -111,17 +116,17 @@ namespace smmap
             {}
 
         private:
-            virtual double getDeformability_impl() const
+            virtual double deformability_impl() const
             {
                 return 14.0; // k
             }
 
-            virtual double getCollisionScalingFactor_impl() const
+            virtual double collisionScalingFactor_impl() const
             {
                 return  1000.0; // beta
             }
 
-            virtual double getStretchingScalingThreshold_impl() const
+            virtual double stretchingScalingThreshold_impl() const
             {
                 return 0.03; // lambda
             }
@@ -129,6 +134,11 @@ namespace smmap
             virtual double maxTime_impl() const
             {
                 return 12.0;
+            }
+
+            virtual double errorHistoryThreshold_impl() const
+            {
+                return 0.01;
             }
 
             virtual void visualizeDeformableObject_impl(
@@ -182,17 +192,17 @@ namespace smmap
             {}
 
         private:
-            virtual double getDeformability_impl() const
+            virtual double deformability_impl() const
             {
                 return 14.0; // k
             }
 
-            virtual double getCollisionScalingFactor_impl() const
+            virtual double collisionScalingFactor_impl() const
             {
                 return  1000.0; // beta
             }
 
-            virtual double getStretchingScalingThreshold_impl() const
+            virtual double stretchingScalingThreshold_impl() const
             {
                 return 0.03; // lambda
             }
@@ -200,6 +210,11 @@ namespace smmap
             virtual double maxTime_impl() const
             {
                 return 2.0;
+            }
+
+            virtual double errorHistoryThreshold_impl() const
+            {
+                return 0.01;
             }
 
             virtual void visualizeDeformableObject_impl(
@@ -278,24 +293,29 @@ namespace smmap
             {}
 
         private:
-            virtual double getDeformability_impl() const
+            virtual double deformability_impl() const
             {
                 return 0.7*20; // k
             }
 
-            virtual double getCollisionScalingFactor_impl() const
+            virtual double collisionScalingFactor_impl() const
             {
                 return 1000.0; // beta
             }
 
-            virtual double getStretchingScalingThreshold_impl() const
+            virtual double stretchingScalingThreshold_impl() const
             {
                 return 0.03; // lambda
             }
 
             virtual double maxTime_impl() const
             {
-                return 6.0;
+                return 4.5;
+            }
+
+            virtual double errorHistoryThreshold_impl() const
+            {
+                return 0.01;
             }
 
             virtual void visualizeDeformableObject_impl(
@@ -422,24 +442,29 @@ namespace smmap
             {}
 
         private:
-            virtual double getDeformability_impl() const
+            virtual double deformability_impl() const
             {
                 return 14.0; // k
             }
 
-            virtual double getCollisionScalingFactor_impl() const
+            virtual double collisionScalingFactor_impl() const
             {
                 return  1000.0; // beta
             }
 
-            virtual double getStretchingScalingThreshold_impl() const
+            virtual double stretchingScalingThreshold_impl() const
             {
                 return 0.03; // lambda
             }
 
             virtual double maxTime_impl() const
             {
-                return 15.0;
+                return 10.0;
+            }
+
+            virtual double errorHistoryThreshold_impl() const
+            {
+                return 0.1;
             }
 
             virtual void visualizeDeformableObject_impl(

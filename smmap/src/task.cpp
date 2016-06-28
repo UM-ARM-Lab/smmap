@@ -69,6 +69,7 @@ void Task::execute()
                     }
                     else
                     {
+                        ROS_INFO_NAMED("task", "Determining desired direction");
                         first_step_error_correction =
                                 task_specification_->calculateObjectErrorCorrectionDelta(state);
 
@@ -89,20 +90,31 @@ void Task::execute()
                 return task_specification_->calculateObjectErrorCorrectionDelta(state);
             }
         };
+        caching_task_desired_object_delta_fn(current_world_state);
 
         DeformableModel::SetCallbackFunctions(error_fn_,
                                               gripper_collision_check_fn_,
                                               caching_task_desired_object_delta_fn,
                                               task_object_delta_projection_fn_);
 
-        ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << task_specification_->calculateError(current_world_state.object_configuration_));
+        const double current_error = error_fn_(current_world_state.object_configuration_);
+        ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << current_error);
 
-        world_feedback = planner_.sendNextTrajectory(
-                    current_world_state,
-                    caching_task_desired_object_delta_fn,
-                    planning_horizion,
-                    RobotInterface::MAX_GRIPPER_VELOCITY,
-                    task_specification_->getCollisionScalingFactor());
+        if (!task_specification_->terminateTask(current_world_state, current_error))
+        {
+            world_feedback = planner_.sendNextTrajectory(
+                        current_world_state,
+                        caching_task_desired_object_delta_fn,
+                        planning_horizion,
+                        RobotInterface::MAX_GRIPPER_VELOCITY,
+                        task_specification_->collisionScalingFactor());
+        }
+        else
+        {
+            // TODO: something other than this for a no-op?
+            ROS_INFO_NAMED("task", "Task finished, sending no-ops");
+            world_feedback = robot_.start();
+        }
 
         ssize_t num_nodes = current_world_state.object_configuration_.cols();
         std::vector<std_msgs::ColorRGBA> colors((size_t)num_nodes);
@@ -127,7 +139,6 @@ void Task::execute()
                         AddObjectDelta(current_world_state.object_configuration_, first_step_desired_motion.delta),
                         Visualizer::Green());
         }
-
 
         if (unlikely(world_feedback.back().sim_time_ - start_time >= task_specification_->maxTime()))
         {
@@ -202,7 +213,7 @@ void Task::initializeModelSet()
         {
                 planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
                                       AdaptiveJacobianModel(
-                                          DiminishingRigidityModel(task_specification_->getDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+                                          DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
                                           learning_rate,
                                           GetOptimizationEnabled(nh_))));
         }
@@ -215,25 +226,25 @@ void Task::initializeModelSet()
 
         planner_.addModel(std::make_shared<DiminishingRigidityModel>(
                               DiminishingRigidityModel(
-                                  task_specification_->getDeformability(),
+                                  task_specification_->defaultDeformability(),
                                   GetOptimizationEnabled(nh_))));
     }
     else if (GetUseAdaptiveModel(ph_))
     {
                 planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
                                       AdaptiveJacobianModel(
-                                          DiminishingRigidityModel(task_specification_->getDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+                                          DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
                                           GetAdaptiveModelLearningRate(ph_),
                                           GetOptimizationEnabled(nh_))));
     }
     else
     {
         ROS_INFO_STREAM_NAMED("task", "Using default deformability value of "
-                               << task_specification_->getDeformability());
+                               << task_specification_->defaultDeformability());
 
         planner_.addModel(std::make_shared<DiminishingRigidityModel>(
                               DiminishingRigidityModel(
-                                  task_specification_->getDeformability(),
+                                  task_specification_->defaultDeformability(),
                                   GetOptimizationEnabled(nh_))));
 
 //        model_set_.addModel(std::make_shared<LeastSquaresJacobianModel>(

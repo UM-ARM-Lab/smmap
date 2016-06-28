@@ -1,4 +1,5 @@
 #include <arc_utilities/arc_exceptions.hpp>
+#include <arc_utilities/log.hpp>
 
 #include "smmap/task_specification.h"
 #include "smmap/task_specification_implementions.hpp"
@@ -50,6 +51,8 @@ ObjectDeltaAndWeight TaskSpecification::CalculateObjectErrorCorrectionDeltaWithT
         const ObjectPointSet& deformable_object,
         const double minimum_threshold)
 {
+    const std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
+
     const ssize_t num_nodes = deformable_object.cols();
     ObjectDeltaAndWeight desired_object_delta(num_nodes * 3);
 
@@ -86,6 +89,10 @@ ObjectDeltaAndWeight TaskSpecification::CalculateObjectErrorCorrectionDeltaWithT
         }
     }
 
+    const std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
+    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+    ROS_INFO_STREAM_NAMED("target_point_task", "Found best delta in " << duration << " milliseconds");
+
     return desired_object_delta;
 }
 
@@ -100,9 +107,14 @@ TaskSpecification::TaskSpecification(ros::NodeHandle& nh, const DeformableType d
 TaskSpecification::TaskSpecification(ros::NodeHandle& nh, Visualizer vis, const DeformableType deformable_type, const TaskType task_type)
     : deformable_type_(deformable_type)
     , task_type_(task_type)
+    , nh_(nh)
     , vis_(vis)
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
     , num_nodes_(object_initial_node_distance_.cols())
+    , error_history_(25)
+    , next_error_history_ind_(0)
+    , error_history_buffer_full_(false)
+    , task_done_(false)
 {}
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -146,24 +158,66 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
 // Virtual function wrappers
 ////////////////////////////////////////////////////////////////////////////////
 
-double TaskSpecification::getDeformability() const
+double TaskSpecification::defaultDeformability() const
 {
-    return getDeformability_impl();
+    return deformability_impl();
 }
 
-double TaskSpecification::getCollisionScalingFactor() const
+double TaskSpecification::collisionScalingFactor() const
 {
-    return getCollisionScalingFactor_impl();
+    return collisionScalingFactor_impl();
 }
 
-double TaskSpecification::getStretchingScalingThreshold() const
+double TaskSpecification::stretchingScalingThreshold() const
 {
-    return getStretchingScalingThreshold_impl();
+    return stretchingScalingThreshold_impl();
 }
 
 double TaskSpecification::maxTime() const
 {
     return maxTime_impl();
+}
+
+double TaskSpecification::errorHistoryThreshold() const
+{
+    return errorHistoryThreshold_impl();
+}
+
+bool TaskSpecification::terminateTask(const WorldState &world_state, const double error)
+{
+    if (unlikely(task_done_))
+    {
+        return true;
+    }
+
+    error_history_(next_error_history_ind_) = error;
+    next_error_history_ind_++;
+
+    if (unlikely(next_error_history_ind_ == error_history_.rows()))
+    {
+        next_error_history_ind_ = 0;
+        error_history_buffer_full_ = true;
+    }
+
+    if (error_history_buffer_full_)
+    {
+        task_done_ = ((error_history_.array() - error_history_.mean()).abs() < errorHistoryThreshold()).all();
+        if (unlikely(task_done_))
+        {
+            // Enable logging if it is requested
+            if (GetLoggingEnabled(nh_))
+            {
+                std::string log_folder = GetLogFolder(nh_);
+                Log::Log termination_log(log_folder + "task_termination_time.txt", false);
+                LOG(termination_log, world_state.sim_time_);
+            }
+        }
+        return task_done_;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 void TaskSpecification::visualizeDeformableObject(
@@ -217,7 +271,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
     const Eigen::MatrixXd node_squared_distance =
             CalculateSquaredDistanceMatrix(object_configuration);
 
-    const double stretching_correction_threshold = getStretchingScalingThreshold();
+    const double stretching_correction_threshold = stretchingScalingThreshold();
 
     EigenHelpers::VectorVector3d start_points;
     EigenHelpers::VectorVector3d end_points;
@@ -295,7 +349,7 @@ double TaskSpecification::calculateStretchingError(
     const Eigen::MatrixXd node_squared_distance =
             CalculateSquaredDistanceMatrix(object_configuration);
 
-    const double stretching_correction_threshold = getStretchingScalingThreshold();
+    const double stretching_correction_threshold = stretchingScalingThreshold();
 
     ssize_t squared_error = 0;
     #pragma omp parallel for reduction(+ : squared_error)

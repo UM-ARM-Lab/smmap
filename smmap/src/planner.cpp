@@ -34,6 +34,7 @@ Planner::Planner(
     , logging_fn_(logging_fn)
     , vis_(vis)
     , dt_(dt)
+    , reward_std_dev_scale_factor_(1.0)
     , process_noise_factor_(GetProcessNoiseFactor(ph_))
     , observation_noise_factor_(GetObservationNoiseFactor(ph_))
     , generator_(0xa8710913d2b5df6c) // a30cd67f3860ddb3) // MD5 sum of "Dale McConachie"
@@ -74,8 +75,8 @@ std::vector<WorldState> Planner::sendNextTrajectory(
         const double obstacle_avoidance_scale)
 {
     // Querry each model for it's best trajectory
-    ROS_INFO_STREAM_NAMED("planner", "Getting trajectory suggestions for each model  of length " << planning_horizion);
-
+    ROS_INFO_STREAM_COND_NAMED(planning_horizion != 1, "planner", "Getting trajectory suggestions for each model of length " << planning_horizion);
+    const std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
     std::vector<std::pair<AllGrippersPoseTrajectory, ObjectTrajectory>> suggested_trajectories(model_list_.size());
     for (size_t model_ind = 0; model_ind < model_list_.size(); model_ind++)
     {
@@ -121,20 +122,26 @@ std::vector<WorldState> Planner::sendNextTrajectory(
 //                    CalculateGrippersPoseDeltas(optimized_grippers_pose_traj),
 //                    dt_);
     }
-
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
+    // Measure the time it took to pick a model
+    const std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
+    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+    ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked on in " << duration << " milliseconds");
+
     ROS_INFO_STREAM_COND_NAMED(model_list_.size() > 1, "planner", "Using model index " << model_to_use);
 
     AllGrippersPoseTrajectory best_trajectory = suggested_trajectories[(size_t)model_to_use].first;
     best_trajectory.erase(best_trajectory.begin());
     // Execute the trajectory
+    ROS_INFO_NAMED("planner", "Sending trajectory to robot");
     std::vector<WorldState> world_feedback = execute_trajectory_fn_(best_trajectory);
     // Get feedback
     world_feedback.emplace(world_feedback.begin(), current_world_state);
 
-    ObjectDeltaAndWeight task_desired_motion = task_desired_object_delta_fn(current_world_state);
+    const ObjectDeltaAndWeight task_desired_motion = task_desired_object_delta_fn(current_world_state);
 
+    ROS_INFO_NAMED("planner", "Updating models and logging data");
     updateModels(current_world_state, task_desired_motion, suggested_trajectories, model_to_use, world_feedback);
     logging_fn_(world_feedback.back(), model_utility_bandit_.getMean(), model_utility_bandit_.getCovariance(), model_to_use);
 
@@ -154,9 +161,9 @@ std::vector<WorldState> Planner::sendNextTrajectory(
  */
 void Planner::updateModels(
         const WorldState& starting_world_state,
-        ObjectDeltaAndWeight task_desired_motion,
+        const ObjectDeltaAndWeight& task_desired_motion,
         const std::vector<std::pair<AllGrippersPoseTrajectory, ObjectTrajectory>>& suggested_trajectories,
-        ssize_t model_used,
+        const ssize_t model_used,
         const std::vector<WorldState>& world_feedback)
 {
     const Eigen::MatrixXd process_noise = calculateProcessNoise(suggested_trajectories);
@@ -169,18 +176,14 @@ void Planner::updateModels(
     const Eigen::MatrixXd observation_matrix = Eigen::MatrixXd::Identity((ssize_t)model_list_.size(), (ssize_t)model_list_.size());
     const Eigen::MatrixXd observation_noise = calculateObservationNoise(process_noise, model_used);
 
-    // TODO: Make this a low pass filter on abs reward?
-    #pragma message "Need to do low-pass/annealing filter on abs(reward)"
-    const double current_reward_scale_factor = 100 * std::pow(std::abs(observed_reward(model_used)), 2.0) + 1e-10;
-    const double process_noise_scaling_factor = process_noise_factor_ * current_reward_scale_factor;
-    const double observation_noise_scaling_factor = observation_noise_factor_ * current_reward_scale_factor;
+    reward_std_dev_scale_factor_ = std::min(1e-10, 0.9 * reward_std_dev_scale_factor_ + 0.1 * observed_reward(model_used));
+    const double process_noise_scaling_factor = process_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);
+    const double observation_noise_scaling_factor = observation_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);
     model_utility_bandit_.updateArms(
                 process_noise_scaling_factor * process_noise,
                 observation_matrix,
                 observed_reward,
                 observation_noise_scaling_factor * observation_noise);
-
-//    std::cerr << model_utility_bandit_.getMean().transpose() << std::endl;
 
     // Then we allow the model to update itself based on the new data
     #pragma omp parallel for
@@ -238,8 +241,8 @@ Eigen::MatrixXd Planner::calculateProcessNoise(
 
 Eigen::VectorXd Planner::calculateObservedReward(
         const WorldState& starting_world_state,
-        ObjectDeltaAndWeight task_desired_motion,
-        ssize_t model_used,
+        const ObjectDeltaAndWeight& task_desired_motion,
+        const ssize_t model_used,
         const std::vector<WorldState>& world_feedback)
 {
     const ssize_t num_models = (ssize_t)model_list_.size();
@@ -296,7 +299,7 @@ Eigen::VectorXd Planner::calculateObservedReward(
 
 Eigen::MatrixXd Planner::calculateObservationNoise(
         const Eigen::MatrixXd& process_noise,
-        ssize_t model_used)
+        const ssize_t model_used)
 {
     const ssize_t num_models = (ssize_t)model_list_.size();
 
