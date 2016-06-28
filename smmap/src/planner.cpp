@@ -48,7 +48,7 @@ void Planner::addModel(DeformableModel::Ptr model)
 void Planner::createBandits()
 {
     ROS_INFO_STREAM_NAMED("planner", "Generating bandits for " << model_list_.size() << " bandits");
-    model_utility_bandit_ = KalmanFilterMultiarmBandit<std::mt19937_64>(
+    model_utility_bandit_ = KalmanFilterRDB<std::mt19937_64>(
                 Eigen::VectorXd::Zero((ssize_t)model_list_.size()),
                 Eigen::MatrixXd::Identity((ssize_t)model_list_.size(), (ssize_t)model_list_.size()));
 }
@@ -208,11 +208,24 @@ Eigen::MatrixXd Planner::calculateProcessNoise(
     {
         for (ssize_t j = i+1; j < num_models; j++)
         {
-            process_noise(i, j) =
-                    MultipleGrippersVelocityTrajectoryDotProduct(
-                        grippers_suggested_pose_deltas[(size_t)i],
-                        grippers_suggested_pose_deltas[(size_t)j])
-                    / (grippers_velocity_norms[(size_t)i] * grippers_velocity_norms[(size_t)j]);
+            if (grippers_velocity_norms[(size_t)i] != 0 &&
+                grippers_velocity_norms[(size_t)j] != 0)
+            {
+                process_noise(i, j) =
+                        MultipleGrippersVelocityTrajectoryDotProduct(
+                            grippers_suggested_pose_deltas[(size_t)i],
+                            grippers_suggested_pose_deltas[(size_t)j])
+                        / (grippers_velocity_norms[(size_t)i] * grippers_velocity_norms[(size_t)j]);
+            }
+            else if (grippers_velocity_norms[(size_t)i] == 0 &&
+                     grippers_velocity_norms[(size_t)j] == 0)
+            {
+                process_noise(i, j) = 1;
+            }
+            else
+            {
+                process_noise(i, j) = 0;
+            }
 
             process_noise(j, i) = process_noise(i, j);
         }
@@ -234,11 +247,11 @@ Eigen::VectorXd Planner::calculateObservedReward(
     const double starting_error = error_fn_(starting_world_state.object_configuration_);
     const double true_error_reduction = starting_error - error_fn_(world_feedback.back().object_configuration_);
     const Eigen::VectorXd true_object_diff = CalculateObjectDeltaAsVector(starting_world_state.object_configuration_, world_feedback.back().object_configuration_);
+    const double true_object_diff_norm = EigenHelpers::WeightedNorm(true_object_diff, task_desired_motion.weight);
 
     // TODO: remove this auto
     const auto grippers_trajectory = GetGripperTrajectories(world_feedback);
     const auto grippers_pose_deltas = CalculateGrippersPoseDeltas(grippers_trajectory);
-
 
     Eigen::VectorXd angle_between_true_and_predicted = Eigen::VectorXd::Zero(num_models);
     for (ssize_t model_ind = 0; model_ind < num_models; model_ind++)
@@ -250,49 +263,33 @@ Eigen::VectorXd Planner::calculateObservedReward(
                     dt_);
 
         const Eigen::VectorXd predicted_object_diff = CalculateObjectDeltaAsVector(starting_world_state.object_configuration_, predicted_motion_under_true_gripper_movement);
+        const double predicted_object_diff_norm = EigenHelpers::WeightedNorm(predicted_object_diff, task_desired_motion.weight);
 
         // Deal with the cloth not moving potentially (i.e. in fake data land)
-        if (true_object_diff.squaredNorm() > 1e-10 && predicted_object_diff.squaredNorm() > 1e-10)
+        if (true_object_diff_norm > 1e-10 && predicted_object_diff_norm > 1e-10)
         {
             angle_between_true_and_predicted(model_ind) = EigenHelpers::WeightedAngleBetweenVectors(true_object_diff, predicted_object_diff, task_desired_motion.weight);
         }
-        else
+        else if (true_object_diff_norm <= 1e-10 && predicted_object_diff_norm <= 1e-10)
         {
             angle_between_true_and_predicted(model_ind) = 0;
+        }
+        else
+        {
+            angle_between_true_and_predicted(model_ind) = M_PI/2.0;
         }
     }
 
     const Eigen::IOFormat CommaSpaceFmt(Eigen::StreamPrecision, 0, ", ", "\n", "", "", "", "");
     const Eigen::IOFormat CommaSpaceSpaceFmt(Eigen::StreamPrecision, 0, ",  ", "\n", "", "", "", "");
 
-//    std::cerr << std::fixed << std::setprecision(6);
-//    std::cerr << "Model used: " << model_used << std::endl;
-//    std::cerr << "Angles:         " << angle_between_true_and_predicted.transpose().format(CommaSpaceSpaceFmt) << std::endl;
-//    std::cerr << "Angle deltas:  ";
-
     Eigen::VectorXd observed_reward = Eigen::VectorXd::Zero(num_models);
     const double angle_to_model_chosen = angle_between_true_and_predicted(model_used);
     for (ssize_t model_ind = 0; model_ind < num_models; model_ind++)
     {
         const double angle_delta = angle_to_model_chosen - angle_between_true_and_predicted(model_ind);
-//        observed_reward(model_ind) = (1.0 + std::cos(angle_delta)) / 2.0;
         observed_reward(model_ind) = true_error_reduction + 1.0 * angle_delta * std::abs(true_error_reduction);
-
-//        if (angle_delta >= 0)
-//            std::cerr << " ";
-//        std::cerr << angle_delta << ", ";
     }
-
-//    std::cerr << std::endl;
-
-//    if ((observed_reward.array() < 0.0).any())
-//    {
-//        std::cerr << "Rewards:       " << observed_reward.transpose().format(CommaSpaceFmt) << std::endl;
-//    }
-//    else
-//    {
-//        std::cerr << "Rewards:        " << observed_reward.transpose().format(CommaSpaceSpaceFmt) << std::endl;
-//    }
 
     return observed_reward;
 }

@@ -12,11 +12,109 @@
 
 namespace smmap
 {
-    template<typename Generator = std::mt19937_64>
-    class KalmanFilterMultiarmBandit
+    template <typename Generator = std::mt19937_64>
+    class KalmanFilterMANB
     {
         public:
-            KalmanFilterMultiarmBandit(
+            KalmanFilterMANB(
+                    const Eigen::VectorXd& prior_mean = Eigen::VectorXd::Zero(1),
+                    const Eigen::VectorXd& prior_var = Eigen::VectorXd::Ones(1))
+                : num_bandits_(prior_mean.rows())
+                , arm_mean_(prior_mean)
+                , arm_var_(prior_var)
+            {
+                assert(arm_mean_.cols() == arm_var_.cols());
+            }
+
+            /**
+             * @brief selectArmToPull Perform Thompson sampling on the bandits,
+             *                        and select the bandit with the largest sample.
+             * @param generator
+             * @return
+             */
+            ssize_t selectArmToPull(Generator& generator)
+            {
+                // Sample from the current distribuition
+                ssize_t best_arm = -1;
+                double best_sample = -std::numeric_limits<double>::infinity();
+                for (ssize_t arm_ind = 0; arm_ind < num_bandits_; arm_ind++)
+                {
+                    std::normal_distribution<double> normal_dist(arm_mean_(arm_ind), arm_var_(arm_ind));
+                    const double sample = normal_dist(generator);
+
+                    if (sample > best_sample)
+                    {
+                        best_arm = arm_ind;
+                        best_sample = sample;
+                    }
+                }
+
+                assert(best_arm >= 0);
+                return best_arm;
+            }
+
+            /**
+             * @brief updateArms
+             * @param transition_variance
+             * @param arm_pulled
+             * @param observed_reward
+             * @param observation_variance
+             */
+            void updateArms(
+                    const Eigen::VectorXd& transition_variance,
+                    const ssize_t arm_pulled,
+                    const double observed_reward,
+                    const double observation_variance)
+            {
+                for (ssize_t arm_ind = 0; arm_ind < num_bandits_; arm_ind++)
+                {
+                    if (arm_ind != arm_pulled)
+                    {
+                        arm_var_(arm_ind) += transition_variance(arm_ind);
+                    }
+                    else
+                    {
+                        arm_mean_(arm_ind) = ((arm_var_(arm_ind) + transition_variance(arm_ind)) * observed_reward + observation_variance * arm_mean_(arm_ind))
+                                            / (arm_var_(arm_ind) + transition_variance(arm_ind) + observation_variance);
+
+                        arm_var_(arm_ind) = (arm_var_(arm_ind) + transition_variance(arm_ind)) * observation_variance
+                                           / (arm_var_(arm_ind) + transition_variance(arm_ind) + observation_variance);
+                    }
+                }
+            }
+
+            const Eigen::VectorXd& getMean() const
+            {
+                return arm_mean_;
+            }
+
+            Eigen::VectorXd getMean()
+            {
+                return arm_mean_;
+            }
+
+            const Eigen::VectorXd& getVariance() const
+            {
+                return arm_var_;
+            }
+
+            Eigen::VectorXd getVariance()
+            {
+                return arm_var_;
+            }
+
+        private:
+            const ssize_t num_bandits_;
+
+            Eigen::VectorXd arm_mean_;
+            Eigen::VectorXd arm_var_;
+    };
+
+    template<typename Generator = std::mt19937_64>
+    class KalmanFilterRDB
+    {
+        public:
+            KalmanFilterRDB(
                     const Eigen::VectorXd& prior_mean = Eigen::VectorXd::Zero(1),
                     const Eigen::MatrixXd& prior_covar = Eigen::MatrixXd::Identity(1, 1))
                 : arm_mean_(prior_mean)

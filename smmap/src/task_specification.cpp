@@ -352,20 +352,22 @@ ObjectDeltaAndWeight TaskSpecification::combineErrorCorrectionAndStretchingCorre
 //              << "Sum stretching: " << stretching_correction.weight.sum() << std::endl;
 //    std::cout << std::endl;
 
-    for (ssize_t ind = 0; ind < num_nodes_ * 3; ind += 3)
+    for (ssize_t node_ind = 0; node_ind < num_nodes_ * 3; node_ind += 3)
     {
         const Eigen::Vector3d error_correction_perpendicular =
-                EigenHelpers::VectorRejection(stretching_correction.delta.segment<3>(ind),
-                                               error_correction.delta.segment<3>(ind) );
+                EigenHelpers::VectorRejection(stretching_correction.delta.segment<3>(node_ind),
+                                               error_correction.delta.segment<3>(node_ind) );
 
-        combined.delta.segment<3>(ind) = stretching_correction.delta.segment<3>(ind) + error_correction_perpendicular;
-        combined.weight.segment<3>(ind) = stretching_correction.weight.segment<3>(ind) + error_correction.weight.segment<3>(ind);
+        combined.delta.segment<3>(node_ind) = stretching_correction.delta.segment<3>(node_ind) + error_correction_perpendicular;
+        combined.weight.segment<3>(node_ind) = stretching_correction.weight.segment<3>(node_ind) + error_correction.weight.segment<3>(node_ind);
     }
 
     // Normalize the weights for later use
     const double combined_normalizer = combined.weight.maxCoeff();
-    assert(combined_normalizer > 0);
-    combined.weight /= combined_normalizer;
+    if (combined_normalizer > 0)
+    {
+        combined.weight /= combined_normalizer;
+    }
 
     return combined;
 }

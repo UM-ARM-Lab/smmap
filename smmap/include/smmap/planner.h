@@ -58,7 +58,7 @@ namespace smmap
             // TODO: this is the wrong spot to store this (mentally)
             const double dt_;
             std::vector<DeformableModel::Ptr> model_list_;
-            KalmanFilterMultiarmBandit<std::mt19937_64> model_utility_bandit_;
+            KalmanFilterRDB<std::mt19937_64> model_utility_bandit_;
             const double process_noise_factor_;
             const double observation_noise_factor_;
             std::mt19937_64 generator_;
