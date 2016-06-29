@@ -44,6 +44,8 @@ void Task::execute()
     while (robot_.ok())
     {
         const WorldState current_world_state = world_feedback.back();
+        const double current_error = error_fn_(current_world_state.object_configuration_);
+        ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << current_error);
 
         ObjectDeltaAndWeight first_step_desired_motion;
         ObjectDeltaAndWeight first_step_error_correction;
@@ -52,7 +54,7 @@ void Task::execute()
         std::mutex first_step_mtx;
 
         // Update our function callbacks for the models
-        TaskDesiredObjectDeltaFunctionType caching_task_desired_object_delta_fn = [&](const WorldState& state)
+        TaskDesiredObjectDeltaFunctionType caching_task_desired_object_delta_fn = [&] (const WorldState& state)
         {
             if (state.sim_time_ == current_world_state.sim_time_)
             {
@@ -80,6 +82,13 @@ void Task::execute()
                                 task_specification_->combineErrorCorrectionAndStretchingCorrection(
                                     first_step_error_correction, first_step_stretching_correction);
 
+                        if (task_specification_->terminateTask(current_world_state, current_error))
+                        {
+                            ROS_INFO_NAMED("task", "Task finished, requesting zero movement from planner");
+                            first_step_desired_motion.delta = Eigen::VectorXd::Zero(first_step_desired_motion.delta.rows());
+                            first_step_desired_motion.weight = Eigen::VectorXd::Zero(first_step_desired_motion.weight.rows());
+                        }
+
                         first_step_calculated.store(true);
                         return first_step_desired_motion;
                     }
@@ -97,24 +106,12 @@ void Task::execute()
                                               caching_task_desired_object_delta_fn,
                                               task_object_delta_projection_fn_);
 
-        const double current_error = error_fn_(current_world_state.object_configuration_);
-        ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << current_error);
-
-        if (!task_specification_->terminateTask(current_world_state, current_error))
-        {
-            world_feedback = planner_.sendNextTrajectory(
-                        current_world_state,
-                        caching_task_desired_object_delta_fn,
-                        planning_horizion,
-                        RobotInterface::MAX_GRIPPER_VELOCITY,
-                        task_specification_->collisionScalingFactor());
-        }
-        else
-        {
-            // TODO: something other than this for a no-op?
-            ROS_INFO_NAMED("task", "Task finished, sending no-ops");
-            world_feedback = robot_.start();
-        }
+        world_feedback = planner_.sendNextTrajectory(
+                    current_world_state,
+                    caching_task_desired_object_delta_fn,
+                    planning_horizion,
+                    RobotInterface::MAX_GRIPPER_VELOCITY,
+                    task_specification_->collisionScalingFactor());
 
         ssize_t num_nodes = current_world_state.object_configuration_.cols();
         std::vector<std_msgs::ColorRGBA> colors((size_t)num_nodes);

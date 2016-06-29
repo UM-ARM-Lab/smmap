@@ -127,7 +127,7 @@ std::vector<WorldState> Planner::sendNextTrajectory(
     // Measure the time it took to pick a model
     const std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-    ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked on in " << duration << " milliseconds");
+    ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in " << duration << " milliseconds");
 
     ROS_INFO_STREAM_COND_NAMED(model_list_.size() > 1, "planner", "Using model index " << model_to_use);
 
