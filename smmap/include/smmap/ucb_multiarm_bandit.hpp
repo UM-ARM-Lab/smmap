@@ -44,7 +44,7 @@ namespace smmap
                         const double average_reward = total_reward_[arm_ind] / (double)num_pulls_[arm_ind];
                         const double term1_numer = (sum_of_squared_reward_[arm_ind] - (double)num_pulls_[arm_ind] * average_reward * average_reward);
                         const double term1_denom = (double)(num_pulls_[arm_ind] - 1);
-                        const double term1 = term1_numer/term1_denom;
+                        const double term1 = std::abs(term1_numer)/term1_denom;
                         const double term2 = std::log((double)total_pulls_) / (double)num_pulls_[arm_ind];
                         const double ucb = average_reward + std::sqrt(16.0 * term1 * term2);
 

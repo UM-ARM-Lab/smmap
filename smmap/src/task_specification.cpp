@@ -51,7 +51,7 @@ ObjectDeltaAndWeight TaskSpecification::CalculateObjectErrorCorrectionDeltaWithT
         const ObjectPointSet& deformable_object,
         const double minimum_threshold)
 {
-    const std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
+    stopwatch(RESET);
 
     const ssize_t num_nodes = deformable_object.cols();
     ObjectDeltaAndWeight desired_object_delta(num_nodes * 3);
@@ -89,9 +89,7 @@ ObjectDeltaAndWeight TaskSpecification::CalculateObjectErrorCorrectionDeltaWithT
         }
     }
 
-    const std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
-    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-    ROS_INFO_STREAM_NAMED("target_point_task", "Found best delta in " << duration << " milliseconds");
+    ROS_INFO_STREAM_NAMED("target_point_task", "Found best delta in " << stopwatch(READ) << " seconds");
 
     return desired_object_delta;
 }

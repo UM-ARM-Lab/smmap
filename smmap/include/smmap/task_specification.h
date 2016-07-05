@@ -1,7 +1,6 @@
 #ifndef TASK_SPECIFICATION_H
 #define TASK_SPECIFICATION_H
 
-#include <chrono>
 #include <memory>
 #include <Eigen/Dense>
 #include <arc_utilities/dijkstras.hpp>
@@ -10,6 +9,8 @@
 #include "smmap/ros_communication_helpers.hpp"
 #include "smmap/task_function_pointer_types.h"
 #include "smmap/visualization_tools.h"
+
+#include "smmap/timing.hpp"
 
 namespace smmap
 {
@@ -274,7 +275,7 @@ namespace smmap
 //                vis_.visualizePoints("graph_nodes", graph_nodes, blue);
 
                 ROS_INFO_STREAM_NAMED("coverage_task", "Generating " << num_cover_points_ << " Dijkstra's solutions");
-                const std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
+                stopwatch(RESET);
                 dijkstras_results_.resize(num_cover_points_);
                 #pragma omp parallel for schedule(guided)
                 for (size_t cover_ind = 0; cover_ind < (size_t)num_cover_points_; cover_ind++)
@@ -283,9 +284,7 @@ namespace smmap
                     auto result = arc_dijkstras::SimpleDijkstrasAlgorithm<Eigen::Vector3d>::PerformDijkstrasAlgorithm(free_space_graph_, free_space_graph_ind);
                     dijkstras_results_[cover_ind] = result.second;
                 }
-                const std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
-                const auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count();
-                ROS_INFO_STREAM_NAMED("coverage_task", "Found solutions in " << duration << " seconds");
+                ROS_INFO_STREAM_NAMED("coverage_task", "Found solutions in " << stopwatch(READ) << " seconds");
             }
 
         protected:
@@ -296,7 +295,7 @@ namespace smmap
 
                 ObjectDeltaAndWeight desired_object_delta(num_nodes_ * 3);
 
-                const std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
+                stopwatch(RESET);
                 // For every cover point, find the nearest deformable object point
                 for (ssize_t cover_ind = 0; cover_ind < num_cover_points_; cover_ind++)
                 {
@@ -355,9 +354,7 @@ namespace smmap
                         desired_object_delta.weight(min_ind * 3 + 2) = weight;
                     }
                 }
-                const std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
-                const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-                ROS_INFO_STREAM_NAMED("coverage_task", "Found best delta in " << duration << " milliseconds");
+                ROS_INFO_STREAM_NAMED("coverage_task", "Found best delta in " << stopwatch(READ) << " seconds");
 
                 return desired_object_delta;
             }

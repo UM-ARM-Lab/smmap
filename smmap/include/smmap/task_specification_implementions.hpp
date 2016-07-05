@@ -464,7 +464,7 @@ namespace smmap
 
             virtual double errorHistoryThreshold_impl() const
             {
-                return 0.1;
+                return 0.05;
             }
 
             virtual void visualizeDeformableObject_impl(

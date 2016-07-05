@@ -7,6 +7,7 @@
 #include <arc_utilities/pretty_print.hpp>
 
 #include "smmap/optimization.hpp"
+#include "smmap/timing.hpp"
 
 using namespace smmap;
 using namespace EigenHelpersConversions;
@@ -76,7 +77,7 @@ std::vector<WorldState> Planner::sendNextTrajectory(
 {
     // Querry each model for it's best trajectory
     ROS_INFO_STREAM_COND_NAMED(planning_horizion != 1, "planner", "Getting trajectory suggestions for each model of length " << planning_horizion);
-    const std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
+    stopwatch(RESET);
     std::vector<std::pair<AllGrippersPoseTrajectory, ObjectTrajectory>> suggested_trajectories(model_list_.size());
     for (size_t model_ind = 0; model_ind < model_list_.size(); model_ind++)
     {
@@ -125,9 +126,7 @@ std::vector<WorldState> Planner::sendNextTrajectory(
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
     // Measure the time it took to pick a model
-    const std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
-    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-    ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in " << duration << " milliseconds");
+    ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in " << stopwatch(READ) << " seconds");
 
     ROS_INFO_STREAM_COND_NAMED(model_list_.size() > 1, "planner", "Using model index " << model_to_use);
 
@@ -147,7 +146,6 @@ std::vector<WorldState> Planner::sendNextTrajectory(
 
     return world_feedback;
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // Internal helpers for the getNextTrajectory() function
@@ -176,7 +174,7 @@ void Planner::updateModels(
     const Eigen::MatrixXd observation_matrix = Eigen::MatrixXd::Identity((ssize_t)model_list_.size(), (ssize_t)model_list_.size());
     const Eigen::MatrixXd observation_noise = calculateObservationNoise(process_noise, model_used);
 
-    reward_std_dev_scale_factor_ = std::min(1e-10, 0.9 * reward_std_dev_scale_factor_ + 0.1 * observed_reward(model_used));
+    reward_std_dev_scale_factor_ = std::max(1e-10, 0.9 * reward_std_dev_scale_factor_ + 0.1 * std::abs(observed_reward(model_used)));
     const double process_noise_scaling_factor = process_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);
     const double observation_noise_scaling_factor = observation_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);
     model_utility_bandit_.updateArms(
@@ -234,7 +232,7 @@ Eigen::MatrixXd Planner::calculateProcessNoise(
         }
     }
 
-    process_noise += Eigen::MatrixXd::Identity(num_models, num_models);
+    process_noise += 0.1 * Eigen::MatrixXd::Identity(num_models, num_models);
 
     return process_noise;
 }
@@ -323,7 +321,7 @@ Eigen::MatrixXd Planner::calculateObservationNoise(
         }
     }
 
-    observation_noise += Eigen::MatrixXd::Identity(num_models, num_models);
+    observation_noise += 0.1 * Eigen::MatrixXd::Identity(num_models, num_models);
 
     return observation_noise;
 }

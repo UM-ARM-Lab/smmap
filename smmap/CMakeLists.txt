@@ -94,7 +94,6 @@ add_executable( kalman_filter_synthetic_trials
     nodes/kalman_filter_synthetic_trials.cpp
 )
 add_dependencies( kalman_filter_synthetic_trials
-    ${PROJECT_NAME}
     ${catkin_EXPORTED_TARGETS}
 )
 target_link_libraries( kalman_filter_synthetic_trials
