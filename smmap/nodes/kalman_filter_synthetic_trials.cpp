@@ -6,6 +6,8 @@
 #include <random>
 #include <omp.h>
 
+#include <cstdlib>
+
 #include "smmap/kalman_filter_multiarm_bandit.hpp"
 #include "smmap/ucb_multiarm_bandit.hpp"
 
@@ -477,7 +479,7 @@ class JacobianBandit
             const double next_error = (y_desired_ - y_next).norm();
             result.true_reward_ = prev_error - next_error;
 
-            // Consider all the arms as possible actions, and find the best action that could have been suggested
+            // Consider all the arms as possible actions, and find the best arm that could have been chosen
             double best_reward = -std::numeric_limits<double>::infinity();
             result.all_possible_arms_true_reward_.resize(num_arms_);
             for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
@@ -1103,9 +1105,6 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
 
 int main(int argc, char* argv[])
 {
-    (void)argc;
-    (void)argv;
-
     std::mt19937_64 generator(0xa8710913d2b5df6c); // a30cd67f3860ddb3) // MD5 sum of "Dale McConachie"
 //    std::mt19937_64 generator(std::chrono::system_clock::now().time_since_epoch().count());
 
@@ -1166,8 +1165,25 @@ int main(int argc, char* argv[])
     ////////////////////////////////////////////////////////////////////////////
     {
         TrialParams params;
-        params["Number of trials: "] = 100;
-        params["Number of pulls:  "] = 1000;
+
+        if (argc > 1)
+        {
+            params["Number of trials: "] = std::atoi(argv[1]);
+        }
+        else
+        {
+            params["Number of trials: "] = 100;
+        }
+
+        if (argc > 2)
+        {
+            params["Number of pulls:  "] = std::atoi(argv[2]);
+        }
+        else
+        {
+            params["Number of pulls:  "] = 1000;
+        }
+
 
 #ifdef SMALL
         params["Number of arms:   "] = 10;

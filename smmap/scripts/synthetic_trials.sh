@@ -1,0 +1,5 @@
+#!/bin/bash
+LOG_FOLDER=/home/dmcconachie/Dropbox/catkin_ws/src/smmap/logs
+rosrun smmap kalman_filter_synthetic_trials_SMALL 2000 1000 > $LOG_FOLDER/kalman_synthetic_trials_SMALL_result_2000_trials_1000_pulls.txt
+rosrun smmap kalman_filter_synthetic_trials_MEDIUM 2000 1000 > $LOG_FOLDER/kalman_synthetic_trials_MEDIUM_result_2000_trials_1000_pulls.txt
+rosrun smmap kalman_filter_synthetic_trials_LARGE 2000 1000 > $LOG_FOLDER/kalman_synthetic_trials_LARGE_result_2000_trials_1000_pulls.txt
