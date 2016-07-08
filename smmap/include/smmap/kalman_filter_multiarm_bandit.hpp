@@ -6,6 +6,8 @@
 #include <random>
 #include <utility>
 
+#include <Eigen/Eigenvalues>
+
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/pretty_print.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
@@ -35,12 +37,13 @@ namespace smmap
             ssize_t selectArmToPull(Generator& generator)
             {
                 // Sample from the current distribuition
+                std::normal_distribution<double> normal_dist(0.0, 1.0);
+
                 ssize_t best_arm = -1;
                 double best_sample = -std::numeric_limits<double>::infinity();
                 for (ssize_t arm_ind = 0; arm_ind < num_bandits_; arm_ind++)
                 {
-                    std::normal_distribution<double> normal_dist(arm_mean_(arm_ind), arm_var_(arm_ind));
-                    const double sample = normal_dist(generator);
+                    const double sample = std::sqrt(arm_var_(arm_ind)) * normal_dist(generator) + arm_mean_(arm_ind);
 
                     if (sample > best_sample)
                     {
@@ -104,7 +107,7 @@ namespace smmap
             }
 
         private:
-            const ssize_t num_bandits_;
+            ssize_t num_bandits_;
 
             Eigen::VectorXd arm_mean_;
             Eigen::VectorXd arm_var_;
@@ -115,13 +118,13 @@ namespace smmap
     {
         public:
             KalmanFilterRDB(
-                    const Eigen::VectorXd& prior_mean = Eigen::VectorXd::Zero(1),
+                    const Eigen::VectorXd& prior_mean = Eigen::VectorXd::Ones(1),
                     const Eigen::MatrixXd& prior_covar = Eigen::MatrixXd::Identity(1, 1))
                 : arm_mean_(prior_mean)
                 , arm_covar_(prior_covar)
             {
-                assert(arm_mean_.rows() == arm_covar_.cols());
-                assert(arm_covar_.cols() == arm_covar_.rows());
+                assert(arm_covar_.rows() == arm_covar_.cols());
+                assert(arm_covar_.rows() == arm_mean_.rows());
             }
 
             /**
@@ -133,8 +136,7 @@ namespace smmap
             ssize_t selectArmToPull(Generator& generator)
             {
                 // Sample from the current distribuition
-                arc_helpers::MultivariteGaussianDistribution distribution(
-                            arm_mean_, arm_covar_);
+                arc_helpers::MultivariteGaussianDistribution distribution(arm_mean_, arm_covar_);
                 const Eigen::VectorXd sample = distribution(generator);
 
                 // Find the arm with the highest sample
@@ -181,22 +183,25 @@ namespace smmap
 
                 // Kalman predict
                 const Eigen::VectorXd& predicted_mean = arm_mean_;                                  // No change to mean
-                const Eigen::MatrixXd& predicted_covariance = arm_covar_ + transition_covariance;   // Add process noise
+                const auto predicted_covariance = arm_covar_ + transition_covariance;   // Add process noise
 
                 // Kalman update - symbols from wikipedia article
-                const Eigen::VectorXd innovation = observed_reward - C * predicted_mean;                                            // tilde y_k
+                const auto innovation = observed_reward - C * predicted_mean;                                            // tilde y_k
 
 //                std::cout << "observed: " << observed_reward.transpose() << std::endl;
 //                std::cout << "C*predic: " << (C * predicted_mean).transpose() << std::endl;
 //                std::cout << "inovate:  " << innovation.transpose() << std::endl;
 
-                const Eigen::MatrixXd innovation_covariance = C * predicted_covariance * C.transpose() + observation_covariance;    // S_k
-                const Eigen::MatrixXd kalman_gain = predicted_covariance * C.transpose() * innovation_covariance.inverse();         // K_k
+                const auto innovation_covariance = C * predicted_covariance.selfadjointView<Eigen::Lower>() * C.transpose() + observation_covariance;    // S_k
+                const auto kalman_gain = predicted_covariance.selfadjointView<Eigen::Lower>() * C.transpose() * innovation_covariance.inverse();         // K_k
 
 
                 arm_mean_ = predicted_mean + kalman_gain * innovation;                                                              // hat x_k|k
-                arm_covar_ = predicted_covariance - kalman_gain * C * predicted_covariance;                                         // P_k|k
+                arm_covar_ = predicted_covariance - kalman_gain * C * predicted_covariance.selfadjointView<Eigen::Lower>();         // P_k|k
                 #pragma GCC diagnostic pop
+
+                // Numerical problems fixing
+                arm_covar_ = ((arm_covar_ + arm_covar_.transpose()) * 0.5).selfadjointView<Eigen::Lower>();
 
 //                std::cout << "update:   " << (kalman_gain * innovation).transpose() << std::endl;
 //                std::cout << "result:   " << arm_mean_.transpose() << std::endl;

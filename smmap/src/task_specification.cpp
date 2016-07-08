@@ -423,3 +423,290 @@ ObjectDeltaAndWeight TaskSpecification::combineErrorCorrectionAndStretchingCorre
 
     return combined;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Coverage Task
+////////////////////////////////////////////////////////////////////////////////
+
+CoverageTask::CoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type)
+    : TaskSpecification(nh, deformable_type, task_type)
+    , cover_points_(GetCoverPoints(nh))
+    , num_cover_points_(cover_points_.cols())
+{}
+
+double CoverageTask::getErrorThreshold() const
+{
+    return getErrorThreshold_impl();
+}
+
+double CoverageTask::calculateError_impl(const ObjectPointSet& current_configuration) const
+{
+    return CalculateErrorWithTheshold(cover_points_, current_configuration, getErrorThreshold());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Direct Coverage Task
+////////////////////////////////////////////////////////////////////////////////
+
+DirectCoverageTask::DirectCoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type)
+    : CoverageTask(nh, deformable_type, task_type)
+{}
+
+ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_impl(const WorldState& world_state) const
+{
+    ROS_INFO_NAMED("direct_coverage_task" , "Finding 'best' object delta");
+    return CalculateObjectErrorCorrectionDeltaWithThreshold(
+                cover_points_, world_state.object_configuration_, getErrorThreshold());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Dijkstras Coverage Task
+////////////////////////////////////////////////////////////////////////////////
+
+DijkstrasCoverageTask::DijkstrasCoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type)
+    : CoverageTask(nh, deformable_type, task_type)
+    , world_x_min_(GetWorldXMin(nh))
+    , world_x_step_(GetWorldXStep(nh))
+    , world_x_num_steps_(GetWorldXNumSteps(nh))
+    , world_y_min_(GetWorldYMin(nh))
+    , world_y_step_(GetWorldYStep(nh))
+    , world_y_num_steps_(GetWorldYNumSteps(nh))
+    , world_z_min_(GetWorldZMin(nh))
+    , world_z_step_(GetWorldZStep(nh))
+    , world_z_num_steps_(GetWorldZNumSteps(nh))
+{
+    GetFreeSpaceGraph(nh, free_space_graph_, cover_ind_to_free_space_graph_ind_);
+    assert(cover_ind_to_free_space_graph_ind_.size() == (size_t)num_cover_points_);
+
+    //                EigenHelpers::VectorVector3d graph_nodes;
+    //                graph_nodes.reserve(free_space_graph_.GetNodesImmutable().size());
+    //                for (size_t node_ind = 0; node_ind < free_space_graph_.GetNodesImmutable().size(); node_ind++)
+    //                {
+    //                    graph_nodes.push_back(free_space_graph_.GetNodeImmutable(node_ind).GetValueImmutable());
+    //                }
+    //                ROS_INFO_STREAM_NAMED("coverage_task", "Visualizing " << graph_nodes.size() << " graph nodes");
+    //                auto blue = Visualizer::Blue();
+    //                blue.a = 0.2f;
+    //                vis_.visualizePoints("graph_nodes", graph_nodes, blue);
+
+    const bool need_to_run_dijkstras = !loadDijkstrasResults();
+
+    if (need_to_run_dijkstras)
+    {
+        ROS_INFO_STREAM_NAMED("coverage_task", "Generating " << num_cover_points_ << " Dijkstra's solutions");
+        stopwatch(RESET);
+        dijkstras_results_.resize((size_t)num_cover_points_);
+#pragma omp parallel for schedule(guided)
+        for (size_t cover_ind = 0; cover_ind < (size_t)num_cover_points_; cover_ind++)
+        {
+            const int64_t free_space_graph_ind = cover_ind_to_free_space_graph_ind_[cover_ind];
+            const auto result = arc_dijkstras::SimpleDijkstrasAlgorithm<Eigen::Vector3d>::PerformDijkstrasAlgorithm(free_space_graph_, free_space_graph_ind);
+            dijkstras_results_[cover_ind] = result.second;
+        }
+        ROS_INFO_NAMED("coverage_task", "Writing solutions to file");
+
+        saveDijkstrasResults();
+        ROS_INFO_STREAM_NAMED("coverage_task", "Found solutions in " << stopwatch(READ) << " seconds");
+    }
+}
+
+
+bool DijkstrasCoverageTask::saveDijkstrasResults()
+{
+    try
+    {
+        std::vector<uint8_t> buffer;
+        // First serialize the graph that created the results
+        ROS_INFO_NAMED("coverage_task", "Serializing the data");
+        free_space_graph_.SerializeSelf(buffer, &EigenHelpers::Serialize<Eigen::Vector3d>);
+
+        // Next serialize the results themselves
+        const auto first_serializer = [] (const std::vector<int64_t>& vec_to_serialize, std::vector<uint8_t>& buffer) { return arc_helpers::SerializeVector<int64_t>(vec_to_serialize, buffer, &arc_helpers::SerializeFixedSizePOD<int64_t>); };
+        const auto second_serializer = [] (const std::vector<double>& vec_to_serialize, std::vector<uint8_t>& buffer) { return arc_helpers::SerializeVector<double>(vec_to_serialize, buffer, &arc_helpers::SerializeFixedSizePOD<double>); };
+        const auto pair_serializer = [&first_serializer, &second_serializer] (const std::pair<std::vector<int64_t>, std::vector<double>>& pair_to_serialize, std::vector<uint8_t>& buffer) { return arc_helpers::SerializePair<std::vector<int64_t>, std::vector<double>>(pair_to_serialize, buffer, first_serializer, second_serializer); };
+        arc_helpers::SerializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(dijkstras_results_, buffer, pair_serializer);
+
+        // Compress and save to file
+        ROS_INFO_NAMED("coverage_task", "Compressing for storage");
+        const std::vector<uint8_t> compressed_serialized_data = ZlibHelpers::CompressBytes(buffer);
+        ROS_INFO_NAMED("coverage_task", "Saving Dijkstras results to file");
+        const std::string dijkstras_file_path = GetDijkstrasStorageLocation(nh_);
+        std::ofstream output_file(dijkstras_file_path, std::ios::out | std::ios::binary);
+        uint64_t serialized_size = compressed_serialized_data.size();
+        output_file.write(reinterpret_cast<const char*>(compressed_serialized_data.data()), (std::streamsize)serialized_size);
+        output_file.close();
+        return true;
+    }
+    catch (...)
+    {
+        ROS_ERROR_NAMED("coverage_task", "Saving Dijkstras results to file failed");
+        return false;
+    }
+}
+
+bool DijkstrasCoverageTask::loadDijkstrasResults()
+{
+    try
+    {
+        ROS_INFO_NAMED("coverage_task", "Checking if Dijkstra's solution already exists");
+        const std::string dijkstras_file_path = GetDijkstrasStorageLocation(nh_);
+        stopwatch(RESET);
+        std::ifstream prev_dijkstras_result(dijkstras_file_path, std::ios::binary | std::ios::in | std::ios::ate);
+        if (!prev_dijkstras_result.is_open())
+        {
+            throw_arc_exception(std::runtime_error, "Couldn't open file");
+        }
+
+        ROS_INFO_NAMED("coverage_task", "Reading contents of file");
+        std::streamsize size = prev_dijkstras_result.tellg();
+        prev_dijkstras_result.seekg(0, std::ios::beg);
+        std::vector<uint8_t> file_buffer((size_t)size);
+        if (!(prev_dijkstras_result.read(reinterpret_cast<char*>(file_buffer.data()), size)))
+        {
+            throw_arc_exception(std::runtime_error, "Unable to read entire contents of file");
+        }
+        const std::vector<uint8_t> decompressed_dijkstras_results = ZlibHelpers::DecompressBytes(file_buffer);
+
+        // First check that the graph we have matches the graph that is stored
+        std::vector<uint8_t> temp_buffer;
+        const uint64_t serialzed_graph_size = free_space_graph_.SerializeSelf(temp_buffer, &EigenHelpers::Serialize<Eigen::Vector3d>);
+        const auto mismatch_results = std::mismatch(temp_buffer.begin(), temp_buffer.end(), decompressed_dijkstras_results.begin());
+        if (mismatch_results.first != temp_buffer.end())
+        {
+            throw_arc_exception(std::runtime_error, "Mismatch in serialzed graphs, need to regenerate Dijkstras results");
+        }
+
+        // Next deserialze the Dijkstras results
+        const auto first_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current) { return arc_helpers::DeserializeVector<int64_t>(buffer, current, &arc_helpers::DeserializeFixedSizePOD<int64_t>); };
+        const auto second_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current) { return arc_helpers::DeserializeVector<double>(buffer, current, &arc_helpers::DeserializeFixedSizePOD<double>); };
+        const auto pair_deserializer = [&first_deserializer, &second_deserializer] (const std::vector<uint8_t>& buffer, const uint64_t current) { return arc_helpers::DeserializePair<std::vector<int64_t>, std::vector<double>>(buffer, current, first_deserializer, second_deserializer); };
+
+        uint64_t current_position = serialzed_graph_size;
+        const auto deserialized_result = arc_helpers::DeserializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(decompressed_dijkstras_results, current_position, pair_deserializer);
+        dijkstras_results_ = deserialized_result.first;
+        current_position += deserialized_result.second;
+        if (current_position != decompressed_dijkstras_results.size())
+        {
+            throw_arc_exception(std::runtime_error, "Invalid data size found");
+        }
+
+        ROS_INFO_STREAM_NAMED("coverage_task", "Read solutions in " << stopwatch(READ) << " seconds");
+        return true;
+    }
+
+    catch (...)
+    {
+        ROS_ERROR_NAMED("coverage_task", "Loading Dijkstras results from file failed");
+        return false;
+    }
+}
+
+ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_Dijkstras(
+        const ObjectPointSet& object_configuration, const double minimum_threshold) const
+{
+    ROS_INFO_NAMED("coverage_task" , "Finding 'best' object delta");
+
+    ObjectDeltaAndWeight desired_object_delta(num_nodes_ * 3);
+
+    stopwatch(RESET);
+    // For every cover point, find the nearest deformable object point
+    for (ssize_t cover_ind = 0; cover_ind < num_cover_points_; cover_ind++)
+    {
+        const Eigen::Vector3d& cover_point = cover_points_.col(cover_ind);
+
+        // Find the closest deformable object point
+        double min_dist = std::numeric_limits<double>::infinity();
+        ssize_t min_ind = -1;
+        ssize_t target_point_ind_in_graph = -1;
+
+        for (ssize_t deformable_ind = 0; deformable_ind < num_nodes_; deformable_ind++)
+        {
+            const Eigen::Vector3d& deformable_point = object_configuration.col(deformable_ind);
+            const double straight_line_distance_squared = (cover_point - deformable_point).squaredNorm();
+
+            int64_t target_ind;
+            double graph_dist;
+
+            // If we are more than a grid cell away from the cover point, then lookup our position in the rest of the grid
+            if (straight_line_distance_squared > 2.0 * std::min({world_x_min_, world_y_min_, world_z_min_}))
+            {
+                const ssize_t deformable_point_ind_in_graph = worldPosToGridIndex(deformable_point);
+                target_ind = dijkstras_results_[(size_t)cover_ind].first[(size_t)deformable_point_ind_in_graph];
+                graph_dist = dijkstras_results_[(size_t)cover_ind].second[(size_t)deformable_point_ind_in_graph];
+            }
+            // Otherwise, use the cover point directly
+            else
+            {
+                target_ind = cover_ind_to_free_space_graph_ind_[(size_t)cover_ind];
+                graph_dist = std::sqrt(straight_line_distance_squared);
+            }
+
+            // If we've found something closer, update our records
+            if (graph_dist < min_dist)
+            {
+                min_dist = graph_dist;
+                min_ind= deformable_ind;
+                target_point_ind_in_graph = target_ind;
+            }
+        }
+
+        // If we are at least some minimum threshold away, use this
+        // cover point as a "pull" on the nearest deformable point
+        if (min_dist > minimum_threshold)
+        {
+            const Eigen::Vector3d& closest_point = object_configuration.col(min_ind);
+            const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(target_point_ind_in_graph).GetValueImmutable();
+
+            desired_object_delta.delta.segment<3>(min_ind * 3) =
+                    desired_object_delta.delta.segment<3>(min_ind * 3)
+                    + (target_point - closest_point);
+
+            const double weight = std::max(desired_object_delta.weight(min_ind * 3), min_dist);
+            desired_object_delta.weight(min_ind * 3) = weight;
+            desired_object_delta.weight(min_ind * 3 + 1) = weight;
+            desired_object_delta.weight(min_ind * 3 + 2) = weight;
+        }
+    }
+    ROS_INFO_STREAM_NAMED("coverage_task", "Found best delta in " << stopwatch(READ) << " seconds");
+
+    return desired_object_delta;
+}
+
+ssize_t DijkstrasCoverageTask::xyzIndexToGridIndex(const ssize_t x_ind, const ssize_t y_ind, const ssize_t z_ind) const
+{
+    // If the point is in the grid, return the index
+    if ((0 <= x_ind && x_ind < world_x_num_steps_)
+        && (0 <= y_ind && y_ind < world_y_num_steps_)
+        && (0 <= z_ind && z_ind < world_z_num_steps_))
+    {
+        return (x_ind * world_y_num_steps_ + y_ind) * world_z_num_steps_ + z_ind;
+    }
+    // Otherwise return -1
+    else
+    {
+        return -1;
+    }
+}
+
+ssize_t DijkstrasCoverageTask::worldPosToGridIndex(const double x, const double y, const double z) const
+{
+    const int64_t x_ind = std::lround((x - world_x_min_) / world_x_step_);
+    const int64_t y_ind = std::lround((y - world_y_min_) / world_y_step_);
+    const int64_t z_ind = std::lround((z - world_z_min_) / world_z_step_);
+
+    return xyzIndexToGridIndex(
+                arc_helpers::ClampValue(x_ind, 0L, world_x_num_steps_ - 1),
+                arc_helpers::ClampValue(y_ind, 0L, world_y_num_steps_ - 1),
+                arc_helpers::ClampValue(z_ind, 0L, world_z_num_steps_ - 1));
+}
+
+ssize_t DijkstrasCoverageTask::worldPosToGridIndex(const Eigen::Vector3d& vec) const
+{
+    return worldPosToGridIndex(vec(0), vec(1), vec(2));
+}
+
+ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_impl(const WorldState& world_state) const
+{
+    ROS_INFO_NAMED("dijkstras_coverage_task" , "Finding 'best' object delta");
+    return calculateObjectErrorCorrectionDelta_Dijkstras(world_state.object_configuration_, getErrorThreshold());
+}

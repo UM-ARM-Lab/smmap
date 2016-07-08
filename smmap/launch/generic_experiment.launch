@@ -9,6 +9,7 @@
     <arg name="start_bullet_viewer"             default="true"/>
 
     <!-- Planner model arguments -->
+    <arg name="bandit_algorithm"                default="KFRDB"/>
     <arg name="multi_model"                     default="false"/>
     <arg name="deformability_override"          default="false"/>
     <arg name="use_adaptive_model"              default="false"/>
@@ -45,5 +46,5 @@
     </include>
 
     <!-- Start the planner -->
-    <node name="smmap_planner_node" pkg="smmap" type="smmap_test_node" required="true"/>
+    <node name="smmap_planner_node" pkg="smmap" type="smmap_test_node_$(arg bandit_algorithm)" required="true"/>
 </launch>

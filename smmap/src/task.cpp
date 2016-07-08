@@ -221,10 +221,10 @@ void Task::initializeModelSet()
         // Single manually tuned model
         ////////////////////////////////////////////////////////////////////////
 
-        planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-                              DiminishingRigidityModel(
-                                  task_specification_->defaultDeformability(),
-                                  GetOptimizationEnabled(nh_))));
+//        planner_.addModel(std::make_shared<DiminishingRigidityModel>(
+//                              DiminishingRigidityModel(
+//                                  task_specification_->defaultDeformability(),
+//                                  GetOptimizationEnabled(nh_))));
     }
     else if (GetUseAdaptiveModel(ph_))
     {

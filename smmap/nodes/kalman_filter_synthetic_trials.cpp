@@ -784,11 +784,10 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
 
     for (size_t trial_ind = 0; trial_ind < num_trials; trial_ind++)
     {
-        JacobianBandit<Generator> bandit(generator, num_arms, num_jacobian_rows, num_jacobian_cols, false, false);
-
         // Run a trial using KF-RDB
         {
-            bandit.reset();
+            Generator generator_copy = generator;
+            JacobianBandit<Generator> bandit(generator_copy, num_arms, num_jacobian_rows, num_jacobian_cols, false, false);
             KalmanFilterRDB<Generator> kfrdb_alg(VectorXd::Zero(num_arms), MatrixXd::Identity(num_arms, num_arms) * 1e6);
             double total_regret = 0;
             double estimated_reward_scale = MIN_REWARD_SCALE;
@@ -797,8 +796,8 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
             {
                 const VectorXd target_movement = bandit.getTargetMovement();
                 const auto arm_suggested_actions = bandit.getArmSuggestedActions(target_movement);
-                const size_t arm_to_pull = kfrdb_alg.selectArmToPull(generator);
-                auto pull_result = bandit.takeAction(arm_suggested_actions[arm_to_pull].suggested_action, arm_suggested_actions);
+                const size_t arm_to_pull = kfrdb_alg.selectArmToPull(generator_copy);
+                const auto pull_result = bandit.takeAction(arm_suggested_actions[arm_to_pull].suggested_action, arm_suggested_actions);
                 estimated_reward_scale = reward_scale_estimator_fn(estimated_reward_scale, pull_result.true_reward_);
 
                 // process noise
@@ -1021,7 +1020,7 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
                 MatrixXd observation_matrix = RowVectorXd::Zero(num_arms);
                 observation_matrix(0, arm_to_pull) = 1;
                 VectorXd observed_reward = VectorXd::Ones(1) * pull_result.true_reward_;
-                MatrixXd observation_noise = MatrixXd::Ones(1, 1);
+                MatrixXd observation_noise = MatrixXd::Zero(1, 1);
 
 
 
@@ -1038,7 +1037,8 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
 
         // Run a trial using KF-MANB
         {
-            bandit.reset();
+            Generator generator_copy = generator;
+            JacobianBandit<Generator> bandit(generator_copy, num_arms, num_jacobian_rows, num_jacobian_cols, false, false);
             KalmanFilterMANB<Generator> kfmanb_alg(VectorXd::Zero(num_arms), VectorXd::Ones(num_arms) * 1e6);
             double total_regret = 0;
             double estimated_reward_scale = MIN_REWARD_SCALE;
@@ -1046,12 +1046,12 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
             for (size_t pull_ind = 0; pull_ind < num_pulls; pull_ind++)
             {
                 const VectorXd target_movement = bandit.getTargetMovement();
-                auto arm_suggested_actions = bandit.getArmSuggestedActions(target_movement);
-                const size_t arm_to_pull = kfmanb_alg.selectArmToPull(generator);
-                auto pull_result = bandit.takeAction(arm_suggested_actions[arm_to_pull].suggested_action, arm_suggested_actions);
+                const auto arm_suggested_actions = bandit.getArmSuggestedActions(target_movement);
+                const size_t arm_to_pull = kfmanb_alg.selectArmToPull(generator_copy);
+                const auto pull_result = bandit.takeAction(arm_suggested_actions[arm_to_pull].suggested_action, arm_suggested_actions);
                 estimated_reward_scale = reward_scale_estimator_fn(estimated_reward_scale, pull_result.true_reward_);
 
-                kfmanb_alg.updateArms(std::pow(estimated_reward_scale, 2) * Eigen::VectorXd::Ones(num_arms), arm_to_pull, pull_result.true_reward_, std::pow(estimated_reward_scale, 2));
+                kfmanb_alg.updateArms(std::pow(estimated_reward_scale, 2) * Eigen::VectorXd::Ones(num_arms), arm_to_pull, pull_result.true_reward_, 0);
                 total_regret += pull_result.true_regret_;
             }
 
@@ -1061,16 +1061,17 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
 
         // Run a trial using UCB1-Normal
         {
-            bandit.reset();
+            Generator generator_copy = generator;
+            JacobianBandit<Generator> bandit(generator_copy, num_arms, num_jacobian_rows, num_jacobian_cols, false, false);
             UCB1Normal ucb1normal_alg(num_arms);
             double total_regret = 0;
 
             for (size_t pull_ind = 0; pull_ind < num_pulls; pull_ind++)
             {
                 const VectorXd target_movement = bandit.getTargetMovement();
-                auto arm_suggested_actions = bandit.getArmSuggestedActions(target_movement);
+                const auto arm_suggested_actions = bandit.getArmSuggestedActions(target_movement);
                 const size_t arm_to_pull = ucb1normal_alg.selectArmToPull();
-                auto pull_result = bandit.takeAction(arm_suggested_actions[arm_to_pull].suggested_action, arm_suggested_actions);
+                const auto pull_result = bandit.takeAction(arm_suggested_actions[arm_to_pull].suggested_action, arm_suggested_actions);
 
                 ucb1normal_alg.updateArms(arm_to_pull, pull_result.true_reward_);
                 total_regret += pull_result.true_regret_;
@@ -1078,6 +1079,9 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
 
             results.ucb1normal_average_regret_(trial_ind) = total_regret / (double)num_pulls;
 //            std::cout << "UCB1-Normal Final Position: " << bandit.getYCurrent().transpose() << std::endl;
+
+            // Update the original version so as to get new data next trial
+            generator = generator_copy;
         }
 
         std::cout << "Trial Num: " << trial_ind;
@@ -1087,7 +1091,6 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
                   << " UCB1-Normal: " << results.ucb1normal_average_regret_(trial_ind);
         std::cout << std::setw(1) << std::setprecision(6)
                   << std::endl;
-
     }
 
     results.calculateStatistics();
@@ -1163,16 +1166,24 @@ int main(int argc, char* argv[])
     ////////////////////////////////////////////////////////////////////////////
     {
         TrialParams params;
-//        params["Number of arms:   "] = 10;
-        params["Number of arms:   "] = 7*7+10;
         params["Number of trials: "] = 100;
         params["Number of pulls:  "] = 1000;
-//        params["Num Jacobian rows: "] = 3;
-//        params["Num Jacobian cols: "] = 2;
-//        params["Num Jacobian rows: "] = 3*49;
-//        params["Num Jacobian cols: "] = 6*1;
+
+#ifdef SMALL
+        params["Number of arms:   "] = 10;
+        params["Num Jacobian rows: "] = 3;
+        params["Num Jacobian cols: "] = 2;
+#endif
+#ifdef MEDIUM
+        params["Number of arms:   "] = 7*7+11;
+        params["Num Jacobian rows: "] = 3*49;
+        params["Num Jacobian cols: "] = 6*1;
+#endif
+#ifdef LARGE
+        params["Number of arms:   "] = 7*7+11;
         params["Num Jacobian rows: "] = 3*2025;
         params["Num Jacobian cols: "] = 6*2;
+#endif
 
 //        params["Initial Reward Variance Scale Factor: "];
 //        params["Transition Covariance Scale Factor:   "];

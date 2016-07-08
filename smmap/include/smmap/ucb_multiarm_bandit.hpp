@@ -7,12 +7,14 @@
 #include <cmath>
 #include <vector>
 
+#include <Eigen/Dense>
+
 namespace smmap
 {
     class UCB1Normal
     {
         public:
-            UCB1Normal(size_t num_bandits)
+            UCB1Normal(size_t num_bandits = 1)
                 : num_arms_(num_bandits)
                 , total_reward_(num_arms_, 0.0)
                 , sum_of_squared_reward_(num_arms_, 0.0)
@@ -70,8 +72,33 @@ namespace smmap
                 total_pulls_++;
             }
 
+            Eigen::VectorXd getMean() const
+            {
+                Eigen::VectorXd mean(num_arms_);
+                for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
+                {
+                    mean((ssize_t)arm_ind) = total_reward_[arm_ind] / (double)num_pulls_[arm_ind];
+                }
+                return mean;
+            }
+
+            Eigen::VectorXd getUCB() const
+            {
+                Eigen::VectorXd ucb(num_arms_);
+                for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
+                {
+                    const double average_reward = total_reward_[arm_ind] / (double)num_pulls_[arm_ind];
+                    const double term1_numer = (sum_of_squared_reward_[arm_ind] - (double)num_pulls_[arm_ind] * average_reward * average_reward);
+                    const double term1_denom = (double)(num_pulls_[arm_ind] - 1);
+                    const double term1 = std::abs(term1_numer)/term1_denom;
+                    const double term2 = std::log((double)total_pulls_) / (double)num_pulls_[arm_ind];
+                    ucb((ssize_t)arm_ind) = average_reward + std::sqrt(16.0 * term1 * term2);
+                }
+                return ucb;
+            }
+
         private:
-            const size_t num_arms_;
+            size_t num_arms_;
 
             std::vector<double> total_reward_;
             std::vector<double> sum_of_squared_reward_;

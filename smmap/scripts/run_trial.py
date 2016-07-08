@@ -6,6 +6,7 @@ def run_trial(experiment,
               logging_enabled = None,
               test_id = None,
               planning_horizion = None,
+              bandit_algorithm = None,
               multi_model = None,
               deformability_override = None,
               translational_deformability = None,
@@ -47,6 +48,9 @@ def run_trial(experiment,
         roslaunch_command.append('adaptive_model_learning_rate:=' + str(adaptive_model_learning_rate))
 
     # Setup multi-model parameters
+    if bandit_algorithm is not None:
+        roslaunch_command.append('bandit_algorithm:=' + bandit_algorithm)
+
     if multi_model is not None:
         roslaunch_command.append('multi_model:=' + multi_model)
     if kalman_parameters_override is not None:

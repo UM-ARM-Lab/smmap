@@ -7,6 +7,7 @@
 #include "smmap/task_function_pointer_types.h"
 #include "smmap/visualization_tools.h"
 #include "smmap/kalman_filter_multiarm_bandit.hpp"
+#include "smmap/ucb_multiarm_bandit.hpp"
 
 namespace smmap
 {
@@ -57,8 +58,17 @@ namespace smmap
 
             // TODO: this is the wrong spot to store this (mentally)
             const double dt_;
+            ssize_t num_models_;
             std::vector<DeformableModel::Ptr> model_list_;
+#ifdef KFRDB_BANDIT
             KalmanFilterRDB<std::mt19937_64> model_utility_bandit_;
+#endif
+#ifdef KFMANB_BANDIT
+            KalmanFilterMANB<std::mt19937_64> model_utility_bandit_;
+#endif
+#ifdef UCB_BANDIT
+            UCB1Normal model_utility_bandit_;
+#endif
             double reward_std_dev_scale_factor_;
             const double process_noise_factor_;
             const double observation_noise_factor_;
