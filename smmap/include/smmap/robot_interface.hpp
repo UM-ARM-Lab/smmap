@@ -225,29 +225,44 @@ namespace smmap
                 return feedback;
             }
 
+
+            size_t feedback_counter_;
+            std::vector<bool> feedback_recieved_;
+
+
+            void internalTestPoseFeedbackCallback(const smmap_msgs::TestGrippersPosesActionFeedbackConstPtr& feedback, const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback)
+            {
+                ROS_INFO_STREAM_NAMED("robot_interface", "Got feedback for test number " << feedback->feedback.test_id);
+                feedback_callback(feedback->feedback.test_id, ConvertToEigenFeedback(feedback->feedback.sim_state));
+                if (feedback_recieved_[feedback->feedback.test_id] == false)
+                {
+                    feedback_recieved_[feedback->feedback.test_id] = true;
+                    feedback_counter_--;
+                }
+            }
+
             bool testGrippersPoses_impl(
                     const smmap_msgs::TestGrippersPosesGoal& goal,
                     const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback)
             {
-                size_t feedback_counter = goal.poses_to_test.size();
-                const auto internal_feedback_fn = [&feedback_callback, &feedback_counter] (const smmap_msgs::TestGrippersPosesFeedbackConstPtr& feedback)
-                {
-                    ROS_INFO_STREAM_NAMED("robot_interface", "Got feedback for test number " << feedback->test_id);
-                    feedback_callback(feedback->test_id, ConvertToEigenFeedback(feedback->sim_state));
-                    feedback_counter--;
-                };
 
-                test_grippers_poses_client_.sendGoal(
-                            goal,
-                            actionlib::SimpleActionClient<smmap_msgs::TestGrippersPosesAction>::SimpleDoneCallback(),
-                            actionlib::SimpleActionClient<smmap_msgs::TestGrippersPosesAction>::SimpleActiveCallback(),
-                            internal_feedback_fn);
+                feedback_counter_ = goal.poses_to_test.size();
+                feedback_recieved_.clear();
+                feedback_recieved_.resize(goal.poses_to_test.size(), false);
+
+                ros::Subscriber internal_feedback_sub = nh_.subscribe<smmap_msgs::TestGrippersPosesActionFeedback>(
+                            GetTestGrippersPosesTopic(nh_) + "/feedback", 1000, boost::bind(&RobotInterface::internalTestPoseFeedbackCallback, this, _1, feedback_callback));
+
+                test_grippers_poses_client_.sendGoal(goal);
+//                            actionlib::SimpleActionClient<smmap_msgs::TestGrippersPosesAction>::SimpleDoneCallback(),
+//                            actionlib::SimpleActionClient<smmap_msgs::TestGrippersPosesAction>::SimpleActiveCallback(),
+//                            internal_feedback_fn);
 
                 const bool result = test_grippers_poses_client_.waitForResult();
 
-                while(feedback_counter > 0)
+                while (feedback_counter_ > 0)
                 {
-                    std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+                    std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));
                 }
 
                 return result;
