@@ -52,7 +52,8 @@ namespace smmap
                     const WorldState& current_world_state,
                     const Eigen::VectorXd& model_utility_mean,
                     const Eigen::MatrixXd& model_utility_covariance,
-                    const ssize_t model_used);
+                    const ssize_t model_used,
+                    const std::vector<double>& rewards_for_all_models);
 
             ////////////////////////////////////////////////////////////////////
             // Function pointers that are created in the construtor that are

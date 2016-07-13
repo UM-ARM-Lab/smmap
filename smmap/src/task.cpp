@@ -312,6 +312,10 @@ void Task::initializeLogging()
         loggers.insert(std::make_pair<std::string, Log::Log> (
                             "model_chosen",
                             Log::Log(log_folder + "model_chosen.txt", false))) ;
+
+        loggers.insert(std::make_pair<std::string, Log::Log> (
+                            "rewards_for_all_models",
+                            Log::Log(log_folder + "rewards_for_all_models.txt", false))) ;
     }
 }
 
@@ -323,7 +327,8 @@ void Task::logData(
         const WorldState& current_world_state,
         const Eigen::VectorXd& model_utility_mean,
         const Eigen::MatrixXd& model_utility_covariance,
-        const ssize_t model_used)
+        const ssize_t model_used,
+        const std::vector<double>& rewards_for_all_models)
 {
     if (logging_enabled_)
     {
@@ -346,6 +351,9 @@ void Task::logData(
 
         LOG(loggers.at("model_chosen"),
              model_used);
+
+        LOG(loggers.at("rewards_for_all_models"),
+            PrettyPrint::PrettyPrint(rewards_for_all_models, false, " "));
     }
 }
 
@@ -391,7 +399,8 @@ LoggingFunctionType Task::createLoggingFunction()
                      std::placeholders::_1,
                      std::placeholders::_2,
                      std::placeholders::_3,
-                     std::placeholders::_4);
+                     std::placeholders::_4,
+                     std::placeholders::_5);
 }
 
 TaskObjectDeltaProjectionFunctionType Task::createTaskObjectDeltaProjectionFunction()

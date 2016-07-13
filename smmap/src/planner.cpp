@@ -158,24 +158,24 @@ std::vector<WorldState> Planner::sendNextTrajectory(
     world_feedback.emplace(world_feedback.begin(), current_world_state);
 
 
-    if (num_models_ > 1)
-    {
-        std::cout << "Visualzed result:\n" << world_feedback.back().object_configuration_.leftCols(5) << std::endl;
-        std::cout << "Forked result:\n" << test_final_state_for_model_chosen.object_configuration_.leftCols(5) << std::endl;
-        assert(world_feedback.back().object_configuration_.cwiseEqual(test_final_state_for_model_chosen.object_configuration_).all());
-    }
+//    if (num_models_ > 1)
+//    {
+//        std::cout << "Visualzed result:\n" << world_feedback.back().object_configuration_.leftCols(5) << std::endl;
+//        std::cout << "Forked result:\n" << test_final_state_for_model_chosen.object_configuration_.leftCols(5) << std::endl;
+//        assert(world_feedback.back().object_configuration_.cwiseEqual(test_final_state_for_model_chosen.object_configuration_).all());
+//    }
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
     const ObjectDeltaAndWeight task_desired_motion = task_desired_object_delta_fn(current_world_state);
     updateModels(current_world_state, task_desired_motion, suggested_trajectories, model_to_use, world_feedback);
 #ifdef KFRDB_BANDIT
-    logging_fn_(world_feedback.back(), model_utility_bandit_.getMean(), model_utility_bandit_.getCovariance(), model_to_use);
+    logging_fn_(world_feedback.back(), model_utility_bandit_.getMean(), model_utility_bandit_.getCovariance(), model_to_use, individual_rewards);
 #endif
 #ifdef KFMANB_BANDIT
-    logging_fn_(world_feedback.back(), model_utility_bandit_.getMean(), model_utility_bandit_.getVariance(), model_to_use);
+    logging_fn_(world_feedback.back(), model_utility_bandit_.getMean(), model_utility_bandit_.getVariance(), model_to_use, individual_rewards);
 #endif
 #ifdef UCB_BANDIT
-    logging_fn_(world_feedback.back(), model_utility_bandit_.getMean(), model_utility_bandit_.getUCB(), model_to_use);
+    logging_fn_(world_feedback.back(), model_utility_bandit_.getMean(), model_utility_bandit_.getUCB(), model_to_use, individual_rewards);
 #endif
 
     return world_feedback;

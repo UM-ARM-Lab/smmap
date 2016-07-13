@@ -42,7 +42,7 @@ namespace smmap
             std::vector<WorldState> start()
             {
                 ROS_INFO_NAMED("robot_bridge", "Waiting for the robot gripper action server to be available");
-                cmd_grippers_traj_client_.waitForServer();
+//                cmd_grippers_traj_client_.waitForServer();
                 test_grippers_poses_client_.waitForServer();
 
                 ROS_INFO_NAMED("robot_bridge", "Kickstarting the planner with a no-op");
