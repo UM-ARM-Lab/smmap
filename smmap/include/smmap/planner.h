@@ -20,6 +20,7 @@ namespace smmap
 
             Planner(const ErrorFunctionType& error_fn,
                     const TaskExecuteGripperTrajectoryFunctionType& execute_trajectory_fn,
+                    const TestGrippersPosesFunctionType& test_grippers_poses_fn,
                     const LoggingFunctionType& logging_fn,
                     Visualizer& vis,
                     const double dt);
@@ -43,6 +44,7 @@ namespace smmap
         private:
             const ErrorFunctionType error_fn_;
             const TaskExecuteGripperTrajectoryFunctionType execute_trajectory_fn_;
+            const TestGrippersPosesFunctionType test_grippers_poses_fn_;
 
             ////////////////////////////////////////////////////////////////////
             // Logging and visualization functionality

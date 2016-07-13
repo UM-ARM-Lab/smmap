@@ -429,7 +429,7 @@ namespace smmap
 
                 if (!collision_checker_client_.call(collision_report_ros))
                 {
-                    ROS_FATAL_NAMED("gripper collision check", "Unabled to retrieve gripper collision report.");
+                    ROS_FATAL_NAMED("gripper collision check", "Unable to retrieve gripper collision report.");
                 }
 
                 std::vector<CollisionData> collision_report_eigen;

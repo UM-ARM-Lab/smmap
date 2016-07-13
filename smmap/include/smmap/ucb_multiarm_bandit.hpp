@@ -74,7 +74,7 @@ namespace smmap
 
             Eigen::VectorXd getMean() const
             {
-                Eigen::VectorXd mean(num_arms_);
+                Eigen::VectorXd mean((ssize_t)num_arms_);
                 for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
                 {
                     mean((ssize_t)arm_ind) = total_reward_[arm_ind] / (double)num_pulls_[arm_ind];
@@ -84,7 +84,7 @@ namespace smmap
 
             Eigen::VectorXd getUCB() const
             {
-                Eigen::VectorXd ucb(num_arms_);
+                Eigen::VectorXd ucb((ssize_t)num_arms_);
                 for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
                 {
                     const double average_reward = total_reward_[arm_ind] / (double)num_pulls_[arm_ind];

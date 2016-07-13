@@ -1,6 +1,7 @@
 #ifndef ROBOT_INTERFACE_HPP
 #define ROBOT_INTERFACE_HPP
 
+#include <chrono>
 #include <thread>
 
 #include <ros/ros.h>
@@ -11,6 +12,7 @@
 
 #include "smmap/ros_communication_helpers.hpp"
 #include "smmap/grippers.hpp"
+#include "smmap/task_function_pointer_types.h"
 
 
 namespace smmap
@@ -23,6 +25,7 @@ namespace smmap
                 , grippers_data_(GetGrippersData(nh_))
                 , gripper_collision_checker_(nh_)
                 , cmd_grippers_traj_client_(nh_, GetCommandGripperTrajTopic(nh_), false)
+                , test_grippers_poses_client_(nh_, GetTestGrippersPosesTopic(nh_), false)
                 // TODO: remove this hardcoded spin rate
                 , spin_thread_(spin, 1000)
             {}
@@ -85,7 +88,13 @@ namespace smmap
             std::vector<WorldState> sendGripperTrajectory(
                     const AllGrippersPoseTrajectory& trajectory)
             {
-                return sendGripperTrajectory_impl(toRosGoal(trajectory));
+                return sendGripperTrajectory_impl(toRosTrajectoryGoal(trajectory));
+            }
+
+            bool testGrippersPoses(const std::vector<AllGrippersSinglePose>& grippers_poses,
+                                   const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback)
+            {
+                return testGrippersPoses_impl(toRosTestPosesGoal(grippers_poses), feedback_callback);
             }
 
             std::vector<CollisionData> checkGripperCollision(
@@ -105,6 +114,7 @@ namespace smmap
             std::vector<GripperData> grippers_data_;
             GripperCollisionChecker gripper_collision_checker_;
             actionlib::SimpleActionClient<smmap_msgs::CmdGrippersTrajectoryAction> cmd_grippers_traj_client_;
+            actionlib::SimpleActionClient<smmap_msgs::TestGrippersPosesAction> test_grippers_poses_client_;
 
             // Our internal version of ros::spin()
             std::thread spin_thread_;
@@ -146,7 +156,7 @@ namespace smmap
                 return goal;
             }
 
-            smmap_msgs::CmdGrippersTrajectoryGoal toRosGoal(
+            smmap_msgs::CmdGrippersTrajectoryGoal toRosTrajectoryGoal(
                     const AllGrippersPoseTrajectory& trajectory) const
             {
                 smmap_msgs::CmdGrippersTrajectoryGoal goal;
@@ -158,6 +168,23 @@ namespace smmap
                     goal.trajectory[time_ind].pose =
                             EigenHelpersConversions::VectorAffine3dToVectorGeometryPose(
                                 trajectory[time_ind]);
+                }
+
+                return goal;
+            }
+
+            smmap_msgs::TestGrippersPosesGoal toRosTestPosesGoal(
+                    const std::vector<AllGrippersSinglePose>& grippers_poses) const
+            {
+                smmap_msgs::TestGrippersPosesGoal goal;
+                goal.gripper_names = GetGripperNames(grippers_data_);
+
+                goal.poses_to_test.resize(grippers_poses.size());
+                for (size_t pose_ind = 0; pose_ind < grippers_poses.size(); pose_ind++)
+                {
+                    goal.poses_to_test[pose_ind].pose =
+                            EigenHelpersConversions::VectorAffine3dToVectorGeometryPose(
+                                grippers_poses[pose_ind]);
                 }
 
                 return goal;
@@ -181,6 +208,33 @@ namespace smmap
                 return feedback;
             }
 
+            bool testGrippersPoses_impl(
+                    const smmap_msgs::TestGrippersPosesGoal& goal,
+                    const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback)
+            {
+                size_t feedback_counter = goal.poses_to_test.size();
+                const auto internal_feedback_fn = [&feedback_callback, &feedback_counter] (const smmap_msgs::TestGrippersPosesFeedbackConstPtr& feedback)
+                {
+                    ROS_INFO_STREAM_NAMED("robot_interface", "Got feedback for test number " << feedback->test_id);
+                    feedback_callback(feedback->test_id, ConvertToEigenFeedback(feedback->sim_state));
+                    feedback_counter--;
+                };
+
+                test_grippers_poses_client_.sendGoal(
+                            goal,
+                            actionlib::SimpleActionClient<smmap_msgs::TestGrippersPosesAction>::SimpleDoneCallback(),
+                            actionlib::SimpleActionClient<smmap_msgs::TestGrippersPosesAction>::SimpleActiveCallback(),
+                            internal_feedback_fn);
+
+                const bool result = test_grippers_poses_client_.waitForResult();
+
+                while(feedback_counter > 0)
+                {
+                    std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+                }
+
+                return result;
+            }
     };
 }
 

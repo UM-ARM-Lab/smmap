@@ -25,8 +25,9 @@ Task::Task(RobotInterface& robot,
     , gripper_collision_check_fn_(createGripperCollisionCheckFunction())
     , task_object_delta_projection_fn_(createTaskObjectDeltaProjectionFunction())
     , execute_trajectory_fn_(createExecuteGripperTrajectoryFunction())
+    , test_grippers_poses_fn_(createTestGrippersPosesFunction())
     , logging_fn_(createLoggingFunction())
-    , planner_(error_fn_, execute_trajectory_fn_, logging_fn_, vis_, GetRobotControlPeriod(nh_))
+    , planner_(error_fn_, execute_trajectory_fn_, test_grippers_poses_fn_, logging_fn_, vis_, GetRobotControlPeriod(nh_))
 {
     initializeModelSet();
     initializeLogging();
@@ -357,38 +358,46 @@ void Task::logData(
 ErrorFunctionType Task::createErrorFunction()
 {
     return std::bind(&TaskSpecification::calculateError,
-                      task_specification_,
-                      std::placeholders::_1);
+                     task_specification_,
+                     std::placeholders::_1);
 }
 
 GripperCollisionCheckFunctionType Task::createGripperCollisionCheckFunction()
 {
     return std::bind(&RobotInterface::checkGripperCollision,
-                      &robot_,
-                      std::placeholders::_1);
+                     &robot_,
+                     std::placeholders::_1);
 }
 
 TaskExecuteGripperTrajectoryFunctionType Task::createExecuteGripperTrajectoryFunction()
 {
     return std::bind(&RobotInterface::sendGripperTrajectory,
-                      &robot_,
-                      std::placeholders::_1);
+                     &robot_,
+                     std::placeholders::_1);
+}
+
+TestGrippersPosesFunctionType Task::createTestGrippersPosesFunction()
+{
+    return std::bind(&RobotInterface::testGrippersPoses,
+                     &robot_,
+                     std::placeholders::_1,
+                     std::placeholders::_2);
 }
 
 LoggingFunctionType Task::createLoggingFunction()
 {
     return std::bind(&Task::logData,
-                      this,
-                      std::placeholders::_1,
-                      std::placeholders::_2,
-                      std::placeholders::_3,
-                      std::placeholders::_4);
+                     this,
+                     std::placeholders::_1,
+                     std::placeholders::_2,
+                     std::placeholders::_3,
+                     std::placeholders::_4);
 }
 
 TaskObjectDeltaProjectionFunctionType Task::createTaskObjectDeltaProjectionFunction()
 {
     return std::bind(&TaskSpecification::projectObjectDelta,
-                      task_specification_,
-                      std::placeholders::_1,
-                      std::placeholders::_2);
+                     task_specification_,
+                     std::placeholders::_1,
+                     std::placeholders::_2);
 }

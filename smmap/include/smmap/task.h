@@ -63,6 +63,7 @@ namespace smmap
             const GripperCollisionCheckFunctionType gripper_collision_check_fn_;
             const TaskObjectDeltaProjectionFunctionType task_object_delta_projection_fn_;
             const TaskExecuteGripperTrajectoryFunctionType execute_trajectory_fn_;
+            const TestGrippersPosesFunctionType test_grippers_poses_fn_;
             const LoggingFunctionType logging_fn_;
 
             ////////////////////////////////////////////////////////////////////
@@ -75,6 +76,7 @@ namespace smmap
             GripperCollisionCheckFunctionType createGripperCollisionCheckFunction();
             TaskObjectDeltaProjectionFunctionType createTaskObjectDeltaProjectionFunction();
             TaskExecuteGripperTrajectoryFunctionType createExecuteGripperTrajectoryFunction();
+            TestGrippersPosesFunctionType createTestGrippersPosesFunction();
             LoggingFunctionType createLoggingFunction();
 
             ////////////////////////////////////////////////////////////////////

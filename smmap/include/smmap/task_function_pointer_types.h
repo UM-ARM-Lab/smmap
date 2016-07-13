@@ -28,7 +28,7 @@ namespace smmap
     GripperCollisionCheckFunctionType;
 
     typedef std::function<ObjectDeltaAndWeight(
-            const WorldState&                       /* current world state */
+            const WorldState& world_current_state
             )>
     TaskDesiredObjectDeltaFunctionType;
 
@@ -41,15 +41,27 @@ namespace smmap
     ObjectFinalConfigurationPredictionFunctionType;
 
     typedef std::function<Eigen::MatrixXd(
-            const ObjectPointSet&,                  /* current object state */
-            Eigen::VectorXd                         /* object delta */
+            const ObjectPointSet& object_current_state,
+            Eigen::VectorXd object_delta
             )>
     TaskObjectDeltaProjectionFunctionType;
 
     typedef std::function<std::vector<WorldState>(
-            const AllGrippersPoseTrajectory&        /* Desired robot trajectory */
+            const AllGrippersPoseTrajectory& desired_robot_trajectory
             )>
     TaskExecuteGripperTrajectoryFunctionType;
+
+    typedef std::function<void(
+            const size_t test_id,
+            const WorldState& resulting_world_state
+            )>
+    TestGrippersPosesFeedbackCallbackFunctionType;
+
+    typedef std::function<bool(
+            const std::vector<AllGrippersSinglePose>& pose_sets_to_test,
+            const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback
+            )>
+    TestGrippersPosesFunctionType;
 
     typedef std::function<void(
             const WorldState& current_world_state,

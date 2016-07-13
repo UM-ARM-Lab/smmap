@@ -182,7 +182,7 @@ namespace smmap
                 const Eigen::MatrixXd& C = observation_matrix;
 
                 // Kalman predict
-                const Eigen::VectorXd& predicted_mean = arm_mean_;                                  // No change to mean
+                const Eigen::VectorXd& predicted_mean = arm_mean_;                      // No change to mean
                 const auto predicted_covariance = arm_covar_ + transition_covariance;   // Add process noise
 
                 // Kalman update - symbols from wikipedia article
@@ -206,7 +206,6 @@ namespace smmap
 //                std::cout << "update:   " << (kalman_gain * innovation).transpose() << std::endl;
 //                std::cout << "result:   " << arm_mean_.transpose() << std::endl;
 //                std::cout << std::endl;
-
 
                 assert(!(arm_mean_.unaryExpr([] (const double &val) { return std::isnan(val); })).any() && "NaN Found in arm_mean_ in kalman banidt!");
                 assert(!(arm_mean_.unaryExpr([] (const double &val) { return std::isinf(val); })).any() && "Inf Found in arm_mean_ in kalman banidt!");

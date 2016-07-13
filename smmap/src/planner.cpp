@@ -26,11 +26,13 @@ using namespace EigenHelpersConversions;
 Planner::Planner(
         const ErrorFunctionType& error_fn,
         const TaskExecuteGripperTrajectoryFunctionType& execute_trajectory_fn,
+        const TestGrippersPosesFunctionType& test_grippers_poses_fn,
         const LoggingFunctionType& logging_fn,
         Visualizer& vis,
         const double dt)
     : error_fn_(error_fn)
     , execute_trajectory_fn_(execute_trajectory_fn)
+    , test_grippers_poses_fn_(test_grippers_poses_fn)
     , ph_("~")
     , logging_fn_(logging_fn)
     , vis_(vis)
@@ -87,6 +89,18 @@ std::vector<WorldState> Planner::sendNextTrajectory(
         const double max_gripper_velocity,
         const double obstacle_avoidance_scale)
 {
+    // Pick an arm to use
+#ifdef KFRDB_BANDIT
+    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
+#endif
+#ifdef KFMANB_BANDIT
+    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
+#endif
+#ifdef UCB_BANDIT
+    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull();
+#endif
+    ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
+
     // Querry each model for it's best trajectory
     ROS_INFO_STREAM_COND_NAMED(planning_horizion != 1, "planner", "Getting trajectory suggestions for each model of length " << planning_horizion);
     stopwatch(RESET);
@@ -100,68 +114,59 @@ std::vector<WorldState> Planner::sendNextTrajectory(
                 dt_,
                 max_gripper_velocity,
                 obstacle_avoidance_scale);
-
-//        ObjectFinalConfigurationPredictionFunctionType prediction_fn = std::bind(
-//                    &DeformableModel::getFinalConfiguration,
-//                    model_list_[model_ind],
-//                    std::placeholders::_1,
-//                    std::placeholders::_2,
-//                    std::placeholders::_3,
-//                    std::placeholders::_4);
-
-//        ErrorFunctionDerivitiveType derivitive_fn = std::bind(
-//                    &ErrorFunctionNumericalDerivitive,
-//                    std::placeholders::_1,
-//                    std::placeholders::_2,
-//                    std::placeholders::_3,
-//                    error_fn_,
-//                    prediction_fn,
-//                    std::placeholders::_4);
-
-//        AllGrippersPoseTrajectory optimized_grippers_pose_traj =
-//                OptimizeTrajectoryDirectShooting(
-//                    current_world_state,
-//                    suggested_trajectories[model_ind].first,
-//                    error_fn_,
-//                    derivitive_fn,
-//                    prediction_fn,
-//                    max_gripper_velocity * dt_,
-//                    dt_ );
-
-//        suggested_trajectories[model_ind].first = optimized_grippers_pose_traj;
-//        suggested_trajectories[model_ind].second = model_list_[model_ind]->getPrediction(
-//                    current_world_state,
-//                    optimized_grippers_pose_traj,
-//                    CalculateGrippersPoseDeltas(optimized_grippers_pose_traj),
-//                    dt_);
     }
-    // Pick an arm to use
-#ifdef KFRDB_BANDIT
-    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
-#endif
-#ifdef KFMANB_BANDIT
-    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
-#endif
-#ifdef UCB_BANDIT
-    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull();
-#endif
-
     // Measure the time it took to pick a model
     ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in " << stopwatch(READ) << " seconds");
 
-    ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
 
-    AllGrippersPoseTrajectory best_trajectory = suggested_trajectories[(size_t)model_to_use].first;
-    best_trajectory.erase(best_trajectory.begin());
+    std::vector<double> individual_rewards(num_models_, std::numeric_limits<double>::infinity());
+    WorldState test_final_state_for_model_chosen;
+    if (num_models_ > 1)
+    {
+        assert(planning_horizion == 1 && "This needs reworking for multi-step planning");
+
+        stopwatch(RESET);
+        const double prev_error = error_fn_(current_world_state.object_configuration_);
+        const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
+        {
+            if ((ssize_t)model_ind == model_to_use)
+            {
+                test_final_state_for_model_chosen = world_state;
+//                std::cout << "Forked result:\n" << test_final_state_for_model_chosen.object_configuration_.leftCols(5) << std::endl;
+            }
+            individual_rewards[model_ind] = prev_error - error_fn_(world_state.object_configuration_);
+            return;
+        };
+
+        std::vector<AllGrippersSinglePose> models_to_test;
+        models_to_test.reserve(num_models_);
+        for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
+        {
+            models_to_test.push_back(suggested_trajectories[model_ind].first.back());
+        }
+        test_grippers_poses_fn_(models_to_test, test_feedback_fn);
+
+        ROS_INFO_STREAM_NAMED("planner", "Collected data to calculate regret in " << stopwatch(READ) << " seconds");
+    }
+
+
+    AllGrippersPoseTrajectory selected_trajectory = suggested_trajectories[(size_t)model_to_use].first;
+    selected_trajectory.erase(selected_trajectory.begin());
     // Execute the trajectory
     ROS_INFO_NAMED("planner", "Sending trajectory to robot");
-    std::vector<WorldState> world_feedback = execute_trajectory_fn_(best_trajectory);
-    // Get feedback
+    std::vector<WorldState> world_feedback = execute_trajectory_fn_(selected_trajectory);
     world_feedback.emplace(world_feedback.begin(), current_world_state);
 
-    const ObjectDeltaAndWeight task_desired_motion = task_desired_object_delta_fn(current_world_state);
+
+    if (num_models_ > 1)
+    {
+        std::cout << "Visualzed result:\n" << world_feedback.back().object_configuration_.leftCols(5) << std::endl;
+        std::cout << "Forked result:\n" << test_final_state_for_model_chosen.object_configuration_.leftCols(5) << std::endl;
+        assert(world_feedback.back().object_configuration_.cwiseEqual(test_final_state_for_model_chosen.object_configuration_).all());
+    }
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
+    const ObjectDeltaAndWeight task_desired_motion = task_desired_object_delta_fn(current_world_state);
     updateModels(current_world_state, task_desired_motion, suggested_trajectories, model_to_use, world_feedback);
 #ifdef KFRDB_BANDIT
     logging_fn_(world_feedback.back(), model_utility_bandit_.getMean(), model_utility_bandit_.getCovariance(), model_to_use);
@@ -367,100 +372,3 @@ Eigen::MatrixXd Planner::calculateObservationNoise(
 
     return observation_noise;
 }
-
-/*
-ObjectTrajectory Planner::combineModelPredictions(
-        const VectorObjectTrajectory& model_predictions) const
-{
-    assert(model_predictions.size() > 0);
-    assert(model_predictions[0].size() > 0);
-
-    const std::vector<double>& model_confidences = get_model_utility_fn_();
-    double total_weight = std::accumulate(model_confidences.begin(), model_confidences.end(), 0.);
-
-    ObjectTrajectory weighted_average_trajectory(model_predictions[0].size(),
-            ObjectPointSet::Zero(3, model_predictions[0][0].cols()));
-
-    // Itterate through each model prediction
-    for (size_t model_ind = 0; model_ind < model_predictions.size(); model_ind++)
-    {
-        // For each model, itterate through time, weighing by the model confidence
-        for (size_t time_ind = 0; time_ind < model_predictions[model_ind].size(); time_ind++)
-        {
-            weighted_average_trajectory[time_ind] +=
-                    model_predictions[model_ind][time_ind] * model_confidences[model_ind] / total_weight;
-        }
-    }
-
-    return weighted_average_trajectory;
-}
-
-ObjectPointSet Planner::combineModelPredictionsLastTimestep(
-        const VectorObjectTrajectory& model_predictions) const
-{
-    assert(model_predictions.size() > 0);
-    size_t traj_length = model_predictions[0].size();
-    assert(traj_length > 0);
-
-    const std::vector<double>& model_confidences = get_model_utility_fn_();
-    double total_weight = std::accumulate(model_confidences.begin(), model_confidences.end(), 0.);
-
-    ObjectPointSet weighted_average_configuration = ObjectPointSet::Zero(3, model_predictions[0][0].cols());
-
-    // Itterate through each model prediction
-    for (size_t model_ind = 0; model_ind < model_predictions.size(); model_ind++)
-    {
-        assert(model_predictions[model_ind].size() == traj_length);
-
-        weighted_average_configuration +=
-                model_predictions[model_ind][traj_length-1] * model_confidences[model_ind] / total_weight;
-    }
-
-    return weighted_average_configuration;
-}
-
-Eigen::VectorXd Planner::combineModelDerivitives(
-        const std::vector<Eigen::VectorXd>& model_derivitives) const
-{
-    assert(model_derivitives.size() > 0);
-
-    const std::vector<double>& model_confidences = get_model_utility_fn_();
-    double total_weight = std::accumulate(model_confidences.begin(), model_confidences.end(), 0.);
-
-    Eigen::VectorXd weighted_average_derivitive = Eigen::VectorXd::Zero(model_derivitives[0].size());
-
-    // Itterate through each model derivitive
-    for (size_t model_ind = 0; model_ind < model_derivitives.size(); model_ind++)
-    {
-        weighted_average_derivitive +=
-                model_derivitives[model_ind] * model_confidences[model_ind] / total_weight;
-    }
-
-    return weighted_average_derivitive;
-}
-
-std::pair<Eigen::VectorXd, Eigen::MatrixXd> Planner::combineModelDerivitives(
-        const std::vector<std::pair<Eigen::VectorXd, Eigen::MatrixXd>>& model_derivitives) const
-{
-    assert(model_derivitives.size() > 0);
-
-    const std::vector<double>& model_confidences = get_model_utility_fn_();
-    double total_weight = std::accumulate(model_confidences.begin(), model_confidences.end(), 0.);
-
-    std::pair<Eigen::VectorXd, Eigen::MatrixXd> weighted_average_derivitive(
-            Eigen::VectorXd::Zero(model_derivitives[0].first.size()),
-            Eigen::MatrixXd::Zero(model_derivitives[0].second.rows(), model_derivitives[0].second.cols()));
-
-    // Itterate through each model derivitive
-    for (size_t model_ind = 0; model_ind < model_derivitives.size(); model_ind++)
-    {
-        weighted_average_derivitive.first +=
-                model_derivitives[model_ind].first * model_confidences[model_ind] / total_weight;
-
-        weighted_average_derivitive.second +=
-                model_derivitives[model_ind].second * model_confidences[model_ind] / total_weight;
-    }
-
-    return weighted_average_derivitive;
-}
-*/

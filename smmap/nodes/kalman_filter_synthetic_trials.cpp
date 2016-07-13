@@ -39,6 +39,15 @@ struct ArmSuggestedAction
         ResultType predicted_result;
 };
 
+template<typename ActionType, typename ResultType>
+std::ostream& operator<<(std::ostream& os, const ArmSuggestedAction<ActionType, ResultType>& actions)
+{
+    os << "Suggsted action: " << PrettyPrint::PrettyPrint(actions.suggested_action)
+       << " Predicted result: " << PrettyPrint::PrettyPrint(actions.predicted_result) << std::endl;
+    return os;
+}
+
+
 template<typename ActionResultType>
 struct ActionResult
 {
@@ -409,7 +418,10 @@ class JacobianBandit
                 }
             }
 
-//            std::cout << "True Jacobian:\n" << true_jacobian_ << std::endl << std::endl;
+            std::cout << "True Jacobian:\n" << true_jacobian_ << std::endl;
+            std::cout << "Determinant: " << true_jacobian_.determinant() << std::endl;
+            std::cout << "Singular Values: " << true_jacobian_.jacobiSvd().singularValues().transpose() << std::endl << std::endl;
+
 
             for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
             {
@@ -422,10 +434,16 @@ class JacobianBandit
                     }
                 }
 
-//                std::cout << "Jacobian " << arm_ind << ":\n" << arm_jacobians_[arm_ind] << std::endl << std::endl;
-            }
+                if (arm_ind == 0)
+                {
+                    std::cout << "First arm is the true jacobian\n";
+                    arm_jacobians_[0] = true_jacobian_;
+                }
 
-//            arm_jacobians_[0] = true_jacobian_;
+                std::cout << "Jacobian " << arm_ind << ":\n" << arm_jacobians_[arm_ind] << std::endl;
+                std::cout << "Determinant: " << arm_jacobians_[arm_ind].determinant() << std::endl;
+                std::cout << "Singular Values: " << arm_jacobians_[arm_ind].jacobiSvd().singularValues().transpose() << std::endl << std::endl;
+            }
 
             assert(y_current_.rows() == y_desired_.rows());
             assert(y_current_.rows() == true_jacobian_.rows());
@@ -451,16 +469,24 @@ class JacobianBandit
             #pragma omp parallel for
             for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
             {
+                arm_suggestions[arm_ind].suggested_action = arm_jacobians_[arm_ind].fullPivHouseholderQr().solve(target_movement);
                 arm_suggestions[arm_ind].suggested_action =
                         ClampNorm(
-                            WeightedLeastSquaresSolver(
-                                arm_jacobians_[arm_ind],
-                                target_movement,
-                                VectorXd::Ones(target_movement.rows()),
-                                1e-3,
-                                1e-2),
+//                            arm_jacobians_[arm_ind].jacobiSvd(ComputeThinU | ComputeThinV).solve(target_movement),
+//                            arm_jacobians_[arm_ind].fullPivHouseholderQr().solve(target_movement),
+                            arm_suggestions[arm_ind].suggested_action,
                             max_action_norm_);
+//                        ClampNorm(
+//                            WeightedLeastSquaresSolver(
+//                                arm_jacobians_[arm_ind],
+//                                target_movement,
+//                                VectorXd::Ones(target_movement.rows()),
+//                                1e-3,
+//                                1e-2),
+//                            max_action_norm_);
+
 //                            Pinv(arm_jacobians_[arm_ind], SuggestedRcond(), true) * target_movement, max_action_norm_);
+
                 arm_suggestions[arm_ind].predicted_result = getArmPrediction(arm_ind, arm_suggestions[arm_ind].suggested_action);
             }
 
@@ -531,7 +557,8 @@ class JacobianBandit
             #pragma GCC diagnostic pop
         }
 
-    private:
+//    private:
+    public:
         const size_t num_arms_;
         const bool y_desired_moves_;
         const bool true_jacobian_moves_;
@@ -784,6 +811,7 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
 
     TrialResults results(num_trials);
 
+    Generator next_generator = generator;
     for (size_t trial_ind = 0; trial_ind < num_trials; trial_ind++)
     {
         // Run a trial using KF-RDB
@@ -796,21 +824,47 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
 
             for (size_t pull_ind = 0; pull_ind < num_pulls; pull_ind++)
             {
+                std::cout << "KF-RDB Current Position at the start of pull " << pull_ind << ":      " << bandit.getYCurrent().transpose() << std::endl;
+                std::cout << "\n\n\n\n\n";
+
+
                 const VectorXd target_movement = bandit.getTargetMovement();
                 const auto arm_suggested_actions = bandit.getArmSuggestedActions(target_movement);
                 const size_t arm_to_pull = kfrdb_alg.selectArmToPull(generator_copy);
                 const auto pull_result = bandit.takeAction(arm_suggested_actions[arm_to_pull].suggested_action, arm_suggested_actions);
                 estimated_reward_scale = reward_scale_estimator_fn(estimated_reward_scale, pull_result.true_reward_);
 
+                std::cout << "Pulling arm " << arm_to_pull << std::endl;
+
                 // process noise
-                MatrixXd process_noise = MatrixXd::Identity(num_arms, num_arms);
+                // Action norms
+                std::vector<double> action_norms((size_t)num_arms);
+                for (size_t arm_ind = 0; arm_ind < (size_t)num_arms; arm_ind++)
+                {
+                    action_norms[arm_ind] = arm_suggested_actions[arm_ind].suggested_action.norm();
+                }
+
+                MatrixXd process_noise = 1.1 * MatrixXd::Identity(num_arms, num_arms);
                 for (ssize_t i = 0; i < num_arms; i++)
                 {
                     for (ssize_t j = i + 1; j < num_arms; j++)
                     {
-                        const VectorXd& action_i = arm_suggested_actions[i].suggested_action;
-                        const VectorXd& action_j = arm_suggested_actions[j].suggested_action;
-                        const double action_similarity = action_i.dot(action_j) / (action_i.norm() * action_j.norm());
+                        double action_similarity;
+                        if (action_norms[(size_t)i] != 0 && action_norms[(size_t)j] != 0)
+                        {
+                            const VectorXd& action_i = arm_suggested_actions[i].suggested_action;
+                            const VectorXd& action_j = arm_suggested_actions[j].suggested_action;
+                            action_similarity = action_i.dot(action_j) / (action_norms[(size_t)i] * action_norms[(size_t)j]);
+                        }
+                        else if (action_norms[(size_t)i] == 0 && action_norms[(size_t)j] == 0)
+                        {
+                            action_similarity = 1;
+                        }
+                        else
+                        {
+                            action_similarity = 0;
+                        }
+
                         process_noise(i, j) = action_similarity;
                         process_noise(j, i) = action_similarity;
                     }
@@ -924,105 +978,128 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
                 }
 
 
+
+                // KFRDB - observation matrix
+                MatrixXd observation_matrix = MatrixXd::Identity(num_arms, num_arms);
+
+
+
+                std::cout << "\n\n\n\n\n";
+                const auto& action = arm_suggested_actions[arm_to_pull].suggested_action;
+
+                // KFRDB - observed reward
+                std::cout << "True result:      " << (bandit.true_jacobian_ * action).transpose() << std::endl << std::endl;
+
+                VectorXd norm_between_true_movement_and_predicted_movement(num_arms);
+                const VectorXd& true_movement = pull_result.action_result_;
+                for (size_t arm_ind = 0; arm_ind < num_arms; arm_ind++)
                 {
-//                // KFRDB - observation matrix
-//                MatrixXd observation_matrix = MatrixXd::Identity(num_arms, num_arms);
+                    const VectorXd current_arm_true_movement_if_suggsted_action_is_taken = bandit.true_jacobian_ * arm_suggested_actions[arm_ind].suggested_action;
+                    const VectorXd current_arm_predicted_movement_if_suggsted_action_is_taken = bandit.arm_jacobians_[arm_ind] * arm_suggested_actions[arm_ind].suggested_action;
 
-//                // KFRDB - observed reward
-//                VectorXd norm_between_true_movement_and_predicted_movement(num_arms);
-//                const Eigen::VectorXd& true_movement = pull_result.action_result_;
-//                for (size_t arm_ind = 0; arm_ind < num_arms; arm_ind++)
-//                {
-//                    const Eigen::VectorXd predicted_movement = bandit.getArmPrediction(arm_ind, arm_suggested_actions[arm_to_pull].suggested_action);
-//                    norm_between_true_movement_and_predicted_movement(arm_ind) = (true_movement - predicted_movement).norm();
-//                }
+                    std::cout << "Arm ind: " << arm_ind << std::endl
+                              << "Suggsted action:                           " << arm_suggested_actions[arm_ind].suggested_action.transpose() << " Norm: " << arm_suggested_actions[arm_ind].suggested_action.norm() << std::endl
+                              << "True movement under suggested action:      " << current_arm_true_movement_if_suggsted_action_is_taken.transpose() << " Norm: " << current_arm_true_movement_if_suggsted_action_is_taken.norm() <<  std::endl
+                              << "Predicted movement under suggested action: " << current_arm_predicted_movement_if_suggsted_action_is_taken.transpose() << " Norm: " << current_arm_predicted_movement_if_suggsted_action_is_taken.norm() << std::endl
+                              << std::endl;
 
-//                bool print_data = false;
-//                std::vector<ssize_t> bad_inds;
-//                VectorXd estimated_reward_improvements = VectorXd::Zero(num_arms);
-//                const VectorXd true_reward_improvements = pull_result.all_possible_arms_true_reward_.array() - pull_result.all_possible_arms_true_reward_(arm_to_pull);
-
-//                VectorXd observed_reward = VectorXd::Zero(num_arms);
-//                VectorXd norm_improvements = VectorXd::Zero(num_arms);
-//                const double norm_to_arm_chosen = norm_between_true_movement_and_predicted_movement(arm_to_pull);
-//                for (ssize_t arm_ind = 0; arm_ind < num_arms; arm_ind++)
-//                {
-//                    const double norm_improvement = norm_to_arm_chosen - norm_between_true_movement_and_predicted_movement(arm_ind);
-//                    norm_improvements(arm_ind) = norm_improvement;
-//                    estimated_reward_improvements(arm_ind) = 1.0 * norm_improvement * std::abs(pull_result.true_reward_);
-//                    observed_reward(arm_ind) = pull_result.true_reward_ + estimated_reward_improvements(arm_ind);
-
-//                    if (estimated_reward_improvements(arm_ind) * true_reward_improvements(arm_ind) < 0)
-//                    {
-//                        print_data = true;
-//                        bad_inds.push_back(arm_ind);
-//                    }
-//                }
-
-//                // KFRDB - observation noise
-//                MatrixXd observation_noise = MatrixXd::Identity(num_arms, num_arms);
-//                for (ssize_t i = 0; i < num_arms; i++)
-//                {
-//                    observation_noise(i, i) = std::exp(-process_noise(i, arm_to_pull));
-//                }
-//                for (ssize_t i = 0; i < num_arms; i++)
-//                {
-//                    for (ssize_t j = i + 1; j < num_arms; j++)
-//                    {
-//                        const double observation_covariance = process_noise(i, j) * std::sqrt(observation_noise(i, i)) * std::sqrt(observation_noise(j, j));
-//                        observation_noise(i, j) = observation_covariance;
-//                        observation_noise(j, i) = observation_covariance;
-//                    }
-//                }
-
-//                print_data = false;
-//                if (print_data)
-//                {
-//                    std::cout << "y_prev         : " << (bandit.getYCurrent() - pull_result.action_result_).transpose() << std::endl;
-//                    std::cout << "y_desired      : " << bandit.getYDesired().transpose() << std::endl;
-//                    std::cout << "desired y_delta: " << target_movement.transpose() << std::endl;
-//                    std::cout << "true action norm: " << pull_result.action_result_.norm() << std::endl;
-//                    std::cout << "bad inds: " << PrettyPrint::PrettyPrint(bad_inds) << std::endl;
-//                    std::cout << " true rewrd |"
-//                              << " est. rewrd |"
-//                              << " norm t vs p|"
-//                              << " norm-imp.  |"
-//                              << " true imp.  |"
-//                              << " est. imp.  |"
-////                              << " predicted action norm |"
-//                              << "\n";
-
-//                    MatrixXd formatted_output;
-//                    formatted_output.resize(num_arms, 6);
-
-//                    formatted_output.col(0) = pull_result.all_possible_arms_true_reward_;
-//                    formatted_output.col(1) = observed_reward;
-//                    formatted_output.col(2) = norm_between_true_movement_and_predicted_movement;
-//                    formatted_output.col(3) = norm_improvements;
-//                    formatted_output.col(4) = true_reward_improvements;
-//                    formatted_output.col(5) = estimated_reward_improvements;
-
-////                    for (ssize_t arm_ind = 0; arm_ind < num_arms; arm_ind++)
-////                    {
-////                        formatted_output(arm_ind, 5) = bandit.getArmPrediction(arm_ind, arm_suggested_actions[arm_to_pull].suggested_action).norm();
-////                    }
-
-//                    std::cout << formatted_output << std::endl << std::endl;
-//                    std::cout << "Process Noise (no scale factor):\n"
-//                              << process_noise
-//                              << std::endl << std::endl;
-//                    std::cout << "Observation Noise (no scale factor):\n"
-//                              << observation_noise
-//                              << std::endl << std::endl;
-//                    exit(-1);
-//                }
+                    const VectorXd predicted_movement = bandit.getArmPrediction(arm_ind, action);
+                    norm_between_true_movement_and_predicted_movement(arm_ind) = (true_movement - predicted_movement).norm();
                 }
 
 
-                MatrixXd observation_matrix = RowVectorXd::Zero(num_arms);
-                observation_matrix(0, arm_to_pull) = 1;
-                VectorXd observed_reward = VectorXd::Ones(1) * pull_result.true_reward_;
-                MatrixXd observation_noise = MatrixXd::Zero(1, 1);
+                std::cout << "\n\n\n\n\n";
+
+
+                bool print_data = false;
+                std::vector<ssize_t> bad_inds;
+                VectorXd estimated_reward_improvements = VectorXd::Zero(num_arms);
+                const VectorXd true_reward_improvements = pull_result.all_possible_arms_true_reward_.array() - pull_result.all_possible_arms_true_reward_(arm_to_pull);
+
+                VectorXd observed_reward = VectorXd::Zero(num_arms);
+                VectorXd norm_improvements = VectorXd::Zero(num_arms);
+                const double norm_to_arm_chosen = norm_between_true_movement_and_predicted_movement(arm_to_pull);
+                for (ssize_t arm_ind = 0; arm_ind < num_arms; arm_ind++)
+                {
+                    const double norm_improvement = norm_to_arm_chosen - norm_between_true_movement_and_predicted_movement(arm_ind);
+                    norm_improvements(arm_ind) = norm_improvement;
+                    estimated_reward_improvements(arm_ind) = 1.0 * norm_improvement * std::abs(pull_result.true_reward_);
+                    observed_reward(arm_ind) = pull_result.true_reward_ + estimated_reward_improvements(arm_ind);
+
+                    if (estimated_reward_improvements(arm_ind) * true_reward_improvements(arm_ind) < 0)
+                    {
+                        print_data = true;
+                        bad_inds.push_back(arm_ind);
+                    }
+                }
+
+                // KFRDB - observation noise
+                MatrixXd observation_noise = 1.1 * MatrixXd::Identity(num_arms, num_arms);
+                for (ssize_t i = 0; i < num_arms; i++)
+                {
+                    observation_noise(i, i) = std::exp(-process_noise(i, arm_to_pull));
+                }
+                for (ssize_t i = 0; i < num_arms; i++)
+                {
+                    for (ssize_t j = i + 1; j < num_arms; j++)
+                    {
+                        const double observation_covariance = process_noise(i, j) * std::sqrt(observation_noise(i, i)) * std::sqrt(observation_noise(j, j));
+                        observation_noise(i, j) = observation_covariance;
+                        observation_noise(j, i) = observation_covariance;
+                    }
+                }
+
+
+
+//                print_data = false;
+                if (print_data)
+                {
+                    std::cout << "y_prev         : " << (bandit.getYCurrent() - pull_result.action_result_).transpose() << std::endl;
+                    std::cout << "y_desired      : " << bandit.getYDesired().transpose() << std::endl;
+                    std::cout << "desired y_delta: " << target_movement.transpose() << std::endl;
+                    std::cout << "true action norm: " << pull_result.action_result_.norm() << std::endl;
+                    std::cout << "bad inds: " << PrettyPrint::PrettyPrint(bad_inds) << std::endl;
+                    std::cout << " true rewrd |"
+                              << " est. rewrd |"
+                              << " norm t vs p|"
+                              << " norm-imp.  |"
+                              << " true imp.  |"
+                              << " est. imp.  |"
+//                              << " predicted action norm |"
+                              << "\n";
+
+                    MatrixXd formatted_output;
+                    formatted_output.resize(num_arms, 6);
+
+                    formatted_output.col(0) = pull_result.all_possible_arms_true_reward_;
+                    formatted_output.col(1) = observed_reward;
+                    formatted_output.col(2) = norm_between_true_movement_and_predicted_movement;
+                    formatted_output.col(3) = norm_improvements;
+                    formatted_output.col(4) = true_reward_improvements;
+                    formatted_output.col(5) = estimated_reward_improvements;
+
+//                    for (ssize_t arm_ind = 0; arm_ind < num_arms; arm_ind++)
+//                    {
+//                        formatted_output(arm_ind, 5) = bandit.getArmPrediction(arm_ind, arm_suggested_actions[arm_to_pull].suggested_action).norm();
+//                    }
+
+                    std::cout << formatted_output << std::endl << std::endl;
+                    std::cout << "Process Noise (no scale factor):\n"
+                              << process_noise
+                              << std::endl << std::endl;
+                    std::cout << "Observation Noise (no scale factor):\n"
+                              << observation_noise
+                              << std::endl << std::endl;
+                    exit(-1);
+                }
+
+
+
+
+//                MatrixXd observation_matrix = RowVectorXd::Zero(num_arms);
+//                observation_matrix(0, arm_to_pull) = 1;
+//                VectorXd observed_reward = VectorXd::Ones(1) * pull_result.true_reward_;
+//                MatrixXd observation_noise = MatrixXd::Zero(1, 1);
 
 
 
@@ -1034,7 +1111,8 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
             }
 
             results.kfrdb_average_regret_(trial_ind) = total_regret / (double)num_pulls;
-//            std::cout << "KF-RDB Final Position:      " << bandit.getYCurrent().transpose() << std::endl;
+            std::cout << "KF-RDB Final Position:      " << bandit.getYCurrent().transpose() << std::endl;
+            next_generator = generator_copy;
         }
 
         // Run a trial using KF-MANB
@@ -1058,7 +1136,7 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
             }
 
             results.kfmanb_average_regret_(trial_ind) = total_regret / (double)num_pulls;
-//            std::cout << "KF-MANB Final Position:     " << bandit.getYCurrent().transpose() << std::endl;
+            std::cout << "KF-MANB Final Position:     " << bandit.getYCurrent().transpose() << std::endl;
         }
 
         // Run a trial using UCB1-Normal
@@ -1080,10 +1158,9 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
             }
 
             results.ucb1normal_average_regret_(trial_ind) = total_regret / (double)num_pulls;
-//            std::cout << "UCB1-Normal Final Position: " << bandit.getYCurrent().transpose() << std::endl;
+            std::cout << "UCB1-Normal Final Position: " << bandit.getYCurrent().transpose() << std::endl;
 
             // Update the original version so as to get new data next trial
-            generator = generator_copy;
         }
 
         std::cout << "Trial Num: " << trial_ind;
@@ -1093,6 +1170,8 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
                   << " UCB1-Normal: " << results.ucb1normal_average_regret_(trial_ind);
         std::cout << std::setw(1) << std::setprecision(6)
                   << std::endl;
+
+        generator = next_generator;
     }
 
     results.calculateStatistics();
@@ -1166,24 +1245,8 @@ int main(int argc, char* argv[])
     {
         TrialParams params;
 
-        if (argc > 1)
-        {
-            params["Number of trials: "] = std::atoi(argv[1]);
-        }
-        else
-        {
-            params["Number of trials: "] = 100;
-        }
-
-        if (argc > 2)
-        {
-            params["Number of pulls:  "] = std::atoi(argv[2]);
-        }
-        else
-        {
-            params["Number of pulls:  "] = 1000;
-        }
-
+        params["Number of trials: "] = 100;
+        params["Number of pulls:  "] = 1000;
 
 #ifdef SMALL
         params["Number of arms:   "] = 10;
@@ -1200,6 +1263,45 @@ int main(int argc, char* argv[])
         params["Num Jacobian rows: "] = 3*2025;
         params["Num Jacobian cols: "] = 6*2;
 #endif
+
+        std::cout << "Usage:\n"
+                  << "\tkalman_filter_synthetic_trials [numtrials [numpulls [numarms [numrows [numcols]]]]]\n"
+                  << "Defaults:\n"
+                  << PrettyPrint::PrettyPrint(params, false, "\n") << std::endl << std::endl;
+
+        if (argc > 1)
+        {
+            params["Number of trials: "] = std::atoi(argv[1]);
+        }
+
+        if (argc > 2)
+        {
+            params["Number of pulls:  "] = std::atoi(argv[2]);
+        }
+
+        if (argc > 3)
+        {
+            params["Number of arms:   "] = std::atoi(argv[3]);
+        }
+
+        if (argc > 4)
+        {
+            params["Num Jacobian rows: "] = std::atoi(argv[4]);
+        }
+
+        if (argc > 5)
+        {
+            params["Num Jacobian cols: "] = std::atoi(argv[5]);
+        }
+
+        if (argc > 6)
+        {
+            for (int arg = 6; arg < argc; arg++)
+            {
+                std::cout << "Unused parameter " << argv[arg] << std::endl;
+            }
+        }
+
 
 //        params["Initial Reward Variance Scale Factor: "];
 //        params["Transition Covariance Scale Factor:   "];
