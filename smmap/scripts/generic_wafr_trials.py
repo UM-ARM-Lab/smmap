@@ -41,24 +41,25 @@ def run_wafr_trials(experiment):
     #               use_adaptive_model="true",
     #               adaptive_model_learning_rate=adaptive_model_learning_rate)
 
-    # Run the multi-model trials last, 1 per bandit algorithm
-    run_trial(experiment=experiment,
-              logging_enabled="true",
-              test_id="wafr_paper_trials/" + "multi_model_KFRDB",
-              planning_horizion=1,
-              bandit_algorithm="KFRDB",
-              multi_model="true")
+    # Run the multi-model trials last, 110 per bandit algorithm
+    for i in range(0,11)
+        run_trial(experiment=experiment,
+                  logging_enabled="true",
+                  test_id="wafr_paper_trials/" + "multi_model_KFRDB_regret_" + str(i),
+                  planning_horizion=1,
+                  bandit_algorithm="KFRDB",
+                  multi_model="true")
 
-    run_trial(experiment=experiment,
-              logging_enabled="true",
-              test_id="wafr_paper_trials/" + "multi_model_KFMANB",
-              planning_horizion=1,
-              bandit_algorithm="KFMANB",
-              multi_model="true")
+        run_trial(experiment=experiment,
+                  logging_enabled="true",
+                  test_id="wafr_paper_trials/" + "multi_model_KFMANB_regret_" + str(i),
+                  planning_horizion=1,
+                  bandit_algorithm="KFMANB",
+                  multi_model="true")
 
-    run_trial(experiment=experiment,
-              logging_enabled="true",
-              test_id="wafr_paper_trials/" + "multi_model_UCB",
-              planning_horizion=1,
-              bandit_algorithm="UCB",
-              multi_model="true")
+        run_trial(experiment=experiment,
+                  logging_enabled="true",
+                  test_id="wafr_paper_trials/" + "multi_model_UCB_regret_" + str(i),
+                  planning_horizion=1,
+                  bandit_algorithm="UCB",
+                  multi_model="true")
