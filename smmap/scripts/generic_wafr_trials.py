@@ -41,8 +41,8 @@ def run_wafr_trials(experiment):
     #               use_adaptive_model="true",
     #               adaptive_model_learning_rate=adaptive_model_learning_rate)
 
-    # Run the multi-model trials last, 110 per bandit algorithm
-    for i in range(0,11)
+    # Run the multi-model trials last, 10 per bandit algorithm
+    for i in range(0,10):
         run_trial(experiment=experiment,
                   logging_enabled="true",
                   test_id="wafr_paper_trials/" + "multi_model_KFRDB_regret_" + str(i),
