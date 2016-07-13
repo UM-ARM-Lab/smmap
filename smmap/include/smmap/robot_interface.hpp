@@ -28,7 +28,10 @@ namespace smmap
                 , test_grippers_poses_client_(nh_, GetTestGrippersPosesTopic(nh_), false)
                 // TODO: remove this hardcoded spin rate
                 , spin_thread_(spin, 1000)
-            {}
+            {
+                execute_gripper_movement_and_update_sim_client_ =
+                        nh.serviceClient<smmap_msgs::ExecuteGripperMovement>(GetExecuteGrippersMovementAndUpdateSimTopic(nh_));
+            }
 
             ~RobotInterface()
             {
@@ -40,6 +43,7 @@ namespace smmap
             {
                 ROS_INFO_NAMED("robot_bridge", "Waiting for the robot gripper action server to be available");
                 cmd_grippers_traj_client_.waitForServer();
+                test_grippers_poses_client_.waitForServer();
 
                 ROS_INFO_NAMED("robot_bridge", "Kickstarting the planner with a no-op");
                 return sendGripperTrajectory_impl(noOpTrajectoryGoal(1));
@@ -115,6 +119,7 @@ namespace smmap
             GripperCollisionChecker gripper_collision_checker_;
             actionlib::SimpleActionClient<smmap_msgs::CmdGrippersTrajectoryAction> cmd_grippers_traj_client_;
             actionlib::SimpleActionClient<smmap_msgs::TestGrippersPosesAction> test_grippers_poses_client_;
+            ros::ServiceClient execute_gripper_movement_and_update_sim_client_;
 
             // Our internal version of ros::spin()
             std::thread spin_thread_;
@@ -193,17 +198,29 @@ namespace smmap
             std::vector<WorldState> sendGripperTrajectory_impl(
                     const smmap_msgs::CmdGrippersTrajectoryGoal& goal)
             {
-                std::vector<WorldState> feedback;
+                std::vector<WorldState> feedback(1);
 
-                cmd_grippers_traj_client_.sendGoalAndWait(goal);
-                if (cmd_grippers_traj_client_.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)
+                smmap_msgs::ExecuteGripperMovement gripper_execution;
+                gripper_execution.request.grippers_names = goal.gripper_names;
+                gripper_execution.request.grippers_poses = goal.trajectory.back();
+
+                if (!execute_gripper_movement_and_update_sim_client_.call(gripper_execution))
                 {
-                    feedback = ParseGripperActionResult(cmd_grippers_traj_client_.getResult());
+                    ROS_FATAL("VERY BAD STUFF");
+                    assert(false);
                 }
-                else
-                {
-                    ROS_FATAL_NAMED("planner", "Sending a goal to the robot failed");
-                }
+
+                feedback[0] = ConvertToEigenFeedback(gripper_execution.response.sim_state);
+
+//                cmd_grippers_traj_client_.sendGoalAndWait(goal);
+//                if (cmd_grippers_traj_client_.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)
+//                {
+//                    feedback = ParseGripperActionResult(cmd_grippers_traj_client_.getResult());
+//                }
+//                else
+//                {
+//                    ROS_FATAL_NAMED("planner", "Sending a goal to the robot failed");
+//                }
 
                 return feedback;
             }
