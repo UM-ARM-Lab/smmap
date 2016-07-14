@@ -1248,21 +1248,9 @@ int main(int argc, char* argv[])
         params["Number of trials: "] = 100;
         params["Number of pulls:  "] = 1000;
 
-#ifdef SMALL
         params["Number of arms:   "] = 10;
         params["Num Jacobian rows: "] = 3;
         params["Num Jacobian cols: "] = 2;
-#endif
-#ifdef MEDIUM
-        params["Number of arms:   "] = 7*7+11;
-        params["Num Jacobian rows: "] = 3*49;
-        params["Num Jacobian cols: "] = 6*1;
-#endif
-#ifdef LARGE
-        params["Number of arms:   "] = 7*7+11;
-        params["Num Jacobian rows: "] = 3*2025;
-        params["Num Jacobian cols: "] = 6*2;
-#endif
 
         std::cout << "Usage:\n"
                   << "\tkalman_filter_synthetic_trials [numtrials [numpulls [numarms [numrows [numcols]]]]]\n"

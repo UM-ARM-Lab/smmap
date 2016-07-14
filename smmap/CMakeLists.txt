@@ -97,20 +97,10 @@ target_link_libraries(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin
 set_target_properties(${PROJECT_NAME}_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
 
 ## Synthethic trials
-add_executable(kalman_filter_synthetic_trials_SMALL nodes/kalman_filter_synthetic_trials.cpp)
-add_dependencies(kalman_filter_synthetic_trials_SMALL ${catkin_EXPORTED_TARGETS})
-target_link_libraries(kalman_filter_synthetic_trials_SMALL ${catkin_LIBRARIES})
-set_target_properties(kalman_filter_synthetic_trials_SMALL PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DSMALL")
-
-add_executable(kalman_filter_synthetic_trials_MEDIUM nodes/kalman_filter_synthetic_trials.cpp)
-add_dependencies(kalman_filter_synthetic_trials_MEDIUM ${catkin_EXPORTED_TARGETS})
-target_link_libraries(kalman_filter_synthetic_trials_MEDIUM ${catkin_LIBRARIES})
-set_target_properties(kalman_filter_synthetic_trials_MEDIUM PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DMEDIUM")
-
-add_executable(kalman_filter_synthetic_trials_LARGE nodes/kalman_filter_synthetic_trials.cpp)
-add_dependencies(kalman_filter_synthetic_trials_LARGE ${catkin_EXPORTED_TARGETS})
-target_link_libraries(kalman_filter_synthetic_trials_LARGE ${catkin_LIBRARIES})
-set_target_properties(kalman_filter_synthetic_trials_LARGE PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DLARGE")
+add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp)
+add_dependencies(kalman_filter_synthetic_trials ${catkin_EXPORTED_TARGETS})
+target_link_libraries(kalman_filter_synthetic_trials ${catkin_LIBRARIES})
+set_target_properties(kalman_filter_synthetic_trials PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS}")
 
 #############
 ## Install ##
