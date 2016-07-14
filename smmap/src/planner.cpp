@@ -120,7 +120,6 @@ std::vector<WorldState> Planner::sendNextTrajectory(
 
 
     std::vector<double> individual_rewards(num_models_, std::numeric_limits<double>::infinity());
-    WorldState test_final_state_for_model_chosen;
     if (num_models_ > 1)
     {
         assert(planning_horizion == 1 && "This needs reworking for multi-step planning");
@@ -129,11 +128,6 @@ std::vector<WorldState> Planner::sendNextTrajectory(
         const double prev_error = error_fn_(current_world_state.object_configuration_);
         const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
         {
-            if ((ssize_t)model_ind == model_to_use)
-            {
-                test_final_state_for_model_chosen = world_state;
-//                std::cout << "Forked result:\n" << test_final_state_for_model_chosen.object_configuration_.leftCols(5) << std::endl;
-            }
             individual_rewards[model_ind] = prev_error - error_fn_(world_state.object_configuration_);
             return;
         };
@@ -151,23 +145,15 @@ std::vector<WorldState> Planner::sendNextTrajectory(
 
 
     AllGrippersPoseTrajectory selected_trajectory = suggested_trajectories[(size_t)model_to_use].first;
-    selected_trajectory.erase(selected_trajectory.begin());
     // Execute the trajectory
     ROS_INFO_NAMED("planner", "Sending trajectory to robot");
     std::vector<WorldState> world_feedback = execute_trajectory_fn_(selected_trajectory);
     world_feedback.emplace(world_feedback.begin(), current_world_state);
 
-
-//    if (num_models_ > 1)
-//    {
-//        std::cout << "Visualzed result:\n" << world_feedback.back().object_configuration_.leftCols(5) << std::endl;
-//        std::cout << "Forked result:\n" << test_final_state_for_model_chosen.object_configuration_.leftCols(5) << std::endl;
-//        assert(world_feedback.back().object_configuration_.cwiseEqual(test_final_state_for_model_chosen.object_configuration_).all());
-//    }
-
     ROS_INFO_NAMED("planner", "Updating models and logging data");
     const ObjectDeltaAndWeight task_desired_motion = task_desired_object_delta_fn(current_world_state);
-    updateModels(current_world_state, task_desired_motion, suggested_trajectories, model_to_use, world_feedback);
+    updateModels(current_world_state, task_desired_motion, suggested_trajectories, model_to_use, world_feedback, individual_rewards);
+
 #ifdef KFRDB_BANDIT
     logging_fn_(world_feedback.back(), model_utility_bandit_.getMean(), model_utility_bandit_.getCovariance(), model_to_use, individual_rewards);
 #endif
@@ -196,7 +182,8 @@ void Planner::updateModels(
         const ObjectDeltaAndWeight& task_desired_motion,
         const std::vector<std::pair<AllGrippersPoseTrajectory, ObjectTrajectory>>& suggested_trajectories,
         const ssize_t model_used,
-        const std::vector<WorldState>& world_feedback)
+        const std::vector<WorldState>& world_feedback,
+        const std::vector<double>& individual_rewards)
 {
     const double starting_error = error_fn_(starting_world_state.object_configuration_);
     const double true_error_reduction = starting_error - error_fn_(world_feedback.back().object_configuration_);

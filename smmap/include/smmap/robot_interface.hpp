@@ -29,8 +29,8 @@ namespace smmap
                 // TODO: remove this hardcoded spin rate
                 , spin_thread_(spin, 1000)
             {
-                execute_gripper_movement_and_update_sim_client_ =
-                        nh.serviceClient<smmap_msgs::ExecuteGripperMovement>(GetExecuteGrippersMovementAndUpdateSimTopic(nh_));
+//                execute_gripper_movement_and_update_sim_client_ =
+//                        nh.serviceClient<smmap_msgs::ExecuteGripperMovement>(GetExecuteGrippersMovementAndUpdateSimTopic(nh_));
             }
 
             ~RobotInterface()
@@ -42,7 +42,7 @@ namespace smmap
             std::vector<WorldState> start()
             {
                 ROS_INFO_NAMED("robot_bridge", "Waiting for the robot gripper action server to be available");
-//                cmd_grippers_traj_client_.waitForServer();
+                cmd_grippers_traj_client_.waitForServer();
                 test_grippers_poses_client_.waitForServer();
 
                 ROS_INFO_NAMED("robot_bridge", "Kickstarting the planner with a no-op");
@@ -119,7 +119,7 @@ namespace smmap
             GripperCollisionChecker gripper_collision_checker_;
             actionlib::SimpleActionClient<smmap_msgs::CmdGrippersTrajectoryAction> cmd_grippers_traj_client_;
             actionlib::SimpleActionClient<smmap_msgs::TestGrippersPosesAction> test_grippers_poses_client_;
-            ros::ServiceClient execute_gripper_movement_and_update_sim_client_;
+//            ros::ServiceClient execute_gripper_movement_and_update_sim_client_;
 
             // Our internal version of ros::spin()
             std::thread spin_thread_;
@@ -198,38 +198,37 @@ namespace smmap
             std::vector<WorldState> sendGripperTrajectory_impl(
                     const smmap_msgs::CmdGrippersTrajectoryGoal& goal)
             {
-                std::vector<WorldState> feedback(1);
+                std::vector<WorldState> feedback;
 
-                smmap_msgs::ExecuteGripperMovement gripper_execution;
-                gripper_execution.request.grippers_names = goal.gripper_names;
-                gripper_execution.request.grippers_poses = goal.trajectory.back();
+//                smmap_msgs::ExecuteGripperMovement gripper_execution;
+//                gripper_execution.request.grippers_names = goal.gripper_names;
+//                gripper_execution.request.grippers_poses = goal.trajectory.back();
 
-                if (!execute_gripper_movement_and_update_sim_client_.call(gripper_execution))
+//                if (!execute_gripper_movement_and_update_sim_client_.call(gripper_execution))
+//                {
+//                    ROS_FATAL("VERY BAD STUFF");
+//                    assert(false);
+//                }
+
+//                feedback[0] = ConvertToEigenFeedback(gripper_execution.response.sim_state);
+
+                cmd_grippers_traj_client_.sendGoalAndWait(goal);
+                if (cmd_grippers_traj_client_.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)
                 {
-                    ROS_FATAL("VERY BAD STUFF");
-                    assert(false);
+                    feedback = ParseGripperActionResult(cmd_grippers_traj_client_.getResult());
                 }
-
-                feedback[0] = ConvertToEigenFeedback(gripper_execution.response.sim_state);
-
-//                cmd_grippers_traj_client_.sendGoalAndWait(goal);
-//                if (cmd_grippers_traj_client_.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)
-//                {
-//                    feedback = ParseGripperActionResult(cmd_grippers_traj_client_.getResult());
-//                }
-//                else
-//                {
-//                    ROS_FATAL_NAMED("planner", "Sending a goal to the robot failed");
-//                }
+                else
+                {
+                    ROS_FATAL_NAMED("planner", "Sending a goal to the robot failed");
+                }
 
                 return feedback;
             }
 
 
+
             size_t feedback_counter_;
             std::vector<bool> feedback_recieved_;
-
-
             void internalTestPoseFeedbackCallback(const smmap_msgs::TestGrippersPosesActionFeedbackConstPtr& feedback, const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback)
             {
                 ROS_INFO_STREAM_NAMED("robot_interface", "Got feedback for test number " << feedback->feedback.test_id);
@@ -240,6 +239,7 @@ namespace smmap
                     feedback_counter_--;
                 }
             }
+
 
             bool testGrippersPoses_impl(
                     const smmap_msgs::TestGrippersPosesGoal& goal,

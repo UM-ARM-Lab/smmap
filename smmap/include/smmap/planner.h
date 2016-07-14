@@ -81,7 +81,8 @@ namespace smmap
                     const ObjectDeltaAndWeight& task_desired_motion,
                     const std::vector<std::pair< AllGrippersPoseTrajectory, ObjectTrajectory>>& suggested_trajectories,
                     const ssize_t model_used,
-                    const std::vector<WorldState>& world_feedback);
+                    const std::vector<WorldState>& world_feedback,
+                    const std::vector<double>& individual_rewards);
 
             Eigen::MatrixXd calculateProcessNoise(
                     const std::vector<std::pair<AllGrippersPoseTrajectory, ObjectTrajectory>>& suggested_trajectories);
