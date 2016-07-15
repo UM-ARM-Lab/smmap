@@ -145,6 +145,7 @@ std::vector<WorldState> Planner::sendNextTrajectory(
 
 
     AllGrippersPoseTrajectory selected_trajectory = suggested_trajectories[(size_t)model_to_use].first;
+    selected_trajectory.erase(selected_trajectory.begin());
     // Execute the trajectory
     ROS_INFO_NAMED("planner", "Sending trajectory to robot");
     std::vector<WorldState> world_feedback = execute_trajectory_fn_(selected_trajectory);
