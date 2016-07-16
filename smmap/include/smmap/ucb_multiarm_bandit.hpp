@@ -32,31 +32,43 @@ namespace smmap
                 const double explore_threshold = 8.0 * std::log((double)total_pulls_ + 1.0);
                 double highest_ucb = -std::numeric_limits<double>::infinity();
                 ssize_t best_arm = -1;
+                size_t lowest_num_exploration_pulls = (size_t)(-1);
 
                 for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
                 {
                     if (num_pulls_[arm_ind] < explore_threshold)
                     {
-                        return (ssize_t)arm_ind;
-                    }
-                    else
-                    {
-                        assert(num_pulls_[arm_ind] > 1);
-
-                        const double average_reward = total_reward_[arm_ind] / (double)num_pulls_[arm_ind];
-                        const double term1_numer = (sum_of_squared_reward_[arm_ind] - (double)num_pulls_[arm_ind] * average_reward * average_reward);
-                        const double term1_denom = (double)(num_pulls_[arm_ind] - 1);
-                        const double term1 = std::abs(term1_numer)/term1_denom;
-                        const double term2 = std::log((double)total_pulls_) / (double)num_pulls_[arm_ind];
-                        const double ucb = average_reward + std::sqrt(16.0 * term1 * term2);
-
-                        assert(std::isfinite(ucb));
-
-                        if (ucb > highest_ucb)
+                        if (num_pulls_[arm_ind] < lowest_num_exploration_pulls)
                         {
-                            highest_ucb = ucb;
-                            best_arm = (ssize_t)arm_ind;
+                            best_arm = arm_ind;
+                            lowest_num_exploration_pulls = num_pulls_[arm_ind];
                         }
+                    }
+                }
+
+                // If we found an arm that qualifies for exploration, pull that arm
+                if (best_arm != -1)
+                {
+                    return best_arm;
+                }
+
+                for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
+                {
+                    assert(num_pulls_[arm_ind] > 1);
+
+                    const double average_reward = total_reward_[arm_ind] / (double)num_pulls_[arm_ind];
+                    const double term1_numer = (sum_of_squared_reward_[arm_ind] - (double)num_pulls_[arm_ind] * average_reward * average_reward);
+                    const double term1_denom = (double)(num_pulls_[arm_ind] - 1);
+                    const double term1 = std::abs(term1_numer)/term1_denom;
+                    const double term2 = std::log((double)total_pulls_) / (double)num_pulls_[arm_ind];
+                    const double ucb = average_reward + std::sqrt(16.0 * term1 * term2);
+
+                    assert(std::isfinite(ucb));
+
+                    if (ucb > highest_ucb)
+                    {
+                        highest_ucb = ucb;
+                        best_arm = (ssize_t)arm_ind;
                     }
                 }
 

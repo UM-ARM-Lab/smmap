@@ -2,7 +2,6 @@
 
 from generic_wafr_trials import *
 
-run_wafr_trials("cloth_table")
-# run_wafr_trials("colab_folding")
-# run_wafr_trials("rope_cylinder")
-# run_wafr_trials("cloth_wafr")
+run_wafr_trials("cloth_table", run_baseline=True, run_UCB=True, run_KFMANB=True, run_KFRDB=True)
+run_wafr_trials("rope_cylinder", run_baseline=True, run_UCB=True, run_KFMANB=True, run_KFRDB=True)
+run_wafr_trials("cloth_wafr", run_baseline=True, run_UCB=True, run_KFMANB=True, run_KFRDB=True)
