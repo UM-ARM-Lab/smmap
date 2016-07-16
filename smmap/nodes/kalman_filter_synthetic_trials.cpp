@@ -1111,7 +1111,7 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
             }
 
             results.kfrdb_average_regret_(trial_ind) = total_regret / (double)num_pulls;
-            std::cout << "KF-RDB Final Position:      " << bandit.getYCurrent().transpose() << std::endl;
+//            std::cout << "KF-RDB Final Position:      " << bandit.getYCurrent().transpose() << std::endl;
             next_generator = generator_copy;
         }
 
@@ -1136,7 +1136,7 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
             }
 
             results.kfmanb_average_regret_(trial_ind) = total_regret / (double)num_pulls;
-            std::cout << "KF-MANB Final Position:     " << bandit.getYCurrent().transpose() << std::endl;
+//            std::cout << "KF-MANB Final Position:     " << bandit.getYCurrent().transpose() << std::endl;
         }
 
         // Run a trial using UCB1-Normal
@@ -1158,7 +1158,7 @@ TrialResults JacobianTrackingTrials(Generator& generator, const TrialParams& par
             }
 
             results.ucb1normal_average_regret_(trial_ind) = total_regret / (double)num_pulls;
-            std::cout << "UCB1-Normal Final Position: " << bandit.getYCurrent().transpose() << std::endl;
+//            std::cout << "UCB1-Normal Final Position: " << bandit.getYCurrent().transpose() << std::endl;
 
             // Update the original version so as to get new data next trial
         }
