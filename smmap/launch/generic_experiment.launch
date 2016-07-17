@@ -3,6 +3,7 @@
     <arg name="task_type"/>
     <arg name="logging_enabled"                 default="true"/>
     <arg name="test_id"                         default=""/>
+    <arg name="screenshots_enabled"             default="false"/>
 
     <!-- Simulator arguments -->
     <arg name="feedback_covariance"             default="0.0"/>
@@ -12,8 +13,11 @@
     <arg name="bandit_algorithm"                default="KFRDB"/>
     <arg name="multi_model"                     default="false"/>
     <arg name="deformability_override"          default="false"/>
+    <arg if="$(arg deformability_override)"     name="translational_deformability"/>
+    <arg if="$(arg deformability_override)"     name="rotational_deformability"/>
     <arg name="use_adaptive_model"              default="false"/>
     <arg name="adaptive_model_learning_rate"    default="0.000001"/>
+    <arg name="calculate_regret"                default="false"/>
 
     <!-- Planner internal arguments -->
     <arg name="planning_horizion"               default="1"/>
@@ -25,6 +29,7 @@
         <arg name="task_type"                       value="$(arg task_type)"/>
         <arg name="logging_enabled"                 value="$(arg logging_enabled)"/>
         <arg name="test_id"                         value="$(arg test_id)"/>
+        <arg name="screenshots_enabled"             value="$(arg screenshots_enabled)"/>
 
         <!-- Simulator arguments -->
         <arg name="feedback_covariance"             value="$(arg feedback_covariance)"/>
@@ -37,6 +42,7 @@
         <arg name="multi_model"                     value="$(arg multi_model)"/>
         <arg name="use_adaptive_model"              value="$(arg use_adaptive_model)"/>
         <arg name="adaptive_model_learning_rate"    value="$(arg adaptive_model_learning_rate)"/>
+        <arg name="calculate_regret"                value="$(arg calculate_regret)"/>
 
         <!-- Planner internal arguments -->
         <arg name="planning_horizion"               value="$(arg planning_horizion)"/>

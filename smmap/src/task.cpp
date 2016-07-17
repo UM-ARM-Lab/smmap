@@ -27,7 +27,7 @@ Task::Task(RobotInterface& robot,
     , execute_trajectory_fn_(createExecuteGripperTrajectoryFunction())
     , test_grippers_poses_fn_(createTestGrippersPosesFunction())
     , logging_fn_(createLoggingFunction())
-    , planner_(error_fn_, execute_trajectory_fn_, test_grippers_poses_fn_, logging_fn_, vis_, GetRobotControlPeriod(nh_))
+    , planner_(error_fn_, execute_trajectory_fn_, test_grippers_poses_fn_, logging_fn_, vis_, GetRobotControlPeriod(nh_), GetCalculateRegret(nh_))
 {
     initializeModelSet();
     initializeLogging();
@@ -114,28 +114,30 @@ void Task::execute()
                     RobotInterface::MAX_GRIPPER_VELOCITY,
                     task_specification_->collisionScalingFactor());
 
-        ssize_t num_nodes = current_world_state.object_configuration_.cols();
-        std::vector<std_msgs::ColorRGBA> colors((size_t)num_nodes);
-        for (size_t node_ind = 0; node_ind < (size_t)num_nodes; node_ind++)
         {
-            colors[node_ind].r = (float)first_step_desired_motion.weight((ssize_t)node_ind * 3);
-            colors[node_ind].g = 0.0f;
-            colors[node_ind].b = 0.0f;
-            colors[node_ind].a = first_step_desired_motion.weight((ssize_t)node_ind * 3) > 0 ? 1.0f : 0.0f;
-        }
-        task_specification_->visualizeDeformableObject(
-                vis_,
-                "desired_position",
-                AddObjectDelta(current_world_state.object_configuration_, first_step_desired_motion.delta),
-                colors);
+//            ssize_t num_nodes = current_world_state.object_configuration_.cols();
+//            std::vector<std_msgs::ColorRGBA> colors((size_t)num_nodes);
+//            for (size_t node_ind = 0; node_ind < (size_t)num_nodes; node_ind++)
+//            {
+//                colors[node_ind].r = (float)first_step_desired_motion.weight((ssize_t)node_ind * 3);
+//                colors[node_ind].g = 0.0f;
+//                colors[node_ind].b = 0.0f;
+//                colors[node_ind].a = first_step_desired_motion.weight((ssize_t)node_ind * 3) > 0 ? 1.0f : 0.0f;
+//            }
+//            task_specification_->visualizeDeformableObject(
+//                    vis_,
+//                    "desired_position",
+//                    AddObjectDelta(current_world_state.object_configuration_, first_step_desired_motion.delta),
+//                    colors);
 
-        if (task_specification_->deformable_type_ == DeformableType::CLOTH)
-        {
-            vis_.visualizeObjectDelta(
-                        "desired_position",
-                        current_world_state.object_configuration_,
-                        AddObjectDelta(current_world_state.object_configuration_, first_step_desired_motion.delta),
-                        Visualizer::Green());
+//            if (task_specification_->deformable_type_ == DeformableType::CLOTH)
+//            {
+//                vis_.visualizeObjectDelta(
+//                            "desired_position",
+//                            current_world_state.object_configuration_,
+//                            AddObjectDelta(current_world_state.object_configuration_, first_step_desired_motion.delta),
+//                            Visualizer::Green());
+//            }
         }
 
         if (unlikely(world_feedback.back().sim_time_ - start_time >= task_specification_->maxTime()))

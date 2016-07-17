@@ -29,7 +29,8 @@ Planner::Planner(
         const TestGrippersPosesFunctionType& test_grippers_poses_fn,
         const LoggingFunctionType& logging_fn,
         Visualizer& vis,
-        const double dt)
+        const double dt,
+        const bool calculate_regret)
     : error_fn_(error_fn)
     , execute_trajectory_fn_(execute_trajectory_fn)
     , test_grippers_poses_fn_(test_grippers_poses_fn)
@@ -37,11 +38,12 @@ Planner::Planner(
     , logging_fn_(logging_fn)
     , vis_(vis)
     , dt_(dt)
+    , calculate_regret_(calculate_regret)
     , reward_std_dev_scale_factor_(1.0)
     , process_noise_factor_(GetProcessNoiseFactor(ph_))
     , observation_noise_factor_(GetObservationNoiseFactor(ph_))
-//    , generator_(0xa8710913d2b5df6c) // a30cd67f3860ddb3) // MD5 sum of "Dale McConachie"
-    , generator_(std::chrono::system_clock::now().time_since_epoch().count())
+    , generator_(0xa8710913d2b5df6c) // a30cd67f3860ddb3) // MD5 sum of "Dale McConachie"
+//    , generator_(std::chrono::system_clock::now().time_since_epoch().count())
 {}
 
 void Planner::addModel(DeformableModel::Ptr model)
@@ -120,7 +122,7 @@ std::vector<WorldState> Planner::sendNextTrajectory(
 
 
     std::vector<double> individual_rewards(num_models_, std::numeric_limits<double>::infinity());
-    if (num_models_ > 1)
+    if (calculate_regret_ && num_models_ > 1)
     {
         assert(planning_horizion == 1 && "This needs reworking for multi-step planning");
 

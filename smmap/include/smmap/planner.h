@@ -23,7 +23,8 @@ namespace smmap
                     const TestGrippersPosesFunctionType& test_grippers_poses_fn,
                     const LoggingFunctionType& logging_fn,
                     Visualizer& vis,
-                    const double dt);
+                    const double dt,
+                    const bool calculate_regret);
 
             void addModel(DeformableModel::Ptr model);
             void createBandits();
@@ -60,6 +61,7 @@ namespace smmap
 
             // TODO: this is the wrong spot to store this (mentally)
             const double dt_;
+            const bool calculate_regret_;
             ssize_t num_models_;
             std::vector<DeformableModel::Ptr> model_list_;
 #ifdef KFRDB_BANDIT
