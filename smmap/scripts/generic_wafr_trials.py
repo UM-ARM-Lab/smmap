@@ -49,7 +49,8 @@ def run_wafr_trials(experiment, run_baseline=False, run_UCB=False, run_KFMANB=Fa
                   test_id="wafr_paper_trials/" + "multi_model_UCB_regret",
                   planning_horizion=1,
                   bandit_algorithm="UCB",
-                  multi_model="true")
+                  multi_model="true",
+                  calculate_regret="true")
 
     if run_KFMANB:
         for i in range(0, 10):
@@ -58,7 +59,8 @@ def run_wafr_trials(experiment, run_baseline=False, run_UCB=False, run_KFMANB=Fa
                       test_id="wafr_paper_trials/" + "multi_model_KFMANB_regret_" + str(i),
                       planning_horizion=1,
                       bandit_algorithm="KFMANB",
-                      multi_model="true")
+                      multi_model="true",
+                      calculate_regret="true")
 
     if run_KFRDB:
         for i in range(0, 10):
@@ -67,4 +69,5 @@ def run_wafr_trials(experiment, run_baseline=False, run_UCB=False, run_KFMANB=Fa
                       test_id="wafr_paper_trials/" + "multi_model_KFRDB_regret_" + str(i),
                       planning_horizion=1,
                       bandit_algorithm="KFRDB",
-                      multi_model="true")
+                      multi_model="true",
+                      calculate_regret="true")

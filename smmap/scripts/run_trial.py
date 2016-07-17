@@ -17,7 +17,9 @@ def run_trial(experiment,
               process_noise_factor = None,
               observation_noise_factor = None,
               feedback_covariance = None,
-              start_bullet_viewer = "false"):
+              start_bullet_viewer = 'false',
+              calculate_regret = 'false',
+              screenshots_enabled = 'false'):
     # Constant values that we need
     roslaunch_command = ["roslaunch", "smmap"]
 
@@ -65,6 +67,9 @@ def run_trial(experiment,
 
     if start_bullet_viewer is not None:
         roslaunch_command.append('start_bullet_viewer:=' + str(start_bullet_viewer))
+
+    roslaunch_command.append('calculate_regret:=' + str(calculate_regret))
+    roslaunch_command.append('screenshots_enabled:=' + str(screenshots_enabled))
 
     # Add any extra parameters that have been added
     roslaunch_command += sys.argv[1:]
