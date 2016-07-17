@@ -76,6 +76,7 @@ namespace smmap
             double reward_std_dev_scale_factor_;
             const double process_noise_factor_;
             const double observation_noise_factor_;
+            const unsigned long seed_;
             std::mt19937_64 generator_;
 
             void updateModels(

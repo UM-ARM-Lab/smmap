@@ -27,7 +27,7 @@ Task::Task(RobotInterface& robot,
     , execute_trajectory_fn_(createExecuteGripperTrajectoryFunction())
     , test_grippers_poses_fn_(createTestGrippersPosesFunction())
     , logging_fn_(createLoggingFunction())
-    , planner_(error_fn_, execute_trajectory_fn_, test_grippers_poses_fn_, logging_fn_, vis_, GetRobotControlPeriod(nh_), GetCalculateRegret(nh_))
+    , planner_(error_fn_, execute_trajectory_fn_, test_grippers_poses_fn_, logging_fn_, vis_, GetRobotControlPeriod(nh_), GetCalculateRegret(ph_))
 {
     initializeModelSet();
     initializeLogging();
