@@ -42,8 +42,8 @@ Planner::Planner(
     , reward_std_dev_scale_factor_(1.0)
     , process_noise_factor_(GetProcessNoiseFactor(ph_))
     , observation_noise_factor_(GetObservationNoiseFactor(ph_))
-//    , seed_(0xa8710913d2b5df6c) // a30cd67f3860ddb3) // MD5 sum of "Dale McConachie"
-    , seed_(std::chrono::system_clock::now().time_since_epoch().count())
+    , seed_(0xa8710913d2b5df6c) // a30cd67f3860ddb3) // MD5 sum of "Dale McConachie"
+//    , seed_(std::chrono::system_clock::now().time_since_epoch().count())
     , generator_(seed_)
 {
     std::cout << seed_ << std::endl;

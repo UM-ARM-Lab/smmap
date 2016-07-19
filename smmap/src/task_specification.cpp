@@ -183,6 +183,8 @@ double TaskSpecification::errorHistoryThreshold() const
 
 bool TaskSpecification::terminateTask(const WorldState &world_state, const double error)
 {
+    #warning "Settings tweaks here that are not runtime nor auto compiled correctly"
+//    return false; // Used by Cloth Wafr VIDEO
     if (unlikely(task_done_))
     {
         return true;

@@ -124,7 +124,11 @@ JacobianModel::getSuggestedGrippersTrajectory(
         #pragma message "More magic numbers - damping threshold and damping coefficient"
         Eigen::VectorXd grippers_delta_achieve_goal =
                 ClampGripperPoseDeltas(
-                    EigenHelpers::WeightedLeastSquaresSolver(jacobian, desired_object_velocity.delta, desired_object_velocity.weight, 1e-3, 1e-2),
+        #warning "Settings tweaks here that are not runtime nor auto compiled correctly"
+                    // Cloth WAFR Video
+                    EigenHelpers::WeightedLeastSquaresSolver(jacobian, desired_object_velocity.delta, desired_object_velocity.weight, 1e-4, 1e-3),
+                    // Everything else
+//                    EigenHelpers::WeightedLeastSquaresSolver(jacobian, desired_object_velocity.delta, desired_object_velocity.weight, 1e-3, 1e-2),
                     max_step_size);
 
         if (optimize_)
