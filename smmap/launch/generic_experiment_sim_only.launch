@@ -1,0 +1,47 @@
+<launch>
+    <!-- Task and logging arguments -->
+    <arg name="task_type"/>
+    <arg name="logging_enabled"                 default="true"/>
+    <arg name="test_id"                         default=""/>
+    <arg name="screenshots_enabled"             default="false"/>
+
+    <!-- Simulator arguments -->
+    <arg name="feedback_covariance"             default="0.0"/>
+    <arg name="start_bullet_viewer"             default="true"/>
+
+    <!-- Planner model arguments -->
+    <arg name="multi_model"                     default="false"/>
+    <arg name="deformability_override"          default="false"/>
+    <arg if="$(arg deformability_override)"     name="translational_deformability"/>
+    <arg if="$(arg deformability_override)"     name="rotational_deformability"/>
+    <arg name="use_adaptive_model"              default="false"/>
+    <arg name="adaptive_model_learning_rate"    default="0.000001"/>
+    <arg name="calculate_regret"                default="false"/>
+
+    <!-- Planner internal arguments -->
+    <arg name="planning_horizion"               default="1"/>
+    <arg name="kalman_parameters_override"      default="false"/>
+
+    <param name="logging_enabled" value="$(arg logging_enabled)"/>
+    <param name="log_folder" value="$(find smmap)/../logs/$(arg task_type)/$(arg test_id)/"/>
+
+    <include file="$(find smmap)/launch/$(arg task_type)_params.launch"/>
+
+    <include file="$(find deform_simulator)/launch/deform_simulator.launch">
+        <arg name="feedback_covariance" value="$(arg feedback_covariance)"/>
+        <arg name="start_bullet_viewer" value="$(arg start_bullet_viewer)"/>
+        <arg name="screenshots_enabled" value="$(arg screenshots_enabled)"/>
+    </include>
+
+    <group ns="smmap_planner_node">
+        <param name="use_multi_model" value="$(arg multi_model)" type="bool"/>
+        <param name="planning_horizion" value="$(arg planning_horizion)" type="int"/>
+        <param if="$(arg deformability_override)" name="translational_deformability" value="$(arg translational_deformability)"/>
+        <param if="$(arg deformability_override)" name="rotational_deformability" value="$(arg rotational_deformability)"/>
+        <param name="use_adaptive_model" value="$(arg use_adaptive_model)" type="bool"/>
+        <param name="adaptive_model_learning_rate" value="$(arg adaptive_model_learning_rate)" type="double"/>
+        <param if="$(arg kalman_parameters_override)" name="process_noise_factor" value="$(arg process_noise_factor)"/>
+        <param if="$(arg kalman_parameters_override)" name="observation_noise_factor" value="$(arg observation_noise_factor)"/>
+        <param name="calculate_regret" value="$(arg calculate_regret)" type="bool"/>
+    </group>
+</launch>

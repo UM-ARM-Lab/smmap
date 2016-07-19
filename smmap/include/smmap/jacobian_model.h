@@ -13,7 +13,7 @@ namespace smmap
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
-            JacobianModel();
+            JacobianModel(bool optimize);
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function overrides
@@ -23,20 +23,20 @@ namespace smmap
                     const WorldState& world_initial_state,
                     const AllGrippersPoseTrajectory& grippers_pose_trajectory,
                     const AllGrippersPoseDeltaTrajectory& grippers_pose_delta_trajectory,
-                    const double dt ) const override final;
+                    const double dt) const override final;
 
             virtual ObjectPointSet getFinalConfiguration(
                     const WorldState& world_initial_state,
                     const AllGrippersPoseTrajectory& gripper_pose_trajectory,
                     const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
-                    const double dt ) const override final;
+                    const double dt) const override final;
 
-            virtual std::pair< AllGrippersPoseTrajectory, ObjectTrajectory > getSuggestedGrippersTrajectory(
+            virtual std::pair<AllGrippersPoseTrajectory, ObjectTrajectory> getSuggestedGrippersTrajectory(
                     const WorldState& world_initial_state,
-                    const int planning_horizion,
+                    const size_t planning_horizion,
                     const double dt,
                     const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale ) const override final;
+                    const double obstacle_avoidance_scale) const override final;
 
         protected:
 
@@ -53,17 +53,17 @@ namespace smmap
             ObjectPointSet getObjectDelta(
                     const ObjectPointSet& object_initial_configuration,
                     const AllGrippersSinglePose& grippers_pose,
-                    const AllGrippersSinglePoseDelta& grippers_pose_delta ) const;
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const;
 
             Eigen::MatrixXd computeNonlinearProjectionGradient(
                     const ObjectPointSet& current_object_configuration,
                     const Eigen::VectorXd& current_object_velocity,
                     const Eigen::MatrixXd& jacobian,
-                    Eigen::VectorXd current_grippers_velocity ) const;
+                    Eigen::VectorXd current_grippers_velocity) const;
 
             virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration ) const = 0;
+                    const ObjectPointSet& current_configuration) const = 0;
 
             ////////////////////////////////////////////////////////////////////
             // Static members
@@ -72,6 +72,9 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
             // Private members
             ////////////////////////////////////////////////////////////////////
+
+            // Controls if we perform an optimization pass between the weighted pseudo inverse and the gripper collision avoidance
+            bool optimize_;
     };
 }
 

@@ -1,10 +1,16 @@
 <launch>
-    <arg name="logging_enabled" default="true"/>
-    <arg name="test_id" default=""/>
-
-    <param name="logging_enabled" value="$(arg logging_enabled)"/>
-    <param name="log_folder" value="$(find smmap)/../logs/cloth_table/$(arg test_id)/"/>
-
     <param name="deformable_type" value="cloth"/>
     <param name="task_type" value="table_coverage"/>
+
+    <param name="world_x_step" value="0.0125"/>
+    <param name="world_x_min" value="-0.3"/>
+    <param name="world_x_max" value="0.3"/>
+
+    <param name="world_y_step" value="0.0125"/>
+    <param name="world_y_min" value="-0.3"/>
+    <param name="world_y_max" value="0.3"/>
+
+    <param name="world_z_step" value="0.0125"/>
+    <param name="world_z_min" value="0.5775"/>
+    <param name="world_z_max" value="0.7775"/>
 </launch>

@@ -13,21 +13,21 @@ planning_horizion = 1
 for feedback_covariance in feedback_covariance_range:
 
     # Run the single model baseline
-    for translational_deform in deform_range:
-        for rotational_deform in deform_range:
-
-            run_trial(experiment="cloth_cylinder",
-                      logging_enabled="true",
-                      test_id=str(planning_horizion) + "_step_simulator_noise_vs_kalman_parameters/"
-                              + "feedback_covariance_" + str(feedback_covariance) + "/"
-                              + "single_model_baseline/"
-                              + "trans_" + str(translational_deform)
-                              + "_rot_" + str(rotational_deform),
-                      planning_horizion=planning_horizion,
-                      multi_model="false",
-                      deformability_override="true",
-                      translational_deformability=translational_deform,
-                      rotational_deformability=rotational_deform)
+    # for translational_deform in deform_range:
+    #     for rotational_deform in deform_range:
+    #
+    #         run_trial(experiment="cloth_cylinder",
+    #                   logging_enabled="true",
+    #                   test_id=str(planning_horizion) + "_step_simulator_noise_vs_kalman_parameters/"
+    #                           + "feedback_covariance_" + str(feedback_covariance) + "/"
+    #                           + "single_model_baseline/"
+    #                           + "trans_" + str(translational_deform)
+    #                           + "_rot_" + str(rotational_deform),
+    #                   planning_horizion=planning_horizion,
+    #                   multi_model="false",
+    #                   deformability_override="true",
+    #                   translational_deformability=translational_deform,
+    #                   rotational_deformability=rotational_deform)
 
     # Run the multi model trials
     for process_noise_factor in process_noise_factor_range:

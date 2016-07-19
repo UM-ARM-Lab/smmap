@@ -14,9 +14,9 @@ namespace smmap
     class Task
     {
         public:
-            Task( RobotInterface& robot,
+            Task(RobotInterface& robot,
                   Visualizer& vis,
-                  TaskSpecification::Ptr task_specification );
+                  TaskSpecification::Ptr task_specification);
             void execute();
 
         private:
@@ -40,19 +40,20 @@ namespace smmap
             // Task specific data
             ////////////////////////////////////////////////////////////////////
 
-            std::shared_ptr< TaskSpecification > task_specification_;
+            std::shared_ptr<TaskSpecification> task_specification_;
 
             ////////////////////////////////////////////////////////////////////
             // Logging objects
             ////////////////////////////////////////////////////////////////////
 
             bool logging_enabled_;
-            std::map< std::string, Log::Log > loggers;
+            std::map<std::string, Log::Log> loggers;
             void logData(
                     const WorldState& current_world_state,
                     const Eigen::VectorXd& model_utility_mean,
                     const Eigen::MatrixXd& model_utility_covariance,
-                    const ssize_t model_used );
+                    const ssize_t model_used,
+                    const std::vector<double>& rewards_for_all_models);
 
             ////////////////////////////////////////////////////////////////////
             // Function pointers that are created in the construtor that are
@@ -63,6 +64,7 @@ namespace smmap
             const GripperCollisionCheckFunctionType gripper_collision_check_fn_;
             const TaskObjectDeltaProjectionFunctionType task_object_delta_projection_fn_;
             const TaskExecuteGripperTrajectoryFunctionType execute_trajectory_fn_;
+            const TestGrippersPosesFunctionType test_grippers_poses_fn_;
             const LoggingFunctionType logging_fn_;
 
             ////////////////////////////////////////////////////////////////////
@@ -75,6 +77,7 @@ namespace smmap
             GripperCollisionCheckFunctionType createGripperCollisionCheckFunction();
             TaskObjectDeltaProjectionFunctionType createTaskObjectDeltaProjectionFunction();
             TaskExecuteGripperTrajectoryFunctionType createExecuteGripperTrajectoryFunction();
+            TestGrippersPosesFunctionType createTestGrippersPosesFunction();
             LoggingFunctionType createLoggingFunction();
 
             ////////////////////////////////////////////////////////////////////

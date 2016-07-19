@@ -14,25 +14,28 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             static void SetInitialObjectConfiguration(
-                    const ObjectPointSet& object_initial_configuration );
+                    const ObjectPointSet& object_initial_configuration);
 
             ////////////////////////////////////////////////////////////////////
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
-            DiminishingRigidityModel( double deformability );
+            DiminishingRigidityModel(
+                    const double deformability,
+                    const bool optimize);
 
             DiminishingRigidityModel(
-                    double translation_deformability,
-                    double rotation_deformability );
+                    const double translation_deformability,
+                    const double rotation_deformability,
+                    const bool optimize);
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            virtual void updateModel( const std::vector< WorldState >& feedback );
+            virtual void updateModel(const std::vector<WorldState>& feedback);
 
-            void perturbModel( std::mt19937_64& generator );
+            void perturbModel(std::mt19937_64& generator);
 
             ////////////////////////////////////////////////////////////////////
             // Helper used only by AdaptiveJacobian (at the moment)
@@ -41,7 +44,7 @@ namespace smmap
 
             Eigen::MatrixXd getGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration ) const;
+                    const ObjectPointSet& current_configuration) const;
 
         private:
 
@@ -57,14 +60,14 @@ namespace smmap
 
             virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration ) const override;
+                    const ObjectPointSet& current_configuration) const override;
 
             ////////////////////////////////////////////////////////////////////
             // Static members
             ////////////////////////////////////////////////////////////////////
 
             static std::atomic_bool static_data_initialized_;
-            static std::normal_distribution< double > perturbation_distribution_;
+            static std::normal_distribution<double> perturbation_distribution_;
             static Eigen::MatrixXd object_initial_node_distance_;
             static long num_nodes_;
 

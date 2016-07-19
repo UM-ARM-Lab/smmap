@@ -1,7 +1,7 @@
-cmake_minimum_required( VERSION 2.8.3 )
-project( smmap )
+cmake_minimum_required(VERSION 2.8.3)
+project(smmap)
 
-set( CATKIN_PACKAGES
+set(CATKIN_PACKAGES
     actionlib
     arc_utilities
     geometry_msgs
@@ -13,12 +13,12 @@ set( CATKIN_PACKAGES
 )
 
 ## Find catkin macros and libraries
-find_package( catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES} )
+find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 
 ## System dependencies are found with CMake's conventions
-find_package( cmake_modules REQUIRED )
-find_package( Boost REQUIRED COMPONENTS filesystem )
-find_package( Eigen REQUIRED )
+find_package(cmake_modules REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem)
+find_package(Eigen REQUIRED)
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -44,51 +44,63 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-include_directories( include
+include_directories(include
     SYSTEM
     ${Boost_INCLUDE_DIRS}
     ${Eigen_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
 )
 
-set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -g -O3 -march=native -Wall -Wextra -Wpedantic -Wconversion" )
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O2 -g -march=native -Wall -Wextra -Wpedantic -Wconversion")
 
-unset( USE_OPEN_MP CACHE )
-option( USE_OPEN_MP "Set to ON if we want to use OpenMP" ON )
-if ( USE_OPEN_MP )
-    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -DUSE_OPEN_MP" )
-    message( STATUS "Enabling OpenMP for SMMAP library" )
-else( USE_OPEN_MP )
-    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas" )
-    message( WARNING "Disabling OpenMP for SMMAP library" )
-endif( USE_OPEN_MP )
+unset(USE_OPEN_MP CACHE)
+option(USE_OPEN_MP "Set to ON if we want to use OpenMP" ON)
+if (USE_OPEN_MP)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -DUSE_OPEN_MP")
+    message(STATUS "Enabling OpenMP for SMMAP library")
+else(USE_OPEN_MP)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
+    message(WARNING "Disabling OpenMP for SMMAP library")
+endif(USE_OPEN_MP)
 
 ## Library file for the whole project
-FILE( GLOB hpp_SRC "include/${PROJECT_NAME}/*.hpp" )
-FILE( GLOB h_SRC "include/${PROJECT_NAME}/*.h" )
-FILE( GLOB cpp_SRC "src/*.cpp" )
+FILE(GLOB hpp_SRC "include/${PROJECT_NAME}/*.hpp")
+FILE(GLOB h_SRC "include/${PROJECT_NAME}/*.h")
+FILE(GLOB cpp_SRC "src/*.cpp")
 
-add_library( ${PROJECT_NAME}
-    ${hpp_SRC}
-    ${h_SRC}
-    ${cpp_SRC}
-)
-add_dependencies( ${PROJECT_NAME}
-    ${catkin_EXPORTED_TARGETS}
-)
+add_library(${PROJECT_NAME}_KFRDB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
+add_dependencies(${PROJECT_NAME}_KFRDB ${catkin_EXPORTED_TARGETS})
+set_target_properties(${PROJECT_NAME}_KFRDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFRDB_BANDIT")
 
-## Test files to test specific functionality
-add_executable( ${PROJECT_NAME}_test_node
-    nodes/${PROJECT_NAME}_test_node.cpp
-)
-add_dependencies( ${PROJECT_NAME}_test_node
-    ${PROJECT_NAME}
-    ${catkin_EXPORTED_TARGETS}
-)
-target_link_libraries( ${PROJECT_NAME}_test_node
-    ${PROJECT_NAME}
-    ${catkin_LIBRARIES}
-)
+add_library(${PROJECT_NAME}_KFMANB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
+add_dependencies(${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
+set_target_properties(${PROJECT_NAME}_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
+
+add_library(${PROJECT_NAME}_UCB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
+add_dependencies(${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
+set_target_properties(${PROJECT_NAME}_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
+
+## Simulator tests
+add_executable(${PROJECT_NAME}_test_node_KFRDB nodes/${PROJECT_NAME}_test_node.cpp)
+add_dependencies(${PROJECT_NAME}_test_node_KFRDB ${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_test_node_KFRDB ${PROJECT_NAME}_KFRDB ${catkin_LIBRARIES})
+set_target_properties(${PROJECT_NAME}_test_node_KFRDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFRDB_BANDIT")
+
+add_executable(${PROJECT_NAME}_test_node_KFMANB nodes/${PROJECT_NAME}_test_node.cpp)
+add_dependencies(${PROJECT_NAME}_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES})
+set_target_properties(${PROJECT_NAME}_test_node_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
+
+add_executable(${PROJECT_NAME}_test_node_UCB nodes/${PROJECT_NAME}_test_node.cpp)
+add_dependencies(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_LIBRARIES})
+set_target_properties(${PROJECT_NAME}_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
+
+## Synthethic trials
+add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp)
+add_dependencies(kalman_filter_synthetic_trials ${catkin_EXPORTED_TARGETS})
+target_link_libraries(kalman_filter_synthetic_trials ${catkin_LIBRARIES})
+set_target_properties(kalman_filter_synthetic_trials PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS}")
 
 #############
 ## Install ##

@@ -12,16 +12,17 @@ namespace smmap
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
-            LeastSquaresJacobianModel( const Eigen::MatrixXd& initial_jacobian,
-                                       const long extra_samples );
+            LeastSquaresJacobianModel(const Eigen::MatrixXd& initial_jacobian,
+                                      const long extra_samples,
+                                      const bool optimize);
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            virtual void updateModel( const std::vector< WorldState >& feedback ) override;
+            virtual void updateModel(const std::vector<WorldState>& feedback) override;
 
-            virtual void perturbModel( std::mt19937_64& generator ) override;
+            virtual void perturbModel(std::mt19937_64& generator) override;
 
         private:
 
@@ -31,7 +32,7 @@ namespace smmap
 
             virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration ) const override;
+                    const ObjectPointSet& current_configuration) const override;
 
             ////////////////////////////////////////////////////////////////////
             // Private members

@@ -1,0 +1,17 @@
+<launch>
+    <param name="deformable_type" value="cloth"/>
+    <param name="task_type" value="wafr"/>
+
+    <param name="cloth_com_x" value="-0.2"/>
+    <param name="cloth_com_z" value="0.86"/>
+
+    <param name="world_x_step" value="0.0125"/>
+    <param name="world_x_min" value="-0.80"/>
+    <param name="world_x_max" value="-0.07"/>
+
+    <param name="world_y_step" value="0.0125"/>
+
+    <param name="world_z_step" value="0.0125"/>
+    <param name="world_z_min" value="0.7775"/>
+    <param name="world_z_max" value="0.9775"/>
+</launch>
