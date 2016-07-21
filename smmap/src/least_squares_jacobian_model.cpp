@@ -4,6 +4,7 @@
 #include <ros/ros.h>
 
 using namespace smmap;
+using namespace Eigen;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Constructors and Destructor
@@ -28,47 +29,36 @@ LeastSquaresJacobianModel::LeastSquaresJacobianModel(
 // Virtual function overrides
 ////////////////////////////////////////////////////////////////////
 
-void LeastSquaresJacobianModel::updateModel(const std::vector<WorldState>& feedback)
+void LeastSquaresJacobianModel::updateModel(const WorldState& previous, const WorldState& next)
 {
-    const AllGrippersPoseDeltaTrajectory grippers_pose_deltas =
-            CalculateGrippersPoseDeltas(GetGripperTrajectories(feedback));
+    const AllGrippersSinglePoseDelta grippers_pose_deltas =
+            CalculateGrippersPoseDelta(previous.all_grippers_single_pose_,
+                                       next.all_grippers_single_pose_);
 
-    for (size_t ind = 0; ind < feedback.size() - 1; ind++)
+    const VectorXd grippers_delta = EigenHelpersConversions::VectorEigenVectorToEigenVectorX(grippers_pose_deltas);
+
+    if (grippers_delta.squaredNorm() < 1e-6)
     {
-        // Collect the data we need
-        Eigen::VectorXd grippers_delta(current_jacobian_.cols());
-        for (size_t gripper_ind = 0; gripper_ind < grippers_pose_deltas[ind].size(); gripper_ind++)
+        ROS_WARN_STREAM_NAMED("least_squares_jacobian", "Grippers did not move much, not updating: squared norm vel: " << grippers_delta.squaredNorm());
+    }
+    else
+    {
+        ROS_INFO_NAMED("least_squares_jacobian", "Adding data to buffer");
+        grippers_delta_wide_matrix_.col(next_buffer_ind_) = grippers_delta;
+
+        MatrixXd object_delta = next.object_configuration_ - previous.object_configuration_;
+        object_delta.resize(current_jacobian_.rows(), 1);
+        deformable_delta_wide_matrix_.col(next_buffer_ind_) = object_delta;
+
+        next_buffer_ind_++;
+        if (next_buffer_ind_ >= buffer_size_)
         {
-            grippers_delta.segment<6>((long)gripper_ind * 6) =
-                    grippers_pose_deltas[ind][gripper_ind];
+            next_buffer_ind_ = 0;
         }
 
-        Eigen::MatrixXd true_delta =
-                feedback[ind + 1].object_configuration_
-                - feedback[ind].object_configuration_;
-        true_delta.resize(current_jacobian_.rows(), 1);
-
-        if (grippers_delta.squaredNorm() < 1e-6)
+        if (next_buffer_ind_ == 0)
         {
-            ROS_WARN_STREAM_NAMED("least_squares_jacobian", "Grippers did not move much, not updating: squared norm vel: " << grippers_delta.squaredNorm());
-        }
-        else
-        {
-            ROS_INFO_NAMED("least_squares_jacobian", "Adding data to buffer");
-            grippers_delta_wide_matrix_.col(next_buffer_ind_) = grippers_delta;
-
-            deformable_delta_wide_matrix_.col(next_buffer_ind_) = true_delta;
-
-            next_buffer_ind_++;
-            if (next_buffer_ind_ >= buffer_size_)
-            {
-                next_buffer_ind_ = 0;
-            }
-
-            if (next_buffer_ind_ == 0)
-            {
-                buffer_full_ = true;
-            }
+            buffer_full_ = true;
         }
     }
 
@@ -78,12 +68,6 @@ void LeastSquaresJacobianModel::updateModel(const std::vector<WorldState>& feedb
         current_jacobian_ = deformable_delta_wide_matrix_ *
                 EigenHelpers::Pinv(grippers_delta_wide_matrix_, EigenHelpers::SuggestedRcond());
     }
-}
-
-void LeastSquaresJacobianModel::perturbModel(std::mt19937_64& generator)
-{
-    #pragma message "LeastSquaresJacobianModel::perturbModel does nothing.  Is this correct?"
-    (void)generator;
 }
 
 ////////////////////////////////////////////////////////////////////

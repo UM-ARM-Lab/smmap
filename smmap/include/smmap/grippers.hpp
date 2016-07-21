@@ -6,6 +6,7 @@
 #include <assert.h>
 
 #include <arc_utilities/eigen_helpers.hpp>
+#include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/pretty_print.hpp>
 #include <kinematics_toolbox/kinematics.h>
 #include <smmap_experiment_params/ros_params.hpp>
@@ -54,7 +55,8 @@ namespace smmap
     };
 
     template<typename T>
-    inline std::vector<long > VectorAnytypeToVectorLong(const std::vector< T>& vector_anytype)
+    inline std::vector<long > VectorAnytypeToVectorLong(
+            const std::vector<T>& vector_anytype)
     {
         std::vector<long> vector_signed(vector_anytype.size());
         for (size_t ind = 0; ind < vector_anytype.size(); ind++)
@@ -64,7 +66,8 @@ namespace smmap
         return vector_signed;
     }
 
-    inline std::vector<std::string> GetGripperNames(const std::vector<GripperData> grippers_data)
+    inline std::vector<std::string> GetGripperNames(
+            const std::vector<GripperData> grippers_data)
     {
         std::vector<std::string> names(grippers_data.size());
 
@@ -84,7 +87,8 @@ namespace smmap
      * @return The the distance between given node, and the closest node grasped by the gripper
      */
     inline double getMinimumDistanceToGripper(
-            const std::vector<long>& gripper_indices, long node_index,
+            const std::vector<long>& gripper_indices,
+            long node_index,
             const Eigen::MatrixXd& object_initial_node_distance)
     {
         double min_dist = std::numeric_limits<double>::infinity();
@@ -171,6 +175,24 @@ namespace smmap
     // Conversion functions
     ////////////////////////////////////////////////////////////////////////////
 
+    inline AllGrippersSinglePoseDelta CalculateGrippersPoseDelta(
+            const AllGrippersSinglePose& prev,
+            const AllGrippersSinglePose& next)
+    {
+        const size_t num_grippers = prev.size();
+        assert(num_grippers > 0);
+        assert(num_grippers == next.size());
+        AllGrippersSinglePoseDelta grippers_pose_delta(num_grippers);
+        for (size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+        {
+            grippers_pose_delta[gripper_ind] =
+                    kinematics::calculateError(
+                        prev[gripper_ind],
+                        next[gripper_ind]);
+        }
+        return grippers_pose_delta;
+    }
+
     /**
      * @brief CalculateGrippersPoseDeltas
      * @param grippers_trajectory
@@ -188,13 +210,10 @@ namespace smmap
 
         for (size_t time_ind = 0; time_ind < grippers_pose_delta_traj.size(); time_ind++)
         {
-            for (size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
-            {
-                grippers_pose_delta_traj[time_ind][gripper_ind] =
-                        kinematics::calculateError(
-                            grippers_trajectory[time_ind][gripper_ind],
-                            grippers_trajectory[time_ind + 1][gripper_ind]);
-            }
+            grippers_pose_delta_traj[time_ind] =
+                    CalculateGrippersPoseDelta(
+                        grippers_trajectory[time_ind],
+                        grippers_trajectory[time_ind + 1]);
         }
 
         return grippers_pose_delta_traj;

@@ -1,4 +1,3 @@
-#include <mutex>
 #include <boost/filesystem.hpp>
 #include <smmap_experiment_params/ros_params.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
@@ -14,20 +13,15 @@ using namespace smmap;
 using namespace EigenHelpersConversions;
 
 Task::Task(RobotInterface& robot,
-            Visualizer& vis,
-            TaskSpecification::Ptr task_specification)
+           Visualizer& vis,
+           const TaskSpecification::Ptr& task_specification)
     : nh_()
     , ph_("~")
     , robot_(robot)
     , vis_(vis)
     , task_specification_(task_specification)
-    , error_fn_(createErrorFunction())
-    , gripper_collision_check_fn_(createGripperCollisionCheckFunction())
-    , task_object_delta_projection_fn_(createTaskObjectDeltaProjectionFunction())
-    , execute_trajectory_fn_(createExecuteGripperTrajectoryFunction())
-    , test_grippers_poses_fn_(createTestGrippersPosesFunction())
     , logging_fn_(createLoggingFunction())
-    , planner_(error_fn_, execute_trajectory_fn_, test_grippers_poses_fn_, logging_fn_, vis_, GetRobotControlPeriod(nh_), GetCalculateRegret(ph_))
+    , planner_(robot_, vis_, task_specification_, logging_fn_)
 {
     initializeModelSet();
     initializeLogging();
@@ -39,82 +33,19 @@ void Task::execute()
 
     // Run the planner at whatever rate we've been given
     ROS_INFO_STREAM_NAMED("task", "Running our planner with a horizion of " << planning_horizion);
-    std::vector<WorldState> world_feedback = robot_.start();
-    const double start_time = world_feedback.back().sim_time_;
+    WorldState world_feedback = robot_.start();
+    const double start_time = world_feedback.sim_time_;
 
     while (robot_.ok())
     {
-        const WorldState current_world_state = world_feedback.back();
-        const double current_error = error_fn_(current_world_state.object_configuration_);
+        const WorldState current_world_state = world_feedback;
+        const double current_error = task_specification_->calculateError(current_world_state.object_configuration_);
         ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << current_error);
 
-        ObjectDeltaAndWeight first_step_desired_motion;
-        ObjectDeltaAndWeight first_step_error_correction;
-        ObjectDeltaAndWeight first_step_stretching_correction;
-        std::atomic_bool first_step_calculated(false);
-        std::mutex first_step_mtx;
+        world_feedback = planner_.sendNextCommand(current_world_state);
 
-        // Update our function callbacks for the models
-        TaskDesiredObjectDeltaFunctionType caching_task_desired_object_delta_fn = [&] (const WorldState& state)
-        {
-            if (state.sim_time_ == current_world_state.sim_time_)
-            {
-                if (first_step_calculated.load())
-                {
-                    return first_step_desired_motion;
-                }
-                else
-                {
-                    std::lock_guard<std::mutex> lock(first_step_mtx);
-                    if (first_step_calculated.load())
-                    {
-                        return first_step_desired_motion;
-                    }
-                    else
-                    {
-                        ROS_INFO_NAMED("task", "Determining desired direction");
-                        first_step_error_correction =
-                                task_specification_->calculateObjectErrorCorrectionDelta(state);
-
-                        first_step_stretching_correction =
-                                task_specification_->calculateStretchingCorrectionDelta(state, false);
-
-                        first_step_desired_motion =
-                                task_specification_->combineErrorCorrectionAndStretchingCorrection(
-                                    first_step_error_correction, first_step_stretching_correction);
-
-                        if (task_specification_->terminateTask(current_world_state, current_error))
-                        {
-                            ROS_INFO_NAMED("task", "Task finished, requesting zero movement from planner");
-                            first_step_desired_motion.delta = Eigen::VectorXd::Zero(first_step_desired_motion.delta.rows());
-                            first_step_desired_motion.weight = Eigen::VectorXd::Zero(first_step_desired_motion.weight.rows());
-                        }
-
-                        first_step_calculated.store(true);
-                        return first_step_desired_motion;
-                    }
-                }
-            }
-            else
-            {
-                return task_specification_->calculateObjectErrorCorrectionDelta(state);
-            }
-        };
-        caching_task_desired_object_delta_fn(current_world_state);
-
-        DeformableModel::SetCallbackFunctions(error_fn_,
-                                              gripper_collision_check_fn_,
-                                              caching_task_desired_object_delta_fn,
-                                              task_object_delta_projection_fn_);
-
-        world_feedback = planner_.sendNextTrajectory(
-                    current_world_state,
-                    caching_task_desired_object_delta_fn,
-                    planning_horizion,
-                    RobotInterface::MAX_GRIPPER_VELOCITY,
-                    task_specification_->collisionScalingFactor());
-
-        {
+        // Visualize the desired position and weights
+//        {
 //            ssize_t num_nodes = current_world_state.object_configuration_.cols();
 //            std::vector<std_msgs::ColorRGBA> colors((size_t)num_nodes);
 //            for (size_t node_ind = 0; node_ind < (size_t)num_nodes; node_ind++)
@@ -138,9 +69,9 @@ void Task::execute()
 //                            AddObjectDelta(current_world_state.object_configuration_, first_step_desired_motion.delta),
 //                            Visualizer::Green());
 //            }
-        }
+//        }
 
-        if (unlikely(world_feedback.back().sim_time_ - start_time >= task_specification_->maxTime()))
+        if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()))
         {
             robot_.shutdown();
         }
@@ -156,10 +87,7 @@ void Task::initializeModelSet()
     // Initialze each model type with the shared data
     DeformableModel::SetGrippersData(robot_.getGrippersData());
     // TODO: fix this interface so that I'm not passing a null ptr here
-    DeformableModel::SetCallbackFunctions(error_fn_,
-                                          gripper_collision_check_fn_,
-                                          TaskDesiredObjectDeltaFunctionType(nullptr),
-                                          task_object_delta_projection_fn_);
+    DeformableModel::SetCallbackFunctions(gripper_collision_check_fn_);
     DiminishingRigidityModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
 
     // Create some models and add them to the model set
@@ -365,12 +293,12 @@ void Task::logData(
 // deformable_type_ have been set already
 ////////////////////////////////////////////////////////////////////////////////
 
-ErrorFunctionType Task::createErrorFunction()
-{
-    return std::bind(&TaskSpecification::calculateError,
-                     task_specification_,
-                     std::placeholders::_1);
-}
+//ErrorFunctionType Task::createErrorFunction()
+//{
+//    return std::bind(&TaskSpecification::calculateError,
+//                     task_specification_,
+//                     std::placeholders::_1);
+//}
 
 GripperCollisionCheckFunctionType Task::createGripperCollisionCheckFunction()
 {
@@ -379,20 +307,20 @@ GripperCollisionCheckFunctionType Task::createGripperCollisionCheckFunction()
                      std::placeholders::_1);
 }
 
-TaskExecuteGripperTrajectoryFunctionType Task::createExecuteGripperTrajectoryFunction()
-{
-    return std::bind(&RobotInterface::sendGripperTrajectory,
-                     &robot_,
-                     std::placeholders::_1);
-}
+//TaskExecuteGripperTrajectoryFunctionType Task::createExecuteGripperTrajectoryFunction()
+//{
+//    return std::bind(&RobotInterface::sendGripperTrajectory,
+//                     &robot_,
+//                     std::placeholders::_1);
+//}
 
-TestGrippersPosesFunctionType Task::createTestGrippersPosesFunction()
-{
-    return std::bind(&RobotInterface::testGrippersPoses,
-                     &robot_,
-                     std::placeholders::_1,
-                     std::placeholders::_2);
-}
+//TestGrippersPosesFunctionType Task::createTestGrippersPosesFunction()
+//{
+//    return std::bind(&RobotInterface::testGrippersPoses,
+//                     &robot_,
+//                     std::placeholders::_1,
+//                     std::placeholders::_2);
+//}
 
 LoggingFunctionType Task::createLoggingFunction()
 {
@@ -405,10 +333,10 @@ LoggingFunctionType Task::createLoggingFunction()
                      std::placeholders::_5);
 }
 
-TaskObjectDeltaProjectionFunctionType Task::createTaskObjectDeltaProjectionFunction()
-{
-    return std::bind(&TaskSpecification::projectObjectDelta,
-                     task_specification_,
-                     std::placeholders::_1,
-                     std::placeholders::_2);
-}
+//TaskObjectDeltaProjectionFunctionType Task::createTaskObjectDeltaProjectionFunction()
+//{
+//    return std::bind(&TaskSpecification::projectObjectDelta,
+//                     task_specification_,
+//                     std::placeholders::_1,
+//                     std::placeholders::_2);
+//}

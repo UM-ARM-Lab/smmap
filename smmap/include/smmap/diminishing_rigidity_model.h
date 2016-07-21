@@ -10,13 +10,6 @@ namespace smmap
     {
         public:
             ////////////////////////////////////////////////////////////////////
-            // Static functions to set data for all models
-            ////////////////////////////////////////////////////////////////////
-
-            static void SetInitialObjectConfiguration(
-                    const ObjectPointSet& object_initial_configuration);
-
-            ////////////////////////////////////////////////////////////////////
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
@@ -33,9 +26,7 @@ namespace smmap
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            virtual void updateModel(const std::vector<WorldState>& feedback);
-
-            void perturbModel(std::mt19937_64& generator);
+            virtual void updateModel(const WorldState& previous, const WorldState& next) final override;
 
             ////////////////////////////////////////////////////////////////////
             // Helper used only by AdaptiveJacobian (at the moment)
@@ -45,6 +36,13 @@ namespace smmap
             Eigen::MatrixXd getGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
                     const ObjectPointSet& current_configuration) const;
+
+            ////////////////////////////////////////////////////////////////////
+            // Static functions to set data for all models
+            ////////////////////////////////////////////////////////////////////
+
+            static void SetInitialObjectConfiguration(
+                    const ObjectPointSet& object_initial_configuration);
 
         private:
 
@@ -60,14 +58,13 @@ namespace smmap
 
             virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration) const override;
+                    const ObjectPointSet& current_configuration) const override final;
 
             ////////////////////////////////////////////////////////////////////
             // Static members
             ////////////////////////////////////////////////////////////////////
 
             static std::atomic_bool static_data_initialized_;
-            static std::normal_distribution<double> perturbation_distribution_;
             static Eigen::MatrixXd object_initial_node_distance_;
             static long num_nodes_;
 
@@ -75,8 +72,8 @@ namespace smmap
             // Private members
             ////////////////////////////////////////////////////////////////////
 
-            double translation_deformability_;
-            double rotation_deformability_;
+            const double translation_deformability_;
+            const double rotation_deformability_;
     };
 }
 

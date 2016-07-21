@@ -5,7 +5,6 @@
 
 namespace smmap
 {
-    // TODO: find a way to accept dynamic/online gripper re-grasping
     class JacobianModel : public DeformableModel
     {
         public:
@@ -19,21 +18,14 @@ namespace smmap
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            virtual ObjectTrajectory getPrediction(
+            virtual ObjectPointSet getPredictedObjectDelta(
                     const WorldState& world_initial_state,
-                    const AllGrippersPoseTrajectory& grippers_pose_trajectory,
-                    const AllGrippersPoseDeltaTrajectory& grippers_pose_delta_trajectory,
+                    const AllGrippersSinglePoseDelta& gripper_pose_delta,
                     const double dt) const override final;
 
-            virtual ObjectPointSet getFinalConfiguration(
+            virtual std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getSuggestedGrippersCommand(
+                    TaskDesiredObjectDeltaFunctionType task_desired_object_delta_fn,
                     const WorldState& world_initial_state,
-                    const AllGrippersPoseTrajectory& gripper_pose_trajectory,
-                    const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
-                    const double dt) const override final;
-
-            virtual std::pair<AllGrippersPoseTrajectory, ObjectTrajectory> getSuggestedGrippersTrajectory(
-                    const WorldState& world_initial_state,
-                    const size_t planning_horizion,
                     const double dt,
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale) const override final;
@@ -54,12 +46,6 @@ namespace smmap
                     const ObjectPointSet& object_initial_configuration,
                     const AllGrippersSinglePose& grippers_pose,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta) const;
-
-            Eigen::MatrixXd computeNonlinearProjectionGradient(
-                    const ObjectPointSet& current_object_configuration,
-                    const Eigen::VectorXd& current_object_velocity,
-                    const Eigen::MatrixXd& jacobian,
-                    Eigen::VectorXd current_grippers_velocity) const;
 
             virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
                     const AllGrippersSinglePose& grippers_pose,

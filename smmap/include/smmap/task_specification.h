@@ -1,7 +1,9 @@
 #ifndef TASK_SPECIFICATION_H
 #define TASK_SPECIFICATION_H
 
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <Eigen/Dense>
 #include <arc_utilities/dijkstras.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
@@ -138,6 +140,16 @@ namespace smmap
             ObjectDeltaAndWeight combineErrorCorrectionAndStretchingCorrection(
                     const ObjectDeltaAndWeight& error_correction,
                     const ObjectDeltaAndWeight& stretching_correction) const;
+
+
+            ObjectDeltaAndWeight calculateDesiredDirection(const WorldState& world_state);
+            ObjectDeltaAndWeight first_step_desired_motion_;
+            ObjectDeltaAndWeight first_step_error_correction_;
+            ObjectDeltaAndWeight first_step_stretching_correction_;
+            std::atomic_bool first_step_calculated_;
+            std::mutex first_step_mtx_;
+            double sim_time_last_time_first_step_calced_;
+
 
             // Records of task and deformable type if various visualizers or whatever need them
             const DeformableType deformable_type_;

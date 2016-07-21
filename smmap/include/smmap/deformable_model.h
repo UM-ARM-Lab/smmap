@@ -2,7 +2,6 @@
 #define DEFORMABLE_MODEL_H
 
 #include <atomic>
-#include <random>
 
 #include "smmap/task_function_pointer_types.h"
 #include "smmap/grippers.hpp"
@@ -20,40 +19,29 @@ namespace smmap
             // Virtual functions that define the interface
             ////////////////////////////////////////////////////////////////////
 
-            virtual void updateModel(const std::vector<WorldState>& feedback) = 0;
+            virtual void updateModel(const WorldState& previous, const WorldState& next) = 0;
 
-            virtual ObjectTrajectory getPrediction(
+            virtual ObjectPointSet getPredictedObjectDelta(
                     const WorldState& world_initial_state,
-                    const AllGrippersPoseTrajectory& gripper_pose_trajectory,
-                    const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta,
                     const double dt) const = 0;
 
-            virtual ObjectPointSet getFinalConfiguration(
+            virtual std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getSuggestedGrippersCommand(
+                    TaskDesiredObjectDeltaFunctionType task_desired_object_delta_fn,
                     const WorldState& world_initial_state,
-                    const AllGrippersPoseTrajectory& gripper_pose_trajectory,
-                    const AllGrippersPoseDeltaTrajectory& gripper_pose_delta_trajectory,
-                    const double dt) const = 0;
-
-            virtual std::pair<AllGrippersPoseTrajectory, ObjectTrajectory> getSuggestedGrippersTrajectory(
-                    const WorldState& world_initial_state,
-                    const size_t planning_horizion,
                     const double dt,
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale) const = 0;
 
-            virtual void perturbModel(std::mt19937_64& generator) = 0;
-
             ////////////////////////////////////////////////////////////////////
-            // Update/Set function for static member
+            // Update/Set function for static members
             ////////////////////////////////////////////////////////////////////
 
-            static void SetGrippersData(const std::vector<GripperData>& grippers_data);
+            static void SetGrippersData(
+                    const std::vector<GripperData>& grippers_data);
 
             static void SetCallbackFunctions(
-                    const ErrorFunctionType& error_fn,
-                    const GripperCollisionCheckFunctionType& gripper_collision_check_fn,
-                    const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn,
-                    const TaskObjectDeltaProjectionFunctionType& task_object_delta_projection_fn);
+                    const GripperCollisionCheckFunctionType& gripper_collision_check_fn);
 
         protected:
 
@@ -71,10 +59,7 @@ namespace smmap
             static std::vector<GripperData> grippers_data_;
 
             static std::atomic_bool function_pointers_initialized_;
-            static ErrorFunctionType error_fn_;
             static GripperCollisionCheckFunctionType gripper_collision_check_fn_;
-            static TaskDesiredObjectDeltaFunctionType task_desired_object_delta_fn_;
-            static TaskObjectDeltaProjectionFunctionType task_object_delta_projection_fn_;
     };
 }
 

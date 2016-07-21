@@ -15,8 +15,8 @@ namespace smmap
     {
         public:
             Task(RobotInterface& robot,
-                  Visualizer& vis,
-                  TaskSpecification::Ptr task_specification);
+                 Visualizer& vis,
+                 const TaskSpecification::Ptr& task_specification);
             void execute();
 
         private:
@@ -60,11 +60,11 @@ namespace smmap
             // then passed on to the models or the planner
             ////////////////////////////////////////////////////////////////////
 
-            const ErrorFunctionType error_fn_;
+//            const ErrorFunctionType error_fn_;
             const GripperCollisionCheckFunctionType gripper_collision_check_fn_;
-            const TaskObjectDeltaProjectionFunctionType task_object_delta_projection_fn_;
-            const TaskExecuteGripperTrajectoryFunctionType execute_trajectory_fn_;
-            const TestGrippersPosesFunctionType test_grippers_poses_fn_;
+//            const TaskObjectDeltaProjectionFunctionType task_object_delta_projection_fn_;
+//            const TaskExecuteGripperTrajectoryFunctionType execute_trajectory_fn_;
+//            const TestGrippersPosesFunctionType test_grippers_poses_fn_;
             const LoggingFunctionType logging_fn_;
 
             ////////////////////////////////////////////////////////////////////
@@ -73,11 +73,11 @@ namespace smmap
             // deformable_type_ have been set already
             ////////////////////////////////////////////////////////////////////
 
-            ErrorFunctionType createErrorFunction();
+//            ErrorFunctionType createErrorFunction();
             GripperCollisionCheckFunctionType createGripperCollisionCheckFunction();
-            TaskObjectDeltaProjectionFunctionType createTaskObjectDeltaProjectionFunction();
-            TaskExecuteGripperTrajectoryFunctionType createExecuteGripperTrajectoryFunction();
-            TestGrippersPosesFunctionType createTestGrippersPosesFunction();
+//            TaskObjectDeltaProjectionFunctionType createTaskObjectDeltaProjectionFunction();
+//            TaskExecuteGripperTrajectoryFunctionType createExecuteGripperTrajectoryFunction();
+//            TestGrippersPosesFunctionType createTestGrippersPosesFunction();
             LoggingFunctionType createLoggingFunction();
 
             ////////////////////////////////////////////////////////////////////

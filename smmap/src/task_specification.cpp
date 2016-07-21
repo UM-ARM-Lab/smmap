@@ -103,7 +103,8 @@ TaskSpecification::TaskSpecification(ros::NodeHandle& nh, const DeformableType d
 {}
 
 TaskSpecification::TaskSpecification(ros::NodeHandle& nh, Visualizer vis, const DeformableType deformable_type, const TaskType task_type)
-    : deformable_type_(deformable_type)
+    : first_step_calculated_(false)
+    , deformable_type_(deformable_type)
     , task_type_(task_type)
     , nh_(nh)
     , vis_(vis)
@@ -425,6 +426,50 @@ ObjectDeltaAndWeight TaskSpecification::combineErrorCorrectionAndStretchingCorre
 
     return combined;
 }
+
+
+ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldState& world_state)
+{
+    if (sim_time_last_time_first_step_calced_ != world_state.sim_time_)
+    {
+        first_step_calculated_.store(false);
+    }
+
+    if (first_step_calculated_.load())
+    {
+        return first_step_desired_motion_;
+    }
+    else
+    {
+        std::lock_guard<std::mutex> lock(first_step_mtx_);
+        if (first_step_calculated_.load())
+        {
+            return first_step_desired_motion_;
+        }
+        else
+        {
+            ROS_INFO_NAMED("task", "Determining desired direction");
+            first_step_error_correction_ = calculateObjectErrorCorrectionDelta(world_state);
+
+            first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, false);
+
+            first_step_desired_motion_ = combineErrorCorrectionAndStretchingCorrection(
+                        first_step_error_correction_, first_step_stretching_correction_);
+
+            if (terminateTask(world_state, calculateError(world_state.object_configuration_)))
+            {
+                ROS_INFO_NAMED("task", "Task finished, requesting zero movement from planner");
+                first_step_desired_motion_.delta = Eigen::VectorXd::Zero(first_step_desired_motion_.delta.rows());
+                first_step_desired_motion_.weight = Eigen::VectorXd::Zero(first_step_desired_motion_.weight.rows());
+            }
+
+            sim_time_last_time_first_step_calced_ = world_state.sim_time_;
+            first_step_calculated_.store(true);
+            return first_step_desired_motion_;
+        }
+    }
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Coverage Task
