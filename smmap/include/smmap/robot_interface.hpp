@@ -4,12 +4,9 @@
 #include <thread>
 
 #include <ros/ros.h>
-//#include <ros/callback_queue.h>
 #include <actionlib/client/simple_action_client.h>
-//#include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <smmap_msgs/messages.h>
 
-//#include "smmap/ros_communication_helpers.hpp"
 #include "smmap/grippers.hpp"
 #include "smmap/task_function_pointer_types.h"
 
@@ -31,12 +28,12 @@ namespace smmap
 
             const AllGrippersSinglePose getGrippersPose();
 
-            WorldState sendGripperCommand(const AllGrippersSinglePose& grippers_poses);
+            WorldState sendGripperMovement(const AllGrippersSinglePose& grippers_pose);
 
-            bool testGrippersPoses(const std::vector<AllGrippersSinglePose>& grippers_poses,
+            bool testGrippersPoses(const std::vector<AllGrippersSinglePose>& grippers_pose,
                                    const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback);
 
-            std::vector<CollisionData> checkGripperCollision(const AllGrippersSinglePose& grippers_poses);
+            std::vector<CollisionData> checkGripperCollision(const AllGrippersSinglePose& grippers_pose);
 
         private:
             ////////////////////////////////////////////////////////////////////
@@ -46,7 +43,7 @@ namespace smmap
             ros::NodeHandle nh_;
             std::vector<GripperData> grippers_data_;
             GripperCollisionChecker gripper_collision_checker_;
-            actionlib::SimpleActionClient<smmap_msgs::CmdGrippersTrajectoryAction> cmd_grippers_traj_client_;
+            ros::ServiceClient execute_gripper_movement_client_;
             actionlib::SimpleActionClient<smmap_msgs::TestGrippersPosesAction> test_grippers_poses_client_;
 
         // TODO: comments, and placement, and stuff
@@ -55,24 +52,16 @@ namespace smmap
             const double max_gripper_velocity_;
 
         private:
-            // Our internal version of ros::spin()
             std::thread spin_thread_;
-            static void spin(double loop_rate);
 
+            WorldState sendGripperMovement_impl(const smmap_msgs::ExecuteGripperMovementRequest& movement);
 
+            smmap_msgs::ExecuteGripperMovementRequest noOpGripperMovement();
+            smmap_msgs::ExecuteGripperMovementRequest toRosGripperMovement(const AllGrippersSinglePose& grippers_pose) const;
 
-
-            std::vector<WorldState> sendGripperTrajectory_impl(
-                    const smmap_msgs::CmdGrippersTrajectoryGoal& goal);
-
-            smmap_msgs::CmdGrippersTrajectoryGoal noOpTrajectoryGoal(size_t num_no_op);
-
-            smmap_msgs::CmdGrippersTrajectoryGoal toRosTrajectoryGoal(
-                    const AllGrippersPoseTrajectory& trajectory) const;
-
-
-
-
+            ////////////////////////////////////////////////////////////////////
+            // Testing specific gripper movements
+            ////////////////////////////////////////////////////////////////////
 
             size_t feedback_counter_;
             std::vector<bool> feedback_recieved_;

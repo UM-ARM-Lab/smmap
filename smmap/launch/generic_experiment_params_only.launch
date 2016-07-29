@@ -2,7 +2,7 @@
     <!-- Task and logging arguments -->
     <arg name="task_type"/>
     <arg name="logging_enabled"                 default="true"/>
-    <arg name="test_id"                         default=""/>
+    <arg name="test_id"                         default="default"/>
     <arg name="screenshots_enabled"             default="false"/>
 
     <!-- Simulator arguments -->

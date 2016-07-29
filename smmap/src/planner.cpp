@@ -144,7 +144,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     AllGrippersSinglePoseDelta selected_command = suggested_robot_commands[(size_t)model_to_use].first;
     // Execute the command
     ROS_INFO_NAMED("planner", "Sending command to robot");
-    WorldState world_feedback = robot_.sendGripperCommand(kinematics::applyTwist(current_world_state.all_grippers_single_pose_, selected_command));
+    WorldState world_feedback = robot_.sendGripperMovement(kinematics::applyTwist(current_world_state.all_grippers_single_pose_, selected_command));
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
     const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
@@ -180,6 +180,7 @@ void Planner::updateModels(const WorldState& starting_world_state,
         const WorldState& world_feedback,
         const std::vector<double>& individual_rewards)
 {
+    (void)individual_rewards;
     const double starting_error = task_specification_->calculateError(starting_world_state.object_configuration_);
     const double true_error_reduction = starting_error - task_specification_->calculateError(world_feedback.object_configuration_);
     reward_std_dev_scale_factor_ = std::max(1e-10, 0.9 * reward_std_dev_scale_factor_ + 0.1 * std::abs(true_error_reduction));

@@ -76,26 +76,6 @@ namespace smmap
     }
 
     /**
-     * @brief parseGripperActionResult
-     * @param result
-     * @return
-     */
-    inline std::vector<WorldState> ParseGripperActionResult(
-            const smmap_msgs::CmdGrippersTrajectoryResultConstPtr& result)
-    {
-        assert(result->sim_state_trajectory.size() > 0);
-        std::vector<WorldState> world_feedback(result->sim_state_trajectory.size());
-
-        for (size_t time_ind = 0; time_ind < result->sim_state_trajectory.size(); time_ind++)
-        {
-            world_feedback[time_ind] =
-                    ConvertToEigenFeedback(result->sim_state_trajectory[time_ind]);
-        }
-
-        return world_feedback;
-    }
-
-    /**
      * @brief getGripperTrajectories
      * @param feedback
      * @return
