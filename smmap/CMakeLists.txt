@@ -19,6 +19,7 @@ find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 find_package(cmake_modules REQUIRED)
 find_package(Boost REQUIRED COMPONENTS filesystem)
 find_package(Eigen REQUIRED)
+find_package(PythonLibs 2.7 REQUIRED)
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -36,6 +37,7 @@ catkin_package(
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
     DEPENDS         Eigen
                     Boost
+                    PythonLibs
 )
 
 ###########
@@ -49,6 +51,7 @@ include_directories(include
     ${Boost_INCLUDE_DIRS}
     ${Eigen_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
+    ${PYTHON_INCLUDE_DIRS}
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O2 -g -march=native -Wall -Wextra -Wpedantic -Wconversion")
@@ -83,23 +86,23 @@ set_target_properties(${PROJECT_NAME}_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_
 ## Simulator tests
 add_executable(${PROJECT_NAME}_test_node_KFRDB nodes/${PROJECT_NAME}_test_node.cpp)
 add_dependencies(${PROJECT_NAME}_test_node_KFRDB ${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_test_node_KFRDB ${PROJECT_NAME}_KFRDB ${catkin_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_test_node_KFRDB ${PROJECT_NAME}_KFRDB ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
 set_target_properties(${PROJECT_NAME}_test_node_KFRDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFRDB_BANDIT")
 
 add_executable(${PROJECT_NAME}_test_node_KFMANB nodes/${PROJECT_NAME}_test_node.cpp)
 add_dependencies(${PROJECT_NAME}_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
 set_target_properties(${PROJECT_NAME}_test_node_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
 
 add_executable(${PROJECT_NAME}_test_node_UCB nodes/${PROJECT_NAME}_test_node.cpp)
 add_dependencies(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
 set_target_properties(${PROJECT_NAME}_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
 
 ## Synthethic trials
 add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp)
 add_dependencies(kalman_filter_synthetic_trials ${catkin_EXPORTED_TARGETS})
-target_link_libraries(kalman_filter_synthetic_trials ${catkin_LIBRARIES})
+target_link_libraries(kalman_filter_synthetic_trials ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
 set_target_properties(kalman_filter_synthetic_trials PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS}")
 
 #############
