@@ -100,7 +100,7 @@ target_link_libraries(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin
 set_target_properties(${PROJECT_NAME}_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
 
 ## Synthethic trials
-add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp)
+add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp src/cvxopt_solvers.cpp)
 add_dependencies(kalman_filter_synthetic_trials ${catkin_EXPORTED_TARGETS})
 target_link_libraries(kalman_filter_synthetic_trials ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
 set_target_properties(kalman_filter_synthetic_trials PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS}")

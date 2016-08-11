@@ -1,14 +1,19 @@
 #include "smmap/cvxopt_solvers.hpp"
+#include <iostream>
 
 using namespace smmap;
 
 PyObject* CVXOptSolvers::solvers_ = nullptr;
 PyObject* CVXOptSolvers::lp_ = nullptr;
 PyObject* CVXOptSolvers::qp_ = nullptr;
+PyObject* CVXOptSolvers::qcqp_module_ = nullptr;
+PyObject* CVXOptSolvers::qcqp_ = nullptr;
 
 void CVXOptSolvers::Initialize()
 {
     Py_Initialize();
+    PyObject* path = PySys_GetObject((char *)"path");
+    PyList_Append(path, PyString_FromString("/home/dmcconachie/Dropbox/catkin_ws/src/smmap/smmap/scripts"));
 
     // import cvxopt
     if (import_cvxopt() < 0)
@@ -20,6 +25,7 @@ void CVXOptSolvers::Initialize()
     solvers_ = PyImport_ImportModule("cvxopt.solvers");
     if (!solvers_)
     {
+        Finalize();
         throw_arc_exception(std::runtime_error, "Error importing cvxopt.solvers");
     }
 
@@ -36,25 +42,29 @@ void CVXOptSolvers::Initialize()
         Finalize();
         throw_arc_exception(std::runtime_error, "Error referencing cvxopt.solvers.qp");
     }
+
+    qcqp_module_ = PyImport_ImportModule("qcqp");
+    if (!qcqp_module_)
+    {
+        Finalize();
+        throw_arc_exception(std::runtime_error, "Error importing qcqp module");
+    }
+
+    qcqp_ = PyObject_GetAttrString(qcqp_module_, "qcqp");
+    if (!qcqp_)
+    {
+        Finalize();
+        throw_arc_exception(std::runtime_error, "Error referencing qcqp");
+    }
 }
 
 void CVXOptSolvers::Finalize()
 {
-    if (qp_)
-    {
-        Py_DECREF(qp_);
-    }
-
-    if (lp_)
-    {
-        Py_DECREF(lp_);
-    }
-
-    if (solvers_)
-    {
-        Py_DECREF(solvers_);
-    }
-
+    Py_XDECREF(qp_);
+    Py_XDECREF(lp_);
+    Py_XDECREF(solvers_);
+    Py_XDECREF(qcqp_);
+    Py_XDECREF(qcqp_module_);
     Py_Finalize();
 }
 
@@ -88,17 +98,9 @@ Eigen::VectorXd CVXOptSolvers::lp(
     memcpy(MAT_BUFD(A_py), A.data(), sizeof(double) * num_unknowns * num_unknowns);
     memcpy(MAT_BUFD(b_py), b.data(), sizeof(double) * num_unknowns);
 
-    // Setup the arguments to the QP solver - references are stolen?
-    PyObject *args = PyTuple_New(5);
-    PyTuple_SetItem(args, 0, c_py);
-    PyTuple_SetItem(args, 1, G_py);
-    PyTuple_SetItem(args, 2, h_py);
-    PyTuple_SetItem(args, 3, A_py);
-    PyTuple_SetItem(args, 4, b_py);
-
     // Solve the LP
     Eigen::VectorXd x(num_unknowns);
-    PyObject *sol = PyObject_CallObject(lp_, args);
+    PyObject *sol = PyObject_CallFunctionObjArgs(lp_, c_py, G_py, h_py, A_py, b_py, NULL);
     if (!sol)
     {
         PyErr_Print();
@@ -110,8 +112,12 @@ Eigen::VectorXd CVXOptSolvers::lp(
         memcpy(x.data(), MAT_BUFD(x_py), sizeof(double) * num_unknowns);
     }
 
-    Py_DECREF(args);
-    Py_DECREF(sol);
+    Py_CLEAR(c_py);
+    Py_CLEAR(G_py);
+    Py_CLEAR(h_py);
+    Py_CLEAR(A_py);
+    Py_CLEAR(b_py);
+    Py_CLEAR(sol);
 
     return x;
 }
@@ -151,18 +157,9 @@ Eigen::VectorXd CVXOptSolvers::qp(
     memcpy(MAT_BUFD(A_py), A.data(), sizeof(double) * num_unknowns * num_unknowns);
     memcpy(MAT_BUFD(b_py), b.data(), sizeof(double) * num_unknowns);
 
-    // Setup the arguments to the QP solver - references are stolen?
-    PyObject *args = PyTuple_New(6);
-    PyTuple_SetItem(args, 0, Q_py);
-    PyTuple_SetItem(args, 1, p_py);
-    PyTuple_SetItem(args, 2, G_py);
-    PyTuple_SetItem(args, 3, h_py);
-    PyTuple_SetItem(args, 4, A_py);
-    PyTuple_SetItem(args, 5, b_py);
-
     // Solve the QP
     Eigen::VectorXd x(num_unknowns);
-    PyObject *sol = PyObject_CallObject(qp_, args);
+    PyObject *sol = PyObject_CallFunctionObjArgs(qp_, Q_py, p_py, G_py, h_py, A_py, b_py, NULL);
     if (!sol)
     {
         PyErr_Print();
@@ -174,8 +171,97 @@ Eigen::VectorXd CVXOptSolvers::qp(
         memcpy(x.data(), MAT_BUFD(x_py), sizeof(double) * num_unknowns);
     }
 
-    Py_DECREF(args);
-    Py_DECREF(sol);
+    Py_CLEAR(Q_py);
+    Py_CLEAR(p_py);
+    Py_CLEAR(G_py);
+    Py_CLEAR(h_py);
+    Py_CLEAR(A_py);
+    Py_CLEAR(b_py);
+    Py_CLEAR(sol);
 
     return x;
+}
+
+Eigen::VectorXd CVXOptSolvers::qcqp_jacobian_least_squares(
+        const Eigen::MatrixXd& J,
+        const Eigen::VectorXd& W,
+        const Eigen::VectorXd& pdot,
+        const double& max_result_norm)
+{
+    const ssize_t num_targets = J.rows();
+    const ssize_t num_unknowns = J.cols();
+    assert(num_targets == W.rows());
+    assert(num_targets == pdot.rows());
+
+    const Eigen::VectorXd W_sqrt = W.array().sqrt();
+    const Eigen::MatrixXd A0 = W_sqrt.asDiagonal() * J;
+    const Eigen::VectorXd b0 = W_sqrt.asDiagonal() * (-pdot);
+
+    PyObject* A0_py = (PyObject*)Matrix_New(num_targets, num_unknowns, DOUBLE);
+    PyObject* b0_py = (PyObject*)Matrix_New(num_targets, 1, DOUBLE);
+    PyObject* Ident_py = (PyObject*)Matrix_New(num_unknowns, num_unknowns, DOUBLE);
+
+    memcpy(MAT_BUFD(A0_py), A0.data(), sizeof(double) * num_targets * num_unknowns);
+    memcpy(MAT_BUFD(b0_py), b0.data(), sizeof(double) * num_targets);
+    for (ssize_t row_ind = 0; row_ind < num_unknowns; row_ind++)
+    {
+        for (ssize_t col_ind = 0; col_ind < num_unknowns; col_ind++)
+        {
+            if (row_ind != col_ind)
+            {
+                MAT_BUFD(Ident_py)[row_ind * num_unknowns + col_ind] = 0.0;
+            }
+            else
+            {
+                MAT_BUFD(Ident_py)[row_ind * num_unknowns + col_ind] = 1.0;
+            }
+        }
+    }
+
+    // Create the first dictionary, with the minimization function
+    PyObject* A0_arg = PyDict_New();
+    PyDict_SetItemString(A0_arg, "A0", A0_py);
+    PyDict_SetItemString(A0_arg, "b0", b0_py);
+    PyDict_SetItemString(A0_arg, "c0", Py_None);
+    PyDict_SetItemString(A0_arg, "d0", Py_None);
+    // Force A0_arg to steal the references
+    Py_CLEAR(A0_py);
+    Py_CLEAR(b0_py);
+
+    // Craete the second dictionary, with the contraint function list
+    PyObject* A_list_py = Py_BuildValue("[O]", Ident_py);
+    Py_CLEAR(Ident_py);
+    PyObject* b_list_py = Py_BuildValue("[O]", Py_None);
+    PyObject* c_list_py = Py_BuildValue("[O]", Py_None);
+    PyObject* d_list_py = Py_BuildValue("[d]", max_result_norm * max_result_norm);
+    PyObject* G0_arg = PyDict_New();
+    PyDict_SetItemString(G0_arg, "A", A_list_py);
+    PyDict_SetItemString(G0_arg, "b", b_list_py);
+    PyDict_SetItemString(G0_arg, "c", c_list_py);
+    PyDict_SetItemString(G0_arg, "d", d_list_py);
+    // Force G0_arg to steal the references
+    Py_CLEAR(A_list_py);
+    Py_CLEAR(b_list_py);
+    Py_CLEAR(c_list_py);
+    Py_CLEAR(d_list_py);
+
+    // Solve the QCQP
+    Eigen::VectorXd qdot(num_unknowns);
+    PyObject *sol = PyObject_CallFunctionObjArgs(qcqp_, A0_arg, G0_arg, NULL);
+    if (!sol)
+    {
+        PyErr_Print();
+        qdot *= std::numeric_limits<double>::quiet_NaN();
+    }
+    else
+    {
+        PyObject* qdot_py = PyDict_GetItemString(sol, "QCQPx");
+        memcpy(qdot.data(), MAT_BUFD(qdot_py), sizeof(double) * num_unknowns);
+    }
+
+    Py_CLEAR(sol);
+    Py_CLEAR(A0_arg);
+    Py_CLEAR(G0_arg);
+
+    return qdot;
 }
