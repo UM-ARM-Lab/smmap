@@ -5,7 +5,8 @@ import subprocess
 def run_trial(experiment,
               logging_enabled = None,
               test_id = None,
-              planning_horizion = None,
+              planning_horizon = None,
+              optimization_enabled = None,
               bandit_algorithm = None,
               multi_model = None,
               deformability_override = None,
@@ -33,8 +34,11 @@ def run_trial(experiment,
         roslaunch_command.append('test_id:=' + test_id)
 
     # Setup planner parameters
-    if planning_horizion is not None:
-        roslaunch_command.append('planning_horizion:=' + str(planning_horizion))
+    if planning_horizon is not None:
+        roslaunch_command.append('planning_horizion:=' + str(planning_horizon))
+
+    if optimization_enabled is not None:
+        roslaunch_command.append('optimization_enabled:=' + str(optimization_enabled))
 
     # Setup model parameters
     if deformability_override is not None:

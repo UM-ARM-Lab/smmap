@@ -13,7 +13,7 @@ for translational_deform in deform_range:
                   test_id = "presentation_trials_baseline_rigidity"
                         + "trans_" + str(translational_deform)
                         + "_rot_" + str(rotational_deform),
-                  planning_horizion = planning_horizion,
+                  planning_horizon= planning_horizion,
                   multi_model = "false",
                   deformability_override = "true",
                   translational_deformability = translational_deform,

@@ -1,7 +1,7 @@
-#ifndef CVXOPT_SOLVERS_HPP
-#define CVXOPT_SOLVERS_HPP
+#ifndef CVXOPT_SOLVERS_H
+#define CVXOPT_SOLVERS_H
 
-#include <arc_utilities/arc_exceptions.hpp>
+#include <Python.h>
 #include <Eigen/Dense>
 #include <cvxopt/cvxopt.h>
 
@@ -51,4 +51,4 @@ namespace smmap
     };
 }
 
-#endif // CVXOPT_SOLVERS_HPP
+#endif // CVXOPT_SOLVERS_H

@@ -1,3 +1,4 @@
+#include <Python.h>
 #include <chrono>
 #include <iostream>
 #include <iomanip>
@@ -10,7 +11,8 @@
 #include <arc_utilities/log.hpp>
 #include <boost/filesystem.hpp>
 
-#include "smmap/cvxopt_solvers.hpp"
+#include "smmap/cvxopt_solvers.h"
+#include "smmap/gurobi_solvers.h"
 #include "smmap/kalman_filter_multiarm_bandit.hpp"
 #include "smmap/ucb_multiarm_bandit.hpp"
 #include "smmap/timing.hpp"
@@ -423,16 +425,16 @@ class JacobianBandit
             , max_action_norm_(0.1)
             , generator_(generator)
         {
-            y_current_ = VectorXd::Zero(num_jacobian_rows);
-            y_desired_ = VectorXd::Ones(num_jacobian_rows) * 10;
+            y_desired_ = VectorXd::Zero(num_jacobian_rows);
+            y_current_ = VectorXd::Ones(num_jacobian_rows) * 10;
 
             std::uniform_real_distribution<double> uniform_dist(-0.1, 0.1);
 
             true_jacobian_ = MatrixXd::Identity(num_jacobian_rows, num_jacobian_cols);
-            true_jacobian_(1,1) *= 2.0;
-            for (ssize_t row_ind = 0; row_ind < num_jacobian_rows; row_ind++)
+            for (ssize_t col_ind = 0; col_ind < num_jacobian_cols; col_ind++)
             {
-                for (ssize_t col_ind = 0; col_ind < num_jacobian_cols; col_ind++)
+                true_jacobian_(col_ind, col_ind) *= std::exp(-(double)col_ind * 2.0 / (num_jacobian_cols - 1.0));
+                for (ssize_t row_ind = 0; row_ind < num_jacobian_rows; row_ind++)
                 {
                     true_jacobian_(row_ind, col_ind) += uniform_dist(generator_);
                 }
@@ -488,9 +490,17 @@ class JacobianBandit
 
             if (use_optimization)
             {
+//                #pragma omp parallel for
                 for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
                 {
-                    arm_suggestions[arm_ind].suggested_action = CVXOptSolvers::qcqp_jacobian_least_squares(arm_jacobians_[arm_ind], weights, target_movement, max_action_norm_);
+                    arm_suggestions[arm_ind].suggested_action =
+                            minSquaredNorm(arm_jacobians_[arm_ind], target_movement, max_action_norm_, weights);
+//                            CVXOptSolvers::qcqp_jacobian_least_squares(arm_jacobians_[arm_ind], weights, target_movement, max_action_norm_);
+
+//                    std::cout << arm_suggestions[arm_ind].suggested_action.transpose() << std::endl;
+//                    std::cout << minSquaredNorm(arm_jacobians_[arm_ind], target_movement, max_action_norm_).transpose() << std::endl;
+//                    std::cout << std::endl;
+
                     arm_suggestions[arm_ind].predicted_result = getArmPrediction(arm_ind, arm_suggestions[arm_ind].suggested_action);
                 }
             }
@@ -597,6 +607,16 @@ class JacobianBandit
             #pragma GCC diagnostic ignored "-Wconversion"
             return true_jacobian_ * Pinv(true_jacobian_, SuggestedRcond()) * y_desired_;
             #pragma GCC diagnostic pop
+        }
+
+        const MatrixXd& getTrueJacobian() const
+        {
+            return true_jacobian_;
+        }
+
+        const MatrixXd& getArmJacobian(const size_t arm_ind) const
+        {
+            return arm_jacobians_.at(arm_ind);
         }
 
     private:
@@ -892,6 +912,8 @@ class JacobianTrackingTrials
                 // Advance the generator some arbitrary number of draws to get a new number stream
                 generator.discard(num_pulls_ * (num_arms_ + 1) + 1000);
 
+                logJacobians(generator);
+                trueJacobianTrial(generator);
                 results.kfrdbsimple_average_regret_(trial_ind_)      = kfrdbSimpleTrial(generator);
                 results.kfrdbnormsim_average_regret_(trial_ind_)     = kfrdbNormSimTrial(generator);
                 results.kfrdbanglesim_average_regret_(trial_ind_)    = kfrdbAngleSimTrial(generator);
@@ -925,13 +947,12 @@ class JacobianTrackingTrials
             return std::max(min_reward_scale_, 0.9 * prev_reward_scale + 0.1 * std::abs(current_reward));
         }
 
-        static double trueJacobianTrial(std::mt19937_64 generator)
+        static void trueJacobianTrial(std::mt19937_64 generator)
         {
-            Log::Log trial_log(log_folder_ + "true_jacobian_trial.txt", true);
-            logHeader(trial_log);
+            Log::Log trial_log(log_folder_ + "true_jacobian_trial_" + std::to_string(trial_ind_) + ".txt", true);
+            trialLogHeader(trial_log);
 
-            std::mt19937_64 generator_copy = generator;
-            JacobianBandit<std::mt19937_64> bandit(generator_copy, num_arms_, num_jacobian_rows_, num_jacobian_cols_, false, false);
+            JacobianBandit<std::mt19937_64> bandit(generator, num_arms_, num_jacobian_rows_, num_jacobian_cols_, false, false);
 
             for (ssize_t pull_ind = 0; pull_ind < num_pulls_; pull_ind++)
             {
@@ -947,14 +968,12 @@ class JacobianTrackingTrials
             }
 
             logData(trial_log, bandit.getYCurrent(), bandit.getTargetMovement().norm(), VectorXd::Zero(num_jacobian_cols_), 0.0, 0.0);
-
-            return 0.0;
         }
 
         static double kfrdbSimpleTrial(std::mt19937_64 generator)
         {
             Log::Log trial_log(log_folder_ + "kfrdbsimple_trial_" + std::to_string(trial_ind_) + ".txt", true);
-            logHeader(trial_log);
+            trialLogHeader(trial_log);
 
             std::mt19937_64 generator_copy = generator;
             JacobianBandit<std::mt19937_64> bandit(generator_copy, num_arms_, num_jacobian_rows_, num_jacobian_cols_, false, false);
@@ -1031,7 +1050,7 @@ class JacobianTrackingTrials
         static double kfrdbNormSimTrial(std::mt19937_64 generator)
         {
             Log::Log trial_log(log_folder_ + "kfrdbnormsim_trial_" + std::to_string(trial_ind_) + ".txt", true);
-            logHeader(trial_log);
+            trialLogHeader(trial_log);
 
             std::mt19937_64 generator_copy = generator;
             JacobianBandit<std::mt19937_64> bandit(generator_copy, num_arms_, num_jacobian_rows_, num_jacobian_cols_, false, false);
@@ -1212,7 +1231,7 @@ class JacobianTrackingTrials
         static double kfrdbAngleSimTrial(std::mt19937_64 generator)
         {
             Log::Log trial_log(log_folder_ + "kfrdbanglesim_trial_" + std::to_string(trial_ind_) + ".txt", true);
-            logHeader(trial_log);
+            trialLogHeader(trial_log);
 
             JacobianBandit<std::mt19937_64> bandit(generator, num_arms_, num_jacobian_rows_, num_jacobian_cols_, false, false);
             KalmanFilterRDB<std::mt19937_64> kfrdb_alg(VectorXd::Zero(num_arms_), MatrixXd::Identity(num_arms_, num_arms_) * 1e6);
@@ -1385,7 +1404,7 @@ class JacobianTrackingTrials
         static double kfmanbTrial(std::mt19937_64 generator)
         {
             Log::Log trial_log(log_folder_ + "kfmanb_trial_" + std::to_string(trial_ind_) + ".txt", true);
-            logHeader(trial_log);
+            trialLogHeader(trial_log);
 
             JacobianBandit<std::mt19937_64> bandit(generator, num_arms_, num_jacobian_rows_, num_jacobian_cols_, false, false);
             KalmanFilterMANB<std::mt19937_64> kfmanb_alg(VectorXd::Zero(num_arms_), VectorXd::Ones(num_arms_) * 1e6);
@@ -1414,7 +1433,7 @@ class JacobianTrackingTrials
         static double ucb1NormalTrial(std::mt19937_64 generator)
         {
             Log::Log trial_log(log_folder_ + "ucb1normal_trial_" + std::to_string(trial_ind_) + ".txt", true);
-            logHeader(trial_log);
+            trialLogHeader(trial_log);
 
             JacobianBandit<std::mt19937_64> bandit(generator, num_arms_, num_jacobian_rows_, num_jacobian_cols_, false, false);
             UCB1Normal ucb1normal_alg(num_arms_);
@@ -1438,7 +1457,7 @@ class JacobianTrackingTrials
             return total_regret / (double)num_pulls_;
         }
 
-        static void logHeader(Log::Log& log)
+        static void trialLogHeader(Log::Log& log)
         {
             LOG_STREAM(log,
                        "position " << num_jacobian_rows_ << " elems"
@@ -1446,6 +1465,21 @@ class JacobianTrackingTrials
                        << " | action " << num_jacobian_cols_ << " elems"
                        << " | reward"
                        << " | regret");
+        }
+
+        static void logJacobians(std::mt19937_64 generator)
+        {
+            Log::Log jacobian_log(log_folder_ + "jacobians_trial_" + std::to_string(trial_ind_) + ".txt", true);
+
+            JacobianBandit<std::mt19937_64> bandit(generator, num_arms_, num_jacobian_rows_, num_jacobian_cols_, false, false);
+            LOG(jacobian_log, "True");
+            LOG(jacobian_log, bandit.getTrueJacobian());
+
+            for (ssize_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
+            {
+                LOG(jacobian_log, arm_ind);
+                LOG(jacobian_log, bandit.getArmJacobian(arm_ind));
+            }
         }
 
         static void logData(Log::Log& log, const VectorXd& position, const double error, const VectorXd& action, const double reward, const double regret)

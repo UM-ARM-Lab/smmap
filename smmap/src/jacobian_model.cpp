@@ -1,4 +1,6 @@
 #include "smmap/jacobian_model.h"
+//#include "smmap/cvxopt_solvers.h"
+#include "smmap/gurobi_solvers.h"
 
 using namespace smmap;
 using namespace Eigen;
@@ -10,9 +12,7 @@ using namespace EigenHelpers;
 
 JacobianModel::JacobianModel(bool optimize)
     : optimize_(optimize)
-{
-    assert(!optimize && "JacobianModel optimization not implemented yet");
-}
+{}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Virtual function overrides
@@ -70,14 +70,24 @@ JacobianModel::getSuggestedGrippersCommand(
     // Find the least-squares fitting to the desired object velocity
     #pragma message "More magic numbers - damping threshold and damping coefficient"
     #warning "Settings tweaks here that are not runtime nor auto compiled correctly"
-    #warning "Todo: if optimize_ ..."
-    VectorXd grippers_delta_achieve_goal =
+    VectorXd grippers_delta_achieve_goal;
+    if (optimize_)
+    {
+        grippers_delta_achieve_goal =
+                minSquaredNorm(jacobian, desired_object_velocity.delta, max_step_size, desired_object_velocity.weight);
+//                CVXOptSolvers::qcqp_jacobian_least_squares(
+//                    jacobian, desired_object_velocity.weight, desired_object_velocity.delta, max_step_size);
+    }
+    else
+    {
+        grippers_delta_achieve_goal =
             ClampGripperPoseDeltas(
                 // Cloth WAFR Video
                 WeightedLeastSquaresSolver(jacobian, desired_object_velocity.delta, desired_object_velocity.weight, 1e-4, 1e-3),
                 // Everything else
 //                WeightedLeastSquaresSolver(jacobian, desired_object_velocity.delta, desired_object_velocity.weight, 1e-3, 1e-2),
                 max_step_size);
+    }
 
     // Find the collision avoidance data that we'll need
     const std::vector<CollisionAvoidanceResult> grippers_collision_avoidance_result =

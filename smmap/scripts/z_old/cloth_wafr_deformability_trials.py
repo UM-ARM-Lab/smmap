@@ -13,7 +13,7 @@ for adaptive_exponent in adaptive_range:
               logging_enabled="true",
               test_id="single_model_baseline/"
                       + "adaptive_1e-" + str(adaptive_exponent),
-              planning_horizion=1,
+              planning_horizon=1,
               multi_model="false",
               use_adaptive_model="true",
               adaptive_model_learning_rate=adaptive_model_learning_rate,
@@ -31,7 +31,7 @@ for translational_deform in deform_range:
                   test_id="single_model_baseline/"
                           + "trans_" + str(translational_deform)
                           + "_rot_" + str(rotational_deform),
-                  planning_horizion=1,
+                  planning_horizon=1,
                   multi_model="false",
                   deformability_override="true",
                   translational_deformability=translational_deform,

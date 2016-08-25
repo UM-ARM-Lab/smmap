@@ -15,7 +15,7 @@ def run_wafr_trials(experiment, run_baseline=False, run_UCB=False, run_KFMANB=Fa
                 run_trial(experiment=experiment,
                           logging_enabled="true",
                           test_id="wafr_paper_trials/" + "single_model_baseline/" + "trans_" + str(translational_deform) + "_rot_" + str(rotational_deform),
-                          planning_horizion=1,
+                          planning_horizon=1,
                           multi_model="false",
                           deformability_override="true",
                           translational_deformability=translational_deform,
@@ -37,7 +37,7 @@ def run_wafr_trials(experiment, run_baseline=False, run_UCB=False, run_KFMANB=Fa
             run_trial(experiment=experiment,
                       logging_enabled="true",
                       test_id="wafr_paper_trials/" + "single_model_baseline/" + "adaptive_1e-" + str(adaptive_exponent),
-                      planning_horizion=1,
+                      planning_horizon=1,
                       multi_model="false",
                       use_adaptive_model="true",
                       adaptive_model_learning_rate=adaptive_model_learning_rate)
@@ -47,7 +47,7 @@ def run_wafr_trials(experiment, run_baseline=False, run_UCB=False, run_KFMANB=Fa
         run_trial(experiment=experiment,
                   logging_enabled="true",
                   test_id="wafr_paper_trials/" + "multi_model_UCB_regret",
-                  planning_horizion=1,
+                  planning_horizon=1,
                   bandit_algorithm="UCB",
                   multi_model="true",
                   calculate_regret="true")
@@ -57,7 +57,7 @@ def run_wafr_trials(experiment, run_baseline=False, run_UCB=False, run_KFMANB=Fa
             run_trial(experiment=experiment,
                       logging_enabled="true",
                       test_id="wafr_paper_trials/" + "multi_model_KFMANB_regret_" + str(i),
-                      planning_horizion=1,
+                      planning_horizon=1,
                       bandit_algorithm="KFMANB",
                       multi_model="true",
                       calculate_regret="true")
@@ -67,7 +67,7 @@ def run_wafr_trials(experiment, run_baseline=False, run_UCB=False, run_KFMANB=Fa
             run_trial(experiment=experiment,
                       logging_enabled="true",
                       test_id="wafr_paper_trials/" + "multi_model_KFRDB_regret_" + str(i),
-                      planning_horizion=1,
+                      planning_horizon=1,
                       bandit_algorithm="KFRDB",
                       multi_model="true",
                       calculate_regret="true")

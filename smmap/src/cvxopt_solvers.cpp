@@ -1,5 +1,6 @@
-#include "smmap/cvxopt_solvers.hpp"
+#include "smmap/cvxopt_solvers.h"
 #include <iostream>
+#include <arc_utilities/arc_exceptions.hpp>
 
 using namespace smmap;
 

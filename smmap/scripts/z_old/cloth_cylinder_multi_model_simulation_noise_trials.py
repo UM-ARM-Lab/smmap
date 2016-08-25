@@ -49,7 +49,7 @@ for feedback_covariance in feedback_covariance_range:
                             + "feedback_covariance_" + str(feedback_covariance) + "/"
                             + "process_" + str(process_noise_factor)
                             + "_observation_" + str(observation_noise_factor),
-                      planning_horizion = planning_horizion,
+                      planning_horizon= planning_horizion,
                       multi_model = "true",
                       kalman_parameters_override = "true",
                       process_noise_factor = process_noise_factor,

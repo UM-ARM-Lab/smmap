@@ -10,18 +10,17 @@
     <arg name="start_bullet_viewer"             default="true"/>
 
     <!-- Planner model arguments -->
-    <arg name="bandit_algorithm"                default="KFRDB"/>
     <arg name="multi_model"                     default="false"/>
     <arg name="deformability_override"          default="false"/>
-    <arg if="$(arg deformability_override)"     name="translational_deformability"/>
-    <arg if="$(arg deformability_override)"     name="rotational_deformability"/>
     <arg name="use_adaptive_model"              default="false"/>
     <arg name="adaptive_model_learning_rate"    default="0.000001"/>
     <arg name="calculate_regret"                default="false"/>
 
     <!-- Planner internal arguments -->
-    <arg name="planning_horizion"               default="1"/>
+    <arg name="planning_horizon"                default="1"/>
+    <arg name="optimization_enabled"            default="false"/>
     <arg name="kalman_parameters_override"      default="false"/>
+    <arg name="bandit_algorithm"                default="KFRDB"/>
 
     <!-- Launch the simulator and setup parameters -->
     <include file="$(find smmap)/launch/generic_experiment_sim_only.launch">
@@ -45,7 +44,8 @@
         <arg name="calculate_regret"                value="$(arg calculate_regret)"/>
 
         <!-- Planner internal arguments -->
-        <arg name="planning_horizion"               value="$(arg planning_horizion)"/>
+        <arg name="planning_horizon"                value="$(arg planning_horizon)"/>
+        <arg name="optimization_enabled"            value="$(arg optimization_enabled)"/>
         <arg name="kalman_parameters_override"      value="$(arg kalman_parameters_override)"/>
         <arg name="process_noise_factor"            value="$(arg process_noise_factor)"         if="$(arg kalman_parameters_override)"/>
         <arg name="observation_noise_factor"        value="$(arg observation_noise_factor)"     if="$(arg kalman_parameters_override)"/>

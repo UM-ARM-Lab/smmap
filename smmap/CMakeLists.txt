@@ -12,6 +12,9 @@ set(CATKIN_PACKAGES
     ${PROJECT_NAME}_experiment_params
 )
 
+## Add our local cmake modules to the list that can be found
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
+
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 
@@ -20,6 +23,7 @@ find_package(cmake_modules REQUIRED)
 find_package(Boost REQUIRED COMPONENTS filesystem)
 find_package(Eigen REQUIRED)
 find_package(PythonLibs 2.7 REQUIRED)
+find_package(GUROBI REQUIRED)
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -38,6 +42,7 @@ catkin_package(
     DEPENDS         Eigen
                     Boost
                     PythonLibs
+                    GUROBI
 )
 
 ###########
@@ -52,19 +57,29 @@ include_directories(include
     ${Eigen_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
     ${PYTHON_INCLUDE_DIRS}
+    ${GUROBI_INCLUDE_DIRS}
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O2 -g -march=native -Wall -Wextra -Wpedantic -Wconversion")
 
 unset(USE_OPEN_MP CACHE)
 option(USE_OPEN_MP "Set to ON if we want to use OpenMP" ON)
-if (USE_OPEN_MP)
+if(USE_OPEN_MP)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -DUSE_OPEN_MP")
     message(STATUS "Enabling OpenMP for SMMAP library")
 else(USE_OPEN_MP)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
     message(WARNING "Disabling OpenMP for SMMAP library")
 endif(USE_OPEN_MP)
+
+
+
+## Test file for random tests
+add_executable(scratchpad nodes/scratchpad.cpp src/gurobi_solvers.cpp)
+target_link_libraries(scratchpad ${GUROBI_LIBRARIES})
+set_target_properties(scratchpad PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS}")
+
+
 
 ## Library file for the whole project
 FILE(GLOB hpp_SRC "include/${PROJECT_NAME}/*.hpp")
@@ -73,14 +88,17 @@ FILE(GLOB cpp_SRC "src/*.cpp")
 
 add_library(${PROJECT_NAME}_KFRDB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 add_dependencies(${PROJECT_NAME}_KFRDB ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_KFRDB ${GUROBI_LIBRARIES})
 set_target_properties(${PROJECT_NAME}_KFRDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFRDB_BANDIT")
 
 add_library(${PROJECT_NAME}_KFMANB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 add_dependencies(${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_KFMANB ${GUROBI_LIBRARIES})
 set_target_properties(${PROJECT_NAME}_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
 
 add_library(${PROJECT_NAME}_UCB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 add_dependencies(${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_UCB ${GUROBI_LIBRARIES})
 set_target_properties(${PROJECT_NAME}_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
 
 ## Simulator tests
@@ -100,9 +118,9 @@ target_link_libraries(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin
 set_target_properties(${PROJECT_NAME}_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
 
 ## Synthethic trials
-add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp src/cvxopt_solvers.cpp)
+add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp src/cvxopt_solvers.cpp src/gurobi_solvers.cpp)
 add_dependencies(kalman_filter_synthetic_trials ${catkin_EXPORTED_TARGETS})
-target_link_libraries(kalman_filter_synthetic_trials ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
+target_link_libraries(kalman_filter_synthetic_trials ${catkin_LIBRARIES} ${PYTHON_LIBRARIES} ${GUROBI_LIBRARIES})
 set_target_properties(kalman_filter_synthetic_trials PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS}")
 
 #############
