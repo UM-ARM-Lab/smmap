@@ -12,6 +12,8 @@
     <!-- Planner model arguments -->
     <arg name="multi_model"                     default="false"/>
     <arg name="deformability_override"          default="false"/>
+    <arg name="translational_deformability"     if="$(arg deformability_override)"/>
+    <arg name="rotational_deformability"        if="$(arg deformability_override)"/>
     <arg name="use_adaptive_model"              default="false"/>
     <arg name="adaptive_model_learning_rate"    default="0.000001"/>
     <arg name="calculate_regret"                default="false"/>

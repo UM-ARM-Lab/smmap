@@ -11,7 +11,7 @@
 #include <arc_utilities/log.hpp>
 #include <boost/filesystem.hpp>
 
-#include "smmap/cvxopt_solvers.h"
+//#include "smmap/cvxopt_solvers.h"
 #include "smmap/gurobi_solvers.h"
 #include "smmap/kalman_filter_multiarm_bandit.hpp"
 #include "smmap/ucb_multiarm_bandit.hpp"
@@ -490,7 +490,7 @@ class JacobianBandit
 
             if (use_optimization)
             {
-//                #pragma omp parallel for
+                #pragma omp parallel for
                 for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
                 {
                     arm_suggestions[arm_ind].suggested_action =
@@ -527,7 +527,9 @@ class JacobianBandit
 
             if (use_optimization)
             {
-                suggestion.suggested_action = CVXOptSolvers::qcqp_jacobian_least_squares(true_jacobian_, weights, target_movement, max_action_norm_);
+                suggestion.suggested_action =
+                        minSquaredNorm(true_jacobian_, target_movement, max_action_norm_, weights);
+//                        CVXOptSolvers::qcqp_jacobian_least_squares(true_jacobian_, weights, target_movement, max_action_norm_);
             }
             else
             {
@@ -1518,7 +1520,7 @@ ssize_t JacobianTrackingTrials::trial_ind_;
 
 int main(int argc, char* argv[])
 {
-    CVXOptSolvers::Initialize();
+//    CVXOptSolvers::Initialize();
     std::mt19937_64 generator(0xa8710913d2b5df6c); // a30cd67f3860ddb3) // MD5 sum of "Dale McConachie"
 //    std::mt19937_64 generator(std::chrono::system_clock::now().time_since_epoch().count());
 
@@ -1649,6 +1651,6 @@ int main(int argc, char* argv[])
         }
     }
 
-    CVXOptSolvers::Finalize();
+//    CVXOptSolvers::Finalize();
     return 0;
 }

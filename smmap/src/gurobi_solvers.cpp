@@ -1,8 +1,12 @@
 #include "smmap/gurobi_solvers.h"
 #include <gurobi_c++.h>
 #include <iostream>
+#include <mutex>
+#include <Eigen/Eigenvalues>
 
 using namespace Eigen;
+
+static std::mutex gurobi_env_construct_mtx;
 
 GRBQuadExpr normSquared(const std::vector<GRBLinExpr>& exprs)
 {
@@ -72,7 +76,11 @@ VectorXd smmap::minSquaredNorm(const MatrixXd& A, const VectorXd& b, const doubl
         const std::vector<double> lb(num_vars, -max_x_norm);
         const std::vector<double> ub(num_vars, max_x_norm);
 
+        // TODO: Find a way to put a scoped lock here
+        gurobi_env_construct_mtx.lock();
         GRBEnv env;
+        gurobi_env_construct_mtx.unlock();
+
         env.set(GRB_IntParam_OutputFlag, 0);
         GRBModel model(env);
         vars = model.addVars(lb.data(), ub.data(), nullptr, nullptr, nullptr, (int)num_vars);
@@ -121,14 +129,27 @@ VectorXd smmap::minSquaredNorm(const MatrixXd& A, const VectorXd& b, const doubl
         const std::vector<double> lb(num_vars, -max_x_norm);
         const std::vector<double> ub(num_vars, max_x_norm);
 
+        // TODO: Find a way to put a scoped lock here
+        gurobi_env_construct_mtx.lock();
         GRBEnv env;
+        gurobi_env_construct_mtx.unlock();
+
         env.set(GRB_IntParam_OutputFlag, 0);
         GRBModel model(env);
         vars = model.addVars(lb.data(), ub.data(), nullptr, nullptr, nullptr, (int)num_vars);
         model.update();
 
         model.addQConstr(normSquared(vars, num_vars), GRB_LESS_EQUAL, max_x_norm * max_x_norm);
-        model.setObjective(normSquared(buildVectorOfExperssions(A, vars, b), weights), GRB_MINIMIZE);
+
+        GRBQuadExpr objective_fn = normSquared(buildVectorOfExperssions(A, vars, b), weights);
+        // Check if we need to add anything extra to the main diagonal.
+        if (((A.transpose() * weights.asDiagonal() * A).selfadjointView<Upper>().eigenvalues().array() < 1.1e-4).any())
+        {
+            std::vector<double> diagonal(num_vars, 1.1e-4);
+            objective_fn.addTerms(diagonal.data(), vars, vars, (int)num_vars);
+        }
+        model.setObjective(objective_fn, GRB_MINIMIZE);
+
         model.update();
         model.optimize();
 

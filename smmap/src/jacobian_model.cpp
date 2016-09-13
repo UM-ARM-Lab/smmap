@@ -68,18 +68,17 @@ JacobianModel::getSuggestedGrippersCommand(
                 world_initial_state.object_configuration_);
 
     // Find the least-squares fitting to the desired object velocity
-    #pragma message "More magic numbers - damping threshold and damping coefficient"
-    #warning "Settings tweaks here that are not runtime nor auto compiled correctly"
     VectorXd grippers_delta_achieve_goal;
     if (optimize_)
     {
         grippers_delta_achieve_goal =
                 minSquaredNorm(jacobian, desired_object_velocity.delta, max_step_size, desired_object_velocity.weight);
-//                CVXOptSolvers::qcqp_jacobian_least_squares(
-//                    jacobian, desired_object_velocity.weight, desired_object_velocity.delta, max_step_size);
+//                CVXOptSolvers::qcqp_jacobian_least_squares(jacobian, desired_object_velocity.weight, desired_object_velocity.delta, max_step_size);
     }
     else
     {
+        #pragma message "More magic numbers - damping threshold and damping coefficient"
+        #warning "Settings tweaks here that are not runtime nor auto compiled correctly"
         grippers_delta_achieve_goal =
             ClampGripperPoseDeltas(
                 // Cloth WAFR Video

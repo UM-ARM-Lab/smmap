@@ -105,6 +105,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     // Querry each model for it's best trajectory
     stopwatch(RESET);
     std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>> suggested_robot_commands(num_models_);
+    #pragma omp parallel for
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
     {
         suggested_robot_commands[model_ind] =
