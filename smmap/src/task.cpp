@@ -1,4 +1,3 @@
-#include <boost/filesystem.hpp>
 #include <smmap_experiment_params/ros_params.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 
@@ -197,30 +196,7 @@ void Task::initializeLogging()
 
     if (logging_enabled_)
     {
-        std::string log_folder = GetLogFolder(nh_);
-
-        // If it hasn't been opened, assume that it is because the
-        // directory doesn't exist.
-        boost::filesystem::path p(log_folder);
-        if (!boost::filesystem::is_directory(p))
-        {
-            std::cerr << "\x1b[33;1m" << log_folder << " does not exist! Creating ... ";
-
-            // NOTE: create_directories should be able to return true in this case
-            // however due to a bug related to a trailing '/' this is not currently
-            // the case in my version of boost
-            // https://svn.boost.org/trac/boost/ticket/7258
-            boost::filesystem::create_directories(p);
-            if (boost::filesystem::is_directory(p))
-//            if (boost::filesystem::create_directories(p))
-            {
-                std::cerr << "Succeeded!\x1b[37m\n";
-            }
-            else
-            {
-                std::cerr << "\x1b[31;1mFailed!\x1b[37m\n";
-            }
-        }
+        const std::string log_folder = GetLogFolder(nh_);
 
         ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
 

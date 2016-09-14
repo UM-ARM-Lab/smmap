@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <numeric>
 #include <arc_utilities/pretty_print.hpp>
+#include <arc_utilities/log.hpp>
 
 //#include "smmap/optimization.hpp"
 #include "smmap/timing.hpp"
@@ -43,6 +44,13 @@ Planner::Planner(
     std::cout << seed_ << std::endl;
     std::cout << seed_ << std::endl;
     std::cout << seed_ << std::endl;
+
+    if (GetLoggingEnabled(nh_))
+    {
+        const std::string log_folder = GetLogFolder(nh_);
+        Log::Log seed_log(log_folder + "seed.txt", false);
+        LOG(seed_log, seed_);
+    }
 }
 
 void Planner::addModel(DeformableModel::Ptr model)

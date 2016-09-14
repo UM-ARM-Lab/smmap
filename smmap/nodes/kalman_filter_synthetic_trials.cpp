@@ -9,7 +9,6 @@
 #include <cstdlib>
 
 #include <arc_utilities/log.hpp>
-#include <boost/filesystem.hpp>
 
 //#include "smmap/cvxopt_solvers.h"
 #include "smmap/gurobi_solvers.h"
@@ -883,28 +882,7 @@ class JacobianTrackingTrials
                     + "__num_cols_" + std::to_string(num_jacobian_cols_)
                     + "__optimization_" + std::to_string(use_optimization_)
                     + "/";
-            {
-                boost::filesystem::path p(log_folder_);
-                if (!boost::filesystem::is_directory(p))
-                {
-                    std::cerr << "\x1b[33;1m" << log_folder_ << " does not exist! Creating ... ";
 
-                    // NOTE: create_directories should be able to return true in this case
-                    // however due to a bug related to a trailing '/' this is not currently
-                    // the case in my version of boost
-                    // https://svn.boost.org/trac/boost/ticket/7258
-                    boost::filesystem::create_directories(p);
-                    if (boost::filesystem::is_directory(p))
-        //            if (boost::filesystem::create_directories(p))
-                    {
-                        std::cerr << "Succeeded!\x1b[37m\n";
-                    }
-                    else
-                    {
-                        std::cerr << "\x1b[31;1mFailed!\x1b[37m\n";
-                    }
-                }
-            }
             Log::Log aggregate_log(log_folder_ + "aggregate_log.txt", true);
 
             TrialResults results(num_trials_);

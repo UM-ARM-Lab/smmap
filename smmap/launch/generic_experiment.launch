@@ -4,6 +4,7 @@
     <arg name="logging_enabled"                 default="true"/>
     <arg name="test_id"                         default="default"/>
     <arg name="screenshots_enabled"             default="false"/>
+    <arg name="use_random_seed"                 default="false"/>
 
     <!-- Simulator arguments -->
     <arg name="feedback_covariance"             default="0.0"/>
@@ -22,6 +23,7 @@
     <arg name="kalman_parameters_override"      default="false"/>
     <arg name="bandit_algorithm"                default="KFRDB"/>
 
+
     <!-- Launch the simulator and setup parameters -->
     <include file="$(find smmap)/launch/generic_experiment_sim_only.launch">
         <!-- Task and logging arguments -->
@@ -29,6 +31,7 @@
         <arg name="logging_enabled"                 value="$(arg logging_enabled)"/>
         <arg name="test_id"                         value="$(arg test_id)"/>
         <arg name="screenshots_enabled"             value="$(arg screenshots_enabled)"/>
+        <arg name="use_random_seed"                 value="$(arg use_random_seed)"/>
 
         <!-- Simulator arguments -->
         <arg name="feedback_covariance"             value="$(arg feedback_covariance)"/>

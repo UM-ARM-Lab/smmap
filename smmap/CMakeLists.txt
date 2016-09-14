@@ -20,7 +20,6 @@ find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 
 ## System dependencies are found with CMake's conventions
 find_package(cmake_modules REQUIRED)
-find_package(Boost REQUIRED COMPONENTS filesystem)
 find_package(Eigen REQUIRED)
 find_package(PythonLibs 2.7 REQUIRED)
 find_package(GUROBI REQUIRED)
