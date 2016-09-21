@@ -60,9 +60,6 @@ namespace smmap
             double collisionScalingFactor() const;      // beta (or k2)
             double stretchingScalingThreshold() const;  // lambda
             double maxTime() const;                     // max simulation time when scripting things
-//            double errorHistoryThreshold() const;
-
-//            bool terminateTask(const WorldState& world_state, const double error);
 
             void visualizeDeformableObject(
                     Visualizer& vis,
@@ -87,10 +84,6 @@ namespace smmap
              */
             ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta(
                     const WorldState& world_state) const;
-
-//            Eigen::VectorXd projectObjectDelta(
-//                    const ObjectPointSet& object_configuration,
-//                    Eigen::VectorXd object_delta) const;
 
             ////////////////////////////////////////////////////////////////////
             // Helper functions
@@ -171,11 +164,6 @@ namespace smmap
             const Eigen::MatrixXd object_initial_node_distance_;
             const ssize_t num_nodes_;
 
-//            Eigen::VectorXd error_history_;
-//            ssize_t next_error_history_ind_;
-//            bool error_history_buffer_full_;
-//            bool task_done_;
-
         private:
             ////////////////////////////////////////////////////////////////////////////////
             // Virtual functions that each task specification must provide
@@ -185,7 +173,6 @@ namespace smmap
             virtual double collisionScalingFactor_impl() const = 0;     // beta (or k2)
             virtual double stretchingScalingThreshold_impl() const = 0; // lambda
             virtual double maxTime_impl() const = 0;                    // max simulation time when scripting things
-//            virtual double errorHistoryThreshold_impl() const = 0;
 
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
@@ -204,10 +191,6 @@ namespace smmap
 
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state) const = 0;
-
-//            virtual Eigen::VectorXd projectObjectDelta_impl(
-//                    const ObjectPointSet& object_configuration,
-//                    Eigen::VectorXd object_delta) const = 0;
     };
 
     class CoverageTask : public TaskSpecification
