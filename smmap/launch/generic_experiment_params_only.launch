@@ -3,11 +3,11 @@
     <arg name="task_type"/>
     <arg name="logging_enabled"                 default="true"/>
     <arg name="test_id"                         default="default"/>
-    <arg name="screenshots_enabled"             default="false"/>
 
     <!-- Simulator arguments -->
     <arg name="feedback_covariance"             default="0.0"/>
     <arg name="start_bullet_viewer"             default="true"/>
+    <arg name="screenshots_enabled"             default="false"/>
 
     <!-- Planner model arguments -->
     <arg name="multi_model"                     default="false"/>
@@ -22,6 +22,7 @@
     <arg name="planning_horizon"                default="1"/>
     <arg name="optimization_enabled"            default="false"/>
     <arg name="kalman_parameters_override"      default="false"/>
+    <arg name="use_random_seed"                 default="false"/>
 
     <param name="logging_enabled" value="$(arg logging_enabled)"/>
     <param name="log_folder" value="$(find smmap)/../logs/$(arg task_type)/$(arg test_id)/"/>
@@ -45,5 +46,6 @@
         <param name="process_noise_factor"              value="$(arg process_noise_factor)"         type="double"   if="$(arg kalman_parameters_override)"/>
         <param name="observation_noise_factor"          value="$(arg observation_noise_factor)"     type="double"   if="$(arg kalman_parameters_override)"/>
         <param name="calculate_regret"                  value="$(arg calculate_regret)"             type="bool"/>
+        <param name="use_random_seed"                   value="$(arg use_random_seed)"              type="bool"/>
     </group>
 </launch>

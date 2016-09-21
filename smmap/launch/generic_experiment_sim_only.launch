@@ -46,6 +46,6 @@
         <param name="process_noise_factor"              value="$(arg process_noise_factor)"         type="double"   if="$(arg kalman_parameters_override)"/>
         <param name="observation_noise_factor"          value="$(arg observation_noise_factor)"     type="double"   if="$(arg kalman_parameters_override)"/>
         <param name="calculate_regret"                  value="$(arg calculate_regret)"             type="bool"/>
-        <param name="use_random_seed"                   value="$(arg use_random_seed)"/>
+        <param name="use_random_seed"                   value="$(arg use_random_seed)"              type="bool"/>
     </group>
 </launch>
