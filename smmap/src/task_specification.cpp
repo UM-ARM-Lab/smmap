@@ -110,10 +110,10 @@ TaskSpecification::TaskSpecification(ros::NodeHandle& nh, Visualizer vis, const 
     , vis_(vis)
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
     , num_nodes_(object_initial_node_distance_.cols())
-    , error_history_(25)
-    , next_error_history_ind_(0)
-    , error_history_buffer_full_(false)
-    , task_done_(false)
+//    , error_history_(25)
+//    , next_error_history_ind_(0)
+//    , error_history_buffer_full_(false)
+//    , task_done_(false)
 {}
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -177,49 +177,49 @@ double TaskSpecification::maxTime() const
     return maxTime_impl();
 }
 
-double TaskSpecification::errorHistoryThreshold() const
-{
-    return errorHistoryThreshold_impl();
-}
+//double TaskSpecification::errorHistoryThreshold() const
+//{
+//    return errorHistoryThreshold_impl();
+//}
 
-bool TaskSpecification::terminateTask(const WorldState &world_state, const double error)
-{
-    #warning "Settings tweaks here that are not runtime nor auto compiled correctly"
-//    return false; // Used by Cloth Wafr VIDEO
-    if (unlikely(task_done_))
-    {
-        return true;
-    }
+//bool TaskSpecification::terminateTask(const WorldState &world_state, const double error)
+//{
+//    #warning "Settings tweaks here that are not runtime nor auto compiled correctly"
+////    return false; // Used by Cloth Wafr VIDEO
+//    if (unlikely(task_done_))
+//    {
+//        return true;
+//    }
 
-    error_history_(next_error_history_ind_) = error;
-    next_error_history_ind_++;
+//    error_history_(next_error_history_ind_) = error;
+//    next_error_history_ind_++;
 
-    if (unlikely(next_error_history_ind_ == error_history_.rows()))
-    {
-        next_error_history_ind_ = 0;
-        error_history_buffer_full_ = true;
-    }
+//    if (unlikely(next_error_history_ind_ == error_history_.rows()))
+//    {
+//        next_error_history_ind_ = 0;
+//        error_history_buffer_full_ = true;
+//    }
 
-    if (error_history_buffer_full_)
-    {
-        task_done_ = ((error_history_.array() - error_history_.mean()).abs() < errorHistoryThreshold()).all();
-        if (unlikely(task_done_))
-        {
-            // Enable logging if it is requested
-            if (GetLoggingEnabled(nh_))
-            {
-                std::string log_folder = GetLogFolder(nh_);
-                Log::Log termination_log(log_folder + "task_termination_time.txt", false);
-                LOG(termination_log, world_state.sim_time_);
-            }
-        }
-        return task_done_;
-    }
-    else
-    {
-        return false;
-    }
-}
+//    if (error_history_buffer_full_)
+//    {
+//        task_done_ = ((error_history_.array() - error_history_.mean()).abs() < errorHistoryThreshold()).all();
+//        if (unlikely(task_done_))
+//        {
+//            // Enable logging if it is requested
+//            if (GetLoggingEnabled(nh_))
+//            {
+//                std::string log_folder = GetLogFolder(nh_);
+//                Log::Log termination_log(log_folder + "task_termination_time.txt", false);
+//                LOG(termination_log, world_state.sim_time_);
+//            }
+//        }
+//        return task_done_;
+//    }
+//    else
+//    {
+//        return false;
+//    }
+//}
 
 void TaskSpecification::visualizeDeformableObject(
         Visualizer& vis,
@@ -251,12 +251,12 @@ ObjectDeltaAndWeight TaskSpecification::calculateObjectErrorCorrectionDelta(
     return calculateObjectErrorCorrectionDelta_impl(world_state);
 }
 
-Eigen::VectorXd TaskSpecification::projectObjectDelta(
-        const ObjectPointSet& object_configuration,
-        Eigen::VectorXd object_delta) const
-{
-    return projectObjectDelta_impl(object_configuration, object_delta);
-}
+//Eigen::VectorXd TaskSpecification::projectObjectDelta(
+//        const ObjectPointSet& object_configuration,
+//        Eigen::VectorXd object_delta) const
+//{
+//    return projectObjectDelta_impl(object_configuration, object_delta);
+//}
 
 /**
  * @brief TaskSpecification::calculateStretchingCorrectionDelta
@@ -456,12 +456,12 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
             first_step_desired_motion_ = combineErrorCorrectionAndStretchingCorrection(
                         first_step_error_correction_, first_step_stretching_correction_);
 
-            if (terminateTask(world_state, calculateError(world_state.object_configuration_)))
-            {
-                ROS_INFO_NAMED("task", "Task finished, requesting zero movement from planner");
-                first_step_desired_motion_.delta = Eigen::VectorXd::Zero(first_step_desired_motion_.delta.rows());
-                first_step_desired_motion_.weight = Eigen::VectorXd::Zero(first_step_desired_motion_.weight.rows());
-            }
+//            if (terminateTask(world_state, calculateError(world_state.object_configuration_)))
+//            {
+//                ROS_INFO_NAMED("task", "Task finished, requesting zero movement from planner");
+//                first_step_desired_motion_.delta = Eigen::VectorXd::Zero(first_step_desired_motion_.delta.rows());
+//                first_step_desired_motion_.weight = Eigen::VectorXd::Zero(first_step_desired_motion_.weight.rows());
+//            }
 
             sim_time_last_time_first_step_calced_ = world_state.sim_time_;
             first_step_calculated_.store(true);

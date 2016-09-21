@@ -40,10 +40,10 @@ namespace smmap
                 return 15.0;
             }
 
-            virtual double errorHistoryThreshold_impl() const
-            {
-                return 0.01;
-            }
+//            virtual double errorHistoryThreshold_impl() const
+//            {
+//                return 0.01;
+//            }
 
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
@@ -68,31 +68,31 @@ namespace smmap
                 return 0.01;
             }
 
-            virtual Eigen::VectorXd projectObjectDelta_impl(
-                    const ObjectPointSet& object_configuration,
-                    Eigen::VectorXd object_delta) const
-            {
-                #pragma message "Rope cylinder projection function makes a lot of assumptions - movements are small, will only penetrate the sides, etc."
+//            virtual Eigen::VectorXd projectObjectDelta_impl(
+//                    const ObjectPointSet& object_configuration,
+//                    Eigen::VectorXd object_delta) const
+//            {
+//                #pragma message "Rope cylinder projection function makes a lot of assumptions - movements are small, will only penetrate the sides, etc."
 
-                #pragma omp parallel for
-                for (ssize_t point_ind = 0; point_ind < num_nodes_; point_ind++)
-                {
-                    const Eigen::Vector2d new_pos = object_configuration.block<2, 1>(0, point_ind)
-                            + object_delta.segment<2>(point_ind * 3);
+//                #pragma omp parallel for
+//                for (ssize_t point_ind = 0; point_ind < num_nodes_; point_ind++)
+//                {
+//                    const Eigen::Vector2d new_pos = object_configuration.block<2, 1>(0, point_ind)
+//                            + object_delta.segment<2>(point_ind * 3);
 
-                    const Eigen::Vector2d vector_from_com = new_pos - cylinder_com_;
-                    if (vector_from_com.norm() < cylinder_radius_ + rope_radius_)
-                    {
-                        const Eigen::Vector2d adjusted_pos = cylinder_com_ +
-                                vector_from_com.normalized() * (cylinder_radius_ + rope_radius_);
+//                    const Eigen::Vector2d vector_from_com = new_pos - cylinder_com_;
+//                    if (vector_from_com.norm() < cylinder_radius_ + rope_radius_)
+//                    {
+//                        const Eigen::Vector2d adjusted_pos = cylinder_com_ +
+//                                vector_from_com.normalized() * (cylinder_radius_ + rope_radius_);
 
-                        object_delta.segment<2>(point_ind * 3) =
-                                adjusted_pos - object_configuration.block<2, 1>(0, point_ind);
-                    }
-                }
+//                        object_delta.segment<2>(point_ind * 3) =
+//                                adjusted_pos - object_configuration.block<2, 1>(0, point_ind);
+//                    }
+//                }
 
-                return object_delta;
-            }
+//                return object_delta;
+//            }
 
         private:
             /// Center of the cylinder in the plane defined by the table
@@ -136,10 +136,10 @@ namespace smmap
                 return 12.0;
             }
 
-            virtual double errorHistoryThreshold_impl() const
-            {
-                return 0.01;
-            }
+//            virtual double errorHistoryThreshold_impl() const
+//            {
+//                return 0.01;
+//            }
 
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
@@ -164,14 +164,14 @@ namespace smmap
                 return 0.002;
             }
 
-            virtual Eigen::VectorXd projectObjectDelta_impl(
-                    const ObjectPointSet& object_configuration,
-                    Eigen::VectorXd object_delta) const
-            {
-                assert(false && "This function is not specified for this experiment yet");
-                (void)object_configuration;
-                (void)object_delta;
-            }
+//            virtual Eigen::VectorXd projectObjectDelta_impl(
+//                    const ObjectPointSet& object_configuration,
+//                    Eigen::VectorXd object_delta) const
+//            {
+//                assert(false && "This function is not specified for this experiment yet");
+//                (void)object_configuration;
+//                (void)object_delta;
+//            }
 
         private:
     };
@@ -212,10 +212,10 @@ namespace smmap
                 return 2.0;
             }
 
-            virtual double errorHistoryThreshold_impl() const
-            {
-                return 0.01;
-            }
+//            virtual double errorHistoryThreshold_impl() const
+//            {
+//                return 0.01;
+//            }
 
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
@@ -240,37 +240,37 @@ namespace smmap
                 return 0.002;
             }
 
-            virtual Eigen::VectorXd projectObjectDelta_impl(
-                    const ObjectPointSet& object_configuration,
-                    Eigen::VectorXd object_delta) const
-            {
-                #pragma message "Cloth Table projection function makes a lot of assumptions - movements are small, will only penetrate the top, etc."
+//            virtual Eigen::VectorXd projectObjectDelta_impl(
+//                    const ObjectPointSet& object_configuration,
+//                    Eigen::VectorXd object_delta) const
+//            {
+//                #pragma message "Cloth Table projection function makes a lot of assumptions - movements are small, will only penetrate the top, etc."
 
-                #pragma omp parallel for
-                for (ssize_t point_ind = 0; point_ind < object_configuration.cols(); point_ind++)
-                {
-                    const Eigen::Vector3d new_pos = object_configuration.col(point_ind)
-                            + object_delta.segment<3>(point_ind * 3);
+//                #pragma omp parallel for
+//                for (ssize_t point_ind = 0; point_ind < object_configuration.cols(); point_ind++)
+//                {
+//                    const Eigen::Vector3d new_pos = object_configuration.col(point_ind)
+//                            + object_delta.segment<3>(point_ind * 3);
 
-                    // TODO: move out of the table sideways?
-                    // TODO: use Calder's SDF/collision resolution stuff?
+//                    // TODO: move out of the table sideways?
+//                    // TODO: use Calder's SDF/collision resolution stuff?
 
-                    // check if the new positition is in the same "vertical column" as the table
-                    if (table_min_x_ <= new_pos(0) && new_pos(0) <= table_max_x_
-                         && table_min_y_ <= new_pos(1) && new_pos(1) <= table_max_y_)
-                    {
-                        // Check if the new point position penetrated the object
-                        // Note that I am only checking "downwards" penetratraion as this task should never even consider having the other type
-                        if (new_pos(2) < table_z_)
-                        {
-                            object_delta(point_ind * 3 + 2) = table_z_ - object_configuration(2, point_ind);
-                        }
-                    }
+//                    // check if the new positition is in the same "vertical column" as the table
+//                    if (table_min_x_ <= new_pos(0) && new_pos(0) <= table_max_x_
+//                         && table_min_y_ <= new_pos(1) && new_pos(1) <= table_max_y_)
+//                    {
+//                        // Check if the new point position penetrated the object
+//                        // Note that I am only checking "downwards" penetratraion as this task should never even consider having the other type
+//                        if (new_pos(2) < table_z_)
+//                        {
+//                            object_delta(point_ind * 3 + 2) = table_z_ - object_configuration(2, point_ind);
+//                        }
+//                    }
 
-                }
+//                }
 
-                return object_delta;
-            }
+//                return object_delta;
+//            }
 
         private:
             const double table_min_x_;
@@ -313,10 +313,10 @@ namespace smmap
                 return 4.5;
             }
 
-            virtual double errorHistoryThreshold_impl() const
-            {
-                return 0.01;
-            }
+//            virtual double errorHistoryThreshold_impl() const
+//            {
+//                return 0.01;
+//            }
 
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
@@ -375,13 +375,13 @@ namespace smmap
                 return desired_cloth_delta;
             }
 
-            virtual Eigen::VectorXd projectObjectDelta_impl(
-                    const ObjectPointSet& object_configuration,
-                    Eigen::VectorXd object_delta) const
-            {
-                (void)object_configuration;
-                return object_delta;
-            }
+//            virtual Eigen::VectorXd projectObjectDelta_impl(
+//                    const ObjectPointSet& object_configuration,
+//                    Eigen::VectorXd object_delta) const
+//            {
+//                (void)object_configuration;
+//                return object_delta;
+//            }
 
         private:
             const PointReflector point_reflector_;
@@ -462,10 +462,10 @@ namespace smmap
                 return 10.0;
             }
 
-            virtual double errorHistoryThreshold_impl() const
-            {
-                return 0.03;
-            }
+//            virtual double errorHistoryThreshold_impl() const
+//            {
+//                return 0.03;
+//            }
 
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
@@ -490,14 +490,14 @@ namespace smmap
                 return 0.002;
             }
 
-            virtual Eigen::VectorXd projectObjectDelta_impl(
-                    const ObjectPointSet& object_configuration,
-                    Eigen::VectorXd object_delta) const
-            {
-                assert(false && "This function is not specified for this experiment yet");
-                (void)object_delta;
-                (void)object_configuration;
-            }
+//            virtual Eigen::VectorXd projectObjectDelta_impl(
+//                    const ObjectPointSet& object_configuration,
+//                    Eigen::VectorXd object_delta) const
+//            {
+//                assert(false && "This function is not specified for this experiment yet");
+//                (void)object_delta;
+//                (void)object_configuration;
+//            }
 
         private:
     };
