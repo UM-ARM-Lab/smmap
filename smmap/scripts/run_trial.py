@@ -20,7 +20,7 @@ def run_trial(experiment,
               feedback_covariance = None,
               start_bullet_viewer = 'false',
               calculate_regret = 'false',
-              screenshots_enabled = 'false',
+              screenshots_enabled = 'true',
               use_random_seed = None):
     # Constant values that we need
     roslaunch_command = ["roslaunch", "smmap"]

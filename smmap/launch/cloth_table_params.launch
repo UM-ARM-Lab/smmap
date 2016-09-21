@@ -13,4 +13,8 @@
     <param name="world_z_step" value="0.0125"/>
     <param name="world_z_min" value="0.5775"/>
     <param name="world_z_max" value="0.7775"/>
+
+    <group ns="deform_simulator_node">
+        <param name="num_simsteps_per_gripper_command" value="4"/>
+    </group>
 </launch>

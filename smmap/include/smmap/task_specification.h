@@ -8,11 +8,11 @@
 #include <arc_utilities/dijkstras.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
 #include <smmap_experiment_params/task_enums.h>
+#include <smmap_experiment_params/xyzgrid.h>
 
 #include "smmap/ros_communication_helpers.hpp"
 #include "smmap/task_function_pointer_types.h"
 #include "smmap/visualization_tools.h"
-
 #include "smmap/timing.hpp"
 
 namespace smmap
@@ -227,6 +227,7 @@ namespace smmap
     {
         public:
             DijkstrasCoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type);
+
         protected:
             bool saveDijkstrasResults();
             bool loadDijkstrasResults();
@@ -234,27 +235,9 @@ namespace smmap
             ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_Dijkstras(
                     const ObjectPointSet& object_configuration, const double minimum_threshold) const;
 
-            #pragma message "These 3 functions are duplicated from CustomScene()"
-            ssize_t xyzIndexToGridIndex(const ssize_t x_ind, const ssize_t y_ind, const ssize_t z_ind) const;
-            ssize_t worldPosToGridIndex(const double x, const double y, const double z) const;
-            ssize_t worldPosToGridIndex(const Eigen::Vector3d& vec) const;
-
-        protected:
             /// Free space graph that creates a vector field for the deformable object to follow
             arc_dijkstras::Graph<Eigen::Vector3d> free_space_graph_;
-
-            /// Variables describing the extents of the graph
-            const double world_x_min_;
-            const double world_x_step_;
-            const int64_t world_x_num_steps_;
-
-            const double world_y_min_;
-            const double world_y_step_;
-            const int64_t world_y_num_steps_;
-
-            const double world_z_min_;
-            const double world_z_step_;
-            const int64_t world_z_num_steps_;
+            const XYZGrid free_space_grid_;
 
             /// Map between cover point indices and graph indices, with distances
             std::vector<int64_t> cover_ind_to_free_space_graph_ind_;

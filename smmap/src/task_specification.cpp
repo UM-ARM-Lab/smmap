@@ -441,15 +441,9 @@ ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_imp
 
 DijkstrasCoverageTask::DijkstrasCoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type)
     : CoverageTask(nh, deformable_type, task_type)
-    , world_x_min_(GetWorldXMin(nh))
-    , world_x_step_(GetWorldXStep(nh))
-    , world_x_num_steps_(GetWorldXNumSteps(nh))
-    , world_y_min_(GetWorldYMin(nh))
-    , world_y_step_(GetWorldYStep(nh))
-    , world_y_num_steps_(GetWorldYNumSteps(nh))
-    , world_z_min_(GetWorldZMin(nh))
-    , world_z_step_(GetWorldZStep(nh))
-    , world_z_num_steps_(GetWorldZNumSteps(nh))
+    , free_space_grid_(GetWorldXMin(nh), GetWorldXStep(nh), GetWorldXNumSteps(nh),
+                       GetWorldYMin(nh), GetWorldYStep(nh), GetWorldYNumSteps(nh),
+                       GetWorldZMin(nh), GetWorldZStep(nh), GetWorldZNumSteps(nh))
 {
     GetFreeSpaceGraph(nh, free_space_graph_, cover_ind_to_free_space_graph_ind_);
     assert(cover_ind_to_free_space_graph_ind_.size() == (size_t)num_cover_points_);
@@ -472,7 +466,7 @@ DijkstrasCoverageTask::DijkstrasCoverageTask(ros::NodeHandle& nh, const Deformab
         ROS_INFO_STREAM_NAMED("coverage_task", "Generating " << num_cover_points_ << " Dijkstra's solutions");
         stopwatch(RESET);
         dijkstras_results_.resize((size_t)num_cover_points_);
-#pragma omp parallel for schedule(guided)
+        #pragma omp parallel for schedule(guided)
         for (size_t cover_ind = 0; cover_ind < (size_t)num_cover_points_; cover_ind++)
         {
             const int64_t free_space_graph_ind = cover_ind_to_free_space_graph_ind_[cover_ind];
@@ -604,9 +598,9 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_
             double graph_dist;
 
             // If we are more than a grid cell away from the cover point, then lookup our position in the rest of the grid
-            if (straight_line_distance_squared > 2.0 * std::min({world_x_min_, world_y_min_, world_z_min_}))
+            if (straight_line_distance_squared > 2.0 * free_space_grid_.minStepDimension())
             {
-                const ssize_t deformable_point_ind_in_graph = worldPosToGridIndex(deformable_point);
+                const ssize_t deformable_point_ind_in_graph = free_space_grid_.worldPosToGridIndexClamped(deformable_point);
                 target_ind = dijkstras_results_[(size_t)cover_ind].first[(size_t)deformable_point_ind_in_graph];
                 graph_dist = dijkstras_results_[(size_t)cover_ind].second[(size_t)deformable_point_ind_in_graph];
             }
@@ -646,39 +640,6 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_
     ROS_INFO_STREAM_NAMED("coverage_task", "Found best delta in " << stopwatch(READ) << " seconds");
 
     return desired_object_delta;
-}
-
-ssize_t DijkstrasCoverageTask::xyzIndexToGridIndex(const ssize_t x_ind, const ssize_t y_ind, const ssize_t z_ind) const
-{
-    // If the point is in the grid, return the index
-    if ((0 <= x_ind && x_ind < world_x_num_steps_)
-        && (0 <= y_ind && y_ind < world_y_num_steps_)
-        && (0 <= z_ind && z_ind < world_z_num_steps_))
-    {
-        return (x_ind * world_y_num_steps_ + y_ind) * world_z_num_steps_ + z_ind;
-    }
-    // Otherwise return -1
-    else
-    {
-        return -1;
-    }
-}
-
-ssize_t DijkstrasCoverageTask::worldPosToGridIndex(const double x, const double y, const double z) const
-{
-    const int64_t x_ind = std::lround((x - world_x_min_) / world_x_step_);
-    const int64_t y_ind = std::lround((y - world_y_min_) / world_y_step_);
-    const int64_t z_ind = std::lround((z - world_z_min_) / world_z_step_);
-
-    return xyzIndexToGridIndex(
-                arc_helpers::ClampValue(x_ind, 0L, world_x_num_steps_ - 1),
-                arc_helpers::ClampValue(y_ind, 0L, world_y_num_steps_ - 1),
-                arc_helpers::ClampValue(z_ind, 0L, world_z_num_steps_ - 1));
-}
-
-ssize_t DijkstrasCoverageTask::worldPosToGridIndex(const Eigen::Vector3d& vec) const
-{
-    return worldPosToGridIndex(vec(0), vec(1), vec(2));
 }
 
 ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_impl(const WorldState& world_state) const

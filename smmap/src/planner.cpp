@@ -93,9 +93,17 @@ void Planner::createBandits()
  */
 WorldState Planner::sendNextCommand(const WorldState& current_world_state)
 {
+    const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
+    {
+        return task_specification_->calculateDesiredDirection(world_state);
+    };
+
+    bool get_action_for_all_models = false;
+
     // Pick an arm to use
 #ifdef KFRDB_BANDIT
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
+    get_action_for_all_models = true;
 #endif
 #ifdef KFMANB_BANDIT
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
@@ -105,28 +113,25 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
 #endif
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
 
-    const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
-    {
-        return task_specification_->calculateDesiredDirection(world_state);
-    };
-
     // Querry each model for it's best trajectory
     stopwatch(RESET);
     std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>> suggested_robot_commands(num_models_);
     #pragma omp parallel for
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
     {
-        suggested_robot_commands[model_ind] =
-            model_list_[model_ind]->getSuggestedGrippersCommand(
-                    task_desired_direction_fn,
-                    current_world_state,
-                    robot_.dt_,
-                    robot_.max_gripper_velocity_,
-                    task_specification_->collisionScalingFactor());
+        if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
+        {
+            suggested_robot_commands[model_ind] =
+                model_list_[model_ind]->getSuggestedGrippersCommand(
+                        task_desired_direction_fn,
+                        current_world_state,
+                        robot_.dt_,
+                        robot_.max_gripper_velocity_,
+                        task_specification_->collisionScalingFactor());
+        }
     }
     // Measure the time it took to pick a model
     ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in " << stopwatch(READ) << " seconds");
-
 
     std::vector<double> individual_rewards(num_models_, std::numeric_limits<double>::infinity());
     if (calculate_regret_ && num_models_ > 1)
