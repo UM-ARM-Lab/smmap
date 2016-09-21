@@ -3,16 +3,17 @@
     <arg name="task_type"/>
     <arg name="logging_enabled"                 default="true"/>
     <arg name="test_id"                         default="default"/>
-    <arg name="screenshots_enabled"             default="false"/>
-    <arg name="use_random_seed"                 default="false"/>
 
     <!-- Simulator arguments -->
     <arg name="feedback_covariance"             default="0.0"/>
     <arg name="start_bullet_viewer"             default="true"/>
+    <arg name="screenshots_enabled"             default="false"/>
 
     <!-- Planner model arguments -->
     <arg name="multi_model"                     default="false"/>
     <arg name="deformability_override"          default="false"/>
+    <arg name="translational_deformability"     if="$(arg deformability_override)"/>
+    <arg name="rotational_deformability"        if="$(arg deformability_override)"/>
     <arg name="use_adaptive_model"              default="false"/>
     <arg name="adaptive_model_learning_rate"    default="0.000001"/>
     <arg name="calculate_regret"                default="false"/>
@@ -22,7 +23,9 @@
     <arg name="optimization_enabled"            default="false"/>
     <arg name="kalman_parameters_override"      default="false"/>
     <arg name="bandit_algorithm"                default="KFRDB"/>
-
+    <arg name="use_random_seed"                 default="false"/>
+    <arg name="static_seed_override"            default="false"/>
+    <arg name="static_seed"                     if="$(arg static_seed_override)"/>
 
     <!-- Launch the simulator and setup parameters -->
     <include file="$(find smmap)/launch/generic_experiment_sim_only.launch">
@@ -55,5 +58,7 @@
     </include>
 
     <!-- Start the planner -->
-    <node name="smmap_planner_node" pkg="smmap" type="smmap_test_node_$(arg bandit_algorithm)" required="true"/>
+    <node name="smmap_planner_node" pkg="smmap" type="smmap_test_node_$(arg bandit_algorithm)" required="true">
+        <param name="static_seed"                   value="$(arg static_seed)"                  if="$(arg static_seed_override)"/>
+    </node>
 </launch>
