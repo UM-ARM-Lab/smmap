@@ -598,7 +598,7 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_
             double graph_dist;
 
             // If we are more than a grid cell away from the cover point, then lookup our position in the rest of the grid
-            if (straight_line_distance_squared > 2.0 * free_space_grid_.minStepDimension())
+            if (straight_line_distance_squared > std::pow(free_space_grid_.minStepDimension(), 2))
             {
                 const ssize_t deformable_point_ind_in_graph = free_space_grid_.worldPosToGridIndexClamped(deformable_point);
                 target_ind = dijkstras_results_[(size_t)cover_ind].first[(size_t)deformable_point_ind_in_graph];
@@ -611,11 +611,11 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_
                 graph_dist = std::sqrt(straight_line_distance_squared);
             }
 
-            // If we've found something closer, update our records
+            // If we've found something closer, update our record of the closest point on the deformable object
             if (graph_dist < min_dist)
             {
                 min_dist = graph_dist;
-                min_ind= deformable_ind;
+                min_ind = deformable_ind;
                 target_point_ind_in_graph = target_ind;
             }
         }

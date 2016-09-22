@@ -1416,14 +1416,14 @@ class JacobianTrackingTrials
             trialLogHeader(trial_log);
 
             JacobianBandit<std::mt19937_64> bandit(generator, num_arms_, num_jacobian_rows_, num_jacobian_cols_, false, false);
-            UCB1Normal ucb1normal_alg(num_arms_);
+            UCB1Normal<std::mt19937_64> ucb1normal_alg(num_arms_);
             double total_regret = 0;
 
             for (ssize_t pull_ind = 0; pull_ind < num_pulls_; pull_ind++)
             {
                 const VectorXd target_movement = bandit.getTargetMovement();
                 const auto arm_suggested_actions = bandit.getArmSuggestedActions(target_movement, use_optimization_);
-                const size_t arm_to_pull = ucb1normal_alg.selectArmToPull();
+                const size_t arm_to_pull = ucb1normal_alg.selectArmToPull(generator);
                 const auto pull_result = bandit.takeAction(arm_suggested_actions[arm_to_pull].suggested_action, arm_suggested_actions);
 
                 LOG_DATA;

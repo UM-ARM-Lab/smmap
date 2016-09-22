@@ -18,7 +18,7 @@ def run_trial(experiment,
               process_noise_factor = None,
               observation_noise_factor = None,
               feedback_covariance = None,
-              start_bullet_viewer = 'false',
+              start_bullet_viewer = 'true',
               calculate_regret = 'false',
               screenshots_enabled = 'true',
               use_random_seed = None):

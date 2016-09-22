@@ -74,7 +74,7 @@ void Planner::createBandits()
                 Eigen::VectorXd::Ones(num_models_) * 1e6);
 #endif
 #ifdef UCB_BANDIT
-            model_utility_bandit_ = UCB1Normal(num_models_);
+    model_utility_bandit_ = UCB1Normal<std::mt19937_64>(num_models_);
 #endif
 }
 
@@ -97,20 +97,13 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     {
         return task_specification_->calculateDesiredDirection(world_state);
     };
-
-    bool get_action_for_all_models = false;
+    const ObjectDeltaAndWeight desired_motion = task_desired_direction_fn(current_world_state);
+    visualizeDesiredMotion(current_world_state, desired_motion);
 
     // Pick an arm to use
-#ifdef KFRDB_BANDIT
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
-    get_action_for_all_models = true;
-#endif
-#ifdef KFMANB_BANDIT
-    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
-#endif
-#ifdef UCB_BANDIT
-    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull();
-#endif
+    const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
+
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
 
     // Querry each model for it's best trajectory
@@ -175,6 +168,33 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
 #endif
 
     return world_feedback;
+}
+
+void Planner::visualizeDesiredMotion(const WorldState& current_world_state, const ObjectDeltaAndWeight& desired_motion)
+{
+    ssize_t num_nodes = current_world_state.object_configuration_.cols();
+    std::vector<std_msgs::ColorRGBA> colors((size_t)num_nodes);
+    for (size_t node_ind = 0; node_ind < (size_t)num_nodes; node_ind++)
+    {
+        colors[node_ind].r = (float)desired_motion.weight((ssize_t)node_ind * 3);
+        colors[node_ind].g = 0.0f;
+        colors[node_ind].b = 0.0f;
+        colors[node_ind].a = desired_motion.weight((ssize_t)node_ind * 3) > 0 ? 1.0f : 0.0f;
+    }
+    task_specification_->visualizeDeformableObject(
+            vis_,
+            "desired_position",
+            AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
+            colors);
+
+    if (task_specification_->deformable_type_ == DeformableType::CLOTH)
+    {
+        vis_.visualizeObjectDelta(
+                    "desired_position",
+                    current_world_state.object_configuration_,
+                    AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
+                    Visualizer::Green());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -33,6 +33,8 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             WorldState sendNextCommand(const WorldState& current_world_state);
+            void visualizeDesiredMotion(const WorldState& current_world_state,
+                                        const ObjectDeltaAndWeight& desired_motion);
 
         private:
             ////////////////////////////////////////////////////////////////////
@@ -61,7 +63,7 @@ namespace smmap
             KalmanFilterMANB<std::mt19937_64> model_utility_bandit_;
 #endif
 #ifdef UCB_BANDIT
-            UCB1Normal model_utility_bandit_;
+            UCB1Normal<std::mt19937_64> model_utility_bandit_;
 #endif
             double reward_std_dev_scale_factor_;
             const double process_noise_factor_;

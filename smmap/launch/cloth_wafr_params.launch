@@ -5,11 +5,17 @@
     <param name="cloth_com_x"           value="-0.2"/>
     <param name="cloth_com_z"           value="0.86"/>
 
-    <param name="cloth_x_size"          value="0.625"/>
+    <!--param name="cloth_x_size"          value="0.625"/>
     <param name="cloth_num_divs_x"      value="50"/>
 
     <param name="cloth_y_size"          value="0.5"/>
-    <param name="cloth_num_divs_y"      value="40"/>
+    <param name="cloth_num_divs_y"      value="40"/-->
+
+    <param name="cloth_x_size"          value="0.5"/>
+    <param name="cloth_num_divs_x"      value="45"/>
+
+    <param name="cloth_y_size"          value="0.5"/>
+    <param name="cloth_num_divs_y"      value="45"/>
 
     <param name="cloth_cylinder_com_x"   value="-0.5"/>
 

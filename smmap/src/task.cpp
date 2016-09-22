@@ -43,33 +43,6 @@ void Task::execute()
 
         world_feedback = planner_.sendNextCommand(current_world_state);
 
-        // Visualize the desired position and weights
-//        {
-//            ssize_t num_nodes = current_world_state.object_configuration_.cols();
-//            std::vector<std_msgs::ColorRGBA> colors((size_t)num_nodes);
-//            for (size_t node_ind = 0; node_ind < (size_t)num_nodes; node_ind++)
-//            {
-//                colors[node_ind].r = (float)first_step_desired_motion.weight((ssize_t)node_ind * 3);
-//                colors[node_ind].g = 0.0f;
-//                colors[node_ind].b = 0.0f;
-//                colors[node_ind].a = first_step_desired_motion.weight((ssize_t)node_ind * 3) > 0 ? 1.0f : 0.0f;
-//            }
-//            task_specification_->visualizeDeformableObject(
-//                    vis_,
-//                    "desired_position",
-//                    AddObjectDelta(current_world_state.object_configuration_, first_step_desired_motion.delta),
-//                    colors);
-
-//            if (task_specification_->deformable_type_ == DeformableType::CLOTH)
-//            {
-//                vis_.visualizeObjectDelta(
-//                            "desired_position",
-//                            current_world_state.object_configuration_,
-//                            AddObjectDelta(current_world_state.object_configuration_, first_step_desired_motion.delta),
-//                            Visualizer::Green());
-//            }
-//        }
-
         if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()))
         {
             robot_.shutdown();

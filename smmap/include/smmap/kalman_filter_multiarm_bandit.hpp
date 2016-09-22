@@ -56,6 +56,11 @@ namespace smmap
                 return best_arm;
             }
 
+            bool generateAllModelActions() const
+            {
+                return false;
+            }
+
             /**
              * @brief updateArms
              * @param transition_variance
@@ -144,6 +149,11 @@ namespace smmap
                 sample.maxCoeff(&best_arm);
 
                 return best_arm;
+            }
+
+            bool generateAllModelActions() const
+            {
+                return true;
             }
 
             /**

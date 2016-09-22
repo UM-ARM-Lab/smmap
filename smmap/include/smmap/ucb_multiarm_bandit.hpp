@@ -11,6 +11,7 @@
 
 namespace smmap
 {
+    template <typename Generator = std::mt19937_64>
     class UCB1Normal
     {
         public:
@@ -22,8 +23,9 @@ namespace smmap
                 , total_pulls_(0)
             {}
 
-            ssize_t selectArmToPull() const
+            ssize_t selectArmToPull(Generator& generator) const
             {
+                (void)generator;
                 if (total_pulls_ == 0UL)
                 {
                     return 0L;
@@ -74,6 +76,11 @@ namespace smmap
 
                 assert(best_arm >= 0);
                 return best_arm;
+            }
+
+            bool generateAllModelActions() const
+            {
+                return false;
             }
 
             void updateArms(const ssize_t arm_pulled, const double reward)
