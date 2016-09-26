@@ -3,7 +3,7 @@
 from run_trial import *
 
 
-def run_trials(experiment, run_baseline=False, run_UCB=False, run_KFMANB=False, run_KFRDB=False, optimization_enabled=None, log_prefix=""):
+def run_trials(experiment, run_baseline=False, run_UCB=False, run_KFMANB=False, run_KFRDB=False, generate_screenshots=False, optimization_enabled=None, log_prefix=""):
 
     if run_baseline:
         # Note that this is 0 to 25 as range does [start, stop), thus we get 0:4:24 in Matlab speak
@@ -64,10 +64,22 @@ def run_trials(experiment, run_baseline=False, run_UCB=False, run_KFMANB=False, 
         for i in range(0, 10):
             run_trial(experiment=experiment,
                       logging_enabled="true",
-                      test_id=log_prefix + "/multi_model_KFRDB_regret_" + str(i),
+                      test_id=log_prefix + "/multi_model_KFMANDB_regret_" + str(i),
                       planning_horizon=1,
                       optimization_enabled=optimization_enabled,
                       bandit_algorithm="KFRDB",
                       multi_model="true",
                       calculate_regret="true",
                       use_random_seed="true")
+
+    if generate_screenshots:
+        run_trial(experiment=experiment,
+                  logging_enabled="true",
+                  test_id=log_prefix + "/screenshots_static_seed_KFMANDB",
+                  planning_horizon=1,
+                  optimization_enabled=optimization_enabled,
+                  bandit_algorithm="KFRDB",
+                  multi_model="true",
+                  calculate_regret="true",
+                  use_random_seed="false",
+                  screenshots_enabled="true")
