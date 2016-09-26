@@ -82,4 +82,5 @@ def run_trials(experiment, run_baseline=False, run_UCB=False, run_KFMANB=False, 
                   multi_model="true",
                   calculate_regret="true",
                   use_random_seed="false",
+                  start_bullet_viewer="true",
                   screenshots_enabled="true")

@@ -18,8 +18,8 @@ def run_trial(experiment,
               process_noise_factor = None,
               observation_noise_factor = None,
               feedback_covariance = None,
-              start_bullet_viewer = 'true',
-              calculate_regret = 'false',
+              calculate_regret='false',
+              start_bullet_viewer='false',
               screenshots_enabled = 'false',
               use_random_seed = None):
     # Constant values that we need
@@ -73,11 +73,11 @@ def run_trial(experiment,
     if start_bullet_viewer is not None:
         roslaunch_command.append('start_bullet_viewer:=' + str(start_bullet_viewer))
 
-    if use_random_seed is not None:
-        roslaunch_command.append('use_random_seed:=' + str(use_random_seed))
-
     roslaunch_command.append('calculate_regret:=' + str(calculate_regret))
     roslaunch_command.append('screenshots_enabled:=' + str(screenshots_enabled))
+
+    if use_random_seed is not None:
+        roslaunch_command.append('use_random_seed:=' + str(use_random_seed))
 
     # Add any extra parameters that have been added
     roslaunch_command += sys.argv[1:]
