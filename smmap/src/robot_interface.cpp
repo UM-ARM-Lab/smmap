@@ -1,5 +1,6 @@
 #include "smmap/robot_interface.hpp"
 
+#include <std_srvs/Empty.h>
 #include <ros/callback_queue.h>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include "smmap/ros_communication_helpers.hpp"
@@ -11,7 +12,7 @@ RobotInterface::RobotInterface(ros::NodeHandle& nh)
     : nh_(nh)
     , grippers_data_(GetGrippersData(nh_))
     , gripper_collision_checker_(nh_)
-    , execute_gripper_movement_client_(nh.serviceClient<smmap_msgs::ExecuteGripperMovement>(GetExecuteGrippersMovementTopic(nh_), true))
+    , execute_gripper_movement_client_(nh_.serviceClient<smmap_msgs::ExecuteGripperMovement>(GetExecuteGrippersMovementTopic(nh_), true))
     , test_grippers_poses_client_(nh_, GetTestGrippersPosesTopic(nh_), false)
     , dt_(GetRobotControlPeriod(nh_))
     , max_gripper_velocity_(GetMaxGripperVelocity(nh_))
@@ -42,6 +43,10 @@ bool RobotInterface::ok() const
 
 void RobotInterface::shutdown()
 {
+    ros::ServiceClient shutdown_sim_client_ = nh_.serviceClient<std_srvs::Empty>(GetTerminateSimulationTopic(nh_));
+    std_srvs::Empty empty;
+    shutdown_sim_client_.call(empty);
+
     ros::shutdown();
 }
 

@@ -119,10 +119,10 @@ namespace smmap
     };
 
     template<typename Generator = std::mt19937_64>
-    class KalmanFilterRDB
+    class KalmanFilterMANDB
     {
         public:
-            KalmanFilterRDB(
+            KalmanFilterMANDB(
                     const Eigen::VectorXd& prior_mean = Eigen::VectorXd::Ones(1),
                     const Eigen::MatrixXd& prior_covar = Eigen::MatrixXd::Identity(1, 1))
                 : arm_mean_(prior_mean)

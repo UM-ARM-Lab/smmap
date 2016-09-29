@@ -74,10 +74,9 @@ void Task::initializeModelSet()
                                << rotational_deformability);
 
         planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-                              DiminishingRigidityModel(
-                                  translational_deformability,
-                                  rotational_deformability,
-                                  optimization_enabled)));
+                              translational_deformability,
+                              rotational_deformability,
+                              optimization_enabled));
     }
     else if (GetUseMultiModel(ph_))
     {
@@ -94,10 +93,9 @@ void Task::initializeModelSet()
             for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
             {
                 planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-                                      DiminishingRigidityModel(
-                                          trans_deform,
-                                          rot_deform,
-                                          optimization_enabled)));
+                                      trans_deform,
+                                      rot_deform,
+                                      optimization_enabled));
             }
         }
         ROS_INFO_STREAM_NAMED("task", "Num diminishing rigidity models: "
@@ -113,10 +111,9 @@ void Task::initializeModelSet()
         for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
         {
                 planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
-                                      AdaptiveJacobianModel(
-                                          DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
-                                          learning_rate,
-                                          optimization_enabled)));
+                                      DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+                                      learning_rate,
+                                      optimization_enabled));
         }
         ROS_INFO_STREAM_NAMED("task", "Num adaptive Jacobian models: "
                                << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
@@ -126,17 +123,15 @@ void Task::initializeModelSet()
         ////////////////////////////////////////////////////////////////////////
 
 //        planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-//                              DiminishingRigidityModel(
-//                                  task_specification_->defaultDeformability(),
-//                                  GetOptimizationEnabled(nh_))));
+//                              task_specification_->defaultDeformability(),
+//                              GetOptimizationEnabled(nh_)));
     }
     else if (GetUseAdaptiveModel(ph_))
     {
-                planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
-                                      AdaptiveJacobianModel(
-                                          DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
-                                          GetAdaptiveModelLearningRate(ph_),
-                                          optimization_enabled)));
+        planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
+                              DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+                              GetAdaptiveModelLearningRate(ph_),
+                              optimization_enabled));
     }
     else
     {
@@ -144,19 +139,12 @@ void Task::initializeModelSet()
                                << task_specification_->defaultDeformability());
 
         planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-                              DiminishingRigidityModel(
-                                  task_specification_->defaultDeformability(),
-                                  optimization_enabled)));
+                              task_specification_->defaultDeformability(),
+                              optimization_enabled));
 
-//        model_set_.addModel(std::make_shared<LeastSquaresJacobianModel>(
-//                                 LeastSquaresJacobianModel(
-//                                     DiminishingRigidityModel(
-//                                         task_specification_->getDeformability())
-//                                     .getGrippersToObjectJacobian(
-//                                         robot_.getGrippersPose(),
-//                                         GetObjectInitialConfiguration(nh_)),
-//                                     2)));
-
+//        planner_.addModel(std::make_shared<LeastSquaresJacobianModel>(
+//                              DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+//                              2));
     }
 
     planner_.createBandits();
