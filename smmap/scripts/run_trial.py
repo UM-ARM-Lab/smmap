@@ -3,6 +3,8 @@ import subprocess
 
 
 def run_trial(experiment,
+              start_bullet_viewer='false',
+              screenshots_enabled='false',
               logging_enabled = None,
               test_id = None,
               planning_horizon = None,
@@ -19,9 +21,8 @@ def run_trial(experiment,
               observation_noise_factor = None,
               feedback_covariance = None,
               calculate_regret='false',
-              start_bullet_viewer='false',
-              screenshots_enabled = 'false',
-              use_random_seed = None):
+              use_random_seed = None,
+              correlation_strength_factor = None):
     # Constant values that we need
     roslaunch_command = ["roslaunch", "smmap"]
 
@@ -78,6 +79,10 @@ def run_trial(experiment,
 
     if use_random_seed is not None:
         roslaunch_command.append('use_random_seed:=' + str(use_random_seed))
+
+    if correlation_strength_factor is not None:
+        roslaunch_command.append('correlation_strength_factor_override:=true')
+        roslaunch_command.append('correlation_strength_factor:=' + str(correlation_strength_factor))
 
     # Add any extra parameters that have been added
     roslaunch_command += sys.argv[1:]

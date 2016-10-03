@@ -40,16 +40,16 @@ Planner::Planner(
     , seed_(GetPlannerSeed(ph_))
     , generator_(seed_)
 {
-    std::cout << seed_ << std::endl;
-    std::cout << seed_ << std::endl;
-    std::cout << seed_ << std::endl;
-    std::cout << seed_ << std::endl;
+    std::cout << std::hex << seed_ << std::endl;
+    std::cout << std::hex << seed_ << std::endl;
+    std::cout << std::hex << seed_ << std::endl;
+    std::cout << std::hex << seed_ << std::endl;
 
     if (GetLoggingEnabled(nh_))
     {
         const std::string log_folder = GetLogFolder(nh_);
         Log::Log seed_log(log_folder + "seed.txt", false);
-        LOG(seed_log, seed_);
+        LOG_STREAM(seed_log, std::hex << seed_);
     }
 }
 
@@ -297,7 +297,7 @@ Eigen::MatrixXd Planner::calculateProcessNoise(const std::vector<std::pair<AllGr
         }
     }
 
-    const double lambda = 0.0;
+    const double lambda = ROSHelpers::GetParam(ph_, "correlation_strength_factor", 0.5);
     return lambda * process_noise + (1.0 - lambda) * Eigen::MatrixXd::Identity(num_models_, num_models_);
 }
 
