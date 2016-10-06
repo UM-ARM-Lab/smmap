@@ -3,8 +3,8 @@ import subprocess
 
 
 def run_trial(experiment,
-              start_bullet_viewer='false',
-              screenshots_enabled='false',
+              start_bullet_viewer = None,
+              screenshots_enabled = None,
               logging_enabled = None,
               test_id = None,
               planning_horizon = None,
@@ -16,18 +16,18 @@ def run_trial(experiment,
               rotational_deformability = None,
               use_adaptive_model = None,
               adaptive_model_learning_rate = None,
-              kalman_parameters_override = None,
+
               process_noise_factor = None,
               observation_noise_factor = None,
-              feedback_covariance = None,
-              calculate_regret='false',
-              use_random_seed = None,
-              correlation_strength_factor = None):
-    # Constant values that we need
-    roslaunch_command = ["roslaunch", "smmap"]
 
-    # Use the correct launch file
-    roslaunch_command.append("generic_experiment.launch task_type:=" + experiment)
+              feedback_covariance = None,
+              calculate_regret = None,
+              use_random_seed = None,
+
+              correlation_strength_factor = None,
+              max_correlation_strength_factor = None):
+    # Constant values that we need
+    roslaunch_command = ["roslaunch", "smmap", "generic_experiment.launch task_type:=" + experiment]
 
     # Setup logging parameters
     if logging_enabled is not None:
@@ -61,9 +61,10 @@ def run_trial(experiment,
 
     if multi_model is not None:
         roslaunch_command.append('multi_model:=' + multi_model)
-    if kalman_parameters_override is not None:
+
+    if process_noise_factor is not None or observation_noise_factor is not None:
         assert(process_noise_factor is not None and observation_noise_factor is not None)
-        roslaunch_command.append('kalman_parameters_override:=' + kalman_parameters_override)
+        roslaunch_command.append('kalman_parameters_override:=true')
         roslaunch_command.append('process_noise_factor:=' + str(process_noise_factor))
         roslaunch_command.append('observation_noise_factor:=' + str(observation_noise_factor))
 
@@ -74,8 +75,11 @@ def run_trial(experiment,
     if start_bullet_viewer is not None:
         roslaunch_command.append('start_bullet_viewer:=' + str(start_bullet_viewer))
 
-    roslaunch_command.append('calculate_regret:=' + str(calculate_regret))
-    roslaunch_command.append('screenshots_enabled:=' + str(screenshots_enabled))
+    if calculate_regret is not None:
+        roslaunch_command.append('calculate_regret:=' + str(calculate_regret))
+
+    if screenshots_enabled is not None:
+        roslaunch_command.append('screenshots_enabled:=' + str(screenshots_enabled))
 
     if use_random_seed is not None:
         roslaunch_command.append('use_random_seed:=' + str(use_random_seed))
@@ -83,6 +87,9 @@ def run_trial(experiment,
     if correlation_strength_factor is not None:
         roslaunch_command.append('correlation_strength_factor_override:=true')
         roslaunch_command.append('correlation_strength_factor:=' + str(correlation_strength_factor))
+
+    if max_correlation_strength_factor is not None:
+        roslaunch_command.append('max_correlation_strength_factor:=' + str(max_correlation_strength_factor))
 
     # Add any extra parameters that have been added
     roslaunch_command += sys.argv[1:]

@@ -21,7 +21,7 @@ namespace smmap
 
             virtual void updateModel(const WorldState& previous, const WorldState& next) = 0;
 
-            virtual ObjectPointSet getPredictedObjectDelta(
+            virtual ObjectPointSet getObjectDelta(
                     const WorldState& world_initial_state,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta,
                     const double dt) const = 0;

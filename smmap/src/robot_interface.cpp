@@ -33,7 +33,7 @@ WorldState RobotInterface::start()
     test_grippers_poses_client_.waitForServer();
 
     ROS_INFO_NAMED("robot_bridge", "Kickstarting the planner with a no-op");
-    return sendGripperMovement_impl(noOpGripperMovement());
+    return sendGrippersPoses_impl(noOpGripperMovement());
 }
 
 bool RobotInterface::ok() const
@@ -80,9 +80,9 @@ const AllGrippersSinglePose RobotInterface::getGrippersPose()
     return grippers_pose;
 }
 
-WorldState RobotInterface::sendGripperMovement(const AllGrippersSinglePose& grippers_poses)
+WorldState RobotInterface::sendGrippersPoses(const AllGrippersSinglePose& grippers_poses)
 {
-    return sendGripperMovement_impl(toRosGripperMovement(grippers_poses));
+    return sendGrippersPoses_impl(toRosGrippersPoses(grippers_poses));
 }
 
 bool RobotInterface::testGrippersPoses(const std::vector<AllGrippersSinglePose>& grippers_poses,
@@ -125,7 +125,7 @@ smmap_msgs::ExecuteGripperMovementRequest RobotInterface::noOpGripperMovement()
     return movement_request;
 }
 
-smmap_msgs::ExecuteGripperMovementRequest RobotInterface::toRosGripperMovement(
+smmap_msgs::ExecuteGripperMovementRequest RobotInterface::toRosGrippersPoses(
         const AllGrippersSinglePose& grippers_pose) const
 {
     smmap_msgs::ExecuteGripperMovementRequest movement_request;
@@ -151,7 +151,7 @@ smmap_msgs::TestGrippersPosesGoal RobotInterface::toRosTestPosesGoal(
     return goal;
 }
 
-WorldState RobotInterface::sendGripperMovement_impl(
+WorldState RobotInterface::sendGrippersPoses_impl(
         const smmap_msgs::ExecuteGripperMovementRequest& movement)
 {
     smmap_msgs::ExecuteGripperMovementResponse result;

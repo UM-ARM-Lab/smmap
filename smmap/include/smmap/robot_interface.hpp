@@ -28,7 +28,7 @@ namespace smmap
 
             const AllGrippersSinglePose getGrippersPose();
 
-            WorldState sendGripperMovement(const AllGrippersSinglePose& grippers_pose);
+            WorldState sendGrippersPoses(const AllGrippersSinglePose& grippers_pose);
 
             bool testGrippersPoses(const std::vector<AllGrippersSinglePose>& grippers_pose,
                                    const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback);
@@ -54,10 +54,10 @@ namespace smmap
         private:
             std::thread spin_thread_;
 
-            WorldState sendGripperMovement_impl(const smmap_msgs::ExecuteGripperMovementRequest& movement);
+            WorldState sendGrippersPoses_impl(const smmap_msgs::ExecuteGripperMovementRequest& movement);
 
             smmap_msgs::ExecuteGripperMovementRequest noOpGripperMovement();
-            smmap_msgs::ExecuteGripperMovementRequest toRosGripperMovement(const AllGrippersSinglePose& grippers_pose) const;
+            smmap_msgs::ExecuteGripperMovementRequest toRosGrippersPoses(const AllGrippersSinglePose& grippers_pose) const;
 
             ////////////////////////////////////////////////////////////////////
             // Testing specific gripper movements

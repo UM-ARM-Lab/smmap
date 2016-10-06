@@ -161,29 +161,33 @@ void Task::initializeLogging()
 
         ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
 
-        loggers.insert(std::make_pair<std::string, Log::Log> (
+        loggers.insert(std::make_pair<std::string, Log::Log>(
                             "time",
-                            Log::Log(log_folder + "time.txt", false))) ;
+                            Log::Log(log_folder + "time.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log> (
+        loggers.insert(std::make_pair<std::string, Log::Log>(
                             "error",
-                            Log::Log(log_folder + "error.txt", false))) ;
+                            Log::Log(log_folder + "error.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log> (
+        loggers.insert(std::make_pair<std::string, Log::Log>(
                             "utility_mean",
-                            Log::Log(log_folder + "utility_mean.txt", false))) ;
+                            Log::Log(log_folder + "utility_mean.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log> (
+        loggers.insert(std::make_pair<std::string, Log::Log>(
                             "utility_covariance",
-                            Log::Log(log_folder + "utility_covariance.txt", false))) ;
+                            Log::Log(log_folder + "utility_covariance.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log> (
+        loggers.insert(std::make_pair<std::string, Log::Log>(
                             "model_chosen",
-                            Log::Log(log_folder + "model_chosen.txt", false))) ;
+                            Log::Log(log_folder + "model_chosen.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log> (
+        loggers.insert(std::make_pair<std::string, Log::Log>(
                             "rewards_for_all_models",
-                            Log::Log(log_folder + "rewards_for_all_models.txt", false))) ;
+                            Log::Log(log_folder + "rewards_for_all_models.txt", false)));
+
+        loggers.insert(std::make_pair<std::string, Log::Log>(
+                            "correlation_scale_factor",
+                            Log::Log(log_folder + "correlation_scale_factor.txt", false)));
     }
 }
 
@@ -196,7 +200,8 @@ void Task::logData(
         const Eigen::VectorXd& model_utility_mean,
         const Eigen::MatrixXd& model_utility_covariance,
         const ssize_t model_used,
-        const std::vector<double>& rewards_for_all_models)
+        const std::vector<double>& rewards_for_all_models,
+        const double correlation_strength_factor)
 {
     if (logging_enabled_)
     {
@@ -222,6 +227,9 @@ void Task::logData(
 
         LOG(loggers.at("rewards_for_all_models"),
             PrettyPrint::PrettyPrint(rewards_for_all_models, false, " "));
+
+        LOG(loggers.at("correlation_scale_factor"),
+            correlation_strength_factor);
     }
 }
 
@@ -268,7 +276,8 @@ LoggingFunctionType Task::createLoggingFunction()
                      std::placeholders::_2,
                      std::placeholders::_3,
                      std::placeholders::_4,
-                     std::placeholders::_5);
+                     std::placeholders::_5,
+                     std::placeholders::_6);
 }
 
 //TaskObjectDeltaProjectionFunctionType Task::createTaskObjectDeltaProjectionFunction()

@@ -68,7 +68,8 @@ namespace smmap
             const Eigen::VectorXd& model_utility_mean,
             const Eigen::MatrixXd& model_utility_covariance,
             const ssize_t model_used,
-            const std::vector<double> rewards_for_all_models
+            const std::vector<double> rewards_for_all_models,
+            const double correlation_strength_factor
             )>
     LoggingFunctionType;
 }
