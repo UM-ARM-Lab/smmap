@@ -159,7 +159,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
 
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
-    if (MultipleGrippersVelocity6dNorm(selected_command) < 1e-3)
+    if (MultipleGrippersVelocity6dNorm(selected_command) < 0.5e-3)
     {
         correlation_strength_factor_ = std::max(0.0, correlation_strength_factor_ - 0.1);
     }
@@ -167,6 +167,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     {
         correlation_strength_factor_ = std::min(max_correlation_strength_factor_, correlation_strength_factor_ + 0.1);
     }
+    correlation_strength_factor_ = 0.9;
     ROS_INFO_STREAM_NAMED("planner", "Correlation strength factor: " << correlation_strength_factor_);
     updateModels(current_world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
 
