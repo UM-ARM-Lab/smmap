@@ -143,9 +143,79 @@ VectorXd smmap::minSquaredNorm(const MatrixXd& A, const VectorXd& b, const doubl
 
         GRBQuadExpr objective_fn = normSquared(buildVectorOfExperssions(A, vars, b), weights);
         // Check if we need to add anything extra to the main diagonal.
-        if (((A.transpose() * weights.asDiagonal() * A).selfadjointView<Upper>().eigenvalues().array() < 1.1e-4).any())
+        const VectorXd eigenvalues = (A.transpose() * weights.asDiagonal() * A).selfadjointView<Upper>().eigenvalues();
+        if ((eigenvalues.array() < 1.1e-4).any())
         {
-            std::vector<double> diagonal(num_vars, 1.1e-4);
+            std::vector<double> diagonal(num_vars, 1.1e-4 - eigenvalues.minCoeff());
+            objective_fn.addTerms(diagonal.data(), vars, vars, (int)num_vars);
+        }
+        model.setObjective(objective_fn, GRB_MINIMIZE);
+
+        model.update();
+        model.optimize();
+
+        if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL)
+        {
+            x.resize(num_vars);
+            for (ssize_t var_ind = 0; var_ind < num_vars; var_ind++)
+            {
+                x(var_ind) = vars[var_ind].get(GRB_DoubleAttr_X);
+            }
+        }
+        else
+        {
+            std::cout << "Status: " << model.get(GRB_IntAttr_Status) << std::endl;
+            exit(-1);
+        }
+    }
+    catch(GRBException e)
+    {
+        std::cout << "Error code = " << e.getErrorCode() << std::endl;
+        std::cout << e.getMessage() << std::endl;
+    }
+    catch(...)
+    {
+        std::cout << "Exception during optimization" << std::endl;
+    }
+
+    delete[] vars;
+    return x;
+}
+
+Eigen::VectorXd smmap::minSquaredNormSE3VelocityConstraints(const Eigen::MatrixXd& A, const Eigen::VectorXd& b, const double max_se3_velocity, const Eigen::VectorXd& weights)
+{
+    VectorXd x;
+    GRBVar* vars = nullptr;
+    try
+    {
+        const ssize_t num_vars = A.cols();
+        assert(num_vars % 6 == 0);
+
+        const std::vector<double> lb(num_vars, -max_se3_velocity);
+        const std::vector<double> ub(num_vars, max_se3_velocity);
+
+        // TODO: Find a way to put a scoped lock here
+        gurobi_env_construct_mtx.lock();
+        GRBEnv env;
+        gurobi_env_construct_mtx.unlock();
+
+        env.set(GRB_IntParam_OutputFlag, 0);
+        GRBModel model(env);
+        vars = model.addVars(lb.data(), ub.data(), nullptr, nullptr, nullptr, (int)num_vars);
+        model.update();
+
+        // Add the SE3 velocity constraints
+        for (int i = 0; i < num_vars / 6; i++)
+        {
+            model.addQConstr(normSquared(&vars[i * 6], 6), GRB_LESS_EQUAL, max_se3_velocity * max_se3_velocity);
+        }
+
+        GRBQuadExpr objective_fn = normSquared(buildVectorOfExperssions(A, vars, b), weights);
+        // Check if we need to add anything extra to the main diagonal.
+        const VectorXd eigenvalues = (A.transpose() * weights.asDiagonal() * A).selfadjointView<Upper>().eigenvalues();
+        if ((eigenvalues.array() < 1.1e-4).any())
+        {
+            std::vector<double> diagonal(num_vars, 1.1e-4 - eigenvalues.minCoeff());
             objective_fn.addTerms(diagonal.data(), vars, vars, (int)num_vars);
         }
         model.setObjective(objective_fn, GRB_MINIMIZE);

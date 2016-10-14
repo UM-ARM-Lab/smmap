@@ -492,14 +492,7 @@ class JacobianBandit
                 #pragma omp parallel for
                 for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
                 {
-                    arm_suggestions[arm_ind].suggested_action =
-                            minSquaredNorm(arm_jacobians_[arm_ind], target_movement, max_action_norm_, weights);
-//                            CVXOptSolvers::qcqp_jacobian_least_squares(arm_jacobians_[arm_ind], weights, target_movement, max_action_norm_);
-
-//                    std::cout << arm_suggestions[arm_ind].suggested_action.transpose() << std::endl;
-//                    std::cout << minSquaredNorm(arm_jacobians_[arm_ind], target_movement, max_action_norm_).transpose() << std::endl;
-//                    std::cout << std::endl;
-
+                    arm_suggestions[arm_ind].suggested_action = minSquaredNorm(arm_jacobians_[arm_ind], target_movement, max_action_norm_, weights);
                     arm_suggestions[arm_ind].predicted_result = getArmPrediction(arm_ind, arm_suggestions[arm_ind].suggested_action);
                 }
             }
@@ -508,9 +501,7 @@ class JacobianBandit
                 #pragma omp parallel for
                 for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
                 {
-                    arm_suggestions[arm_ind].suggested_action =
-                            arm_jacobians_[arm_ind].jacobiSvd(ComputeThinU | ComputeThinV).solve(target_movement);
-//                            WeightedLeastSquaresSolver(arm_jacobians_[arm_ind], target_movement, VectorXd::Ones(target_movement.rows()), 1e-3, 1e-2);
+                    arm_suggestions[arm_ind].suggested_action = arm_jacobians_[arm_ind].jacobiSvd(ComputeThinU | ComputeThinV).solve(target_movement);
                     arm_suggestions[arm_ind].suggested_action = ClampNorm(arm_suggestions[arm_ind].suggested_action, max_action_norm_);
                     arm_suggestions[arm_ind].predicted_result = getArmPrediction(arm_ind, arm_suggestions[arm_ind].suggested_action);
                 }
@@ -526,15 +517,11 @@ class JacobianBandit
 
             if (use_optimization)
             {
-                suggestion.suggested_action =
-                        minSquaredNorm(true_jacobian_, target_movement, max_action_norm_, weights);
-//                        CVXOptSolvers::qcqp_jacobian_least_squares(true_jacobian_, weights, target_movement, max_action_norm_);
+                suggestion.suggested_action = minSquaredNorm(true_jacobian_, target_movement, max_action_norm_, weights);
             }
             else
             {
-                suggestion.suggested_action =
-                        true_jacobian_.jacobiSvd(ComputeThinU | ComputeThinV).solve(target_movement);
-//                        WeightedLeastSquaresSolver(true_jacobian_, target_movement, VectorXd::Ones(target_movement.rows()), 1e-3, 1e-2);
+                suggestion.suggested_action = true_jacobian_.jacobiSvd(ComputeThinU | ComputeThinV).solve(target_movement);
                 suggestion.suggested_action = ClampNorm(suggestion.suggested_action, max_action_norm_);
             }
 
