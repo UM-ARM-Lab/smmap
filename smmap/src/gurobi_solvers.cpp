@@ -146,7 +146,8 @@ VectorXd smmap::minSquaredNorm(const MatrixXd& A, const VectorXd& b, const doubl
         const VectorXd eigenvalues = (A.transpose() * weights.asDiagonal() * A).selfadjointView<Upper>().eigenvalues();
         if ((eigenvalues.array() < 1.1e-4).any())
         {
-            std::vector<double> diagonal(num_vars, 1.1e-4 - eigenvalues.minCoeff());
+//            const std::vector<double> diagonal(num_vars, 1.1e-4 - eigenvalues.minCoeff());
+            const std::vector<double> diagonal(num_vars, 1.1e-4);
             objective_fn.addTerms(diagonal.data(), vars, vars, (int)num_vars);
         }
         model.setObjective(objective_fn, GRB_MINIMIZE);
