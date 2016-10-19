@@ -98,7 +98,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
         return task_specification_->calculateDesiredDirection(world_state);
     };
     const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
-    visualizeDesiredMotion(current_world_state, task_desired_motion);
+//    visualizeDesiredMotion(current_world_state, task_desired_motion);
 
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);

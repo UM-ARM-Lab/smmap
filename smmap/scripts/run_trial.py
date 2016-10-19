@@ -93,6 +93,12 @@ def run_trial(experiment,
 
     # Add any extra parameters that have been added
     roslaunch_command += sys.argv[1:]
-    print " ".join(roslaunch_command), "\n"
 
-    subprocess.call(args=" ".join(roslaunch_command), shell=True)
+    log_folder = '~/Dropbox/catkin_ws/src/smmap/logs/' + experiment + '/' + test_id
+    roslaunch_command.append(' --screen > ' + log_folder + '/output_log.txt')
+
+    cmd = ' '.join(roslaunch_command)
+    print cmd, '\n'
+
+    subprocess.call(args='mkdir -p ' + log_folder, shell=True)
+    subprocess.call(args=cmd, shell=True)

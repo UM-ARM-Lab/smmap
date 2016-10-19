@@ -239,34 +239,12 @@ void Task::logData(
 // deformable_type_ have been set already
 ////////////////////////////////////////////////////////////////////////////////
 
-//ErrorFunctionType Task::createErrorFunction()
-//{
-//    return std::bind(&TaskSpecification::calculateError,
-//                     task_specification_,
-//                     std::placeholders::_1);
-//}
-
 GripperCollisionCheckFunctionType Task::createGripperCollisionCheckFunction()
 {
     return std::bind(&RobotInterface::checkGripperCollision,
                      &robot_,
                      std::placeholders::_1);
 }
-
-//TaskExecuteGripperTrajectoryFunctionType Task::createExecuteGripperTrajectoryFunction()
-//{
-//    return std::bind(&RobotInterface::sendGripperTrajectory,
-//                     &robot_,
-//                     std::placeholders::_1);
-//}
-
-//TestGrippersPosesFunctionType Task::createTestGrippersPosesFunction()
-//{
-//    return std::bind(&RobotInterface::testGrippersPoses,
-//                     &robot_,
-//                     std::placeholders::_1,
-//                     std::placeholders::_2);
-//}
 
 LoggingFunctionType Task::createLoggingFunction()
 {
@@ -279,11 +257,3 @@ LoggingFunctionType Task::createLoggingFunction()
                      std::placeholders::_5,
                      std::placeholders::_6);
 }
-
-//TaskObjectDeltaProjectionFunctionType Task::createTaskObjectDeltaProjectionFunction()
-//{
-//    return std::bind(&TaskSpecification::projectObjectDelta,
-//                     task_specification_,
-//                     std::placeholders::_1,
-//                     std::placeholders::_2);
-//}
