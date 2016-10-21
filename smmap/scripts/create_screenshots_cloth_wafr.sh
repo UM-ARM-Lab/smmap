@@ -2,20 +2,36 @@
 
 LOG_FOLDER=~/Dropbox/catkin_ws/src/smmap/logs/cloth_wafr/
 
-TEST_ID=wafr_final_submission/test_vs_noise_data_process_0.01_obs_0.1_regret_0_with_actual_noise_process_0.1_obs_0.01
+#TEST_ID=wafr_final_submission/test_vs_noise_data_process_0.01_obs_0.1_regret_0_with_actual_noise_process_0.1_obs_0.01
+#mkdir ${LOG_FOLDER}${TEST_ID}
+#roslaunch smmap generic_experiment.launch \
+#    task_type:=cloth_wafr \
+#    test_id:=${TEST_ID}\
+#    logging_enabled:=true \
+#    start_bullet_viewer:=true \
+#    screenshots_enabled:=true \
+#    multi_model:=true \
+#    bandit_algoritm:=KFMANDB \
+#    calculate_regret:=false \
+#    use_random_seed:=false \
+#    static_seed_override:=true \
+#    static_seed:=147c6fc183e8c118 \
+#    --screen > ${LOG_FOLDER}${TEST_ID}/output_log.txt
+
+TEST_ID=wafr_final_submission/test_vs_noise_data_process_0.1_obs_0.01_with_actual_noise_process_0.1_obs_0.01_KFMANB_regret_0
 mkdir ${LOG_FOLDER}${TEST_ID}
 roslaunch smmap generic_experiment.launch \
     task_type:=cloth_wafr \
     test_id:=${TEST_ID}\
     logging_enabled:=true \
-    start_bullet_viewer:=true \
-    screenshots_enabled:=true \
+    start_bullet_viewer:=false \
+    screenshots_enabled:=false \
     multi_model:=true \
-    bandit_algoritm:=KFMANDB \
+    bandit_algoritm:=KFMANB \
     calculate_regret:=false \
     use_random_seed:=false \
     static_seed_override:=true \
-    static_seed:=147c6fc183e8c118 \
+    static_seed:=147ba3bc969ecbf4 \
     --screen > ${LOG_FOLDER}${TEST_ID}/output_log.txt
 
 ## Cloth Wafr - regret 9 with cloth pulled through cylinder
