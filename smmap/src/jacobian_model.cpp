@@ -17,15 +17,14 @@ JacobianModel::JacobianModel(bool optimize)
 // Virtual function overrides
 ////////////////////////////////////////////////////////////////////////////////
 
-ObjectPointSet JacobianModel::getPredictedObjectDelta(
+ObjectPointSet JacobianModel::getObjectDelta(
         const WorldState& world_initial_state,
         const AllGrippersSinglePoseDelta& gripper_pose_delta,
         const double dt) const
 {
     (void)dt;
 
-    return world_initial_state.object_configuration_
-            + getObjectDelta(
+    return getObjectDelta(
                 world_initial_state.object_configuration_,
                 world_initial_state.all_grippers_single_pose_,
                 gripper_pose_delta);

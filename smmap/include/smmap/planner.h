@@ -56,39 +56,40 @@ namespace smmap
             const bool calculate_regret_;
             ssize_t num_models_;
             std::vector<DeformableModel::Ptr> model_list_;
-#ifdef KFRDB_BANDIT
-            KalmanFilterRDB<std::mt19937_64> model_utility_bandit_;
+#ifdef UCB_BANDIT
+            UCB1Normal<std::mt19937_64> model_utility_bandit_;
 #endif
 #ifdef KFMANB_BANDIT
             KalmanFilterMANB<std::mt19937_64> model_utility_bandit_;
 #endif
-#ifdef UCB_BANDIT
-            UCB1Normal<std::mt19937_64> model_utility_bandit_;
+#ifdef KFMANDB_BANDIT
+            KalmanFilterMANDB<std::mt19937_64> model_utility_bandit_;
 #endif
             double reward_std_dev_scale_factor_;
             const double process_noise_factor_;
             const double observation_noise_factor_;
+            const double max_correlation_strength_factor_;
+            double correlation_strength_factor_;
             const unsigned long seed_;
             std::mt19937_64 generator_;
 
             void updateModels(const WorldState& starting_world_state,
                     const ObjectDeltaAndWeight& task_desired_motion,
-                    const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> >& suggested_commands,
-                    const ssize_t model_used,
-                    const WorldState& world_feedback,
-                    const std::vector<double>& individual_rewards);
-
-            Eigen::MatrixXd calculateProcessNoise(const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands);
-
-            Eigen::VectorXd calculateObservedReward(
-                    const WorldState& starting_world_state,
-                    const ObjectDeltaAndWeight& task_desired_motion,
+                    const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands,
                     const ssize_t model_used,
                     const WorldState& world_feedback);
 
-            Eigen::MatrixXd calculateObservationNoise(
-                    const Eigen::MatrixXd& process_noise,
-                    const ssize_t model_used);
+            Eigen::MatrixXd calculateProcessNoise(const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands);
+
+//            Eigen::VectorXd calculateObservedReward(
+//                    const WorldState& starting_world_state,
+//                    const ObjectDeltaAndWeight& task_desired_motion,
+//                    const ssize_t model_used,
+//                    const WorldState& world_feedback);
+
+//            Eigen::MatrixXd calculateObservationNoise(
+//                    const Eigen::MatrixXd& process_noise,
+//                    const ssize_t model_used);
     };
 }
 

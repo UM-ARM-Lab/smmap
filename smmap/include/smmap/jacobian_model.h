@@ -18,7 +18,7 @@ namespace smmap
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            virtual ObjectPointSet getPredictedObjectDelta(
+            virtual ObjectPointSet getObjectDelta(
                     const WorldState& world_initial_state,
                     const AllGrippersSinglePoseDelta& gripper_pose_delta,
                     const double dt) const override final;

@@ -74,10 +74,9 @@ void Task::initializeModelSet()
                                << rotational_deformability);
 
         planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-                              DiminishingRigidityModel(
-                                  translational_deformability,
-                                  rotational_deformability,
-                                  optimization_enabled)));
+                              translational_deformability,
+                              rotational_deformability,
+                              optimization_enabled));
     }
     else if (GetUseMultiModel(ph_))
     {
@@ -94,10 +93,9 @@ void Task::initializeModelSet()
             for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
             {
                 planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-                                      DiminishingRigidityModel(
-                                          trans_deform,
-                                          rot_deform,
-                                          optimization_enabled)));
+                                      trans_deform,
+                                      rot_deform,
+                                      optimization_enabled));
             }
         }
         ROS_INFO_STREAM_NAMED("task", "Num diminishing rigidity models: "
@@ -113,10 +111,9 @@ void Task::initializeModelSet()
         for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
         {
                 planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
-                                      AdaptiveJacobianModel(
-                                          DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
-                                          learning_rate,
-                                          optimization_enabled)));
+                                      DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+                                      learning_rate,
+                                      optimization_enabled));
         }
         ROS_INFO_STREAM_NAMED("task", "Num adaptive Jacobian models: "
                                << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
@@ -126,17 +123,15 @@ void Task::initializeModelSet()
         ////////////////////////////////////////////////////////////////////////
 
 //        planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-//                              DiminishingRigidityModel(
-//                                  task_specification_->defaultDeformability(),
-//                                  GetOptimizationEnabled(nh_))));
+//                              task_specification_->defaultDeformability(),
+//                              GetOptimizationEnabled(nh_)));
     }
     else if (GetUseAdaptiveModel(ph_))
     {
-                planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
-                                      AdaptiveJacobianModel(
-                                          DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
-                                          GetAdaptiveModelLearningRate(ph_),
-                                          optimization_enabled)));
+        planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
+                              DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+                              GetAdaptiveModelLearningRate(ph_),
+                              optimization_enabled));
     }
     else
     {
@@ -144,19 +139,12 @@ void Task::initializeModelSet()
                                << task_specification_->defaultDeformability());
 
         planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-                              DiminishingRigidityModel(
-                                  task_specification_->defaultDeformability(),
-                                  optimization_enabled)));
+                              task_specification_->defaultDeformability(),
+                              optimization_enabled));
 
-//        model_set_.addModel(std::make_shared<LeastSquaresJacobianModel>(
-//                                 LeastSquaresJacobianModel(
-//                                     DiminishingRigidityModel(
-//                                         task_specification_->getDeformability())
-//                                     .getGrippersToObjectJacobian(
-//                                         robot_.getGrippersPose(),
-//                                         GetObjectInitialConfiguration(nh_)),
-//                                     2)));
-
+//        planner_.addModel(std::make_shared<LeastSquaresJacobianModel>(
+//                              DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+//                              2));
     }
 
     planner_.createBandits();
@@ -173,29 +161,33 @@ void Task::initializeLogging()
 
         ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
 
-        loggers.insert(std::make_pair<std::string, Log::Log> (
+        loggers.insert(std::make_pair<std::string, Log::Log>(
                             "time",
-                            Log::Log(log_folder + "time.txt", false))) ;
+                            Log::Log(log_folder + "time.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log> (
+        loggers.insert(std::make_pair<std::string, Log::Log>(
                             "error",
-                            Log::Log(log_folder + "error.txt", false))) ;
+                            Log::Log(log_folder + "error.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log> (
+        loggers.insert(std::make_pair<std::string, Log::Log>(
                             "utility_mean",
-                            Log::Log(log_folder + "utility_mean.txt", false))) ;
+                            Log::Log(log_folder + "utility_mean.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log> (
+        loggers.insert(std::make_pair<std::string, Log::Log>(
                             "utility_covariance",
-                            Log::Log(log_folder + "utility_covariance.txt", false))) ;
+                            Log::Log(log_folder + "utility_covariance.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log> (
+        loggers.insert(std::make_pair<std::string, Log::Log>(
                             "model_chosen",
-                            Log::Log(log_folder + "model_chosen.txt", false))) ;
+                            Log::Log(log_folder + "model_chosen.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log> (
+        loggers.insert(std::make_pair<std::string, Log::Log>(
                             "rewards_for_all_models",
-                            Log::Log(log_folder + "rewards_for_all_models.txt", false))) ;
+                            Log::Log(log_folder + "rewards_for_all_models.txt", false)));
+
+        loggers.insert(std::make_pair<std::string, Log::Log>(
+                            "correlation_scale_factor",
+                            Log::Log(log_folder + "correlation_scale_factor.txt", false)));
     }
 }
 
@@ -208,7 +200,8 @@ void Task::logData(
         const Eigen::VectorXd& model_utility_mean,
         const Eigen::MatrixXd& model_utility_covariance,
         const ssize_t model_used,
-        const std::vector<double>& rewards_for_all_models)
+        const std::vector<double>& rewards_for_all_models,
+        const double correlation_strength_factor)
 {
     if (logging_enabled_)
     {
@@ -234,6 +227,9 @@ void Task::logData(
 
         LOG(loggers.at("rewards_for_all_models"),
             PrettyPrint::PrettyPrint(rewards_for_all_models, false, " "));
+
+        LOG(loggers.at("correlation_scale_factor"),
+            correlation_strength_factor);
     }
 }
 
@@ -243,34 +239,12 @@ void Task::logData(
 // deformable_type_ have been set already
 ////////////////////////////////////////////////////////////////////////////////
 
-//ErrorFunctionType Task::createErrorFunction()
-//{
-//    return std::bind(&TaskSpecification::calculateError,
-//                     task_specification_,
-//                     std::placeholders::_1);
-//}
-
 GripperCollisionCheckFunctionType Task::createGripperCollisionCheckFunction()
 {
     return std::bind(&RobotInterface::checkGripperCollision,
                      &robot_,
                      std::placeholders::_1);
 }
-
-//TaskExecuteGripperTrajectoryFunctionType Task::createExecuteGripperTrajectoryFunction()
-//{
-//    return std::bind(&RobotInterface::sendGripperTrajectory,
-//                     &robot_,
-//                     std::placeholders::_1);
-//}
-
-//TestGrippersPosesFunctionType Task::createTestGrippersPosesFunction()
-//{
-//    return std::bind(&RobotInterface::testGrippersPoses,
-//                     &robot_,
-//                     std::placeholders::_1,
-//                     std::placeholders::_2);
-//}
 
 LoggingFunctionType Task::createLoggingFunction()
 {
@@ -280,13 +254,6 @@ LoggingFunctionType Task::createLoggingFunction()
                      std::placeholders::_2,
                      std::placeholders::_3,
                      std::placeholders::_4,
-                     std::placeholders::_5);
+                     std::placeholders::_5,
+                     std::placeholders::_6);
 }
-
-//TaskObjectDeltaProjectionFunctionType Task::createTaskObjectDeltaProjectionFunction()
-//{
-//    return std::bind(&TaskSpecification::projectObjectDelta,
-//                     task_specification_,
-//                     std::placeholders::_1,
-//                     std::placeholders::_2);
-//}

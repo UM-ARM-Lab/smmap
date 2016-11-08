@@ -67,15 +67,15 @@ struct TrialResults
     public:
         TrialResults(const ssize_t num_trials)
             : num_trials_(num_trials)
-            , kfrdbsimple_average_regret_(num_trials)
-            , average_kfrdbsimple_avg_regret_(0)
-            , variance_kfrdbsimple_avg_regret_(0)
-            , kfrdbnormsim_average_regret_(num_trials)
-            , average_kfrdbnormsim_avg_regret_(0)
-            , variance_kfrdbnormsim_avg_regret_(0)
-            , kfrdbanglesim_average_regret_(num_trials)
-            , average_kfrdbanglesim_avg_regret_(0)
-            , variance_kfrdbanglesim_avg_regret_(0)
+            , kfmandbsimple_average_regret_(num_trials)
+            , average_kfmandbsimple_avg_regret_(0)
+            , variance_kfmandbsimple_avg_regret_(0)
+//            , kfmandbnormsim_average_regret_(num_trials)
+//            , average_kfmandbnormsim_avg_regret_(0)
+//            , variance_kfmandbnormsim_avg_regret_(0)
+//            , kfmandbanglesim_average_regret_(num_trials)
+//            , average_kfmandbanglesim_avg_regret_(0)
+//            , variance_kfmandbanglesim_avg_regret_(0)
             , kfmanb_average_regret_(num_trials)
             , average_kfmanb_avg_regret_(0)
             , variance_kfmanb_avg_regret_(0)
@@ -86,17 +86,17 @@ struct TrialResults
 
         const ssize_t num_trials_;
 
-        Eigen::VectorXd kfrdbsimple_average_regret_;
-        double average_kfrdbsimple_avg_regret_;
-        double variance_kfrdbsimple_avg_regret_;
+        Eigen::VectorXd kfmandbsimple_average_regret_;
+        double average_kfmandbsimple_avg_regret_;
+        double variance_kfmandbsimple_avg_regret_;
 
-        Eigen::VectorXd kfrdbnormsim_average_regret_;
-        double average_kfrdbnormsim_avg_regret_;
-        double variance_kfrdbnormsim_avg_regret_;
+//        Eigen::VectorXd kfmandbnormsim_average_regret_;
+//        double average_kfmandbnormsim_avg_regret_;
+//        double variance_kfmandbnormsim_avg_regret_;
 
-        Eigen::VectorXd kfrdbanglesim_average_regret_;
-        double average_kfrdbanglesim_avg_regret_;
-        double variance_kfrdbanglesim_avg_regret_;
+//        Eigen::VectorXd kfmandbanglesim_average_regret_;
+//        double average_kfmandbanglesim_avg_regret_;
+//        double variance_kfmandbanglesim_avg_regret_;
 
         Eigen::VectorXd kfmanb_average_regret_;
         double average_kfmanb_avg_regret_;
@@ -108,15 +108,15 @@ struct TrialResults
 
         void calculateStatistics()
         {
-            average_kfrdbsimple_avg_regret_ = kfrdbsimple_average_regret_.mean();
-            average_kfrdbnormsim_avg_regret_ = kfrdbnormsim_average_regret_.mean();
-            average_kfrdbanglesim_avg_regret_ = kfrdbanglesim_average_regret_.mean();
+            average_kfmandbsimple_avg_regret_ = kfmandbsimple_average_regret_.mean();
+//            average_kfmandbnormsim_avg_regret_ = kfmandbnormsim_average_regret_.mean();
+//            average_kfmandbanglesim_avg_regret_ = kfmandbanglesim_average_regret_.mean();
             average_kfmanb_avg_regret_ = kfmanb_average_regret_.mean();
             average_ucb1normal_avg_regret_ = ucb1normal_average_regret_.mean();
 
-            variance_kfrdbsimple_avg_regret_ = 1.0/(double)(num_trials_ - 1) * kfrdbsimple_average_regret_.squaredNorm() - std::pow(average_kfrdbsimple_avg_regret_, 2);
-            variance_kfrdbnormsim_avg_regret_ = 1.0/(double)(num_trials_ - 1) * kfrdbnormsim_average_regret_.squaredNorm() - std::pow(average_kfrdbnormsim_avg_regret_, 2);
-            variance_kfrdbanglesim_avg_regret_ = 1.0/(double)(num_trials_ - 1) * kfrdbanglesim_average_regret_.squaredNorm() - std::pow(average_kfrdbanglesim_avg_regret_, 2);
+            variance_kfmandbsimple_avg_regret_ = 1.0/(double)(num_trials_ - 1) * kfmandbsimple_average_regret_.squaredNorm() - std::pow(average_kfmandbsimple_avg_regret_, 2);
+//            variance_kfmandbnormsim_avg_regret_ = 1.0/(double)(num_trials_ - 1) * kfmandbnormsim_average_regret_.squaredNorm() - std::pow(average_kfmandbnormsim_avg_regret_, 2);
+//            variance_kfmandbanglesim_avg_regret_ = 1.0/(double)(num_trials_ - 1) * kfmandbanglesim_average_regret_.squaredNorm() - std::pow(average_kfmandbanglesim_avg_regret_, 2);
             variance_kfmanb_avg_regret_ = 1.0/(double)(num_trials_ - 1) * kfmanb_average_regret_.squaredNorm() - std::pow(average_kfmanb_avg_regret_, 2);
             variance_ucb1normal_avg_regret_ = 1.0/(double)(num_trials_ - 1) * ucb1normal_average_regret_.squaredNorm() - std::pow(average_ucb1normal_avg_regret_, 2);
         }
@@ -125,9 +125,9 @@ struct TrialResults
 std::ostream& operator<<(std::ostream& os, const TrialResults& tr)
 {
     os << std::setw(9) << std::setprecision(6) << std::fixed;
-    os << "KF-RDB (simple) average regret:    " << tr.average_kfrdbsimple_avg_regret_   << "   Std dev: " << std::sqrt(tr.variance_kfrdbsimple_avg_regret_) << std::endl
-       << "KF-RDB (norm-sim) average regret:  " << tr.average_kfrdbnormsim_avg_regret_  << "   Std dev: " << std::sqrt(tr.variance_kfrdbnormsim_avg_regret_) << std::endl
-       << "KF-RDB (angle-sim) average regret: " << tr.average_kfrdbanglesim_avg_regret_ << "   Std dev: " << std::sqrt(tr.variance_kfrdbanglesim_avg_regret_) << std::endl
+    os << "KF-RDB (simple) average regret:    " << tr.average_kfmandbsimple_avg_regret_   << "   Std dev: " << std::sqrt(tr.variance_kfmandbsimple_avg_regret_) << std::endl
+//       << "KF-RDB (norm-sim) average regret:  " << tr.average_kfmandbnormsim_avg_regret_  << "   Std dev: " << std::sqrt(tr.variance_kfmandbnormsim_avg_regret_) << std::endl
+//       << "KF-RDB (angle-sim) average regret: " << tr.average_kfmandbanglesim_avg_regret_ << "   Std dev: " << std::sqrt(tr.variance_kfmandbanglesim_avg_regret_) << std::endl
        << "KF-MANB average regret:            " << tr.average_kfmanb_avg_regret_        << "   Std dev: " << std::sqrt(tr.variance_kfmanb_avg_regret_) << std::endl
        << "UCB1-Normal average regret:        " << tr.average_ucb1normal_avg_regret_    << "   Std dev: " << std::sqrt(tr.variance_ucb1normal_avg_regret_) << std::endl;
     os << std::setw(1) << std::setprecision(6);
@@ -137,272 +137,6 @@ std::ostream& operator<<(std::ostream& os, const TrialResults& tr)
 ////////////////////////////////////////////////////////////////////////////////
 // Bandits
 ////////////////////////////////////////////////////////////////////////////////
-
-template <class Generator>
-class MultiarmGaussianBandit
-{
-    public:
-        MultiarmGaussianBandit(
-                Generator &generator,
-                const VectorXd& reward_mean,
-                const MatrixXd& reward_covariance,
-                const MatrixXd& transition_covariance,
-                const MatrixXd& observation_covariance)
-            : num_arms_(reward_mean.rows())
-            , reward_mean_(reward_mean)
-            , reward_covariance_(reward_covariance)
-            , transition_covariance_(transition_covariance)
-            , observation_covariance_(observation_covariance)
-            , generator_(generator)
-            , reward_distribution_(std::make_shared<MultivariteGaussianDistribution>(reward_mean_, reward_covariance_))
-            , transition_distribution_(std::make_shared<MultivariteGaussianDistribution>(VectorXd::Zero(num_arms_), transition_covariance_))
-            , observation_distribution_(std::make_shared<MultivariteGaussianDistribution>(VectorXd::Zero(num_arms_), observation_covariance_))
-        {
-            assert(reward_mean_.rows() == num_arms_);
-            assert(reward_covariance_.rows() == num_arms_);
-            assert(reward_covariance_.cols() == num_arms_);
-            assert(transition_covariance_.rows() == num_arms_);
-            assert(transition_covariance_.cols() == num_arms_);
-            assert(observation_covariance_.rows() == num_arms_);
-            assert(observation_covariance_.cols() == num_arms_);
-        }
-
-        ////////////////////////////////////////////////////////////////////////
-        // Getters and Setters
-        ////////////////////////////////////////////////////////////////////////
-
-        // Getters and Setters: reward_mean_ ///////////////////////////////////
-
-        const VectorXd& getRewardMean() const
-        {
-            return reward_mean_;
-        }
-
-        void setRewardMean(const VectorXd& reward_mean)
-        {
-            assert(reward_mean.rows() == num_arms_);
-            reward_mean_ = reward_mean;
-            reward_distribution_ = std::make_shared<MultivariteGaussianDistribution>(reward_mean_, reward_covariance_);
-        }
-
-        // Getters and Setters: reward_covariance_ /////////////////////////////
-
-        const MatrixXd& getRewardCovariance() const
-        {
-            return reward_covariance_;
-        }
-
-        void setRewardCovariance(const MatrixXd& reward_covariance)
-        {
-            assert(reward_covariance.rows() == num_arms_);
-            assert(reward_covariance.cols() == num_arms_);
-            reward_covariance_ = reward_covariance;
-            reward_distribution_ = std::make_shared<MultivariteGaussianDistribution>(reward_mean_, reward_covariance_);
-        }
-
-        // Getters and Setters: transition_covariance_ /////////////////////////
-
-        const MatrixXd& getTransitionCovariance() const
-        {
-            return transition_covariance_;
-        }
-
-        void setTransitionCovariance(const MatrixXd& transition_covariance)
-        {
-            assert(transition_covariance.rows() == num_arms_);
-            assert(transition_covariance.cols() == num_arms_);
-            transition_covariance_ = transition_covariance;
-            transition_distribution_ = std::make_shared<MultivariteGaussianDistribution>(VectorXd::Zero(), transition_covariance_);
-        }
-
-        // Getters and Setters: reward_mean_ ///////////////////////////////////
-
-        const MatrixXd& getObservationCovariance() const
-        {
-            return observation_covariance_;
-        }
-
-        void setObservationCovariance(const MatrixXd& observation_covariance)
-        {
-            assert(observation_covariance.rows() == num_arms_);
-            assert(observation_covariance.cols() == num_arms_);
-            observation_covariance_ = observation_covariance;
-            observation_distribution_ = MultivariteGaussianDistribution(VectorXd::Zero(), transition_covariance_);
-        }
-
-        ////////////////////////////////////////////////////////////////////////
-        // Functions to be used most of the time
-        ////////////////////////////////////////////////////////////////////////
-
-        RewardObservation pullArms()
-        {
-            RewardObservation observation;
-
-            observation.true_reward = (*reward_distribution_)(generator_);
-            observation.observed_reward = observation.true_reward + (*observation_distribution_)(generator_);
-
-//            MatrixXd output;
-//            output.resize(2, num_arms_);
-//            output << observation.true_reward.transpose(), observation.observed_reward.transpose();
-
-//            std::cout << output << std::endl << std::endl;
-
-            setRewardMean(reward_mean_ + (*transition_distribution_)(generator_));
-
-            return observation;
-        }
-
-    private:
-        const ssize_t num_arms_;
-
-        VectorXd reward_mean_;
-        MatrixXd reward_covariance_;
-        MatrixXd transition_covariance_;
-        MatrixXd observation_covariance_;
-
-        Generator& generator_;
-        std::shared_ptr<MultivariteGaussianDistribution> reward_distribution_;
-        std::shared_ptr<MultivariteGaussianDistribution> transition_distribution_;
-        std::shared_ptr<MultivariteGaussianDistribution> observation_distribution_;
-};
-
-/**
- * w'x = y
- */
-template <class Generator>
-class LinearRegressionBandit
-{
-    public:
-        LinearRegressionBandit(
-                Generator &generator,
-                const size_t num_arms,
-                const VectorXd& starting_weights,
-                const MatrixXd& feature_covariance,
-                const MatrixXd& weights_transition_covariance,
-                const double observation_covariance)
-            : num_arms_(num_arms)
-            , true_weights_(starting_weights)
-            , arm_weights_(num_arms_)
-            , feature_covariance_(feature_covariance)
-            , weights_transition_covariance_(weights_transition_covariance)
-            , true_regression_variance_(observation_covariance)
-            , generator_(generator)
-            , feature_distribution_(std::make_shared<MultivariteGaussianDistribution>(VectorXd::Zero(feature_covariance_.rows()), feature_covariance_))
-            , weights_transition_distribution_(std::make_shared<MultivariteGaussianDistribution>(VectorXd::Zero(weights_transition_covariance_.cols()), weights_transition_covariance_))
-            , true_regression_distribution_(std::make_shared<std::normal_distribution<double>>(0.0, true_regression_variance_))
-        {
-            assert(feature_covariance.rows() == starting_weights.rows());
-            assert(feature_covariance.rows() == feature_covariance.cols());
-            assert(weights_transition_covariance.rows() == starting_weights.rows());
-            assert(weights_transition_covariance.rows() == weights_transition_covariance.cols());
-
-            // Fill the bandit arm weights in an uniformly sampled sphere
-            // http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.138.8671&rep=rep1&type=pdf
-            MultivariteGaussianDistribution arm_distribution(VectorXd::Zero(feature_covariance_.rows()), MatrixXd::Identity(feature_covariance_.rows(), feature_covariance_.rows()));
-            for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
-            {
-                VectorXd weights;
-                do
-                {
-                    weights = arm_distribution(generator);
-                }
-                while (weights.norm() < 1e-10);
-                arm_weights_[arm_ind] = weights / weights.norm();
-            }
-
-            // Calculate how similar our bandits are to each other
-            MatrixXd bandit_similarity_matrix = MatrixXd::Identity(num_arms_, num_arms_);
-            for (ssize_t i = 0; i < num_arms_; i++)
-            {
-                for (ssize_t j = i + 1; j < num_arms_; j++)
-                {
-                    bandit_similarity_matrix(i, j) = arm_weights_[i].dot(arm_weights_[j]);
-                    bandit_similarity_matrix(j, i) = bandit_similarity_matrix(i, j);
-                }
-            }
-
-//            std::cout << "Bandit similarity matrix:\n";
-//            if (num_arms_ <= 10)
-//            {
-//                std::cout << bandit_similarity_matrix << std::endl << std::endl;
-//            }
-//            else
-//            {
-//                std::cout << "Max similarity: " << (bandit_similarity_matrix - MatrixXd::Identity(num_arms_, num_arms_)).maxCoeff() << std::endl
-//                          << "Min similarity: " << (bandit_similarity_matrix - MatrixXd::Identity(num_arms_, num_arms_)).minCoeff() << std::endl << std::endl;
-//            }
-        }
-
-        VectorXd getFeatures()
-        {
-            return (*feature_distribution_)(generator_);
-        }
-
-        std::vector<VectorXd> getActions(const VectorXd& features) const
-        {
-            (void)features;
-            return arm_weights_;
-        }
-
-        std::vector<double> getPredictions(const VectorXd& features) const
-        {
-            std::vector<double> predictions(num_arms_);
-            for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
-            {
-                predictions[arm_ind] = arm_weights_[arm_ind].dot(features);
-            }
-            return predictions;
-        }
-
-        std::pair<RewardObservation, double> pullArms(const VectorXd& features)
-        {
-            RewardObservation reward;
-            reward.true_reward.resize(num_arms_);
-            reward.observed_reward.resize(num_arms_);
-
-            const double true_regression = true_weights_.dot(features);
-            const double observed_true_regression = true_regression + (*true_regression_distribution_)(generator_);
-
-            #pragma omp parallel for
-            for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
-            {
-                const double true_loss = std::abs(true_regression - arm_weights_[arm_ind].dot(features));
-                reward.true_reward[arm_ind] = -true_loss;
-
-                const double observed_loss = std::abs(observed_true_regression - arm_weights_[arm_ind].dot(features));
-                reward.observed_reward[arm_ind] = -observed_loss;
-            }
-
-            setTrueWeights(true_weights_ + (*weights_transition_distribution_)(generator_));
-
-            return std::make_pair(reward, observed_true_regression);
-        }
-
-        void setTrueWeights(const VectorXd& new_weights)
-        {
-            assert(new_weights.rows() == true_weights_.rows());
-            true_weights_ = new_weights;
-            true_weights_.normalize();
-        }
-
-        double getObservationCovariance() const
-        {
-            return true_regression_variance_;
-        }
-
-    private:
-        const size_t num_arms_;
-        VectorXd true_weights_;
-        std::vector<VectorXd> arm_weights_;
-        MatrixXd feature_covariance_;
-        MatrixXd weights_transition_covariance_;
-        double true_regression_variance_;
-
-        Generator& generator_;
-        std::shared_ptr<MultivariteGaussianDistribution> feature_distribution_;
-        std::shared_ptr<MultivariteGaussianDistribution> weights_transition_distribution_;
-        std::shared_ptr<std::normal_distribution<double>> true_regression_distribution_;
-};
 
 template <class Generator>
 class JacobianBandit
@@ -492,14 +226,7 @@ class JacobianBandit
                 #pragma omp parallel for
                 for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
                 {
-                    arm_suggestions[arm_ind].suggested_action =
-                            minSquaredNorm(arm_jacobians_[arm_ind], target_movement, max_action_norm_, weights);
-//                            CVXOptSolvers::qcqp_jacobian_least_squares(arm_jacobians_[arm_ind], weights, target_movement, max_action_norm_);
-
-//                    std::cout << arm_suggestions[arm_ind].suggested_action.transpose() << std::endl;
-//                    std::cout << minSquaredNorm(arm_jacobians_[arm_ind], target_movement, max_action_norm_).transpose() << std::endl;
-//                    std::cout << std::endl;
-
+                    arm_suggestions[arm_ind].suggested_action = minSquaredNorm(arm_jacobians_[arm_ind], target_movement, max_action_norm_, weights);
                     arm_suggestions[arm_ind].predicted_result = getArmPrediction(arm_ind, arm_suggestions[arm_ind].suggested_action);
                 }
             }
@@ -508,9 +235,7 @@ class JacobianBandit
                 #pragma omp parallel for
                 for (size_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
                 {
-                    arm_suggestions[arm_ind].suggested_action =
-                            arm_jacobians_[arm_ind].jacobiSvd(ComputeThinU | ComputeThinV).solve(target_movement);
-//                            WeightedLeastSquaresSolver(arm_jacobians_[arm_ind], target_movement, VectorXd::Ones(target_movement.rows()), 1e-3, 1e-2);
+                    arm_suggestions[arm_ind].suggested_action = arm_jacobians_[arm_ind].jacobiSvd(ComputeThinU | ComputeThinV).solve(target_movement);
                     arm_suggestions[arm_ind].suggested_action = ClampNorm(arm_suggestions[arm_ind].suggested_action, max_action_norm_);
                     arm_suggestions[arm_ind].predicted_result = getArmPrediction(arm_ind, arm_suggestions[arm_ind].suggested_action);
                 }
@@ -526,15 +251,11 @@ class JacobianBandit
 
             if (use_optimization)
             {
-                suggestion.suggested_action =
-                        minSquaredNorm(true_jacobian_, target_movement, max_action_norm_, weights);
-//                        CVXOptSolvers::qcqp_jacobian_least_squares(true_jacobian_, weights, target_movement, max_action_norm_);
+                suggestion.suggested_action = minSquaredNorm(true_jacobian_, target_movement, max_action_norm_, weights);
             }
             else
             {
-                suggestion.suggested_action =
-                        true_jacobian_.jacobiSvd(ComputeThinU | ComputeThinV).solve(target_movement);
-//                        WeightedLeastSquaresSolver(true_jacobian_, target_movement, VectorXd::Ones(target_movement.rows()), 1e-3, 1e-2);
+                suggestion.suggested_action = true_jacobian_.jacobiSvd(ComputeThinU | ComputeThinV).solve(target_movement);
                 suggestion.suggested_action = ClampNorm(suggestion.suggested_action, max_action_norm_);
             }
 
@@ -666,8 +387,8 @@ TrialResults IndependantGaussianBanditsTrials(Generator& generator, const TrialP
         MultiarmGaussianBandit<Generator> bandit(generator, reward_mean, initial_reward_covariance, transition_covariance, observation_covariance);
 
         // Create the algorithms
-        KalmanFilterRDB<Generator> kfrdb_alg(VectorXd::Zero(num_arms), MatrixXd::Identity(num_arms, num_arms) * 1e100);
-        double kfrdb_total_regret = 0;
+        KalmanFilterMANDB<Generator> kfmandb_alg(VectorXd::Zero(num_arms), MatrixXd::Identity(num_arms, num_arms) * 1e100);
+        double kfmandb_total_regret = 0;
 
         KalmanFilterMANB<Generator> kfmanb_alg(VectorXd::Zero(num_arms), VectorXd::Ones(num_arms) * 1e100);
         double kfmanb_total_regret = 0;
@@ -679,7 +400,7 @@ TrialResults IndependantGaussianBanditsTrials(Generator& generator, const TrialP
         for (size_t pull_ind = 0; pull_ind < num_pulls; pull_ind++)
         {
             // Determine which arm each algorithm pulls
-            const ssize_t kfrdb_arm_pulled = kfrdb_alg.selectArmToPull(generator);
+            const ssize_t kfmandb_arm_pulled = kfmandb_alg.selectArmToPull(generator);
             const ssize_t kfmanb_arm_pulled = kfmanb_alg.selectArmToPull(generator);
             const ssize_t ucb1normal_arm_pulled = ucb1normal_alg.selectArmToPull();
 
@@ -688,14 +409,14 @@ TrialResults IndependantGaussianBanditsTrials(Generator& generator, const TrialP
             const auto rewards = bandit.pullArms();
 
             // Give rewards for each algorithm
-            kfrdb_total_regret += best_expected_reward - rewards.true_reward(kfrdb_arm_pulled);
+            kfmandb_total_regret += best_expected_reward - rewards.true_reward(kfmandb_arm_pulled);
             kfmanb_total_regret += best_expected_reward - rewards.true_reward(kfmanb_arm_pulled);
             ucb1normal_total_regret += best_expected_reward - rewards.true_reward(ucb1normal_arm_pulled);
 
             // Update each algorithm
-            const MatrixXd kfrdb_observation_matrix = MatrixXd::Identity(num_arms, num_arms);
-            const VectorXd kfrdb_observed_reward = rewards.observed_reward;
-            kfrdb_alg.updateArms(bandit.getTransitionCovariance(), kfrdb_observation_matrix, kfrdb_observed_reward, bandit.getObservationCovariance());
+            const MatrixXd kfmandb_observation_matrix = MatrixXd::Identity(num_arms, num_arms);
+            const VectorXd kfmandb_observed_reward = rewards.observed_reward;
+            kfmandb_alg.updateArms(bandit.getTransitionCovariance(), kfmandb_observation_matrix, kfmandb_observed_reward, bandit.getObservationCovariance());
 
             const VectorXd kfmanb_transition_variance = bandit.getTransitionCovariance().diagonal();
             const double kfmanb_observed_reward = rewards.observed_reward(kfmanb_arm_pulled);
@@ -706,12 +427,12 @@ TrialResults IndependantGaussianBanditsTrials(Generator& generator, const TrialP
         }
 
         // Record the results
-        results.kfrdbsimple_average_regret_(trial_ind) = kfrdb_total_regret / (double)num_pulls;
+        results.kfmandbsimple_average_regret_(trial_ind) = kfmandb_total_regret / (double)num_pulls;
         results.kfmanb_average_regret_(trial_ind) = kfmanb_total_regret / (double)num_pulls;
         results.ucb1normal_average_regret_(trial_ind) = ucb1normal_total_regret / (double)num_pulls;
 
         std::cout << "Trial Num: " << trial_ind
-                  << " KF-RDB: " << results.kfrdbsimple_average_regret_(trial_ind)
+                  << " KF-RDB: " << results.kfmandbsimple_average_regret_(trial_ind)
                   << " KF-MANB: " << results.kfmanb_average_regret_(trial_ind)
                   << " UCB1-Normal: " << results.ucb1normal_average_regret_(trial_ind)
                   << std::endl;
@@ -746,9 +467,9 @@ TrialResults LinearRegressionBanditsTrials(Generator& generator, const TrialPara
         LinearRegressionBandit<Generator> bandit(generator, num_arms, starting_weights, feature_covariance, weights_transition_covariance, observation_covariance);
 
         // Create the algorithms
-        KalmanFilterRDB<Generator> kfrdb_alg(VectorXd::Zero(num_arms), MatrixXd::Identity(num_arms, num_arms) * 1e100);
-        double kfrdb_total_regret = 0;
-        double kfrdb_current_reward_std_dev_scale = 1.0;
+        KalmanFilterMANDB<Generator> kfmandb_alg(VectorXd::Zero(num_arms), MatrixXd::Identity(num_arms, num_arms) * 1e100);
+        double kfmandb_total_regret = 0;
+        double kfmandb_current_reward_std_dev_scale = 1.0;
 
         KalmanFilterMANB <Generator>kfmanb_alg(VectorXd::Zero(num_arms), VectorXd::Ones(num_arms) * 1e100);
         double kfmanb_total_regret = 0;
@@ -760,7 +481,7 @@ TrialResults LinearRegressionBanditsTrials(Generator& generator, const TrialPara
         for (size_t pull_ind = 0; pull_ind < num_pulls; pull_ind++)
         {
             // Determine which arm each algorithm pulls
-            const ssize_t kfrdb_arm_pulled = kfrdb_alg.selectArmToPull(generator);
+            const ssize_t kfmandb_arm_pulled = kfmandb_alg.selectArmToPull(generator);
             const ssize_t kfmanb_arm_pulled = kfmanb_alg.selectArmToPull(generator);
             const ssize_t ucb1normal_arm_pulled = ucb1normal_alg.selectArmToPull();
 
@@ -774,62 +495,62 @@ TrialResults LinearRegressionBanditsTrials(Generator& generator, const TrialPara
             const double best_expected_reward = 0;
 
             // Give rewards for each algorithm
-            kfrdb_total_regret += best_expected_reward - rewards.true_reward(kfrdb_arm_pulled);
+            kfmandb_total_regret += best_expected_reward - rewards.true_reward(kfmandb_arm_pulled);
             kfmanb_total_regret += best_expected_reward - rewards.true_reward(kfmanb_arm_pulled);
             ucb1normal_total_regret += best_expected_reward - rewards.true_reward(ucb1normal_arm_pulled);
 
             // Update each algorithm
 
-            // KFRDB - process noise
-            MatrixXd kfrdb_process_noise = MatrixXd::Identity(num_arms, num_arms);
+            // kfmandb - process noise
+            MatrixXd kfmandb_process_noise = MatrixXd::Identity(num_arms, num_arms);
             for (ssize_t i = 0; i < num_arms; i++)
             {
                 for (ssize_t j = i + 1; j < num_arms; j++)
                 {
-                    kfrdb_process_noise(i, j) = actions[i].dot(actions[j]) / (actions[i].norm() * actions[j].norm());
-                    kfrdb_process_noise(j, i) = kfrdb_process_noise(i, j);
+                    kfmandb_process_noise(i, j) = actions[i].dot(actions[j]) / (actions[i].norm() * actions[j].norm());
+                    kfmandb_process_noise(j, i) = kfmandb_process_noise(i, j);
                 }
             }
 
-            // KFRDB - observation matrix
-            MatrixXd kfrdb_observation_matrix = MatrixXd::Identity(num_arms, num_arms);
+            // kfmandb - observation matrix
+            MatrixXd kfmandb_observation_matrix = MatrixXd::Identity(num_arms, num_arms);
 
-            // KFRDB - observed reward
-            VectorXd kfrdb_observed_reward = VectorXd::Zero(num_arms);
-            const double equivalent_distance = std::abs(observed_regression - predictions[(size_t)kfrdb_arm_pulled]);
-            kfrdb_current_reward_std_dev_scale = 0.9 * kfrdb_current_reward_std_dev_scale + 0.1 * equivalent_distance;
+            // kfmandb - observed reward
+            VectorXd kfmandb_observed_reward = VectorXd::Zero(num_arms);
+            const double equivalent_distance = std::abs(observed_regression - predictions[(size_t)kfmandb_arm_pulled]);
+            kfmandb_current_reward_std_dev_scale = 0.9 * kfmandb_current_reward_std_dev_scale + 0.1 * equivalent_distance;
             for (ssize_t arm_ind = 0; arm_ind < num_arms; arm_ind++)
             {
                 const double current_arm_distance = std::abs(observed_regression - predictions[(size_t)arm_ind]);
-                kfrdb_observed_reward(arm_ind) = rewards.observed_reward(kfrdb_arm_pulled)
-                        + (equivalent_distance - current_arm_distance) * std::pow(kfrdb_current_reward_std_dev_scale, 2);
+                kfmandb_observed_reward(arm_ind) = rewards.observed_reward(kfmandb_arm_pulled)
+                        + (equivalent_distance - current_arm_distance) * std::pow(kfmandb_current_reward_std_dev_scale, 2);
             }
 
 //            MatrixXd formatted_output;
 //            formatted_output.resize(2, rewards.true_reward.rows());
-//            formatted_output << rewards.true_reward.transpose(), kfrdb_observed_reward.transpose();
+//            formatted_output << rewards.true_reward.transpose(), kfmandb_observed_reward.transpose();
 
-//            std::cout << " True Reward: " << rewards.true_reward(kfrdb_arm_pulled)
-//                      << " Obs Reward: " << rewards.observed_reward(kfrdb_arm_pulled)
+//            std::cout << " True Reward: " << rewards.true_reward(kfmandb_arm_pulled)
+//                      << " Obs Reward: " << rewards.observed_reward(kfmandb_arm_pulled)
 //                      << std::endl;
 //            std::cout << formatted_output << std::endl << std::endl;
 
-            // KFRDB - observation noise
-            MatrixXd kfrdb_observation_noise = MatrixXd::Identity(num_arms, num_arms);
+            // kfmandb - observation noise
+            MatrixXd kfmandb_observation_noise = MatrixXd::Identity(num_arms, num_arms);
             for (ssize_t i = 0; i < num_arms; i++)
             {
-                kfrdb_observation_noise(i, i) = std::exp(-kfrdb_process_noise(i, kfrdb_arm_pulled));
+                kfmandb_observation_noise(i, i) = std::exp(-kfmandb_process_noise(i, kfmandb_arm_pulled));
             }
             for (ssize_t i = 0; i < num_arms; i++)
             {
                 for (ssize_t j = i + 1; j < num_arms; j++)
                 {
-                    kfrdb_observation_noise(i, j) = kfrdb_process_noise(i, j) * std::sqrt(kfrdb_observation_noise(i, i)) * std::sqrt(kfrdb_observation_noise(j, j));
-                    kfrdb_observation_noise(j, i) = kfrdb_process_noise(i, j);
+                    kfmandb_observation_noise(i, j) = kfmandb_process_noise(i, j) * std::sqrt(kfmandb_observation_noise(i, i)) * std::sqrt(kfmandb_observation_noise(j, j));
+                    kfmandb_observation_noise(j, i) = kfmandb_process_noise(i, j);
                 }
             }
 
-            kfrdb_alg.updateArms(kfrdb_process_noise, kfrdb_observation_matrix, kfrdb_observed_reward, kfrdb_observation_noise);
+            kfmandb_alg.updateArms(kfmandb_process_noise, kfmandb_observation_matrix, kfmandb_observed_reward, kfmandb_observation_noise);
 
             const VectorXd kfmanb_transition_variance = VectorXd::Ones(num_arms);
             const double kfmanb_observed_reward = rewards.observed_reward(kfmanb_arm_pulled);
@@ -840,13 +561,13 @@ TrialResults LinearRegressionBanditsTrials(Generator& generator, const TrialPara
         }
 
         // Record the results
-        results.kfrdbsimple_average_regret_(trial_ind) = kfrdb_total_regret / (double)num_pulls;
+        results.kfmandbsimple_average_regret_(trial_ind) = kfmandb_total_regret / (double)num_pulls;
         results.kfmanb_average_regret_(trial_ind) = kfmanb_total_regret / (double)num_pulls;
         results.ucb1normal_average_regret_(trial_ind) = ucb1normal_total_regret / (double)num_pulls;
 
         std::cout << "Trial Num: " << trial_ind;
         std::cout << std::setw(9) << std::setprecision(6) << std::fixed;
-        std::cout << " KF-RDB: " << results.kfrdbsimple_average_regret_(trial_ind)
+        std::cout << " KF-RDB: " << results.kfmandbsimple_average_regret_(trial_ind)
                   << " KF-MANB: " << results.kfmanb_average_regret_(trial_ind)
                   << " UCB1-Normal: " << results.ucb1normal_average_regret_(trial_ind);
         std::cout << std::setw(1) << std::setprecision(6)
@@ -894,18 +615,18 @@ class JacobianTrackingTrials
 
                 logJacobians(generator);
                 trueJacobianTrial(generator);
-                results.kfrdbsimple_average_regret_(trial_ind_)      = kfrdbSimpleTrial(generator);
-                results.kfrdbnormsim_average_regret_(trial_ind_)     = kfrdbNormSimTrial(generator);
-                results.kfrdbanglesim_average_regret_(trial_ind_)    = kfrdbAngleSimTrial(generator);
-                results.kfmanb_average_regret_(trial_ind_)           = kfmanbTrial(generator);
-                results.ucb1normal_average_regret_(trial_ind_)       = ucb1NormalTrial(generator);
+                results.kfmandbsimple_average_regret_(trial_ind_)   = kfmandbSimpleTrial(generator);
+//                results.kfmandbnormsim_average_regret_(trial_ind_)  = kfmandbNormSimTrial(generator);
+//                results.kfmandbanglesim_average_regret_(trial_ind_) = kfmandbAngleSimTrial(generator);
+                results.kfmanb_average_regret_(trial_ind_)          = kfmanbTrial(generator);
+                results.ucb1normal_average_regret_(trial_ind_)      = ucb1NormalTrial(generator);
 
                 std::stringstream ss;
                 ss << "Trial Ind: " << trial_ind_;
                 ss << std::setw(9) << std::setprecision(6) << std::fixed;
-                ss << "   KF-RDB (simple): " << results.kfrdbsimple_average_regret_(trial_ind_)
-                   << "   KF-RDB (norm sim): " << results.kfrdbnormsim_average_regret_(trial_ind_)
-                   << "   KF-RDB (angle sim): " << results.kfrdbanglesim_average_regret_(trial_ind_)
+                ss << "   KF-RDB (simple): " << results.kfmandbsimple_average_regret_(trial_ind_)
+//                   << "   KF-RDB (norm sim): " << results.kfmandbnormsim_average_regret_(trial_ind_)
+//                   << "   KF-RDB (angle sim): " << results.kfmandbanglesim_average_regret_(trial_ind_)
                    << "   KF-MANB: " << results.kfmanb_average_regret_(trial_ind_)
                    << "   UCB1-Normal: " << results.ucb1normal_average_regret_(trial_ind_);
 
@@ -950,14 +671,14 @@ class JacobianTrackingTrials
             logData(trial_log, bandit.getYCurrent(), bandit.getTargetMovement().norm(), VectorXd::Zero(num_jacobian_cols_), 0.0, 0.0);
         }
 
-        static double kfrdbSimpleTrial(std::mt19937_64 generator)
+        static double kfmandbSimpleTrial(std::mt19937_64 generator)
         {
-            Log::Log trial_log(log_folder_ + "kfrdbsimple_trial_" + std::to_string(trial_ind_) + ".txt", true);
+            Log::Log trial_log(log_folder_ + "kfmandbsimple_trial_" + std::to_string(trial_ind_) + ".txt", true);
             trialLogHeader(trial_log);
 
             std::mt19937_64 generator_copy = generator;
             JacobianBandit<std::mt19937_64> bandit(generator_copy, num_arms_, num_jacobian_rows_, num_jacobian_cols_, false, false);
-            KalmanFilterRDB<std::mt19937_64> kfrdb_alg(VectorXd::Zero(num_arms_), MatrixXd::Identity(num_arms_, num_arms_) * 1e6);
+            KalmanFilterMANDB<std::mt19937_64> kfmandb_alg(VectorXd::Zero(num_arms_), MatrixXd::Identity(num_arms_, num_arms_) * 1e6);
             double total_regret = 0;
             double estimated_reward_scale = min_reward_scale_;
 
@@ -966,7 +687,7 @@ class JacobianTrackingTrials
                 // Pull an arm, collect data
                 const VectorXd target_movement = bandit.getTargetMovement();
                 const auto arm_suggested_actions = bandit.getArmSuggestedActions(target_movement, use_optimization_);
-                const size_t arm_to_pull = kfrdb_alg.selectArmToPull(generator_copy);
+                const size_t arm_to_pull = kfmandb_alg.selectArmToPull(generator_copy);
                 const auto pull_result = bandit.takeAction(arm_suggested_actions[arm_to_pull].suggested_action, arm_suggested_actions);
                 estimated_reward_scale = rewardScaleEstimator(estimated_reward_scale, pull_result.true_reward_);
 
@@ -979,20 +700,20 @@ class JacobianTrackingTrials
                     action_norms[arm_ind] = arm_suggested_actions[arm_ind].suggested_action.norm();
                 }
 
-                // KFRDB - Process noise
-                MatrixXd process_noise = 1.1 * MatrixXd::Identity(num_arms_, num_arms_);
+                // KFMANDB - Process noise
+                MatrixXd process_noise = MatrixXd::Identity(num_arms_, num_arms_);
                 for (ssize_t i = 0; i < num_arms_; i++)
                 {
                     for (ssize_t j = i + 1; j < num_arms_; j++)
                     {
                         double action_similarity;
-                        if (action_norms[(size_t)i] != 0 && action_norms[(size_t)j] != 0)
+                        if (action_norms[(size_t)i] > 1e-10 && action_norms[(size_t)j] > 1e-10)
                         {
                             const VectorXd& action_i = arm_suggested_actions[i].suggested_action;
                             const VectorXd& action_j = arm_suggested_actions[j].suggested_action;
                             action_similarity = action_i.dot(action_j) / (action_norms[(size_t)i] * action_norms[(size_t)j]);
                         }
-                        else if (action_norms[(size_t)i] == 0 && action_norms[(size_t)j] == 0)
+                        else if (action_norms[(size_t)i] <= 1e-10 && action_norms[(size_t)j] <= 1e-10)
                         {
                             action_similarity = 1;
                         }
@@ -1005,20 +726,21 @@ class JacobianTrackingTrials
                         process_noise(j, i) = action_similarity;
                     }
                 }
+                process_noise = 0.9 * process_noise + 0.1 * Eigen::MatrixXd::Identity(num_arms_, num_arms_);
                 process_noise *= std::pow(estimated_reward_scale, 2);
 
-                // KFRDB - Observation matrix
+                // KFMANDB - Observation matrix
                 MatrixXd observation_matrix = RowVectorXd::Zero(num_arms_);
                 observation_matrix(0, arm_to_pull) = 1;
 
-                // KFRDB - Observed Reward
+                // KFMANDB - Observed Reward
                 VectorXd observed_reward = VectorXd::Ones(1) * pull_result.true_reward_;
 
-                // KFRDB - Observation Noise
+                // KFMANDB - Observation Noise
                 MatrixXd observation_noise = MatrixXd::Zero(1, 1);
                 observation_noise *= std::pow(estimated_reward_scale, 2);
 
-                kfrdb_alg.updateArms(process_noise, observation_matrix, observed_reward, observation_noise);
+                kfmandb_alg.updateArms(process_noise, observation_matrix, observed_reward, observation_noise);
                 total_regret += pull_result.true_regret_;
             }
 
@@ -1027,14 +749,15 @@ class JacobianTrackingTrials
             return total_regret / (double)num_pulls_;
         }
 
-        static double kfrdbNormSimTrial(std::mt19937_64 generator)
+/*
+        static double kfmandbNormSimTrial(std::mt19937_64 generator)
         {
-            Log::Log trial_log(log_folder_ + "kfrdbnormsim_trial_" + std::to_string(trial_ind_) + ".txt", true);
+            Log::Log trial_log(log_folder_ + "kfmandbnormsim_trial_" + std::to_string(trial_ind_) + ".txt", true);
             trialLogHeader(trial_log);
 
             std::mt19937_64 generator_copy = generator;
             JacobianBandit<std::mt19937_64> bandit(generator_copy, num_arms_, num_jacobian_rows_, num_jacobian_cols_, false, false);
-            KalmanFilterRDB<std::mt19937_64> kfrdb_alg(VectorXd::Zero(num_arms_), MatrixXd::Identity(num_arms_, num_arms_) * 1e6);
+            KalmanFilterMANDB<std::mt19937_64> kfmandb_alg(VectorXd::Zero(num_arms_), MatrixXd::Identity(num_arms_, num_arms_) * 1e6);
             double total_regret = 0;
             double estimated_reward_scale = min_reward_scale_;
 
@@ -1042,7 +765,7 @@ class JacobianTrackingTrials
             {
                 const VectorXd target_movement = bandit.getTargetMovement();
                 const auto arm_suggested_actions = bandit.getArmSuggestedActions(target_movement, use_optimization_);
-                const size_t arm_to_pull = kfrdb_alg.selectArmToPull(generator_copy);
+                const size_t arm_to_pull = kfmandb_alg.selectArmToPull(generator_copy);
                 const auto pull_result = bandit.takeAction(arm_suggested_actions[arm_to_pull].suggested_action, arm_suggested_actions);
                 estimated_reward_scale = rewardScaleEstimator(estimated_reward_scale, pull_result.true_reward_);
 
@@ -1055,7 +778,7 @@ class JacobianTrackingTrials
                     action_norms[arm_ind] = arm_suggested_actions[arm_ind].suggested_action.norm();
                 }
 
-                // KFRDB - Process noise
+                // kfmandb - Process noise
                 MatrixXd process_noise = 1.1 * MatrixXd::Identity(num_arms_, num_arms_);
                 for (ssize_t i = 0; i < num_arms_; i++)
                 {
@@ -1083,12 +806,12 @@ class JacobianTrackingTrials
                 }
                 process_noise *= std::pow(estimated_reward_scale, 2);
 
-                // KFRDB - observation matrix
+                // kfmandb - observation matrix
                 MatrixXd observation_matrix = MatrixXd::Identity(num_arms_, num_arms_);
 
 
                 //                std::cout << "\n\n\n\n\n";
-                // KFRDB - observed reward
+                // kfmandb - observed reward
                 VectorXd norm_between_true_movement_and_predicted_movement(num_arms_);
                 const VectorXd& true_movement = pull_result.action_result_;
                 //                std::cout << "True movement:            " << true_movement.transpose() << std::endl;
@@ -1140,7 +863,7 @@ class JacobianTrackingTrials
                     }
                 }
 
-                // KFRDB - observation noise
+                // kfmandb - observation noise
                 MatrixXd observation_noise = 1.1 * MatrixXd::Identity(num_arms_, num_arms_);
                 for (ssize_t i = 0; i < num_arms_; i++)
                 {
@@ -1199,7 +922,7 @@ class JacobianTrackingTrials
                 }
 
 
-                kfrdb_alg.updateArms(process_noise, observation_matrix, observed_reward, observation_noise);
+                kfmandb_alg.updateArms(process_noise, observation_matrix, observed_reward, observation_noise);
                 total_regret += pull_result.true_regret_;
             }
 
@@ -1208,13 +931,13 @@ class JacobianTrackingTrials
             return total_regret / (double)num_pulls_;
         }
 
-        static double kfrdbAngleSimTrial(std::mt19937_64 generator)
+        static double kfmandbAngleSimTrial(std::mt19937_64 generator)
         {
-            Log::Log trial_log(log_folder_ + "kfrdbanglesim_trial_" + std::to_string(trial_ind_) + ".txt", true);
+            Log::Log trial_log(log_folder_ + "kfmandbanglesim_trial_" + std::to_string(trial_ind_) + ".txt", true);
             trialLogHeader(trial_log);
 
             JacobianBandit<std::mt19937_64> bandit(generator, num_arms_, num_jacobian_rows_, num_jacobian_cols_, false, false);
-            KalmanFilterRDB<std::mt19937_64> kfrdb_alg(VectorXd::Zero(num_arms_), MatrixXd::Identity(num_arms_, num_arms_) * 1e6);
+            KalmanFilterMANDB<std::mt19937_64> kfmandb_alg(VectorXd::Zero(num_arms_), MatrixXd::Identity(num_arms_, num_arms_) * 1e6);
             double total_regret = 0;
             double estimated_reward_scale = min_reward_scale_;
 
@@ -1223,7 +946,7 @@ class JacobianTrackingTrials
                 // Pull an arm, collect data
                 const VectorXd target_movement = bandit.getTargetMovement();
                 const auto arm_suggested_actions = bandit.getArmSuggestedActions(target_movement, use_optimization_);
-                const size_t arm_to_pull = kfrdb_alg.selectArmToPull(generator);
+                const size_t arm_to_pull = kfmandb_alg.selectArmToPull(generator);
                 const auto pull_result = bandit.takeAction(arm_suggested_actions[arm_to_pull].suggested_action, arm_suggested_actions);
                 estimated_reward_scale = rewardScaleEstimator(estimated_reward_scale, pull_result.true_reward_);
 
@@ -1236,7 +959,7 @@ class JacobianTrackingTrials
                     action_norms[arm_ind] = arm_suggested_actions[arm_ind].suggested_action.norm();
                 }
 
-                // KFRDB - Process noise
+                // kfmandb - Process noise
                 MatrixXd process_noise = 1.1 * MatrixXd::Identity(num_arms_, num_arms_);
                 for (ssize_t i = 0; i < num_arms_; i++)
                 {
@@ -1264,10 +987,10 @@ class JacobianTrackingTrials
                 }
                 process_noise *= std::pow(estimated_reward_scale, 2);
 
-                // KFRDB - observation matrix
+                // kfmandb - observation matrix
                 MatrixXd observation_matrix = MatrixXd::Identity(num_arms_, num_arms_);
 
-                // KFRDB - observed reward
+                // kfmandb - observed reward
                 VectorXd angle_between_true_movement_and_predicted_movement(num_arms_);
                 for (ssize_t arm_ind = 0; arm_ind < num_arms_; arm_ind++)
                 {
@@ -1315,7 +1038,7 @@ class JacobianTrackingTrials
                     }
                 }
 
-                // KFRDB - observation noise
+                // kfmandb - observation noise
                 MatrixXd observation_noise(num_arms_, num_arms_);
                 for (ssize_t i = 0; i < num_arms_; i++)
                 {
@@ -1372,7 +1095,7 @@ class JacobianTrackingTrials
                 }
 
 
-                kfrdb_alg.updateArms(process_noise, observation_matrix, observed_reward, observation_noise);
+                kfmandb_alg.updateArms(process_noise, observation_matrix, observed_reward, observation_noise);
                 total_regret += pull_result.true_regret_;
             }
 
@@ -1380,6 +1103,7 @@ class JacobianTrackingTrials
 
             return total_regret / (double)num_pulls_;
         }
+*/
 
         static double kfmanbTrial(std::mt19937_64 generator)
         {
@@ -1498,61 +1222,8 @@ ssize_t JacobianTrackingTrials::trial_ind_;
 
 int main(int argc, char* argv[])
 {
-//    CVXOptSolvers::Initialize();
     std::mt19937_64 generator(0xa8710913d2b5df6c); // a30cd67f3860ddb3) // MD5 sum of "Dale McConachie"
 //    std::mt19937_64 generator(std::chrono::system_clock::now().time_since_epoch().count());
-
-    ////////////////////////////////////////////////////////////////////////////
-    // Purely Gaussian Bandits - Independant
-    ////////////////////////////////////////////////////////////////////////////
-    {
-//        trial_params.num_arms_ = 10;
-//        trial_num_trials = 100;
-//        trial_num_pulls = 1000;
-//        trial_params.initial_reward_variance_scale_factor_ = 0.0;
-//        trial_params.transition_covariance_scale_factor_ = 0.0;
-//        trial_params.observation_covariance_scale_factor_ = 0.0;
-
-//        const std::vector<double> obs_std_dev_list = {12.5, 50.0/3.0, 25.0, 50.0*2.0/3.0, 50.0, 75.0, 100.0, 150.0, 200.0};
-//        for (double obs_std_dev: obs_std_dev_list)
-//        {
-//            std::cout << "\n----------------------------------------------------------------------\n\n";
-//            trial_params.observation_covariance_scale_factor_ = obs_std_dev * obs_std_dev;
-//            std::cout << trial_params << std::endl;
-//            const auto trial_results = IndependantGaussianBanditsTrials(trial_params);
-//            std::cout << trial_results << std::endl;
-//        }
-
-//        trial_params.observation_covariance_scale_factor_ = 50.0 * 50.0;
-//        const std::vector<double> transition_std_dev_list = {0.0, 12.5, 50.0/3.0, 25.0, 50.0*2.0/3.0, 50.0, 75.0, 100.0, 150.0, 200.0};
-//        for (double transition_std_dev: transition_std_dev_list)
-//        {
-//            std::cout << "\n\n----------------------------------------------------------------------\n\n";
-//            trial_params.transition_covariance_scale_factor_ = transition_std_dev * transition_std_dev;
-//            std::cout << trial_params << std::endl;
-//            const auto trial_results = IndependantGaussianBanditsTrials(trial_params);
-//            std::cout << trial_results << std::endl;
-//        }
-    }
-
-    ////////////////////////////////////////////////////////////////////////////
-    // Linear Regression Bandits - Dependant
-    ////////////////////////////////////////////////////////////////////////////
-    {
-//        trial_params.num_arms_ = 50;
-//        trial_feature_vector_length = 10;
-//        trial_params.feature_covariance_scale_factor_ = 1.0;
-//        trial_params.observation_covariance_scale_factor_ = 0.2 * 0.2;
-//        const std::vector<double> transition_std_dev_list = {0.0, 0.01, 0.02, 0.04, 0.08, 0.16};
-//        for (double transition_std_dev: transition_std_dev_list)
-//        {
-//            std::cout << "\n\n----------------------------------------------------------------------\n\n";
-//            trial_params.transition_covariance_scale_factor_ = transition_std_dev * transition_std_dev;
-//            std::cout << trial_params << std::endl;
-//            auto lr_results = LinearRegressionBanditsTrials(trial_params);
-//            std::cout << lr_results << std::endl;
-//        }
-    }
 
     ////////////////////////////////////////////////////////////////////////////
     // Tracking trials
@@ -1607,6 +1278,7 @@ int main(int argc, char* argv[])
 
 
         // Test without optimization
+        /*
         {
             std::cout << "\n\n---------------No Optimization----------------------------------------\n\n";
             params["Optimize:          "] = false;
@@ -1616,6 +1288,7 @@ int main(int argc, char* argv[])
             auto results = JacobianTrackingTrials::run(generator_copy, params);
             std::cout << results << std::endl;
         }
+        */
 
         // Test with optimization
         {
@@ -1629,6 +1302,6 @@ int main(int argc, char* argv[])
         }
     }
 
-//    CVXOptSolvers::Finalize();
+
     return 0;
 }

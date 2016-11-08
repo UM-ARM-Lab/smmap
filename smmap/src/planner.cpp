@@ -37,19 +37,18 @@ Planner::Planner(
     , reward_std_dev_scale_factor_(1.0)
     , process_noise_factor_(GetProcessNoiseFactor(ph_))
     , observation_noise_factor_(GetObservationNoiseFactor(ph_))
+    , max_correlation_strength_factor_(GetMaxCorrelationStrengthFactor(ph_))
+    , correlation_strength_factor_(GetCorrelationStrengthFactor(ph_))
     , seed_(GetPlannerSeed(ph_))
     , generator_(seed_)
 {
-    std::cout << seed_ << std::endl;
-    std::cout << seed_ << std::endl;
-    std::cout << seed_ << std::endl;
-    std::cout << seed_ << std::endl;
+    ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
 
     if (GetLoggingEnabled(nh_))
     {
         const std::string log_folder = GetLogFolder(nh_);
         Log::Log seed_log(log_folder + "seed.txt", false);
-        LOG(seed_log, seed_);
+        LOG_STREAM(seed_log, std::hex << seed_);
     }
 }
 
@@ -63,18 +62,18 @@ void Planner::createBandits()
     num_models_ = (ssize_t)model_list_.size();
     ROS_INFO_STREAM_NAMED("planner", "Generating bandits for " << num_models_ << " bandits");
 
-#ifdef KFRDB_BANDIT
-    model_utility_bandit_ = KalmanFilterRDB<std::mt19937_64>(
-                Eigen::VectorXd::Zero(num_models_),
-                Eigen::MatrixXd::Identity(num_models_, num_models_) * 1e6);
+#ifdef UCB_BANDIT
+    model_utility_bandit_ = UCB1Normal<std::mt19937_64>(num_models_);
 #endif
 #ifdef KFMANB_BANDIT
     model_utility_bandit_ = KalmanFilterMANB<std::mt19937_64>(
                 Eigen::VectorXd::Zero(num_models_),
                 Eigen::VectorXd::Ones(num_models_) * 1e6);
 #endif
-#ifdef UCB_BANDIT
-    model_utility_bandit_ = UCB1Normal<std::mt19937_64>(num_models_);
+#ifdef KFMANDB_BANDIT
+    model_utility_bandit_ = KalmanFilterMANDB<std::mt19937_64>(
+                Eigen::VectorXd::Zero(num_models_),
+                Eigen::MatrixXd::Identity(num_models_, num_models_) * 1e6);
 #endif
 }
 
@@ -93,17 +92,17 @@ void Planner::createBandits()
  */
 WorldState Planner::sendNextCommand(const WorldState& current_world_state)
 {
+    ROS_INFO_NAMED("planner", "------------------------------------------------------------------------------------");
     const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
     {
         return task_specification_->calculateDesiredDirection(world_state);
     };
-    const ObjectDeltaAndWeight desired_motion = task_desired_direction_fn(current_world_state);
-    visualizeDesiredMotion(current_world_state, desired_motion);
+    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
+//    visualizeDesiredMotion(current_world_state, task_desired_motion);
 
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
     const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
-
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
 
     // Querry each model for it's best trajectory
@@ -126,6 +125,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     // Measure the time it took to pick a model
     ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in " << stopwatch(READ) << " seconds");
 
+    //
     std::vector<double> individual_rewards(num_models_, std::numeric_limits<double>::infinity());
     if (calculate_regret_ && num_models_ > 1)
     {
@@ -148,23 +148,28 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     }
 
 
-    AllGrippersSinglePoseDelta selected_command = suggested_robot_commands[(size_t)model_to_use].first;
     // Execute the command
-    ROS_INFO_NAMED("planner", "Sending command to robot");
-    WorldState world_feedback = robot_.sendGripperMovement(kinematics::applyTwist(current_world_state.all_grippers_single_pose_, selected_command));
+    const AllGrippersSinglePoseDelta& selected_command = suggested_robot_commands[(size_t)model_to_use].first;
+    ObjectPointSet predicted_object_delta = model_list_[(size_t)model_to_use]->getObjectDelta(current_world_state, selected_command, robot_.dt_);
+    const Eigen::Map<Eigen::VectorXd> predicted_object_delta_as_vector(predicted_object_delta.data(), predicted_object_delta.size());
+    ROS_INFO_STREAM_NAMED("planner", "Sending command to robot, action norm:  " << MultipleGrippersVelocity6dNorm(selected_command));
+    ROS_INFO_STREAM_NAMED("planner", "Task desired deformable movement norm:  " << EigenHelpers::WeightedNorm(task_desired_motion.delta, task_desired_motion.weight));
+    ROS_INFO_STREAM_NAMED("planner", "Task predicted deformable movment norm: " << EigenHelpers::WeightedNorm(predicted_object_delta_as_vector, task_desired_motion.weight));
+    WorldState world_feedback = robot_.sendGrippersPoses(kinematics::applyTwist(current_world_state.all_grippers_single_pose_, selected_command));
+
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
-    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
-    updateModels(current_world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback, individual_rewards);
+    ROS_INFO_STREAM_NAMED("planner", "Correlation strength factor: " << correlation_strength_factor_);
+    updateModels(current_world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
 
-#ifdef KFRDB_BANDIT
-    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getCovariance(), model_to_use, individual_rewards);
+#ifdef UCB_BANDIT
+    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getUCB(), model_to_use, individual_rewards, correlation_strength_factor_);
 #endif
 #ifdef KFMANB_BANDIT
-    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getVariance(), model_to_use, individual_rewards);
+    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getVariance(), model_to_use, individual_rewards, correlation_strength_factor_);
 #endif
-#ifdef UCB_BANDIT
-    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getUCB(), model_to_use, individual_rewards);
+#ifdef KFMANDB_BANDIT
+    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getCovariance(), model_to_use, individual_rewards, correlation_strength_factor_);
 #endif
 
     return world_feedback;
@@ -211,17 +216,28 @@ void Planner::updateModels(const WorldState& starting_world_state,
         const ObjectDeltaAndWeight& task_desired_motion,
         const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands,
         const ssize_t model_used,
-        const WorldState& world_feedback,
-        const std::vector<double>& individual_rewards)
+        const WorldState& world_feedback)
 {
-    (void)individual_rewards;
+    // First we update the bandit algorithm
     const double starting_error = task_specification_->calculateError(starting_world_state.object_configuration_);
     const double true_error_reduction = starting_error - task_specification_->calculateError(world_feedback.object_configuration_);
     reward_std_dev_scale_factor_ = std::max(1e-10, 0.9 * reward_std_dev_scale_factor_ + 0.1 * std::abs(true_error_reduction));
     const double process_noise_scaling_factor = process_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);
     const double observation_noise_scaling_factor = observation_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);
 
-#ifdef KFRDB_BANDIT
+#ifdef UCB_BANDIT
+    (void)task_desired_motion;
+    (void)suggested_commands;
+    (void)process_noise_scaling_factor;
+    (void)observation_noise_scaling_factor;
+    model_utility_bandit_.updateArms(model_used, true_error_reduction);
+#endif
+#ifdef KFMANB_BANDIT
+    (void)task_desired_motion;
+    (void)suggested_commands;
+    model_utility_bandit_.updateArms(process_noise_scaling_factor * Eigen::VectorXd::Ones(num_models_), model_used, true_error_reduction, observation_noise_scaling_factor * 1.0);
+#endif
+#ifdef KFMANDB_BANDIT
     (void)task_desired_motion;
 
     const Eigen::MatrixXd process_noise = calculateProcessNoise(suggested_commands);
@@ -240,20 +256,8 @@ void Planner::updateModels(const WorldState& starting_world_state,
                 observed_reward,
                 observation_noise_scaling_factor * observation_noise);
 #endif
-#ifdef KFMANB_BANDIT
-    (void)task_desired_motion;
-    (void)suggested_commands;
-    model_utility_bandit_.updateArms(process_noise_scaling_factor * Eigen::VectorXd::Ones(num_models_), model_used, true_error_reduction, observation_noise_scaling_factor * 1);
-#endif
-#ifdef UCB_BANDIT
-    (void)task_desired_motion;
-    (void)suggested_commands;
-    (void)process_noise_scaling_factor;
-    (void)observation_noise_scaling_factor;
-    model_utility_bandit_.updateArms(model_used, true_error_reduction);
-#endif
 
-    // Then we allow the model to update itself based on the new data
+    // Then we allow each model to update itself based on the new data
     #pragma omp parallel for
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
     {
@@ -298,11 +302,10 @@ Eigen::MatrixXd Planner::calculateProcessNoise(const std::vector<std::pair<AllGr
         }
     }
 
-    process_noise += 0.1 * Eigen::MatrixXd::Identity(num_models_, num_models_);
-
-    return process_noise;
+    return correlation_strength_factor_ * process_noise + (1.0 - correlation_strength_factor_) * Eigen::MatrixXd::Identity(num_models_, num_models_);
 }
 
+/*
 Eigen::VectorXd Planner::calculateObservedReward(
         const WorldState& starting_world_state,
         const ObjectDeltaAndWeight& task_desired_motion,
@@ -385,3 +388,4 @@ Eigen::MatrixXd Planner::calculateObservationNoise(
 
     return observation_noise;
 }
+*/
