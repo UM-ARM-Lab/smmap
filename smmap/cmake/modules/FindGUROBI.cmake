@@ -10,11 +10,15 @@
 
 find_path(GUROBI_INCLUDE_DIR NAMES gurobi_c++.h PATHS "$ENV{GUROBI_HOME}/include")
 
-find_library(GUROBI_LIBRARY NAMES gurobi gurobi65 PATHS "$ENV{GUROBI_HOME}/lib")
+find_library(GUROBI_LIBRARY NAMES gurobi gurobi70 PATHS "$ENV{GUROBI_HOME}/lib")
 find_library(GUROBI_CXX_LIBRARY NAMES gurobi_c++ PATHS "$ENV{GUROBI_HOME}/lib")
 
 set(GUROBI_INCLUDE_DIRS "${GUROBI_INCLUDE_DIR}")
 set(GUROBI_LIBRARIES "${GUROBI_CXX_LIBRARY};${GUROBI_LIBRARY}")
+
+
+message(STATUS "-------------${GUROBI_INCLUDE_DIRS}")
+message(STATUS "-------------${GUROBI_LIBRARIES}")
 
 # use c++ headers as default
 # set(GUROBI_COMPILER_FLAGS "-DIL_STD" CACHE STRING "Gurobi Compiler Flags")
