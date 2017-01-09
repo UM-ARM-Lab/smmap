@@ -74,9 +74,9 @@ endif(USE_OPEN_MP)
 
 
 ## Test file for random tests
-add_executable(scratchpad nodes/scratchpad.cpp src/gurobi_solvers.cpp)
-target_link_libraries(scratchpad ${GUROBI_LIBRARIES})
-set_target_properties(scratchpad PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS}")
+#add_executable(scratchpad nodes/scratchpad.cpp src/gurobi_solvers.cpp)
+#target_link_libraries(scratchpad ${GUROBI_LIBRARIES})
+#set_target_properties(scratchpad PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS}")
 
 
 
