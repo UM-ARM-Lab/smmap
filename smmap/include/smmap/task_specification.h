@@ -4,9 +4,11 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <tuple>
 #include <Eigen/Dense>
 #include <arc_utilities/dijkstras.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
+#include <sdf_tools/sdf.hpp>
 #include <smmap_experiment_params/task_enums.h>
 #include <smmap_experiment_params/xyzgrid.h>
 
@@ -136,6 +138,8 @@ namespace smmap
 
 
             ObjectDeltaAndWeight calculateDesiredDirection(const WorldState& world_state);
+
+        private:
             ObjectDeltaAndWeight first_step_desired_motion_;
             ObjectDeltaAndWeight first_step_error_correction_;
             ObjectDeltaAndWeight first_step_stretching_correction_;
@@ -144,9 +148,12 @@ namespace smmap
             double sim_time_last_time_first_step_calced_;
 
 
+        public:
             // Records of task and deformable type if various visualizers or whatever need them
             const DeformableType deformable_type_;
             const TaskType task_type_;
+            #warning "This ought to be like a Java final"
+            bool is_dijkstras_type_task_;
 
         protected:
             ////////////////////////////////////////////////////////////////////
@@ -228,9 +235,14 @@ namespace smmap
         public:
             DijkstrasCoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type);
 
+            std::vector<EigenHelpers::VectorVector3d> findPathFromObjectToTarget(const ObjectPointSet& object_configuration, const double minimum_threshold) const;
+
         protected:
             bool saveDijkstrasResults();
             bool loadDijkstrasResults();
+
+            std::tuple<ssize_t, double, ssize_t> findNearestObjectPoint(const ObjectPointSet& object_configuration, const ssize_t cover_ind) const;
+            EigenHelpers::VectorVector3d followCoverPointAssignments(Eigen::Vector3d current_pos, const std::vector<ssize_t>& cover_point_assignments, const size_t maximum_itterations) const;
 
             ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_Dijkstras(
                     const ObjectPointSet& object_configuration, const double minimum_threshold) const;
@@ -238,6 +250,7 @@ namespace smmap
             /// Free space graph that creates a vector field for the deformable object to follow
             arc_dijkstras::Graph<Eigen::Vector3d> free_space_graph_;
             const XYZGrid free_space_grid_;
+            const sdf_tools::SignedDistanceField environment_sdf_;
 
             /// Map between cover point indices and graph indices, with distances
             std::vector<int64_t> cover_ind_to_free_space_graph_ind_;

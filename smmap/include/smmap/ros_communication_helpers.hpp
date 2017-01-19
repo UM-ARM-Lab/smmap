@@ -4,6 +4,7 @@
 #include <ros/ros.h>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/dijkstras.hpp>
+#include <sdf_tools/sdf.hpp>
 #include <smmap_experiment_params/task_enums.h>
 #include <smmap_msgs/messages.h>
 
@@ -14,7 +15,7 @@ namespace smmap
 {
     inline std::vector<GripperData> GetGrippersData(ros::NodeHandle& nh)
     {
-        ROS_INFO_NAMED("grippers_data" , "Getting grippers data");
+        ROS_INFO_NAMED("ros_comms_helpers" , "Getting grippers data");
         std::vector<GripperData> grippers_data;
 
         // Service client to get the names of each gripper
@@ -25,7 +26,7 @@ namespace smmap
         smmap_msgs::GetGripperNames names_srv_data;
         if (!gripper_names_client.call(names_srv_data))
         {
-            ROS_FATAL_NAMED("grippers_data", "Unabled to retrieve gripper names.");
+            ROS_FATAL_NAMED("ros_comms_helpers", "Unabled to retrieve gripper names.");
         }
         std::vector<std::string> gripper_names = names_srv_data.response.names;
 
@@ -47,7 +48,7 @@ namespace smmap
             }
             else
             {
-                ROS_ERROR_STREAM_NAMED("grippers_data", "Unable to retrieve node indices for gripper: " << gripper_names[gripper_ind]);
+                ROS_ERROR_STREAM_NAMED("ros_comms_helpers", "Unable to retrieve node indices for gripper: " << gripper_names[gripper_ind]);
             }
         }
 
@@ -56,7 +57,7 @@ namespace smmap
 
     inline ObjectPointSet GetObjectInitialConfiguration(ros::NodeHandle& nh)
     {
-        ROS_INFO_NAMED("object_initial_configuration" , "Getting object initial configuration");
+        ROS_INFO_NAMED("ros_comms_helpers" , "Getting object initial configuration");
 
         // Get the initial configuration of the object
         ros::ServiceClient object_initial_configuration_client =
@@ -67,14 +68,14 @@ namespace smmap
         smmap_msgs::GetPointSet srv_data;
         object_initial_configuration_client.call(srv_data);
 
-        ROS_INFO_NAMED("object_initial_configuration" , "Number of points on object: %zu", srv_data.response.points.size());
+        ROS_INFO_NAMED("ros_comms_helpers" , "Number of points on object: %zu", srv_data.response.points.size());
 
         return EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(srv_data.response.points);
     }
 
     inline ObjectPointSet GetCoverPoints(ros::NodeHandle& nh)
     {
-        ROS_INFO_NAMED("cover_points_helper" , "Getting cover points");
+        ROS_INFO_NAMED("ros_comms_helpers" , "Getting cover points");
 
         // Get the initial configuration of the object
         ros::ServiceClient cover_points_client =
@@ -87,7 +88,7 @@ namespace smmap
         ObjectPointSet cover_points =
             EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(srv_data.response.points);
 
-        ROS_INFO_NAMED("cover_points_helper" , "Number of cover points: %zu", srv_data.response.points.size());
+        ROS_INFO_NAMED("ros_comms_helpers" , "Number of cover points: %zu", srv_data.response.points.size());
 
         return cover_points;
     }
@@ -95,7 +96,7 @@ namespace smmap
     // TODO: replace these out params with something else
     inline void GetFreeSpaceGraph(ros::NodeHandle& nh, arc_dijkstras::Graph<Eigen::Vector3d>& free_space_graph, std::vector<int64_t>& cover_ind_to_free_space_graph_ind)
     {
-        ROS_INFO_NAMED("get_free_space_graph_helper", "Getting free space graph");
+        ROS_INFO_NAMED("ros_comms_helpers", "Getting free space graph");
 
         // First we collect the data in serialzed form
         ros::ServiceClient free_space_graph_client =
@@ -132,11 +133,30 @@ namespace smmap
             current_position += free_space_graph.DeserializeSelf(srv_data.response.graph_data_buffer, current_position, value_deserializer_fn);
             assert(current_position == srv_data.response.graph_data_buffer.size());
             assert(free_space_graph.CheckGraphLinkage());
-            ROS_INFO_STREAM_NAMED("ros_communications_helpers", "Recieved " << free_space_graph.GetNodesImmutable().size() << " graph nodes");
+            ROS_INFO_STREAM_NAMED("ros_comms_helpers", "Recieved " << free_space_graph.GetNodesImmutable().size() << " graph nodes");
         }
 
         // Last we copy the map between cover point indices and graph indices
         cover_ind_to_free_space_graph_ind = srv_data.response.cover_point_ind_to_graph_ind;
+    }
+
+    inline sdf_tools::SignedDistanceField GetEnvironmentSDF(ros::NodeHandle& nh)
+    {
+        ROS_INFO_NAMED("ros_comms_helpers", "Getting environment sdf");
+
+        // First we collect the data in serialzed form
+        ros::ServiceClient sdf_client =
+            nh.serviceClient<smmap_msgs::GetSignedDistanceField>(GetSignedDistanceFieldTopic(nh));
+
+        sdf_client.waitForExistence();
+
+        smmap_msgs::GetSignedDistanceField srv_data;
+        sdf_client.call(srv_data);
+
+        // Then parse the message and return the result
+        sdf_tools::SignedDistanceField sdf;
+        sdf.LoadFromMessageRepresentation(srv_data.response.sdf);
+        return sdf;
     }
 }
 

@@ -32,6 +32,8 @@ namespace smmap
             // The two functions that gets invoked repeatedly
             ////////////////////////////////////////////////////////////////////
 
+            void detectFutureConstraintViolations(const WorldState& current_world_state);
+
             WorldState sendNextCommand(const WorldState& current_world_state);
             void visualizeDesiredMotion(const WorldState& current_world_state,
                                         const ObjectDeltaAndWeight& desired_motion);

@@ -6,8 +6,7 @@ set(CATKIN_PACKAGES
     arc_utilities
     geometry_msgs
     kinematics_toolbox
-    image_transport
-    cv_bridge
+    sdf_tools
     ${PROJECT_NAME}_msgs
     ${PROJECT_NAME}_experiment_params
 )
@@ -59,7 +58,7 @@ include_directories(include
     ${GUROBI_INCLUDE_DIRS}
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O2 -g -march=native -Wall -Wextra -Wpedantic -Wconversion")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O2 -g -Wall -Wextra -Wpedantic -Wconversion")
 
 unset(USE_OPEN_MP CACHE)
 option(USE_OPEN_MP "Set to ON if we want to use OpenMP" ON)
@@ -87,17 +86,17 @@ FILE(GLOB cpp_SRC "src/*.cpp")
 
 add_library(${PROJECT_NAME}_KFMANDB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 add_dependencies(${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_KFMANDB ${GUROBI_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_KFMANDB ${GUROBI_LIBRARIES} ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
 set_target_properties(${PROJECT_NAME}_KFMANDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANDB_BANDIT")
 
 add_library(${PROJECT_NAME}_KFMANB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 add_dependencies(${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_KFMANB ${GUROBI_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_KFMANB ${GUROBI_LIBRARIES} ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
 set_target_properties(${PROJECT_NAME}_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
 
 add_library(${PROJECT_NAME}_UCB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 add_dependencies(${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_UCB ${GUROBI_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_UCB ${GUROBI_LIBRARIES} ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
 set_target_properties(${PROJECT_NAME}_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
 
 ## Simulator tests

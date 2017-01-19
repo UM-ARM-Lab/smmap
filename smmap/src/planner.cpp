@@ -81,6 +81,22 @@ void Planner::createBandits()
 // The one function that gets invoked externally
 ////////////////////////////////////////////////////////////////////////////////
 
+void Planner::detectFutureConstraintViolations(const WorldState &current_world_state)
+{
+    ROS_INFO_NAMED("planner", "------------------------------------------------------------------------------------");
+    if (task_specification_->is_dijkstras_type_task_)
+    {
+        ROS_INFO_NAMED("planner", "Starting future constraint violation detection");
+        std::shared_ptr<DijkstrasCoverageTask> dijkstras_task = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
+
+        const auto projected_paths = dijkstras_task->findPathFromObjectToTarget(current_world_state.object_configuration_, dijkstras_task->getErrorThreshold());
+    }
+    else
+    {
+        ROS_ERROR_NAMED("planner", "Unable to do future constraint violation detection");
+    }
+}
+
 /**
  * @brief Planner::getNextTrajectory
  * @param world_current_state
@@ -105,7 +121,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
 
-    // Querry each model for it's best trajectory
+    // Querry each model for it's best gripper delta
     stopwatch(RESET);
     std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>> suggested_robot_commands(num_models_);
     #pragma omp parallel for
