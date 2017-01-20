@@ -83,32 +83,35 @@ Visualizer::Visualizer(ros::NodeHandle& nh)
 
     // Publish visualization request markers
     visualization_marker_pub_ =
-            nh.advertise<visualization_msgs::Marker>(GetVisualizationMarkerTopic(nh), 10);
+            nh.advertise<visualization_msgs::Marker>(GetVisualizationMarkerTopic(nh), 3000);
 
     visualization_marker_array_pub_ =
-            nh.advertise<visualization_msgs::MarkerArray>(GetVisualizationMarkerArrayTopic(nh), 10);
+            nh.advertise<visualization_msgs::MarkerArray>(GetVisualizationMarkerArrayTopic(nh), 3000);
 }
 
-void Visualizer::visualizePoints(
-        const std::string& marker_name,
+void Visualizer::visualizePoints(const std::string& marker_name,
         EigenHelpers::VectorVector3d points,
-        const std_msgs::ColorRGBA& color) const
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
 {
     std::vector<std_msgs::ColorRGBA> colors(points.size(), color);
 
-    visualizePoints(marker_name, points, colors);
+    visualizePoints(marker_name, points, colors, id);
 }
 
 void Visualizer::visualizePoints(
         const std::string& marker_name,
         const EigenHelpers::VectorVector3d points,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
+        const std::vector<std_msgs::ColorRGBA>& colors,
+        const int32_t id) const
 {
     visualization_msgs::Marker marker;
 
+    marker.header.frame_id = "mocap_world";
+
     marker.type = visualization_msgs::Marker::POINTS;
     marker.ns = marker_name;
-    marker.id = 0;
+    marker.id = id;
     marker.scale.x = 0.005;
     marker.scale.y = 0.005;
     marker.points = EigenHelpersConversions::VectorEigenVector3dToVectorGeometryPoint(points);

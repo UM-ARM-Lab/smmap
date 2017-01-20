@@ -25,12 +25,13 @@ namespace smmap
             void visualizePoints(
                     const std::string& marker_name,
                     EigenHelpers::VectorVector3d points,
-                    const std_msgs::ColorRGBA& color) const;
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 0) const;
 
-            void visualizePoints(
-                    const std::string& marker_name,
+            void visualizePoints(const std::string& marker_name,
                     const EigenHelpers::VectorVector3d points,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const;
+                    const std::vector<std_msgs::ColorRGBA>& colors,
+                    const int32_t id) const;
 
             void visualizeRope(
                     const std::string& marker_name,

@@ -614,6 +614,7 @@ std::tuple<ssize_t, double, ssize_t> DijkstrasCoverageTask::findNearestObjectPoi
     return std::make_tuple(closest_deformable_ind, min_dist, best_target_ind_in_free_space_graph);
 }
 
+
 std::vector<EigenHelpers::VectorVector3d> DijkstrasCoverageTask::findPathFromObjectToTarget(const ObjectPointSet& object_configuration, const double minimum_threshold) const
 {
     #warning "Fix this magic number"
@@ -650,6 +651,7 @@ std::vector<EigenHelpers::VectorVector3d> DijkstrasCoverageTask::findPathFromObj
 
 EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(Eigen::Vector3d current_pos, const std::vector<ssize_t>& cover_point_assignments, const size_t maximum_itterations) const
 {
+    static int32_t weirdness_num = 0;
     EigenHelpers::VectorVector3d trajectory(1, current_pos);
 
     bool progress = cover_point_assignments.size() > 0;
@@ -659,6 +661,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
 
         const ssize_t deformable_point_ind_in_free_space_graph = free_space_grid_.worldPosToGridIndexClamped(current_pos);
 
+        // Combine the vector fields from each assignment
         for (size_t assignment_ind = 0; assignment_ind < cover_point_assignments.size(); ++assignment_ind)
         {
             const ssize_t cover_ind = cover_point_assignments[assignment_ind];
@@ -667,30 +670,50 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             summed_dijkstras_deltas += target_point - current_pos;
         }
 
-
         // If the combined vector moves us at least into the next voxel, then move into the next voxel
         progress = summed_dijkstras_deltas.squaredNorm() > std::pow(free_space_grid_.minStepDimension() / 2.0, 2);
         if (progress)
         {
-            Eigen::Vector3d combined_delta = summed_dijkstras_deltas.normalized() * free_space_grid_.minStepDimension();
+            const Eigen::Vector3d combined_delta = summed_dijkstras_deltas.normalized() * free_space_grid_.minStepDimension();
 
-            // If we are inside an obstacle, then push ourselves back out
-            float sdf_dist = environment_sdf_.Get(current_pos + combined_delta);
-            while (sdf_dist < 0)
+            // Split the delta up into smaller steps to simulate "pulling" the cloth along with constant obstacle collision resolution
+            Eigen::Vector3d net_delta = Eigen::Vector3d::Zero();
+            for (int i = 0; i < 10; i++)
             {
-                const bool enable_edge_gradients = true;
-                const std::vector<double> gradient = environment_sdf_.GetGradient(current_pos + combined_delta, enable_edge_gradients);
-                assert(gradient.size() == 3); // Sanity check
-                const Eigen::Vector3d grad_eigen(gradient[0], gradient[1], gradient[2]);
-                assert(grad_eigen.norm() > free_space_grid_.minStepDimension() / 4.0); // Sanity check
+                net_delta += combined_delta / 10.0;
 
-                const Eigen::Vector3d projection_step = grad_eigen.normalized() * free_space_grid_.minStepDimension() / 2.0;
-                combined_delta += projection_step;
-                sdf_dist = environment_sdf_.Get(current_pos + combined_delta);
-                assert(combined_delta.norm() < free_space_grid_.minStepDimension() * 1.5); // Sanity check
+                // If we are inside an obstacle, then push ourselves back out
+                for (float sdf_dist = environment_sdf_.Get(current_pos + net_delta); sdf_dist < 0; sdf_dist = environment_sdf_.Get(current_pos + net_delta))
+                {
+                    const bool enable_edge_gradients = true;
+                    const std::vector<double> gradient = environment_sdf_.GetGradient(current_pos + net_delta, enable_edge_gradients);
+                    const Eigen::Vector3d grad_eigen = EigenHelpers::StdVectorDoubleToEigenVector3d(gradient);
+
+                    if (grad_eigen.norm() <= free_space_grid_.minStepDimension() / 4.0)
+                    {
+                        const EigenHelpers::VectorVector3d vec_of_single_item(1, current_pos + net_delta);
+                        vis_.visualizePoints("gradient_weirdness", vec_of_single_item, Visualizer::Red(), weirdness_num);
+                        ++weirdness_num;
+                    }
+                    else
+                    {
+                        net_delta += grad_eigen.normalized() * free_space_grid_.minStepDimension() / 2.0;
+                    }
+                    assert(grad_eigen.norm() > free_space_grid_.minStepDimension() / 4.0); // Sanity check
+
+                    if (net_delta.norm() >= free_space_grid_.minStepDimension() * 1.5)
+                    {
+                        trajectory.push_back(current_pos + net_delta);
+                        vis_.visualizePoints("projected_point_path_weirdness", trajectory, Visualizer::Red(), weirdness_num);
+                        ++weirdness_num;
+                        std::cerr << PrettyPrint::PrettyPrint(trajectory) << std::endl << std::endl << std::endl;
+                    }
+//                    assert(net_delta.norm() < free_space_grid_.minStepDimension() * 1.5); // Sanity check
+                }
             }
 
-            const ssize_t graph_aligned_next_ind = free_space_grid_.worldPosToGridIndexClamped(current_pos + combined_delta);
+            // Align the result to the grid
+            const ssize_t graph_aligned_next_ind = free_space_grid_.worldPosToGridIndexClamped(current_pos + net_delta);
 
             // Double check that we are still making progress
             progress = graph_aligned_next_ind != deformable_point_ind_in_free_space_graph;
@@ -705,6 +728,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
 
     return trajectory;
 }
+
 
 ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_Dijkstras(
         const ObjectPointSet& object_configuration, const double minimum_threshold) const

@@ -37,7 +37,6 @@ Planner::Planner(
     , reward_std_dev_scale_factor_(1.0)
     , process_noise_factor_(GetProcessNoiseFactor(ph_))
     , observation_noise_factor_(GetObservationNoiseFactor(ph_))
-    , max_correlation_strength_factor_(GetMaxCorrelationStrengthFactor(ph_))
     , correlation_strength_factor_(GetCorrelationStrengthFactor(ph_))
     , seed_(GetPlannerSeed(ph_))
     , generator_(seed_)
@@ -89,7 +88,19 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
         ROS_INFO_NAMED("planner", "Starting future constraint violation detection");
         std::shared_ptr<DijkstrasCoverageTask> dijkstras_task = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
 
-        const auto projected_paths = dijkstras_task->findPathFromObjectToTarget(current_world_state.object_configuration_, dijkstras_task->getErrorThreshold());
+        const std::vector<EigenHelpers::VectorVector3d> projected_paths = dijkstras_task->findPathFromObjectToTarget(current_world_state.object_configuration_, dijkstras_task->getErrorThreshold());
+
+        for (size_t path_ind = 0; path_ind < projected_paths.size(); ++path_ind)
+        {
+            if (projected_paths[path_ind].size() > 1)
+            {
+                vis_.visualizePoints("projected_point_path", projected_paths[path_ind], Visualizer::Magenta(), (int32_t)path_ind);
+            }
+            else
+            {
+                vis_.visualizePoints("projected_point_path", EigenHelpers::VectorVector3d(), Visualizer::Magenta(), (int32_t)path_ind);
+            }
+        }
     }
     else
     {

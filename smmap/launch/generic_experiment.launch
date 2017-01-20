@@ -26,13 +26,12 @@
     <arg name="kalman_parameters_override"              default="false"/>
     <arg name="process_noise_factor"                    if="$(arg kalman_parameters_override)"/>
     <arg name="observation_noise_factor"                if="$(arg kalman_parameters_override)"/>
-    <arg name="bandit_algorithm"                        default="KFMANB"/>
+    <arg name="bandit_algorithm"                        default="UCB"/>
     <arg name="use_random_seed"                         default="false"/>
     <arg name="static_seed_override"                    default="false"/>
     <arg name="static_seed"                             if="$(arg static_seed_override)"/>
     <arg name="correlation_strength_factor_override"    default="false"/>
-    <arg name="correlation_strength_factor"             if="$(arg static_seed_override)"/>
-    <arg name="max_correlation_strength_factor"         default="0.9"/>
+    <arg name="correlation_strength_factor"             if="$(arg correlation_strength_factor_override)"/>
 
     <!-- Setup task parameters -->
     <include file="$(find smmap)/launch/$(arg task_type)_params.launch"/>
@@ -41,9 +40,9 @@
 
     <!-- Launch the simulator -->
     <group ns="deform_simulator_node">
-        <param name="feedback_covariance"               value="$(arg feedback_covariance)"          type="double"/>
-        <param name="start_bullet_viewer"               value="$(arg start_bullet_viewer)"          type="bool"/>
-        <param name="screenshots_enabled"               value="$(arg screenshots_enabled)"          type="bool"/>
+        <param name="feedback_covariance"               value="$(arg feedback_covariance)"      type="double"/>
+        <param name="start_bullet_viewer"               value="$(arg start_bullet_viewer)"      type="bool"/>
+        <param name="screenshots_enabled"               value="$(arg screenshots_enabled)"      type="bool"/>
     </group>
 
     <env name="OSG_FILE_PATH" value="$(find OpenSceneGraph)/data"/>
@@ -64,7 +63,6 @@
         <param name="use_random_seed"                   value="$(arg use_random_seed)"                  type="bool"/>
         <param name="static_seed"                       value="$(arg static_seed)"                      type="string"   if="$(arg static_seed_override)"/>
         <param name="correlation_strength_factor"       value="$(arg correlation_strength_factor)"      type="double"   if="$(arg correlation_strength_factor_override)"/>
-        <param name="max_correlation_strength_factor"   value="$(arg max_correlation_strength_factor)"  type="double"/>
     </group>
 
     <node name="smmap_planner_node" pkg="smmap" type="smmap_test_node_$(arg bandit_algorithm)" required="true" if="$(arg launch_planner)"/>

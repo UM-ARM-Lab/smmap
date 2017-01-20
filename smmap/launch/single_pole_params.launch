@@ -1,0 +1,25 @@
+<launch>
+    <param name="deformable_type"       value="cloth"/>
+    <param name="task_type"             value="single_pole"/>
+
+    <param name="cloth_com_x"           value="-0.2"/>
+    <param name="cloth_com_z"           value="0.0"/>
+
+    <param name="cloth_x_size"          value="0.625"/>
+    <param name="cloth_num_divs_x"      value="50"/>
+
+    <param name="cloth_y_size"          value="0.5"/>
+    <param name="cloth_num_divs_y"      value="40"/>
+
+    <param name="cloth_cylinder_com_x"  value="0.0"/>
+    <param name="cloth_cylinder_com_y"  value="0.0"/>
+    <param name="cloth_cylinder_com_z"  value="0.0"/>
+
+    <param name="cloth_cylinder_height" value="0.5"/>
+    <param name="cloth_cylinder_radius" value="0.1"/>
+
+
+    <group ns="deform_simulator_node">
+        <param name="num_simsteps_per_gripper_command"  value="4"/>
+    </group>
+</launch>
