@@ -142,6 +142,15 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(ros::NodeHandle&
         case TaskType::CLOTH_SINGLE_POLE:
             return std::make_shared<ClothSinglePole>(nh);
 
+        case TaskType::CLOTH_WALL:
+            return std::make_shared<ClothWall>(nh);
+
+        case TaskType::CLOTH_DOUBLE_SLIT:
+            return std::make_shared<ClothDoubleSlit>(nh);
+
+        case TaskType::ROPE_MAZE:
+            return std::make_shared<RopeMaze>(nh);
+
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
             return nullptr;

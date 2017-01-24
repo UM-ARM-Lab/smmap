@@ -14,9 +14,6 @@ namespace smmap
         public:
             RopeCylinderCoverage(ros::NodeHandle& nh)
                 : DirectCoverageTask(nh, DeformableType::ROPE, TaskType::ROPE_CYLINDER_COVERAGE)
-                , cylinder_com_(GetCylinderCenterOfMassX(nh), GetCylinderCenterOfMassY(nh))
-                , cylinder_radius_(GetCylinderRadius(nh))
-                , rope_radius_(GetRopeRadius(nh))
             {}
 
         private:
@@ -62,16 +59,6 @@ namespace smmap
             {
                 return 0.01;
             }
-
-        private:
-            /// Center of the cylinder in the plane defined by the table
-            const Eigen::Vector2d cylinder_com_;
-
-            /// Radious of the cylinder
-            const double cylinder_radius_;
-
-            /// Radius of the rope
-            const double rope_radius_;
     };
 
     /**
@@ -443,6 +430,171 @@ namespace smmap
             virtual double getErrorThreshold_impl() const
             {
                 return 0.002;
+            }
+    };
+
+    /**
+     * @brief The ClothWall class
+     */
+    class ClothWall : public DijkstrasCoverageTask
+    {
+        public:
+            ClothWall(ros::NodeHandle& nh)
+                : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_WALL)
+            {}
+
+        private:
+            virtual double deformability_impl() const
+            {
+                return 14.0; // k
+            }
+
+            virtual double collisionScalingFactor_impl() const
+            {
+                return  1000.0; // beta
+            }
+
+            virtual double stretchingScalingThreshold_impl() const
+            {
+                return 0.03; // lambda
+            }
+
+            virtual double maxTime_impl() const
+            {
+                return 20.0;
+            }
+
+            virtual void visualizeDeformableObject_impl(
+                    Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std_msgs::ColorRGBA& color) const
+            {
+                vis.visualizeCloth(marker_name, object_configuration, color);
+            }
+
+            virtual void visualizeDeformableObject_impl(
+                    Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std::vector<std_msgs::ColorRGBA>& colors) const
+            {
+                vis.visualizeCloth(marker_name, object_configuration, colors);
+            }
+
+            virtual double getErrorThreshold_impl() const
+            {
+                return 0.002;
+            }
+    };
+
+    /**
+     * @brief The ClothDoubleSlit class
+     */
+    class ClothDoubleSlit : public DijkstrasCoverageTask
+    {
+        public:
+            ClothDoubleSlit(ros::NodeHandle& nh)
+                : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_DOUBLE_SLIT)
+            {}
+
+        private:
+            virtual double deformability_impl() const
+            {
+                return 14.0; // k
+            }
+
+            virtual double collisionScalingFactor_impl() const
+            {
+                return  1000.0; // beta
+            }
+
+            virtual double stretchingScalingThreshold_impl() const
+            {
+                return 0.03; // lambda
+            }
+
+            virtual double maxTime_impl() const
+            {
+                return 20.0;
+            }
+
+            virtual void visualizeDeformableObject_impl(
+                    Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std_msgs::ColorRGBA& color) const
+            {
+                vis.visualizeCloth(marker_name, object_configuration, color);
+            }
+
+            virtual void visualizeDeformableObject_impl(
+                    Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std::vector<std_msgs::ColorRGBA>& colors) const
+            {
+                vis.visualizeCloth(marker_name, object_configuration, colors);
+            }
+
+            virtual double getErrorThreshold_impl() const
+            {
+                return 0.002;
+            }
+    };
+
+    /**
+     * @brief The RopeMaze class
+     */
+    class RopeMaze : public DijkstrasCoverageTask
+    {
+        public:
+            RopeMaze(ros::NodeHandle& nh)
+                : DijkstrasCoverageTask(nh, DeformableType::ROPE, TaskType::ROPE_MAZE)
+            {}
+
+        private:
+            virtual double deformability_impl() const
+            {
+                return 10.0; // k
+            }
+
+            virtual double collisionScalingFactor_impl() const
+            {
+                return  200.0; // beta
+            }
+
+            virtual double stretchingScalingThreshold_impl() const
+            {
+                return 0.005; // lambda
+            }
+
+            virtual double maxTime_impl() const
+            {
+                return 20.0;
+            }
+
+            virtual void visualizeDeformableObject_impl(
+                    Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std_msgs::ColorRGBA& color) const
+            {
+                vis.visualizeRope(marker_name, object_configuration, color);
+            }
+
+            virtual void visualizeDeformableObject_impl(
+                    Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std::vector<std_msgs::ColorRGBA>& colors) const
+            {
+                vis.visualizeRope(marker_name, object_configuration, colors);
+            }
+
+            virtual double getErrorThreshold_impl() const
+            {
+                return 0.01;
             }
     };
 }
