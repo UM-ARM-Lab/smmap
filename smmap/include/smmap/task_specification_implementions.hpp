@@ -389,8 +389,61 @@ namespace smmap
             {
                 return 0.002;
             }
+    };
+
+    /**
+     * @brief The ClothSinglePole class
+     */
+    class ClothSinglePole : public DijkstrasCoverageTask
+    {
+        public:
+            ClothSinglePole(ros::NodeHandle& nh)
+                : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_SINGLE_POLE)
+            {}
 
         private:
+            virtual double deformability_impl() const
+            {
+                return 14.0; // k
+            }
+
+            virtual double collisionScalingFactor_impl() const
+            {
+                return  1000.0; // beta
+            }
+
+            virtual double stretchingScalingThreshold_impl() const
+            {
+                return 0.03; // lambda
+            }
+
+            virtual double maxTime_impl() const
+            {
+                return 20.0;
+            }
+
+            virtual void visualizeDeformableObject_impl(
+                    Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std_msgs::ColorRGBA& color) const
+            {
+                vis.visualizeCloth(marker_name, object_configuration, color);
+            }
+
+            virtual void visualizeDeformableObject_impl(
+                    Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std::vector<std_msgs::ColorRGBA>& colors) const
+            {
+                vis.visualizeCloth(marker_name, object_configuration, colors);
+            }
+
+            virtual double getErrorThreshold_impl() const
+            {
+                return 0.002;
+            }
     };
 }
 

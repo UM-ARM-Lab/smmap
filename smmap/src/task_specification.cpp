@@ -139,6 +139,9 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(ros::NodeHandle&
         case TaskType::CLOTH_WAFR:
             return std::make_shared<ClothWAFR>(nh);
 
+        case TaskType::CLOTH_SINGLE_POLE:
+            return std::make_shared<ClothSinglePole>(nh);
+
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
             return nullptr;
