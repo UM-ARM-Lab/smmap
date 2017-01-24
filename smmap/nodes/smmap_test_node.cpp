@@ -6,8 +6,7 @@ using namespace smmap;
 
 int main(int argc, char* argv[])
 {
-#warning "This is manually disabled and ought to be fixed instead"
-//    CVXOptSolvers::Initialize();
+    CVXOptSolvers::Initialize();
 
     // Read in all ROS parameters
     ros::init(argc, argv, "smmap_planner_node", ros::init_options::NoSigintHandler);

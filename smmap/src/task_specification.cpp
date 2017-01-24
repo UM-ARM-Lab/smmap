@@ -120,33 +120,28 @@ TaskSpecification::TaskSpecification(ros::NodeHandle& nh, Visualizer vis, const 
 
 TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(ros::NodeHandle& nh)
 {
-    TaskType task_type = GetTaskType(nh);
-    DeformableType deformable_type = GetDeformableType(nh);
+    const TaskType task_type = GetTaskType(nh);
 
-    if (deformable_type == DeformableType::ROPE && task_type == TaskType::CYLINDER_COVERAGE)
+    switch (task_type)
     {
-        return std::make_shared<RopeCylinderCoverage>(nh);
-    }
-    else if (deformable_type == DeformableType::CLOTH && task_type == TaskType::TABLE_COVERAGE)
-    {
-        return std::make_shared<ClothTableCoverage>(nh);
-    }
-    else if (deformable_type == DeformableType::CLOTH && task_type == TaskType::CYLINDER_COVERAGE)
-    {
-        return std::make_shared<ClothCylinderCoverage>(nh);
-    }
-    else if (deformable_type == DeformableType::CLOTH && task_type == TaskType::COLAB_FOLDING)
-    {
-        return std::make_shared<ClothColabFolding>(nh);
-    }
-    else if (deformable_type == DeformableType::CLOTH && task_type == TaskType::WAFR)
-    {
-        return std::make_shared<ClothWAFR>(nh);
-    }
-    else
-    {
-        throw_arc_exception(std::invalid_argument, "Invalid task and deformable pair in MakeTaskSpecification(), this should not be possible");
-        return nullptr;
+        case TaskType::ROPE_CYLINDER_COVERAGE:
+            return std::make_shared<RopeCylinderCoverage>(nh);
+
+        case TaskType::CLOTH_TABLE_COVERAGE:
+            return std::make_shared<ClothTableCoverage>(nh);
+
+        case TaskType::CLOTH_CYLINDER_COVERAGE:
+            return std::make_shared<ClothCylinderCoverage>(nh);
+
+        case TaskType::CLOTH_COLAB_FOLDING:
+            return std::make_shared<ClothColabFolding>(nh);
+
+        case TaskType::CLOTH_WAFR:
+            return std::make_shared<ClothWAFR>(nh);
+
+        default:
+            throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
+            return nullptr;
     }
 }
 

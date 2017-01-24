@@ -13,7 +13,7 @@ namespace smmap
     {
         public:
             RopeCylinderCoverage(ros::NodeHandle& nh)
-                : DirectCoverageTask(nh, DeformableType::ROPE, TaskType::CYLINDER_COVERAGE)
+                : DirectCoverageTask(nh, DeformableType::ROPE, TaskType::ROPE_CYLINDER_COVERAGE)
                 , cylinder_com_(GetCylinderCenterOfMassX(nh), GetCylinderCenterOfMassY(nh))
                 , cylinder_radius_(GetCylinderRadius(nh))
                 , rope_radius_(GetRopeRadius(nh))
@@ -81,7 +81,7 @@ namespace smmap
     {
         public:
             ClothCylinderCoverage(ros::NodeHandle& nh)
-                : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CYLINDER_COVERAGE)
+                : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_CYLINDER_COVERAGE)
             {}
 
         private:
@@ -138,7 +138,7 @@ namespace smmap
     {
         public:
             ClothTableCoverage(ros::NodeHandle& nh)
-                : DirectCoverageTask(nh, DeformableType::CLOTH, TaskType::TABLE_COVERAGE)
+                : DirectCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_TABLE_COVERAGE)
                 , table_min_x_(GetTableSurfaceX(nh) - GetTableHalfExtentsX(nh))
                 , table_max_x_(GetTableSurfaceX(nh) + GetTableHalfExtentsX(nh))
                 , table_min_y_(GetTableSurfaceY(nh) - GetTableHalfExtentsY(nh))
@@ -205,7 +205,7 @@ namespace smmap
     {
         public:
             ClothColabFolding(ros::NodeHandle& nh)
-                : TaskSpecification(nh, DeformableType::CLOTH, TaskType::COLAB_FOLDING)
+                : TaskSpecification(nh, DeformableType::CLOTH, TaskType::CLOTH_COLAB_FOLDING)
                 , point_reflector_(createPointReflector(nh))
                 , mirror_map_(createMirrorMap(nh, point_reflector_))
             {}
@@ -343,7 +343,7 @@ namespace smmap
     {
         public:
             ClothWAFR(ros::NodeHandle& nh)
-                : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::WAFR)
+                : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_WAFR)
             {}
 
         private:
