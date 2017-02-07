@@ -330,7 +330,7 @@ namespace smmap
 
             default:
                 Maybe::Maybe<double> val = ROSHelpers::GetParamRequired<double>(nh, "cloth_com_x", __func__);
-                return val.Get();
+                return (float)val.Get();
         }
     }
 
@@ -349,7 +349,7 @@ namespace smmap
 
             default:
                 Maybe::Maybe<double> val = ROSHelpers::GetParamRequired<double>(nh, "cloth_com_y", __func__);
-                return val.Get();
+                return (float)val.Get();
         }
     }
 
@@ -368,7 +368,7 @@ namespace smmap
 
             default:
                 Maybe::Maybe<double> val = ROSHelpers::GetParamRequired<double>(nh, "cloth_com_z", __func__);
-                return val.Get();
+                return (float)val.Get();
         }
     }
 
@@ -782,27 +782,27 @@ namespace smmap
         switch (GetTaskType(nh))
         {
             case TaskType::CLOTH_WAFR:
-                dijkstras_file_path = "/home/dmcconachie/Dropbox/catkin_ws/src/smmap/logs/cloth_wafr.dijkstras_serialized";
+                dijkstras_file_path = "/home/dmcconac/Dropbox/catkin_ws/src/smmap/logs/cloth_wafr.dijkstras_serialized";
                 break;
 
             case TaskType::CLOTH_SINGLE_POLE:
-                dijkstras_file_path = "/home/dmcconachie/Dropbox/catkin_ws/src/smmap/logs/cloth_single_pole.dijkstras_serialized";
+                dijkstras_file_path = "/home/dmcconac/Dropbox/catkin_ws/src/smmap/logs/cloth_single_pole.dijkstras_serialized";
                 break;
 
             case TaskType::CLOTH_WALL:
-                dijkstras_file_path = "/home/dmcconachie/Dropbox/catkin_ws/src/smmap/logs/cloth_wall.dijkstras_serialized";
+                dijkstras_file_path = "/home/dmcconac/Dropbox/catkin_ws/src/smmap/logs/cloth_wall.dijkstras_serialized";
                 break;
 
             case TaskType::CLOTH_DOUBLE_SLIT:
-                dijkstras_file_path = "/home/dmcconachie/Dropbox/catkin_ws/src/smmap/logs/cloth_double_slit.dijkstras_serialized";
+                dijkstras_file_path = "/home/dmcconac/Dropbox/catkin_ws/src/smmap/logs/cloth_double_slit.dijkstras_serialized";
                 break;
 
             case TaskType::ROPE_MAZE:
-                dijkstras_file_path = "/home/dmcconachie/Dropbox/catkin_ws/src/smmap/logs/rope_maze.dijkstras_serialized";
+                dijkstras_file_path = "/home/dmcconac/Dropbox/catkin_ws/src/smmap/logs/rope_maze.dijkstras_serialized";
                 break;
 
             default:
-                dijkstras_file_path = "/home/dmcconachie/Dropbox/catkin_ws/src/smmap/logs/unknown_trial.dijkstras_serialized";
+                dijkstras_file_path = "/home/dmcconac/Dropbox/catkin_ws/src/smmap/logs/unknown_trial.dijkstras_serialized";
                 break;
         }
 

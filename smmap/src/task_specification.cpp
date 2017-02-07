@@ -99,15 +99,15 @@ ObjectDeltaAndWeight TaskSpecification::CalculateObjectErrorCorrectionDeltaWithT
 // Constructor to initialize objects that all TaskSpecifications share
 ////////////////////////////////////////////////////////////////////
 
-TaskSpecification::TaskSpecification(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type)
-    : TaskSpecification(nh, Visualizer(nh), deformable_type, task_type)
+TaskSpecification::TaskSpecification(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type, const bool is_dijkstras_type_task)
+    : TaskSpecification(nh, Visualizer(nh), deformable_type, task_type, is_dijkstras_type_task)
 {}
 
-TaskSpecification::TaskSpecification(ros::NodeHandle& nh, Visualizer vis, const DeformableType deformable_type, const TaskType task_type)
+TaskSpecification::TaskSpecification(ros::NodeHandle& nh, Visualizer vis, const DeformableType deformable_type, const TaskType task_type, const bool is_dijkstras_type_task)
     : first_step_calculated_(false)
     , deformable_type_(deformable_type)
     , task_type_(task_type)
-    , is_dijkstras_type_task_(false)
+    , is_dijkstras_type_task_(is_dijkstras_type_task)
     , nh_(nh)
     , vis_(vis)
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
@@ -171,9 +171,9 @@ double TaskSpecification::collisionScalingFactor() const
     return collisionScalingFactor_impl();
 }
 
-double TaskSpecification::stretchingScalingThreshold() const
+double TaskSpecification::stretchingThreshold() const
 {
-    return stretchingScalingThreshold_impl();
+    return stretchingThreshold_impl();
 }
 
 double TaskSpecification::maxTime() const
@@ -211,70 +211,138 @@ ObjectDeltaAndWeight TaskSpecification::calculateObjectErrorCorrectionDelta(
     return calculateObjectErrorCorrectionDelta_impl(world_state);
 }
 
+
+
+
+
+
+inline void addStrechingCorrectionVector(ObjectDeltaAndWeight& stretching_correction, const ObjectPointSet& object_configuration, const ssize_t first_node, const ssize_t second_node, const double node_distance_delta)
+{
+    // The correction vector points from the first node to the second node,
+    // and is half the length of the "extra" distance
+    const Eigen::Vector3d correction_vector = 0.5 * node_distance_delta
+            * (object_configuration.col(second_node)
+                - object_configuration.col(first_node));
+
+    stretching_correction.delta.segment<3>(3 * first_node) += correction_vector;
+    stretching_correction.delta.segment<3>(3 * second_node) -= correction_vector;
+
+    // Set the weight to be the stretch distance of the worst offender
+    const double first_node_max_stretch = std::max(stretching_correction.weight(3 * first_node), 2000.0*node_distance_delta);
+    stretching_correction.weight(3 * first_node)     = first_node_max_stretch;
+    stretching_correction.weight(3 * first_node + 1) = first_node_max_stretch;
+    stretching_correction.weight(3 * first_node + 2) = first_node_max_stretch;
+
+    // Set the weight to be the stretch distance of the worst offender
+    const double second_node_max_stretch = std::max(stretching_correction.weight(3 * second_node), 2000.0*node_distance_delta);
+    stretching_correction.weight(3 * second_node)     = second_node_max_stretch;
+    stretching_correction.weight(3 * second_node + 1) = second_node_max_stretch;
+    stretching_correction.weight(3 * second_node + 2) = second_node_max_stretch;
+}
+
+
+bool TaskSpecification::stretchingConstraintViolated(
+        const ssize_t first_node_ind,
+        const Eigen::Vector3d& first_node,
+        const ssize_t second_node_ind,
+        const Eigen::Vector3d& second_node) const
+{
+    const double dist = (first_node - second_node).norm();
+    const double node_distance_delta = dist - object_initial_node_distance_(first_node_ind, second_node_ind);
+    return node_distance_delta > stretchingThreshold();
+}
+
+
 /**
- * @brief TaskSpecification::calculateStretchingCorrectionDelta
+ * @brief TaskSpecification::calculateStretchingCorrectionDeltaFullyConnected
  * @param object_configuration
+ * @param visualize
  * @return
  */
-ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
+ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyConnected(
         const ObjectPointSet& object_configuration,
         bool visualize) const
 {
-    ObjectDeltaAndWeight stretching_correction (num_nodes_ * 3);
+    ObjectDeltaAndWeight stretching_correction(num_nodes_ * 3);
 
-    const Eigen::MatrixXd node_squared_distance =
-            CalculateSquaredDistanceMatrix(object_configuration);
+    const Eigen::MatrixXd node_distance =
+            CalculateDistanceMatrix(object_configuration);
 
-    const double stretching_correction_threshold = stretchingScalingThreshold();
+    const double max_delta = stretchingThreshold();
 
-    EigenHelpers::VectorVector3d start_points;
-    EigenHelpers::VectorVector3d end_points;
+    EigenHelpers::VectorVector3d vis_start_points;
+    EigenHelpers::VectorVector3d vis_end_points;
 
     for (ssize_t first_node = 0; first_node < num_nodes_; ++first_node)
     {
         for (ssize_t second_node = first_node + 1; second_node < num_nodes_; ++second_node)
         {
-            const double max_distance = stretching_correction_threshold + object_initial_node_distance_(first_node, second_node);
-            if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
+            const double node_distance_delta = node_distance(first_node, second_node)
+                    - object_initial_node_distance_(first_node, second_node);
+            if (node_distance_delta > max_delta)
             {
-                const double node_distance_delta = std::sqrt(node_squared_distance(first_node, second_node)) - object_initial_node_distance_(first_node, second_node);
-                assert(node_distance_delta > stretching_correction_threshold);
-                // The correction vector points from the first node to the second node,
-                // and is half the length of the "extra" distance
-                const Eigen::Vector3d correction_vector = 0.5 * node_distance_delta
-                        * (object_configuration.block<3, 1>(0, second_node)
-                            - object_configuration.block<3, 1>(0, first_node));
-
-                stretching_correction.delta.segment<3>(3 * first_node) += correction_vector;
-                stretching_correction.delta.segment<3>(3 * second_node) -= correction_vector;
-
-                // Set the weight to be the stretch distance of the worst offender
-                const double first_node_max_stretch = std::max(stretching_correction.weight(3 * first_node), node_distance_delta);
-                stretching_correction.weight(3 * first_node) = first_node_max_stretch;
-                stretching_correction.weight(3 * first_node + 1) = first_node_max_stretch;
-                stretching_correction.weight(3 * first_node + 2) = first_node_max_stretch;
-
-                // Set the weight to be the stretch distance of the worst offender
-                const double second_node_max_stretch = std::max(stretching_correction.weight(3 * second_node), node_distance_delta);
-                stretching_correction.weight(3 * second_node) = second_node_max_stretch;
-                stretching_correction.weight(3 * second_node + 1) = second_node_max_stretch;
-                stretching_correction.weight(3 * second_node + 2) = second_node_max_stretch;
+                addStrechingCorrectionVector(stretching_correction, object_configuration, first_node, second_node, node_distance_delta);
 
                 if (visualize)
                 {
-                    start_points.push_back(object_configuration.block<3, 1>(0, first_node));
-                    end_points.push_back(object_configuration.block<3, 1>(0, first_node) + correction_vector);
-
-                    start_points.push_back(object_configuration.block<3, 1>(0, second_node));
-                    end_points.push_back(object_configuration.block<3, 1>(0, first_node) - correction_vector);
+                    vis_start_points.push_back(object_configuration.col(first_node));
+                    vis_end_points.push_back(object_configuration.col(second_node));
                 }
             }
         }
     }
 
-    if (visualize && start_points.size() > 0)
+    if (visualize)
     {
-        vis_.visualizeLines("stretching_lines", start_points, end_points, Visualizer::Blue());
+        vis_.visualizeLines("stretching_lines", vis_start_points, vis_end_points, Visualizer::Blue());
+    }
+
+    return stretching_correction;
+}
+
+/**
+ * @brief TaskSpecification::calculateStretchingCorrectionDeltaPairwise
+ * @param object_configuration
+ * @param visualize
+ * @return
+ */
+ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaPairwise(
+        const ObjectPointSet& object_configuration,
+        bool visualize) const
+{
+    ObjectDeltaAndWeight stretching_correction(num_nodes_ * 3);
+
+    EigenHelpers::VectorVector3d vis_start_points;
+    EigenHelpers::VectorVector3d vis_end_points;
+
+    const double max_delta = stretchingThreshold();
+
+    for (ssize_t first_node = 0; first_node < num_nodes_; ++first_node)
+    {
+        for (ssize_t second_node : getNodeNeighbours(first_node))
+        {
+            // Only calculate corrections for nodes beyond the first so as to avoid duplicating work
+            if (second_node > first_node)
+            {
+                const double dist = (object_configuration.col(second_node) - object_configuration.col(first_node)).norm();
+                const double node_distance_delta = dist - object_initial_node_distance_(first_node, second_node);
+                if (node_distance_delta > max_delta)
+                {
+                    addStrechingCorrectionVector(stretching_correction, object_configuration, first_node, second_node, node_distance_delta);
+
+                    if (visualize)
+                    {
+                        vis_start_points.push_back(object_configuration.col(first_node));
+                        vis_end_points.push_back(object_configuration.col(second_node));
+                    }
+                }
+            }
+        }
+    }
+
+    if (visualize)
+    {
+        vis_.visualizeLines("stretching_lines", vis_start_points, vis_end_points, Visualizer::Blue());
     }
 
     return stretching_correction;
@@ -283,14 +351,29 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
 /**
  * @brief TaskSpecification::calculateStretchingCorrectionDelta
  * @param world_state
+ * @param visualize
  * @return
  */
 ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
         const WorldState& world_state,
         bool visualize) const
 {
-    return calculateStretchingCorrectionDelta(world_state.object_configuration_, visualize);
+//    return calculateStretchingCorrectionDeltaFullyConnected(world_state.object_configuration_, visualize);
+    return calculateStretchingCorrectionDeltaPairwise(world_state.object_configuration_, visualize);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /**
  * @brief TaskSpecification::calculateStretchingError
@@ -300,10 +383,12 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
 double TaskSpecification::calculateStretchingError(
         const ObjectPointSet& object_configuration) const
 {
+    assert(false && "This function has not been used in long enough that the implementation is suspect.");
+
     const Eigen::MatrixXd node_squared_distance =
             CalculateSquaredDistanceMatrix(object_configuration);
 
-    const double stretching_correction_threshold = stretchingScalingThreshold();
+    const double stretching_correction_threshold = stretchingThreshold();
 
     ssize_t squared_error = 0;
     #pragma omp parallel for reduction(+ : squared_error)
@@ -395,7 +480,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
             ROS_INFO_NAMED("task", "Determining desired direction");
             first_step_error_correction_ = calculateObjectErrorCorrectionDelta(world_state);
 
-            first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, false);
+            first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, true);
 
             first_step_desired_motion_ = combineErrorCorrectionAndStretchingCorrection(
                         first_step_error_correction_, first_step_stretching_correction_);
@@ -407,13 +492,19 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
     }
 }
 
+std::vector<ssize_t> TaskSpecification::getNodeNeighbours(const ssize_t node) const
+{
+    assert(node < num_nodes_);
+    return getNodeNeighbours_impl(node);
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Coverage Task
 ////////////////////////////////////////////////////////////////////////////////
 
-CoverageTask::CoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type)
-    : TaskSpecification(nh, deformable_type, task_type)
+CoverageTask::CoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type, const bool is_dijkstras_type_task = false)
+    : TaskSpecification(nh, deformable_type, task_type, is_dijkstras_type_task)
     , cover_points_(GetCoverPoints(nh))
     , num_cover_points_(cover_points_.cols())
 {}
@@ -448,14 +539,12 @@ ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_imp
 ////////////////////////////////////////////////////////////////////////////////
 
 DijkstrasCoverageTask::DijkstrasCoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type)
-    : CoverageTask(nh, deformable_type, task_type)
+    : CoverageTask(nh, deformable_type, task_type, true)
     , free_space_grid_(GetWorldXMin(nh), GetWorldXStep(nh), GetWorldXNumSteps(nh),
                        GetWorldYMin(nh), GetWorldYStep(nh), GetWorldYNumSteps(nh),
                        GetWorldZMin(nh), GetWorldZStep(nh), GetWorldZNumSteps(nh))
     , environment_sdf_(GetEnvironmentSDF(nh))
 {
-    is_dijkstras_type_task_ = true;
-
     GetFreeSpaceGraph(nh, free_space_graph_, cover_ind_to_free_space_graph_ind_);
     assert(cover_ind_to_free_space_graph_ind_.size() == (size_t)num_cover_points_);
 
@@ -622,6 +711,10 @@ std::tuple<ssize_t, double, ssize_t> DijkstrasCoverageTask::findNearestObjectPoi
 }
 
 
+
+
+
+
 std::vector<EigenHelpers::VectorVector3d> DijkstrasCoverageTask::findPathFromObjectToTarget(const ObjectPointSet& object_configuration, const double minimum_threshold) const
 {
     #warning "Fix this magic number"
@@ -727,14 +820,26 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             if (progress)
             {
                 const Eigen::Vector3d& graph_aligned_next_pos = free_space_graph_.GetNodeImmutable(graph_aligned_next_ind).GetValueImmutable();
-                trajectory.push_back(graph_aligned_next_pos);
-                current_pos = graph_aligned_next_pos;
+                // Check for length 2 cycles
+                if (trajectory.size() >= 2)
+                {
+                    const Eigen::Vector3d& graph_aligned_pos_prev = trajectory[trajectory.size() - 2];
+                    progress = (graph_aligned_next_pos - graph_aligned_pos_prev).norm() > 1e-5;
+                }
+
+                if (progress)
+                {
+                    trajectory.push_back(graph_aligned_next_pos);
+                    current_pos = graph_aligned_next_pos;
+                }
             }
         }
     }
 
     return trajectory;
 }
+
+
 
 
 ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_Dijkstras(
@@ -780,4 +885,77 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_
 {
     ROS_INFO_NAMED("dijkstras_coverage_task" , "Finding 'best' object delta");
     return calculateObjectErrorCorrectionDelta_Dijkstras(world_state.object_configuration_, getErrorThreshold());
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Rope and cloth neighbour functions
+////////////////////////////////////////////////////////////////////////////////
+
+LineNeighbours::LineNeighbours(const ssize_t num_nodes)
+    : num_nodes_(num_nodes)
+{}
+
+std::vector<ssize_t> LineNeighbours::getNodeNeighbours(const ssize_t node) const
+{
+    std::vector<ssize_t> neighbours;
+    neighbours.reserve(2);
+
+    // Left
+    if (node > 0)
+    {
+        neighbours.push_back(node - 1);
+    }
+
+    // Right
+    if (node + 1 < num_nodes_)
+    {
+        neighbours.push_back(node + 1);
+    }
+
+    return neighbours;
+}
+
+
+
+Grid4Neighbours::Grid4Neighbours(const ssize_t num_nodes, const ssize_t stride)
+    : num_nodes_(num_nodes)
+    , stride_(stride)
+{}
+
+std::vector<ssize_t> Grid4Neighbours::getNodeNeighbours(const ssize_t node) const
+{
+    std::vector<ssize_t> neighbours;
+    neighbours.reserve(4);
+
+    const bool on_upper_edge = node < stride_;
+    const bool on_left_edge = node % stride_ == 0;
+    const bool on_right_edge = (node + 1) % stride_ == 0;
+    const bool on_bottom_edge = node + stride_ >= num_nodes_;
+
+    // Up
+    if (!on_upper_edge)
+    {
+        neighbours.push_back(node - stride_);
+    }
+
+    // Left
+    if (!on_left_edge)
+    {
+        neighbours.push_back(node - 1);
+    }
+
+    // Right
+    if (!on_right_edge)
+    {
+        neighbours.push_back(node + 1);
+    }
+
+    // Down
+    if (!on_bottom_edge)
+    {
+        neighbours.push_back(node + stride_);
+    }
+
+    return neighbours;
 }

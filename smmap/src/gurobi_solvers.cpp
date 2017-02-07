@@ -8,6 +8,21 @@ using namespace Eigen;
 
 static std::mutex gurobi_env_construct_mtx;
 
+GRBQuadExpr buildQuadraticTerm(GRBVar* left_vars, GRBVar* right_vars, const Eigen::MatrixXd& Q)
+{
+    GRBQuadExpr expr;
+
+    for (ssize_t right_ind = 0; right_ind < Q.rows(); ++right_ind)
+    {
+        for (ssize_t left_ind = 0; left_ind < Q.cols(); ++left_ind)
+        {
+            expr += left_vars[(size_t)left_ind] * Q(left_ind, right_ind) * right_vars[(size_t)right_ind];
+        }
+    }
+
+    return expr;
+}
+
 GRBQuadExpr normSquared(const std::vector<GRBLinExpr>& exprs)
 {
     GRBQuadExpr vector_norm_squared = 0;
@@ -35,12 +50,12 @@ GRBQuadExpr normSquared(const std::vector<GRBLinExpr>& exprs, const VectorXd& we
     return vector_norm_squared;
 }
 
-GRBQuadExpr normSquared(GRBVar* vars, const ssize_t num_vars)
+GRBQuadExpr normSquared(GRBVar* vars, const size_t num_vars)
 {
     GRBQuadExpr vector_norm_squared = 0;
 
     // TODO: replace with a single call to addTerms?
-    for (ssize_t var_ind = 0; var_ind < num_vars; var_ind++)
+    for (size_t var_ind = 0; var_ind < num_vars; var_ind++)
     {
         vector_norm_squared += vars[var_ind] * vars[var_ind];
     }
@@ -206,19 +221,26 @@ Eigen::VectorXd smmap::minSquaredNormSE3VelocityConstraints(const Eigen::MatrixX
         model.update();
 
         // Add the SE3 velocity constraints
-        for (int i = 0; i < num_vars / 6; i++)
+        for (ssize_t i = 0; i < num_vars / 6; ++i)
         {
             model.addQConstr(normSquared(&vars[i * 6], 6), GRB_LESS_EQUAL, max_se3_velocity * max_se3_velocity);
         }
 
-        GRBQuadExpr objective_fn = normSquared(buildVectorOfExperssions(A, vars, b), weights);
-        // Check if we need to add anything extra to the main diagonal.
-        const VectorXd eigenvalues = (A.transpose() * weights.asDiagonal() * A).selfadjointView<Upper>().eigenvalues();
-        if ((eigenvalues.array() < 1.1e-4).any())
+
+
+        // Build up the matrix expressions
+        // min || A x - b ||^2_W is the same as min x^T A^T W A x - 2 b^T W A x = x^T Q x + L x
+        Eigen::MatrixXd Q = A.transpose() * weights.asDiagonal() * A;
+        const double min_eigenvalue = Q.selfadjointView<Upper>().eigenvalues().minCoeff();
+        if (min_eigenvalue < 1.1e-4)
         {
-            std::vector<double> diagonal(num_vars, 1.1e-4 - eigenvalues.minCoeff());
-            objective_fn.addTerms(diagonal.data(), vars, vars, (int)num_vars);
+            Q += Eigen::MatrixXd::Identity(num_vars, num_vars) * (1.400001e-4 - min_eigenvalue);
         }
+
+        const Eigen::RowVectorXd L = -2.0 * b.transpose() * weights.asDiagonal() * A;
+
+        GRBQuadExpr objective_fn = buildQuadraticTerm(vars, vars, Q);
+        objective_fn.addTerms(L.data(), vars, (int)num_vars);
         model.setObjective(objective_fn, GRB_MINIMIZE);
 
         model.update();

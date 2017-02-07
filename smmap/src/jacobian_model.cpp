@@ -70,7 +70,7 @@ JacobianModel::getSuggestedGrippersCommand(
     if (optimize_)
     {
         grippers_delta_achieve_goal =
-                minSquaredNorm(jacobian, desired_object_velocity.delta, max_step_size, desired_object_velocity.weight);
+                minSquaredNormSE3VelocityConstraints(jacobian, desired_object_velocity.delta, max_step_size, desired_object_velocity.weight);
     }
     else
     {

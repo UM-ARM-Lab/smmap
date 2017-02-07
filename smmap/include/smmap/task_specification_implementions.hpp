@@ -4,6 +4,8 @@
 #include "smmap/task_specification.h"
 #include "smmap/point_reflector.hpp"
 
+#define CLOTH_STRECH_THRESHOLD 0.002
+
 namespace smmap
 {
     /**
@@ -14,6 +16,7 @@ namespace smmap
         public:
             RopeCylinderCoverage(ros::NodeHandle& nh)
                 : DirectCoverageTask(nh, DeformableType::ROPE, TaskType::ROPE_CYLINDER_COVERAGE)
+                , neighbours_(num_nodes_)
             {}
 
         private:
@@ -27,7 +30,7 @@ namespace smmap
                 return  200.0; // beta
             }
 
-            virtual double stretchingScalingThreshold_impl() const
+            virtual double stretchingThreshold_impl() const
             {
                 return 0.005; // lambda
             }
@@ -59,6 +62,13 @@ namespace smmap
             {
                 return 0.01;
             }
+
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const
+            {
+                return neighbours_.getNodeNeighbours(node);
+            }
+
+            const LineNeighbours neighbours_;
     };
 
     /**
@@ -69,6 +79,7 @@ namespace smmap
         public:
             ClothCylinderCoverage(ros::NodeHandle& nh)
                 : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_CYLINDER_COVERAGE)
+                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
             {}
 
         private:
@@ -82,9 +93,9 @@ namespace smmap
                 return  1000.0; // beta
             }
 
-            virtual double stretchingScalingThreshold_impl() const
+            virtual double stretchingThreshold_impl() const
             {
-                return 0.03; // lambda
+                return CLOTH_STRECH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -115,7 +126,12 @@ namespace smmap
                 return 0.002;
             }
 
-        private:
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const
+            {
+                return neighbours_.getNodeNeighbours(node);
+            }
+
+            const Grid4Neighbours neighbours_;
     };
 
     /**
@@ -126,11 +142,12 @@ namespace smmap
         public:
             ClothTableCoverage(ros::NodeHandle& nh)
                 : DirectCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_TABLE_COVERAGE)
-                , table_min_x_(GetTableSurfaceX(nh) - GetTableHalfExtentsX(nh))
-                , table_max_x_(GetTableSurfaceX(nh) + GetTableHalfExtentsX(nh))
-                , table_min_y_(GetTableSurfaceY(nh) - GetTableHalfExtentsY(nh))
-                , table_max_y_(GetTableSurfaceY(nh) + GetTableHalfExtentsY(nh))
-                , table_z_(GetTableSurfaceZ(nh))
+                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
+//                , table_min_x_(GetTableSurfaceX(nh) - GetTableHalfExtentsX(nh))
+//                , table_max_x_(GetTableSurfaceX(nh) + GetTableHalfExtentsX(nh))
+//                , table_min_y_(GetTableSurfaceY(nh) - GetTableHalfExtentsY(nh))
+//                , table_max_y_(GetTableSurfaceY(nh) + GetTableHalfExtentsY(nh))
+//                , table_z_(GetTableSurfaceZ(nh))
             {}
 
         private:
@@ -144,9 +161,9 @@ namespace smmap
                 return  1000.0; // beta
             }
 
-            virtual double stretchingScalingThreshold_impl() const
+            virtual double stretchingThreshold_impl() const
             {
-                return 0.03; // lambda
+                return CLOTH_STRECH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -177,12 +194,19 @@ namespace smmap
                 return 0.002;
             }
 
-        private:
-            const double table_min_x_;
-            const double table_max_x_;
-            const double table_min_y_;
-            const double table_max_y_;
-            const double table_z_;
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const
+            {
+                return neighbours_.getNodeNeighbours(node);
+            }
+
+            const Grid4Neighbours neighbours_;
+
+//        private:
+//            const double table_min_x_;
+//            const double table_max_x_;
+//            const double table_min_y_;
+//            const double table_max_y_;
+//            const double table_z_;
     };
 
     /**
@@ -193,6 +217,7 @@ namespace smmap
         public:
             ClothColabFolding(ros::NodeHandle& nh)
                 : TaskSpecification(nh, DeformableType::CLOTH, TaskType::CLOTH_COLAB_FOLDING)
+                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
                 , point_reflector_(createPointReflector(nh))
                 , mirror_map_(createMirrorMap(nh, point_reflector_))
             {}
@@ -208,9 +233,9 @@ namespace smmap
                 return 1000.0; // beta
             }
 
-            virtual double stretchingScalingThreshold_impl() const
+            virtual double stretchingThreshold_impl() const
             {
-                return 0.03; // lambda
+                return CLOTH_STRECH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -275,6 +300,13 @@ namespace smmap
                 return desired_cloth_delta;
             }
 
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const
+            {
+                return neighbours_.getNodeNeighbours(node);
+            }
+
+            const Grid4Neighbours neighbours_;
+
         private:
             const PointReflector point_reflector_;
             PointReflector createPointReflector(ros::NodeHandle& nh)
@@ -331,6 +363,7 @@ namespace smmap
         public:
             ClothWAFR(ros::NodeHandle& nh)
                 : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_WAFR)
+                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
             {}
 
         private:
@@ -344,9 +377,9 @@ namespace smmap
                 return  1000.0; // beta
             }
 
-            virtual double stretchingScalingThreshold_impl() const
+            virtual double stretchingThreshold_impl() const
             {
-                return 0.03; // lambda
+                return CLOTH_STRECH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -376,6 +409,13 @@ namespace smmap
             {
                 return 0.002;
             }
+
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const
+            {
+                return neighbours_.getNodeNeighbours(node);
+            }
+
+            const Grid4Neighbours neighbours_;
     };
 
     /**
@@ -386,6 +426,7 @@ namespace smmap
         public:
             ClothSinglePole(ros::NodeHandle& nh)
                 : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_SINGLE_POLE)
+                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
             {}
 
         private:
@@ -399,9 +440,9 @@ namespace smmap
                 return  1000.0; // beta
             }
 
-            virtual double stretchingScalingThreshold_impl() const
+            virtual double stretchingThreshold_impl() const
             {
-                return 0.03; // lambda
+                return CLOTH_STRECH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -431,6 +472,13 @@ namespace smmap
             {
                 return 0.002;
             }
+
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const
+            {
+                return neighbours_.getNodeNeighbours(node);
+            }
+
+            const Grid4Neighbours neighbours_;
     };
 
     /**
@@ -441,6 +489,7 @@ namespace smmap
         public:
             ClothWall(ros::NodeHandle& nh)
                 : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_WALL)
+                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
             {}
 
         private:
@@ -454,9 +503,9 @@ namespace smmap
                 return  1000.0; // beta
             }
 
-            virtual double stretchingScalingThreshold_impl() const
+            virtual double stretchingThreshold_impl() const
             {
-                return 0.03; // lambda
+                return CLOTH_STRECH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -486,6 +535,13 @@ namespace smmap
             {
                 return 0.002;
             }
+
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const
+            {
+                return neighbours_.getNodeNeighbours(node);
+            }
+
+            const Grid4Neighbours neighbours_;
     };
 
     /**
@@ -496,6 +552,7 @@ namespace smmap
         public:
             ClothDoubleSlit(ros::NodeHandle& nh)
                 : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_DOUBLE_SLIT)
+                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
             {}
 
         private:
@@ -509,9 +566,9 @@ namespace smmap
                 return  1000.0; // beta
             }
 
-            virtual double stretchingScalingThreshold_impl() const
+            virtual double stretchingThreshold_impl() const
             {
-                return 0.03; // lambda
+                return CLOTH_STRECH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -541,6 +598,13 @@ namespace smmap
             {
                 return 0.002;
             }
+
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const
+            {
+                return neighbours_.getNodeNeighbours(node);
+            }
+
+            const Grid4Neighbours neighbours_;
     };
 
     /**
@@ -551,6 +615,7 @@ namespace smmap
         public:
             RopeMaze(ros::NodeHandle& nh)
                 : DijkstrasCoverageTask(nh, DeformableType::ROPE, TaskType::ROPE_MAZE)
+                , neighbours_(num_nodes_)
             {}
 
         private:
@@ -564,7 +629,7 @@ namespace smmap
                 return  200.0; // beta
             }
 
-            virtual double stretchingScalingThreshold_impl() const
+            virtual double stretchingThreshold_impl() const
             {
                 return 0.005; // lambda
             }
@@ -596,6 +661,13 @@ namespace smmap
             {
                 return 0.01;
             }
+
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const
+            {
+                return neighbours_.getNodeNeighbours(node);
+            }
+
+            const LineNeighbours neighbours_;
     };
 }
 

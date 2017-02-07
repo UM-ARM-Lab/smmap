@@ -44,8 +44,8 @@ namespace smmap
             // Constructor to initialize objects that all TaskSpecifications share
             ////////////////////////////////////////////////////////////////////
 
-            TaskSpecification(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type);
-            TaskSpecification(ros::NodeHandle& nh, Visualizer vis, const DeformableType deformable_type, const TaskType task_type);
+            TaskSpecification(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type, const bool is_dijkstras_type_task = false);
+            TaskSpecification(ros::NodeHandle& nh, Visualizer vis, const DeformableType deformable_type, const TaskType task_type, const bool is_dijkstras_type_task = false);
 
             ////////////////////////////////////////////////////////////////////
             // Static builder function
@@ -60,7 +60,7 @@ namespace smmap
 
             double defaultDeformability() const;        // k
             double collisionScalingFactor() const;      // beta (or k2)
-            double stretchingScalingThreshold() const;  // lambda
+            double stretchingThreshold() const;         // lambda
             double maxTime() const;                     // max simulation time when scripting things
 
             void visualizeDeformableObject(
@@ -92,12 +92,28 @@ namespace smmap
             // TODO: Should these be virtual? virtual final?
             ////////////////////////////////////////////////////////////////////
 
+            bool stretchingConstraintViolated(
+                    const ssize_t first_node_ind,
+                    const Eigen::Vector3d& first_node,
+                    const ssize_t second_node_ind,
+                    const Eigen::Vector3d& second_node) const;
+
             /**
-             * @brief calculateStretchingCorrectionDelta
+             * @brief calculateStretchingCorrectionDeltaFullyConnected
              * @param world_state
              * @return
              */
-            ObjectDeltaAndWeight calculateStretchingCorrectionDelta(
+            ObjectDeltaAndWeight calculateStretchingCorrectionDeltaFullyConnected(
+                    const ObjectPointSet& object_configuration,
+                    bool visualize) const;
+
+            /**
+             * @brief calculateStretchingCorrectionDeltaPairwise
+             * @param object_configuration
+             * @param visualize
+             * @return
+             */
+            ObjectDeltaAndWeight calculateStretchingCorrectionDeltaPairwise(
                     const ObjectPointSet& object_configuration,
                     bool visualize) const;
 
@@ -109,6 +125,11 @@ namespace smmap
             ObjectDeltaAndWeight calculateStretchingCorrectionDelta(
                     const WorldState& world_state,
                     bool visualize) const;
+
+
+
+
+
 
             /**
              * @brief calculateStretchingError
@@ -139,6 +160,8 @@ namespace smmap
 
             ObjectDeltaAndWeight calculateDesiredDirection(const WorldState& world_state);
 
+            std::vector<ssize_t> getNodeNeighbours(const ssize_t node) const;
+
         private:
             ObjectDeltaAndWeight first_step_desired_motion_;
             ObjectDeltaAndWeight first_step_error_correction_;
@@ -152,8 +175,7 @@ namespace smmap
             // Records of task and deformable type if various visualizers or whatever need them
             const DeformableType deformable_type_;
             const TaskType task_type_;
-            #warning "This ought to be like a Java final"
-            bool is_dijkstras_type_task_;
+            const bool is_dijkstras_type_task_;
 
         protected:
             ////////////////////////////////////////////////////////////////////
@@ -178,7 +200,7 @@ namespace smmap
 
             virtual double deformability_impl() const = 0;              // k
             virtual double collisionScalingFactor_impl() const = 0;     // beta (or k2)
-            virtual double stretchingScalingThreshold_impl() const = 0; // lambda
+            virtual double stretchingThreshold_impl() const = 0; // lambda
             virtual double maxTime_impl() const = 0;                    // max simulation time when scripting things
 
             virtual void visualizeDeformableObject_impl(
@@ -198,12 +220,14 @@ namespace smmap
 
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state) const = 0;
+
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const = 0;
     };
 
     class CoverageTask : public TaskSpecification
     {
         public:
-            CoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type);
+            CoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type, const bool is_dijkstras_type_task);
 
             double getErrorThreshold() const;
 
@@ -249,8 +273,12 @@ namespace smmap
 
             /// Free space graph that creates a vector field for the deformable object to follow
             arc_dijkstras::Graph<Eigen::Vector3d> free_space_graph_;
+
+        public:
             const XYZGrid free_space_grid_;
             const sdf_tools::SignedDistanceField environment_sdf_;
+
+        private:
 
             /// Map between cover point indices and graph indices, with distances
             std::vector<int64_t> cover_ind_to_free_space_graph_ind_;
@@ -260,6 +288,28 @@ namespace smmap
         private:
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state) const final;
+    };
+
+    class LineNeighbours
+    {
+        public:
+            LineNeighbours(const ssize_t num_nodes);
+            std::vector<ssize_t> getNodeNeighbours(const ssize_t node) const;
+
+        private:
+            const ssize_t num_nodes_;
+    };
+
+
+    class Grid4Neighbours
+    {
+        public:
+            Grid4Neighbours(const ssize_t num_nodes, const ssize_t stride);
+            std::vector<ssize_t> getNodeNeighbours(const ssize_t node) const;
+
+        private:
+            const ssize_t num_nodes_;
+            const ssize_t stride_;
     };
 }
 

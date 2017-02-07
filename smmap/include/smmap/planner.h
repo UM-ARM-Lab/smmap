@@ -32,7 +32,17 @@ namespace smmap
             // The two functions that gets invoked repeatedly
             ////////////////////////////////////////////////////////////////////
 
+            bool checkForClothStretchingViolations(const std::vector<EigenHelpers::VectorVector3d>& projected_paths);
             void detectFutureConstraintViolations(const WorldState& current_world_state);
+
+//            std::pair<EigenHelpers::VectorVector3d, std::vector<double>> forwardSimulateVirtualRubberBand(
+//                    std::shared_ptr<DijkstrasCoverageTask> task,
+//                    const EigenHelpers::VectorVector3d& starting_band,
+//                    const std::vector<double>& starting_dists,
+//                    const AllGrippersSinglePose& starting_grippers_single_pose,
+//                    const AllGrippersSinglePose& ending_grippers_single_pose) const;
+
+
 
             WorldState sendNextCommand(const WorldState& current_world_state);
             void visualizeDesiredMotion(const WorldState& current_world_state,
@@ -91,6 +101,16 @@ namespace smmap
 //            Eigen::MatrixXd calculateObservationNoise(
 //                    const Eigen::MatrixXd& process_noise,
 //                    const ssize_t model_used);
+
+
+        ////////////////////////////////////
+        // Random stuff to be properly managed later
+        ////////////////////////////////////
+
+        private:
+            EigenHelpers::VectorVector3d virtual_rubber_band_between_grippers_;
+            std::vector<double> virtual_rubber_band_distance_running_sum_;
+            double max_gripper_distance_;
     };
 }
 

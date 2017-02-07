@@ -160,7 +160,7 @@ namespace smmap
     // TODO: vectorize this
     // TODO: use this for the coverage task error functions?
     inline ssize_t closestPointInSet(const ObjectPointSet& obj,
-                                   const Eigen::Vector3d& point)
+                                     const Eigen::Vector3d& point)
     {
         assert (obj.cols() > 0);
         long min_ind = 0;

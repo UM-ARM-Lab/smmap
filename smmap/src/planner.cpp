@@ -4,6 +4,7 @@
 #include <numeric>
 #include <arc_utilities/pretty_print.hpp>
 #include <arc_utilities/log.hpp>
+#include <arc_utilities/shortcut_smoothing.hpp>
 
 //#include "smmap/optimization.hpp"
 #include "smmap/timing.hpp"
@@ -77,28 +78,259 @@ void Planner::createBandits()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// The one function that gets invoked externally
+// Helpers
 ////////////////////////////////////////////////////////////////////////////////
+
+std::pair<EigenHelpers::VectorVector3d, std::vector<double>> forwardSimulateVirtualRubberBand(
+        std::shared_ptr<DijkstrasCoverageTask> task,
+        const EigenHelpers::VectorVector3d& starting_band,
+        const std::vector<double>& starting_dists,
+        const AllGrippersSinglePose& starting_grippers_single_pose,
+        const AllGrippersSinglePose& ending_grippers_single_pose)
+{
+    const sdf_tools::SignedDistanceField& sdf = task->environment_sdf_;
+    const XYZGrid& grid = task->free_space_grid_;
+
+    EigenHelpers::VectorVector3d gripper_translation_deltas(2);
+    gripper_translation_deltas[0] = ending_grippers_single_pose[0].translation() - starting_grippers_single_pose[0].translation();
+    gripper_translation_deltas[1] = ending_grippers_single_pose[1].translation() - starting_grippers_single_pose[1].translation();
+    const double total_distance_between_grippers = starting_dists.back();
+
+    std::pair<EigenHelpers::VectorVector3d, std::vector<double>> resulting_band;
+
+    // Forward simulate the rubber band
+    for (size_t virtual_rubber_band_node_ind = 0; virtual_rubber_band_node_ind < starting_band.size(); ++virtual_rubber_band_node_ind)
+    {
+        const double distance_to_gripper_0 = starting_dists[virtual_rubber_band_node_ind];
+        const double distance_to_gripper_1 = starting_dists.back() - distance_to_gripper_0;
+
+        const Eigen::Vector3d total_delta = distance_to_gripper_1 / total_distance_between_grippers * gripper_translation_deltas[0]
+                                          + distance_to_gripper_0 / total_distance_between_grippers * gripper_translation_deltas[1];
+
+        Eigen::Vector3d current_pos = starting_band[virtual_rubber_band_node_ind];
+        Eigen::Vector3d net_delta(0.0, 0.0, 0.0);
+        // Split the delta up into smaller steps to simulate "pulling" the rubber band along with constant obstacle collision resolution
+        for (int i = 0; i < 10; i++)
+        {
+            net_delta += total_delta / 10.0;
+
+            // If we are inside an obstacle, then push ourselves back out
+            for (float sdf_dist = sdf.Get(current_pos + net_delta); sdf_dist < 0; sdf_dist = sdf.Get(current_pos + net_delta))
+            {
+                const bool enable_edge_gradients = true;
+                const std::vector<double> gradient = sdf.GetGradient(current_pos + net_delta, enable_edge_gradients);
+                const Eigen::Vector3d grad_eigen = EigenHelpers::StdVectorDoubleToEigenVector3d(gradient);
+
+                net_delta += grad_eigen.normalized() * grid.minStepDimension() / 2.0;
+                assert(grad_eigen.norm() > grid.minStepDimension() / 4.0); // Sanity check
+                assert(net_delta.norm() < grid.minStepDimension() * 1.5); // Sanity check
+            }
+        }
+        resulting_band.first.push_back(current_pos + net_delta);
+    }
+
+    // Shortcut smoothing
+    const double step_size = task->free_space_grid_.minStepDimension() / 2.0;
+    const auto sdf_collision_fn = [&] (const Eigen::Vector3d& location) { return sdf.Get(location) < 0.0; };
+//    std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
+    std::default_random_engine generator;
+    for (int smoothing_ittr = 0; smoothing_ittr < 2000; ++smoothing_ittr)
+    {
+        std::uniform_int_distribution<size_t> distribution(0, resulting_band.first.size() - 1);
+
+        const size_t first_ind = distribution(generator);
+        const size_t second_ind = distribution(generator);
+        assert(first_ind < resulting_band.first.size());
+        assert(second_ind < resulting_band.first.size());
+
+        #warning "Shortcut smoothing magic minimum object radius here"
+        if (first_ind != second_ind && (resulting_band.first[first_ind] - resulting_band.first[second_ind]).squaredNorm() < 0.04*0.04)
+        {
+            resulting_band.first = shortcut_smoothing::ShortcutSmooth(resulting_band.first, first_ind, second_ind, step_size, sdf_collision_fn);
+        }
+    }
+
+    // Re-calculate distances
+    resulting_band.second.push_back(0.0);
+    for (size_t i = 1; i < resulting_band.first.size(); ++i)
+    {
+        const double prev_dist = resulting_band.second.back();
+        const double delta = (resulting_band.first[i] - resulting_band.first[i-1]).norm();
+        resulting_band.second.push_back(prev_dist + delta);
+    }
+
+    return resulting_band;
+}
+
+
+
+bool Planner::checkForClothStretchingViolations(const std::vector<EigenHelpers::VectorVector3d>& projected_paths)
+{
+    bool violations_exist = false;
+
+    const EigenHelpers::VectorVector3d empty_path;
+    EigenHelpers::VectorVector3d vis_start_points;
+    EigenHelpers::VectorVector3d vis_end_points;
+
+    // For each node, check it's projected path against it's neighbours
+    for (ssize_t node_ind = 0; node_ind < (ssize_t)projected_paths.size(); ++node_ind)
+    {
+        if (projected_paths[node_ind].size() > 1)
+        {
+            vis_.visualizePoints("projected_point_path", projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind);
+            vis_.visualizeXYZTrajectory("projected_point_path_lines", projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind);
+
+            // For each neighbour, check for violations
+            for (ssize_t neighbour_ind : task_specification_->getNodeNeighbours(node_ind))
+            {
+                // Only check a neighbour if we have not checked this pair before
+                if (neighbour_ind > node_ind)
+                {
+                    const size_t max_time = std::min(projected_paths[node_ind].size(), projected_paths[neighbour_ind].size());
+
+                    // At every future timestep, check for violations
+                    for (size_t t = 1; t < max_time; ++t)
+                    {
+                        if (task_specification_->stretchingConstraintViolated(node_ind, projected_paths[node_ind][t], neighbour_ind, projected_paths[neighbour_ind][t]))
+                        {
+                            violations_exist = true;
+                            vis_start_points.push_back(projected_paths[node_ind][t]);
+                            vis_end_points.push_back(projected_paths[neighbour_ind][t]);
+                        }
+                    }
+                }
+            }
+
+        }
+        else
+        {
+            vis_.visualizePoints("projected_point_path", empty_path,Visualizer::Magenta(), (int32_t)node_ind);
+            vis_.visualizeXYZTrajectory("projected_point_path_lines", empty_path, Visualizer::Magenta(), (int32_t)node_ind);
+        }
+    }
+
+    vis_.visualizeLines("constraint_violation_detection_lines_version_1", vis_start_points, vis_end_points, Visualizer::Blue());
+
+    return violations_exist;
+}
+
+
 
 void Planner::detectFutureConstraintViolations(const WorldState &current_world_state)
 {
     ROS_INFO_NAMED("planner", "------------------------------------------------------------------------------------");
     if (task_specification_->is_dijkstras_type_task_)
     {
-        ROS_INFO_NAMED("planner", "Starting future constraint violation detection");
+        //////////////////////////////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////////////////////////////
+        ROS_INFO_NAMED("planner", "Starting future constraint violation detection - Version 1");
+        const ObjectPointSet& object_configuration = current_world_state.object_configuration_;
         std::shared_ptr<DijkstrasCoverageTask> dijkstras_task = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
 
-        const std::vector<EigenHelpers::VectorVector3d> projected_paths = dijkstras_task->findPathFromObjectToTarget(current_world_state.object_configuration_, dijkstras_task->getErrorThreshold());
+        const std::vector<EigenHelpers::VectorVector3d> projected_paths = dijkstras_task->findPathFromObjectToTarget(object_configuration, dijkstras_task->getErrorThreshold());
+        const bool stretching_violations_exist = checkForClothStretchingViolations(projected_paths);
 
-        for (size_t path_ind = 0; path_ind < projected_paths.size(); ++path_ind)
+
+
+
+
+        //////////////////////////////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////////////////////////////
+        ROS_INFO_NAMED("planner", "Starting future constraint violation detection - Version 2b");
+        assert(num_models_ == 1 && current_world_state.all_grippers_single_pose_.size() == 2);
+        const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
         {
-            if (projected_paths[path_ind].size() > 1)
+            return task_specification_->calculateDesiredDirection(world_state);
+        };
+        const std_msgs::ColorRGBA gripper_violation_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
+
+        // Create the initial rubber band if needed
+        if (unlikely(virtual_rubber_band_between_grippers_.size() == 0))
+        {
+            const size_t num_divs = GetClothNumDivsY(nh_);
+            virtual_rubber_band_between_grippers_.reserve(num_divs);
+            virtual_rubber_band_distance_running_sum_.reserve(num_divs);
+
+            const auto& start_point = current_world_state.all_grippers_single_pose_.at(0).translation();
+            const auto& end_point = current_world_state.all_grippers_single_pose_.at(1).translation();
+            const auto delta = end_point - start_point;
+
+            for (size_t i = 0; i < num_divs; ++i)
             {
-                vis_.visualizePoints("projected_point_path", projected_paths[path_ind], Visualizer::Magenta(), (int32_t)path_ind);
+                virtual_rubber_band_between_grippers_.push_back(start_point + (double)i/(double)(num_divs - 1) * delta);
+                virtual_rubber_band_distance_running_sum_.push_back((virtual_rubber_band_between_grippers_.back() - virtual_rubber_band_between_grippers_.front()).norm());
+                assert(dijkstras_task->environment_sdf_.Get(virtual_rubber_band_between_grippers_.back()) > 0.0);
+            }
+
+            max_gripper_distance_ = virtual_rubber_band_distance_running_sum_.back() + (double)(GetClothNumDivsY(nh_) - 1) * dijkstras_task->stretchingThreshold();
+            ROS_INFO_STREAM_NAMED("planner", "  -----   Max gripper distance: " << max_gripper_distance_);
+        }
+
+        assert(virtual_rubber_band_between_grippers_.size() == virtual_rubber_band_distance_running_sum_.size());
+        assert((current_world_state.all_grippers_single_pose_[0].translation() - virtual_rubber_band_between_grippers_.front()).norm() < 1e-5);
+        assert((current_world_state.all_grippers_single_pose_[1].translation() - virtual_rubber_band_between_grippers_.back()).norm() < 1e-5);
+
+        // Visualize the initial rubber band
+        if (virtual_rubber_band_distance_running_sum_.back() <= max_gripper_distance_)
+        {
+            vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_, Visualizer::Black(), 0);
+        }
+        else
+        {
+            vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_, gripper_violation_color, 0);
+        }
+
+
+
+        //////////////////////////////////////////////////////////////////////////////////////////
+        WorldState world_state_copy = current_world_state;
+        EigenHelpers::VectorVector3d virtual_rubber_band_between_grippers_copy = virtual_rubber_band_between_grippers_;
+        std::vector<double> virtual_rubber_band_distance_running_sum_copy = virtual_rubber_band_distance_running_sum_;
+        for (size_t t = 0; t < 200; ++t)
+        {
+            const AllGrippersSinglePose starting_grippers_single_pose = world_state_copy.all_grippers_single_pose_;
+
+            // Move the grippers and cloth
+            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command =
+                model_list_[0]->getSuggestedGrippersCommand(
+                        task_desired_direction_fn,
+                        world_state_copy,
+                        robot_.dt_,
+                        robot_.max_gripper_velocity_,
+                        task_specification_->collisionScalingFactor());
+
+            world_state_copy.all_grippers_single_pose_ = kinematics::applyTwist(world_state_copy.all_grippers_single_pose_, robot_command.first);
+            world_state_copy.object_configuration_ += robot_command.second;
+            world_state_copy.sim_time_ += robot_.dt_;
+            world_state_copy.gripper_collision_data_ = robot_.checkGripperCollision(world_state_copy.all_grippers_single_pose_);
+
+            // Move the virtual rubber band to follow the grippers, projecting out of collision as needed
+            std::pair<EigenHelpers::VectorVector3d, std::vector<double>> next_rubber_band_data = forwardSimulateVirtualRubberBand(
+                        dijkstras_task,
+                        virtual_rubber_band_between_grippers_copy,
+                        virtual_rubber_band_distance_running_sum_copy,
+                        starting_grippers_single_pose,
+                        world_state_copy.all_grippers_single_pose_);
+
+
+            virtual_rubber_band_between_grippers_copy = next_rubber_band_data.first;
+            virtual_rubber_band_distance_running_sum_copy = next_rubber_band_data.second;
+
+            // Visualize
+            if (next_rubber_band_data.second.back() <= max_gripper_distance_)
+            {
+                vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_copy, Visualizer::Black(), (int32_t)t+1);
             }
             else
             {
-                vis_.visualizePoints("projected_point_path", EigenHelpers::VectorVector3d(), Visualizer::Magenta(), (int32_t)path_ind);
+                vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_copy, gripper_violation_color, (int32_t)t+1);
+            }
+
+            // If we are simulating the first step, then cache the results for the next call of this function - this 'ought' to be in the sendNextCommand function, however then we would be duplicating work
+            if (t == 0)
+            {
+                virtual_rubber_band_between_grippers_ = virtual_rubber_band_between_grippers_copy;
+                virtual_rubber_band_distance_running_sum_ = virtual_rubber_band_distance_running_sum_copy;
             }
         }
     }
@@ -108,13 +340,17 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
     }
 }
 
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// The one function that gets invoked externally
+////////////////////////////////////////////////////////////////////////////////
+
 /**
- * @brief Planner::getNextTrajectory
- * @param world_current_state
- * @param planning_horizion
- * @param dt
- * @param max_gripper_velocity
- * @param obstacle_avoidance_scale
+ * @brief Planner::sendNextCommand
+ * @param current_world_state
  * @return
  */
 WorldState Planner::sendNextCommand(const WorldState& current_world_state)
@@ -292,6 +528,11 @@ void Planner::updateModels(const WorldState& starting_world_state,
     }
 }
 
+/**
+ * @brief Planner::calculateProcessNoise
+ * @param suggested_commands
+ * @return
+ */
 Eigen::MatrixXd Planner::calculateProcessNoise(const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands)
 {
     std::vector<double> grippers_velocity_norms((size_t)num_models_);
@@ -331,88 +572,3 @@ Eigen::MatrixXd Planner::calculateProcessNoise(const std::vector<std::pair<AllGr
 
     return correlation_strength_factor_ * process_noise + (1.0 - correlation_strength_factor_) * Eigen::MatrixXd::Identity(num_models_, num_models_);
 }
-
-/*
-Eigen::VectorXd Planner::calculateObservedReward(
-        const WorldState& starting_world_state,
-        const ObjectDeltaAndWeight& task_desired_motion,
-        const ssize_t model_used,
-        const WorldState& world_feedback)
-{
-    const double starting_error = task_specification_->calculateError(starting_world_state.object_configuration_);
-    const double true_error_reduction = starting_error - task_specification_->calculateError(world_feedback.object_configuration_);
-    const Eigen::VectorXd true_object_diff = CalculateObjectDeltaAsVector(starting_world_state.object_configuration_, world_feedback.object_configuration_);
-    const double true_object_delta_norm = EigenHelpers::WeightedNorm(true_object_diff, task_desired_motion.weight);
-
-    // TODO: remove this auto
-    const AllGrippersSinglePoseDelta grippers_pose_delta = CalculateGrippersPoseDelta(starting_world_state.all_grippers_single_pose_, world_feedback.all_grippers_single_pose_);
-
-    Eigen::VectorXd angle_between_true_and_predicted = Eigen::VectorXd::Zero(num_models_);
-    for (ssize_t model_ind = 0; model_ind < num_models_; model_ind++)
-    {
-        const ObjectPointSet predicted_object_delta = model_list_[(size_t)model_ind]->getPredictedObjectDelta(
-                    starting_world_state,
-                    grippers_pose_delta,
-                    robot_.dt_);
-
-//        const Eigen::VectorXd predicted_object_diff = CalculateObjectDeltaAsVector(starting_world_state.object_configuration_, predicted_motion_under_true_gripper_movement);
-        const double predicted_object_delta_norm = EigenHelpers::WeightedNorm(predicted_object_delta, task_desired_motion.weight);
-
-        // Deal with the cloth not moving potentially (i.e. in fake data land)
-        if (predicted_object_delta_norm > 1e-10 && predicted_object_delta_norm > 1e-10)
-        {
-            angle_between_true_and_predicted(model_ind) = EigenHelpers::WeightedAngleBetweenVectors(true_object_diff, predicted_object_delta, task_desired_motion.weight);
-        }
-        else if (true_object_delta_norm <= 1e-10 && predicted_object_delta_norm <= 1e-10)
-        {
-            angle_between_true_and_predicted(model_ind) = 0;
-        }
-        else
-        {
-            angle_between_true_and_predicted(model_ind) = M_PI/2.0;
-        }
-    }
-
-    const Eigen::IOFormat CommaSpaceFmt(Eigen::StreamPrecision, 0, ", ", "\n", "", "", "", "");
-    const Eigen::IOFormat CommaSpaceSpaceFmt(Eigen::StreamPrecision, 0, ",  ", "\n", "", "", "", "");
-
-    Eigen::VectorXd observed_reward = Eigen::VectorXd::Zero(num_models_);
-    const double angle_to_model_chosen = angle_between_true_and_predicted(model_used);
-    for (ssize_t model_ind = 0; model_ind < num_models_; model_ind++)
-    {
-        const double angle_delta = angle_to_model_chosen - angle_between_true_and_predicted(model_ind);
-        observed_reward(model_ind) = true_error_reduction + 1.0 * angle_delta * std::abs(true_error_reduction);
-    }
-
-    return observed_reward;
-}
-
-Eigen::MatrixXd Planner::calculateObservationNoise(
-        const Eigen::MatrixXd& process_noise,
-        const ssize_t model_used)
-{
-    // Observation noise
-    Eigen::MatrixXd observation_noise;
-    observation_noise.resize(num_models_, num_models_);
-    for (ssize_t i = 0; i < num_models_; i++)
-    {
-        // reuse dot products between true gripper movement and suggested gripper movement - as the model_used gripper movement is the same as the true gipper movement (right now)
-        #pragma message "This term needs to change when we work with a non-perfectly tracking robot"
-        observation_noise(i, i) = std::exp(-process_noise(i, model_used));
-    }
-
-    for (ssize_t i = 0; i < num_models_; i++)
-    {
-        for (ssize_t j = i + 1; j < num_models_; j++)
-        {
-            // reuse dot products between true gripper movement and suggested gripper movement
-            observation_noise(i, j) = process_noise(i, j) * std::sqrt(observation_noise(i, i)) * std::sqrt(observation_noise(j, j));
-            observation_noise(j, i) = observation_noise(i, j);
-        }
-    }
-
-    observation_noise += 0.1 * Eigen::MatrixXd::Identity(num_models_, num_models_);
-
-    return observation_noise;
-}
-*/

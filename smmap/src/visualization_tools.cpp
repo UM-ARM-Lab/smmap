@@ -78,6 +78,7 @@ std_msgs::ColorRGBA Visualizer::Magenta()
 ////////////////////////////////////////////////////////////////////////////////
 
 Visualizer::Visualizer(ros::NodeHandle& nh)
+    : world_frame_name_(GetWorldFrameName())
 {
     InitializeStandardColors();
 
@@ -89,8 +90,9 @@ Visualizer::Visualizer(ros::NodeHandle& nh)
             nh.advertise<visualization_msgs::MarkerArray>(GetVisualizationMarkerArrayTopic(nh), 3000);
 }
 
-void Visualizer::visualizePoints(const std::string& marker_name,
-        EigenHelpers::VectorVector3d points,
+void Visualizer::visualizePoints(
+        const std::string& marker_name,
+        const EigenHelpers::VectorVector3d points,
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
@@ -107,7 +109,7 @@ void Visualizer::visualizePoints(
 {
     visualization_msgs::Marker marker;
 
-    marker.header.frame_id = "mocap_world";
+    marker.header.frame_id = world_frame_name_;
 
     marker.type = visualization_msgs::Marker::POINTS;
     marker.ns = marker_name;
@@ -136,6 +138,8 @@ void Visualizer::visualizeRope(
         const std::vector<std_msgs::ColorRGBA>& colors) const
 {
     visualization_msgs::Marker marker;
+
+    marker.header.frame_id = world_frame_name_;
 
     marker.type = visualization_msgs::Marker::LINE_STRIP;
     marker.ns = marker_name;
@@ -169,6 +173,8 @@ void Visualizer::visualizeCloth(
 {
     visualization_msgs::Marker marker;
 
+    marker.header.frame_id = world_frame_name_;
+
     marker.type = visualization_msgs::Marker::POINTS;
     marker.ns = marker_name;
     marker.id = 0;
@@ -201,6 +207,8 @@ void Visualizer::visualizeObjectDelta(
 {
     visualization_msgs::Marker marker;
 
+    marker.header.frame_id = world_frame_name_;
+
     marker.type = visualization_msgs::Marker::LINE_LIST;
     marker.ns = marker_name;
     marker.id = 0;
@@ -225,6 +233,8 @@ void Visualizer::visualizeTranslation(
         const std_msgs::ColorRGBA& color) const
 {
     visualization_msgs::Marker marker;
+
+    marker.header.frame_id = world_frame_name_;
 
     marker.type = visualization_msgs::Marker::LINE_STRIP;
     marker.ns = marker_name;
@@ -266,14 +276,19 @@ void Visualizer::visualizeLines(
         const std::string& marker_name,
         const EigenHelpers::VectorVector3d& start,
         const EigenHelpers::VectorVector3d& end,
-        const std_msgs::ColorRGBA& color) const
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
 {
+    assert(start.size() == end.size());
+
     visualization_msgs::Marker marker;
 
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    marker.header.frame_id = world_frame_name_;
+
+    marker.type = visualization_msgs::Marker::LINE_LIST;
     marker.ns = marker_name;
-    marker.id = 0;
-    marker.scale.x = 0.1;
+    marker.id = id;
+    marker.scale.x = 0.001;
 
     for (size_t ind = 0; ind < start.size(); ind++)
     {
@@ -282,6 +297,62 @@ void Visualizer::visualizeLines(
         marker.colors.push_back(color);
         marker.colors.push_back(color);
     }
+
+    visualization_marker_pub_.publish(marker);
+}
+
+void Visualizer::visualizeXYZTrajectory(
+        const std::string& marker_name,
+        const EigenHelpers::VectorVector3d& point_sequence,
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
+{
+    visualization_msgs::Marker marker;
+
+    marker.header.frame_id = world_frame_name_;
+
+    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    marker.ns = marker_name;
+    marker.id = id;
+    marker.scale.x = 0.001;
+
+    marker.points = EigenHelpersConversions::VectorEigenVector3dToVectorGeometryPoint(point_sequence);
+    marker.colors = std::vector<std_msgs::ColorRGBA>(marker.points.size(), color);
+
+    visualization_marker_pub_.publish(marker);
+}
+
+void Visualizer::deletePoints(
+        const std::string& marker_name,
+        const int32_t id) const
+{
+    assert(false && "There is something wrong with these functions as far as bullet is concerned");
+    visualization_msgs::Marker marker;
+
+    marker.header.frame_id = world_frame_name_;
+    marker.action = visualization_msgs::Marker::DELETE;
+
+    marker.type = visualization_msgs::Marker::POINTS;
+    marker.ns = marker_name;
+    marker.id = id;
+
+    visualization_marker_pub_.publish(marker);
+}
+
+
+void Visualizer::deleteXYZTrajectory(
+        const std::string& marker_name,
+        const int32_t id) const
+{
+    assert(false && "There is something wrong with these functions as far as bullet is concerned");
+    visualization_msgs::Marker marker;
+
+    marker.header.frame_id = world_frame_name_;
+    marker.action = visualization_msgs::Marker::DELETE;
+
+    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    marker.ns = marker_name;
+    marker.id = id;
 
     visualization_marker_pub_.publish(marker);
 }

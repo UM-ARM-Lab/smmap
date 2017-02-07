@@ -24,7 +24,7 @@ namespace smmap
 
             void visualizePoints(
                     const std::string& marker_name,
-                    EigenHelpers::VectorVector3d points,
+                    const EigenHelpers::VectorVector3d points,
                     const std_msgs::ColorRGBA& color,
                     const int32_t id = 0) const;
 
@@ -86,9 +86,25 @@ namespace smmap
                     const std::string& marker_name,
                     const EigenHelpers::VectorVector3d& start,
                     const EigenHelpers::VectorVector3d& end,
-                    const std_msgs::ColorRGBA& color) const;
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 0) const;
+
+            void visualizeXYZTrajectory(
+                    const std::string& marker_name,
+                    const EigenHelpers::VectorVector3d& point_sequence,
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 0) const;
+
+            void deletePoints(
+                    const std::string& marker_name,
+                    const int32_t id = 0) const;
+
+            void deleteXYZTrajectory(
+                    const std::string& marker_name,
+                    const int32_t id = 0) const;
 
         private:
+            const std::string world_frame_name_;
             mutable ros::Publisher visualization_marker_pub_;
             mutable ros::Publisher visualization_marker_array_pub_;
 
