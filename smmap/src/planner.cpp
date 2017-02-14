@@ -233,14 +233,15 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
 
 
 
-
+#if 0
         //////////////////////////////////////////////////////////////////////////////////////////
         //////////////////////////////////////////////////////////////////////////////////////////
         ROS_INFO_NAMED("planner", "Starting future constraint violation detection - Version 2b");
         assert(num_models_ == 1 && current_world_state.all_grippers_single_pose_.size() == 2);
         const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
         {
-            return task_specification_->calculateDesiredDirection(world_state);
+//            return task_specification_->calculateDesiredDirection(world_state);
+            return task_specification_->calculateObjectErrorCorrectionDelta(world_state);
         };
         const std_msgs::ColorRGBA gripper_violation_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
 
@@ -266,19 +267,10 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
             ROS_INFO_STREAM_NAMED("planner", "  -----   Max gripper distance: " << max_gripper_distance_);
         }
 
-        assert(virtual_rubber_band_between_grippers_.size() == virtual_rubber_band_distance_running_sum_.size());
-        assert((current_world_state.all_grippers_single_pose_[0].translation() - virtual_rubber_band_between_grippers_.front()).norm() < 1e-5);
-        assert((current_world_state.all_grippers_single_pose_[1].translation() - virtual_rubber_band_between_grippers_.back()).norm() < 1e-5);
-
         // Visualize the initial rubber band
-        if (virtual_rubber_band_distance_running_sum_.back() <= max_gripper_distance_)
-        {
-            vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_, Visualizer::Black(), 0);
-        }
-        else
-        {
-            vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_, gripper_violation_color, 0);
-        }
+        const std_msgs::ColorRGBA gripper_visualization_color = virtual_rubber_band_distance_running_sum_.back() <= max_gripper_distance_ ? Visualizer::Black() : gripper_violation_color;
+        vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_, gripper_visualization_color, 0);
+
 
 
 
@@ -317,14 +309,8 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
             virtual_rubber_band_distance_running_sum_copy = next_rubber_band_data.second;
 
             // Visualize
-            if (next_rubber_band_data.second.back() <= max_gripper_distance_)
-            {
-                vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_copy, Visualizer::Black(), (int32_t)t+1);
-            }
-            else
-            {
-                vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_copy, gripper_violation_color, (int32_t)t+1);
-            }
+            const std_msgs::ColorRGBA gripper_visualization_color = next_rubber_band_data.second.back() <= max_gripper_distance_ ? Visualizer::Black() : gripper_violation_color;
+            vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_copy, gripper_visualization_color, (int32_t)t+1);
 
             // If we are simulating the first step, then cache the results for the next call of this function - this 'ought' to be in the sendNextCommand function, however then we would be duplicating work
             if (t == 0)
@@ -333,6 +319,7 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
                 virtual_rubber_band_distance_running_sum_ = virtual_rubber_band_distance_running_sum_copy;
             }
         }
+#endif
     }
     else
     {

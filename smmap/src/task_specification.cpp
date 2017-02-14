@@ -749,6 +749,8 @@ std::vector<EigenHelpers::VectorVector3d> DijkstrasCoverageTask::findPathFromObj
     return dijkstras_paths;
 }
 
+
+
 EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(Eigen::Vector3d current_pos, const std::vector<ssize_t>& cover_point_assignments, const size_t maximum_itterations) const
 {
     static int32_t weirdness_num = 0;
@@ -766,8 +768,12 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
         {
             const ssize_t cover_ind = cover_point_assignments[assignment_ind];
             const ssize_t target_ind_in_free_space_graph = dijkstras_results_[(size_t)cover_ind].first[(size_t)deformable_point_ind_in_free_space_graph];
+
+            const ssize_t graph_aligned_current_ind = free_space_grid_.worldPosToGridIndexClamped(current_pos);
+            const Eigen::Vector3d& graph_aligned_current_pos = free_space_graph_.GetNodeImmutable(graph_aligned_current_ind).GetValueImmutable();
             const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(target_ind_in_free_space_graph).GetValueImmutable();
-            summed_dijkstras_deltas += target_point - current_pos;
+
+            summed_dijkstras_deltas += (target_point - graph_aligned_current_pos) / 10.0;
         }
 
         // If the combined vector moves us at least into the next voxel, then move into the next voxel
@@ -812,27 +818,35 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
                 }
             }
 
-            // Align the result to the grid
-            const ssize_t graph_aligned_next_ind = free_space_grid_.worldPosToGridIndexClamped(current_pos + net_delta);
-
-            // Double check that we are still making progress
-            progress = graph_aligned_next_ind != deformable_point_ind_in_free_space_graph;
+            progress = net_delta.squaredNorm() > 1e-6;
             if (progress)
             {
-                const Eigen::Vector3d& graph_aligned_next_pos = free_space_graph_.GetNodeImmutable(graph_aligned_next_ind).GetValueImmutable();
-                // Check for length 2 cycles
-                if (trajectory.size() >= 2)
-                {
-                    const Eigen::Vector3d& graph_aligned_pos_prev = trajectory[trajectory.size() - 2];
-                    progress = (graph_aligned_next_pos - graph_aligned_pos_prev).norm() > 1e-5;
-                }
-
-                if (progress)
-                {
-                    trajectory.push_back(graph_aligned_next_pos);
-                    current_pos = graph_aligned_next_pos;
-                }
+                current_pos += net_delta;
+                trajectory.push_back(current_pos);
             }
+
+
+            // Align the result to the grid
+//            const ssize_t graph_aligned_next_ind = free_space_grid_.worldPosToGridIndexClamped(current_pos + net_delta);
+
+//            // Double check that we are still making progress
+//            progress = graph_aligned_next_ind != deformable_point_ind_in_free_space_graph;
+//            if (progress)
+//            {
+//                const Eigen::Vector3d& graph_aligned_next_pos = free_space_graph_.GetNodeImmutable(graph_aligned_next_ind).GetValueImmutable();
+//                // Check for length 2 cycles
+//                if (trajectory.size() >= 2)
+//                {
+//                    const Eigen::Vector3d& graph_aligned_pos_prev = trajectory[trajectory.size() - 2];
+//                    progress = (graph_aligned_next_pos - graph_aligned_pos_prev).norm() > 1e-5;
+//                }
+
+//                if (progress)
+//                {
+//                    trajectory.push_back(graph_aligned_next_pos);
+//                    current_pos = graph_aligned_next_pos;
+//                }
+//            }
         }
     }
 
