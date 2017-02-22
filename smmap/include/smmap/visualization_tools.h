@@ -53,9 +53,19 @@ namespace smmap
                     const ObjectPointSet& cloth,
                     const std::vector<std_msgs::ColorRGBA>& colors) const;
 
+            visualization_msgs::MarkerArray::_markers_type createGripperMarker(
+                    const std::string& marker_name,
+                    const Eigen::Affine3d& eigen_pose,
+                    const std_msgs::ColorRGBA& color) const;
+
             void visualizeGripper(
                     const std::string& marker_name,
-                    const geometry_msgs::Pose& pose,
+                    const Eigen::Affine3d& eigen_pose,
+                    const std_msgs::ColorRGBA& color) const;
+
+            void visualizeGrippers(
+                    const std::string& marker_name,
+                    const EigenHelpers::VectorAffine3d eigen_poses,
                     const std_msgs::ColorRGBA& color) const;
 
             void visualizeObjectDelta(
@@ -105,6 +115,7 @@ namespace smmap
 
         private:
             const std::string world_frame_name_;
+            const double gripper_apperture_;
             mutable ros::Publisher visualization_marker_pub_;
             mutable ros::Publisher visualization_marker_array_pub_;
 

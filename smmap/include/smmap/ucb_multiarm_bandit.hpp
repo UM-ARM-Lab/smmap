@@ -101,6 +101,11 @@ namespace smmap
                 return mean;
             }
 
+            Eigen::VectorXd getSecondStat() const
+            {
+                return getUCB();
+            }
+
             Eigen::VectorXd getUCB() const
             {
                 Eigen::VectorXd ucb((ssize_t)num_arms_);

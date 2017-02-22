@@ -259,7 +259,7 @@ namespace smmap
         public:
             DijkstrasCoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type);
 
-            std::vector<EigenHelpers::VectorVector3d> findPathFromObjectToTarget(const ObjectPointSet& object_configuration, const double minimum_threshold) const;
+            std::vector<EigenHelpers::VectorVector3d> findPathFromObjectToTarget(const ObjectPointSet& object_configuration, const double minimum_threshold, const size_t max_ittr) const;
 
         protected:
             bool saveDijkstrasResults();

@@ -79,6 +79,7 @@ std_msgs::ColorRGBA Visualizer::Magenta()
 
 Visualizer::Visualizer(ros::NodeHandle& nh)
     : world_frame_name_(GetWorldFrameName())
+    , gripper_apperture_(GetGripperApperture(nh))
 {
     InitializeStandardColors();
 
@@ -186,16 +187,69 @@ void Visualizer::visualizeCloth(
     visualization_marker_pub_.publish(marker);
 }
 
-void Visualizer::visualizeGripper(
+visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
         const std::string& marker_name,
-        const geometry_msgs::Pose& pose,
+        const Eigen::Affine3d& eigen_pose,
         const std_msgs::ColorRGBA& color) const
 {
-    // TODO: do
-    (void)marker_name;
-    (void)pose;
-    (void)color;
-    assert(false && "Visualizer::visualizeGripper is not yet implemented.");
+    visualization_msgs::MarkerArray::_markers_type markers;
+    markers.resize(2);
+
+    markers[0].header.frame_id = world_frame_name_;
+
+    markers[0].type = visualization_msgs::Marker::CUBE;
+    markers[0].ns = marker_name;
+    markers[0].id = 0;
+    markers[0].scale.x = 0.03;
+    markers[0].scale.y = 0.03;
+    markers[0].scale.z = 0.01;
+    markers[0].pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(eigen_pose * Eigen::Translation3d(0.0, 0.0, gripper_apperture_));
+    markers[0].color = color;
+
+    markers[1].header.frame_id = world_frame_name_;
+
+    markers[1].type = visualization_msgs::Marker::CUBE;
+    markers[1].ns = marker_name;
+    markers[1].id = 1;
+    markers[1].scale.x = 0.03;
+    markers[1].scale.y = 0.03;
+    markers[1].scale.z = 0.01;
+    markers[1].pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(eigen_pose * Eigen::Translation3d(0.0, 0.0, -gripper_apperture_));
+    markers[1].color = color;
+
+    return markers;
+}
+
+void Visualizer::visualizeGripper(
+        const std::string& marker_name,
+        const Eigen::Affine3d& eigen_pose,
+        const std_msgs::ColorRGBA& color) const
+{
+    visualization_msgs::MarkerArray marker;
+
+    marker.markers = createGripperMarker(marker_name, eigen_pose, color);
+
+    visualization_marker_array_pub_.publish(marker);
+}
+
+void Visualizer::visualizeGrippers(
+        const std::string& marker_name,
+        const EigenHelpers::VectorAffine3d eigen_poses,
+        const std_msgs::ColorRGBA& color) const
+{
+    visualization_msgs::MarkerArray marker;
+    marker.markers.reserve(2 * eigen_poses.size());
+
+    for (size_t gripper_ind = 0; gripper_ind < eigen_poses.size(); ++gripper_ind)
+    {
+        const auto m = createGripperMarker(marker_name, eigen_poses[gripper_ind], color);
+        marker.markers.insert(marker.markers.end(), m.begin(), m.end());
+
+        marker.markers[2*gripper_ind].id = (int)(2*gripper_ind);
+        marker.markers[2*gripper_ind + 1].id = (int)(2*gripper_ind + 1);
+    }
+
+    visualization_marker_array_pub_.publish(marker);
 }
 
 

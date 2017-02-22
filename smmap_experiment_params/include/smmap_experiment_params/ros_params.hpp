@@ -84,6 +84,26 @@ namespace smmap
     }
 
     ////////////////////////////////////////////////////////////////////////////
+    // Gripper Size Settings
+    ////////////////////////////////////////////////////////////////////////////
+
+    inline float GetGripperApperture(ros::NodeHandle& nh) // METERS
+    {
+        switch(GetDeformableType(nh))
+        {
+            case DeformableType::ROPE:
+                // TODO: why did Dmitry's code use 0.5f here?
+                return ROSHelpers::GetParam(nh, "gripper_apperture", 0.03f);
+
+            case DeformableType::CLOTH:
+                // TODO: This number is actually the "closed gap"
+                //       The original number was 0.1f
+                return ROSHelpers::GetParam(nh, "cloth_gripper_apperture", 0.006f);
+        }
+
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
     // Table Size Settings
     ////////////////////////////////////////////////////////////////////////////
 
@@ -271,17 +291,6 @@ namespace smmap
     }
 
     ////////////////////////////////////////////////////////////////////////////
-    // Rope BulletPhysics settings
-    ////////////////////////////////////////////////////////////////////////////
-
-    // TODO: merge this and the cloth version into a single param?
-    inline float GetRopeGripperApperture(ros::NodeHandle& nh) // METERS
-    {
-        // TODO: why did Dmitry's code use 0.5f here?
-        return ROSHelpers::GetParam(nh, "rope_gripper_apperture", 0.03f);
-    }
-
-    ////////////////////////////////////////////////////////////////////////////
     // Rope-Cylinder experiment settings
     ////////////////////////////////////////////////////////////////////////////
 
@@ -404,13 +413,6 @@ namespace smmap
     {
         return ROSHelpers::GetParam(nh, "cloth_num_divs_y", 45);
     }
-
-    inline float GetClothGripperApperture(ros::NodeHandle& nh) // METERS
-    {
-        return ROSHelpers::GetParam(nh, "cloth_gripper_apperture", 0.1f);
-    }
-
-
 
     ////////////////////////////////////////////////////////////////////////////
     // Generic target patch settings

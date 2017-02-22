@@ -710,16 +710,56 @@ std::tuple<ssize_t, double, ssize_t> DijkstrasCoverageTask::findNearestObjectPoi
     return std::make_tuple(closest_deformable_ind, min_dist, best_target_ind_in_free_space_graph);
 }
 
-
-
-
-
-
-std::vector<EigenHelpers::VectorVector3d> DijkstrasCoverageTask::findPathFromObjectToTarget(const ObjectPointSet& object_configuration, const double minimum_threshold) const
+ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_Dijkstras(
+        const ObjectPointSet& object_configuration, const double minimum_threshold) const
 {
-    #warning "Fix this magic number"
-    const size_t MAX_ITTR = 100;
+    ROS_INFO_NAMED("coverage_task" , "Finding 'best' object delta");
 
+    ObjectDeltaAndWeight desired_object_delta(num_nodes_ * 3);
+
+    stopwatch(RESET);
+    // For every cover point, find the nearest deformable object point
+    for (ssize_t cover_ind = 0; cover_ind < num_cover_points_; ++cover_ind)
+    {
+        // Find the closest deformable object point
+        ssize_t closest_deformable_ind;
+        double min_dist_to_deformable_object;
+        ssize_t best_target_ind_in_free_space_graph;
+        std::tie(closest_deformable_ind, min_dist_to_deformable_object, best_target_ind_in_free_space_graph) = findNearestObjectPoint(object_configuration, cover_ind);
+
+        // If we are at least some minimum threshold away, use this
+        // cover point as a "pull" on the nearest deformable point
+        if (min_dist_to_deformable_object > minimum_threshold)
+        {
+            const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(best_target_ind_in_free_space_graph).GetValueImmutable();
+            const Eigen::Vector3d& closest_deformable_point = object_configuration.col(closest_deformable_ind);
+
+            desired_object_delta.delta.segment<3>(closest_deformable_ind * 3) =
+                    desired_object_delta.delta.segment<3>(closest_deformable_ind * 3)
+                    + (target_point - closest_deformable_point);
+
+            const double weight = std::max(desired_object_delta.weight(closest_deformable_ind * 3), min_dist_to_deformable_object);
+            desired_object_delta.weight(closest_deformable_ind * 3) = weight;
+            desired_object_delta.weight(closest_deformable_ind * 3 + 1) = weight;
+            desired_object_delta.weight(closest_deformable_ind * 3 + 2) = weight;
+        }
+    }
+    ROS_INFO_STREAM_NAMED("coverage_task", "Found best delta in " << stopwatch(READ) << " seconds");
+
+    return desired_object_delta;
+}
+
+ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_impl(const WorldState& world_state) const
+{
+    ROS_INFO_NAMED("dijkstras_coverage_task" , "Finding 'best' object delta");
+    return calculateObjectErrorCorrectionDelta_Dijkstras(world_state.object_configuration_, getErrorThreshold());
+}
+
+
+
+
+std::vector<EigenHelpers::VectorVector3d> DijkstrasCoverageTask::findPathFromObjectToTarget(const ObjectPointSet& object_configuration, const double minimum_threshold, const size_t max_ittr) const
+{
     std::vector<std::vector<ssize_t>> cover_point_assignments(num_nodes_);
 
     // First get the target point assignments
@@ -743,12 +783,11 @@ std::vector<EigenHelpers::VectorVector3d> DijkstrasCoverageTask::findPathFromObj
     // Next, for each deformable point, follow the (combined) Dijkstras field
     for (ssize_t deformable_ind = 0; deformable_ind < num_nodes_; ++deformable_ind)
     {
-        dijkstras_paths[deformable_ind] = followCoverPointAssignments(object_configuration.col(deformable_ind), cover_point_assignments[deformable_ind], MAX_ITTR);
+        dijkstras_paths[deformable_ind] = followCoverPointAssignments(object_configuration.col(deformable_ind), cover_point_assignments[deformable_ind], max_ittr);
     }
 
     return dijkstras_paths;
 }
-
 
 
 EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(Eigen::Vector3d current_pos, const std::vector<ssize_t>& cover_point_assignments, const size_t maximum_itterations) const
@@ -853,53 +892,6 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
     return trajectory;
 }
 
-
-
-
-ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_Dijkstras(
-        const ObjectPointSet& object_configuration, const double minimum_threshold) const
-{
-    ROS_INFO_NAMED("coverage_task" , "Finding 'best' object delta");
-
-    ObjectDeltaAndWeight desired_object_delta(num_nodes_ * 3);
-
-    stopwatch(RESET);
-    // For every cover point, find the nearest deformable object point
-    for (ssize_t cover_ind = 0; cover_ind < num_cover_points_; ++cover_ind)
-    {
-        // Find the closest deformable object point
-        ssize_t closest_deformable_ind;
-        double min_dist_to_deformable_object;
-        ssize_t best_target_ind_in_free_space_graph;
-        std::tie(closest_deformable_ind, min_dist_to_deformable_object, best_target_ind_in_free_space_graph) = findNearestObjectPoint(object_configuration, cover_ind);
-
-        // If we are at least some minimum threshold away, use this
-        // cover point as a "pull" on the nearest deformable point
-        if (min_dist_to_deformable_object > minimum_threshold)
-        {
-            const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(best_target_ind_in_free_space_graph).GetValueImmutable();
-            const Eigen::Vector3d& closest_deformable_point = object_configuration.col(closest_deformable_ind);
-
-            desired_object_delta.delta.segment<3>(closest_deformable_ind * 3) =
-                    desired_object_delta.delta.segment<3>(closest_deformable_ind * 3)
-                    + (target_point - closest_deformable_point);
-
-            const double weight = std::max(desired_object_delta.weight(closest_deformable_ind * 3), min_dist_to_deformable_object);
-            desired_object_delta.weight(closest_deformable_ind * 3) = weight;
-            desired_object_delta.weight(closest_deformable_ind * 3 + 1) = weight;
-            desired_object_delta.weight(closest_deformable_ind * 3 + 2) = weight;
-        }
-    }
-    ROS_INFO_STREAM_NAMED("coverage_task", "Found best delta in " << stopwatch(READ) << " seconds");
-
-    return desired_object_delta;
-}
-
-ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_impl(const WorldState& world_state) const
-{
-    ROS_INFO_NAMED("dijkstras_coverage_task" , "Finding 'best' object delta");
-    return calculateObjectErrorCorrectionDelta_Dijkstras(world_state.object_configuration_, getErrorThreshold());
-}
 
 
 ////////////////////////////////////////////////////////////////////////////////

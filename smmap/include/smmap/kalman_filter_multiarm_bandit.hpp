@@ -101,6 +101,11 @@ namespace smmap
                 return arm_mean_;
             }
 
+            const Eigen::VectorXd& getSecondStat() const
+            {
+                return getVariance();
+            }
+
             const Eigen::VectorXd& getVariance() const
             {
                 return arm_var_;
@@ -231,6 +236,16 @@ namespace smmap
             Eigen::VectorXd getMean()
             {
                 return arm_mean_;
+            }
+
+            const Eigen::MatrixXd& getSecondStat() const
+            {
+                return getCovariance();
+            }
+
+            Eigen::MatrixXd getSecondStat()
+            {
+                return getCovariance();
             }
 
             const Eigen::MatrixXd& getCovariance() const

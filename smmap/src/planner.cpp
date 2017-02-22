@@ -83,36 +83,39 @@ void Planner::createBandits()
 
 std::pair<EigenHelpers::VectorVector3d, std::vector<double>> forwardSimulateVirtualRubberBand(
         std::shared_ptr<DijkstrasCoverageTask> task,
-        const EigenHelpers::VectorVector3d& starting_band,
-        const std::vector<double>& starting_dists,
+        std::pair<EigenHelpers::VectorVector3d, std::vector<double>> starting_band,
         const AllGrippersSinglePose& starting_grippers_single_pose,
         const AllGrippersSinglePose& ending_grippers_single_pose)
 {
+    #warning "Fix this magic number"
+    const int NUM_SMOOTHING_ITTRS = 1000;
+    const int NUM_INTEGRATION_STEPS = 10;
+
     const sdf_tools::SignedDistanceField& sdf = task->environment_sdf_;
     const XYZGrid& grid = task->free_space_grid_;
 
     EigenHelpers::VectorVector3d gripper_translation_deltas(2);
     gripper_translation_deltas[0] = ending_grippers_single_pose[0].translation() - starting_grippers_single_pose[0].translation();
     gripper_translation_deltas[1] = ending_grippers_single_pose[1].translation() - starting_grippers_single_pose[1].translation();
-    const double total_distance_between_grippers = starting_dists.back();
+    const double total_distance_between_grippers = starting_band.second.back();
 
     std::pair<EigenHelpers::VectorVector3d, std::vector<double>> resulting_band;
 
     // Forward simulate the rubber band
-    for (size_t virtual_rubber_band_node_ind = 0; virtual_rubber_band_node_ind < starting_band.size(); ++virtual_rubber_band_node_ind)
+    for (size_t virtual_rubber_band_node_ind = 0; virtual_rubber_band_node_ind < starting_band.first.size(); ++virtual_rubber_band_node_ind)
     {
-        const double distance_to_gripper_0 = starting_dists[virtual_rubber_band_node_ind];
-        const double distance_to_gripper_1 = starting_dists.back() - distance_to_gripper_0;
+        const double distance_to_gripper_0 = starting_band.second[virtual_rubber_band_node_ind];
+        const double distance_to_gripper_1 = starting_band.second.back() - distance_to_gripper_0;
 
         const Eigen::Vector3d total_delta = distance_to_gripper_1 / total_distance_between_grippers * gripper_translation_deltas[0]
                                           + distance_to_gripper_0 / total_distance_between_grippers * gripper_translation_deltas[1];
 
-        Eigen::Vector3d current_pos = starting_band[virtual_rubber_band_node_ind];
+        Eigen::Vector3d current_pos = starting_band.first[virtual_rubber_band_node_ind];
         Eigen::Vector3d net_delta(0.0, 0.0, 0.0);
         // Split the delta up into smaller steps to simulate "pulling" the rubber band along with constant obstacle collision resolution
-        for (int i = 0; i < 10; i++)
+        for (int i = 0; i < NUM_INTEGRATION_STEPS; i++)
         {
-            net_delta += total_delta / 10.0;
+            net_delta += total_delta / (double)NUM_INTEGRATION_STEPS;
 
             // If we are inside an obstacle, then push ourselves back out
             for (float sdf_dist = sdf.Get(current_pos + net_delta); sdf_dist < 0; sdf_dist = sdf.Get(current_pos + net_delta))
@@ -134,7 +137,7 @@ std::pair<EigenHelpers::VectorVector3d, std::vector<double>> forwardSimulateVirt
     const auto sdf_collision_fn = [&] (const Eigen::Vector3d& location) { return sdf.Get(location) < 0.0; };
 //    std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
     std::default_random_engine generator;
-    for (int smoothing_ittr = 0; smoothing_ittr < 2000; ++smoothing_ittr)
+    for (int smoothing_ittr = 0; smoothing_ittr < NUM_SMOOTHING_ITTRS; ++smoothing_ittr)
     {
         std::uniform_int_distribution<size_t> distribution(0, resulting_band.first.size() - 1);
 
@@ -160,6 +163,32 @@ std::pair<EigenHelpers::VectorVector3d, std::vector<double>> forwardSimulateVirt
     }
 
     return resulting_band;
+}
+
+
+std::pair<EigenHelpers::VectorVector3d, std::vector<double>> Planner::createVirtualRubberBand(const WorldState &current_world_state, std::shared_ptr<DijkstrasCoverageTask> dijkstras_task)
+{
+    const size_t num_divs = GetClothNumDivsY(nh_);
+
+    std::pair<EigenHelpers::VectorVector3d, std::vector<double>> virtual_rubber_band;
+    virtual_rubber_band.first.reserve(num_divs);
+    virtual_rubber_band.second.reserve(num_divs);
+
+    const auto& start_point = current_world_state.all_grippers_single_pose_.at(0).translation();
+    const auto& end_point = current_world_state.all_grippers_single_pose_.at(1).translation();
+    const auto delta = end_point - start_point;
+
+    for (size_t i = 0; i < num_divs; ++i)
+    {
+        virtual_rubber_band.first.push_back(start_point + (double)i/(double)(num_divs - 1) * delta);
+        virtual_rubber_band.second.push_back((virtual_rubber_band.first.back() - virtual_rubber_band.first.front()).norm());
+        assert(dijkstras_task->environment_sdf_.Get(virtual_rubber_band.first.back()) > 0.0);
+    }
+
+    max_gripper_distance_ = virtual_rubber_band.second.back() + (double)(num_divs - 1) * dijkstras_task->stretchingThreshold();
+    ROS_INFO_STREAM_NAMED("planner", "  -----   Max gripper distance: " << max_gripper_distance_);
+
+    return virtual_rubber_band;
 }
 
 
@@ -215,71 +244,64 @@ bool Planner::checkForClothStretchingViolations(const std::vector<EigenHelpers::
 }
 
 
-
 void Planner::detectFutureConstraintViolations(const WorldState &current_world_state)
 {
     ROS_INFO_NAMED("planner", "------------------------------------------------------------------------------------");
     if (task_specification_->is_dijkstras_type_task_)
     {
-        //////////////////////////////////////////////////////////////////////////////////////////
-        //////////////////////////////////////////////////////////////////////////////////////////
-        ROS_INFO_NAMED("planner", "Starting future constraint violation detection - Version 1");
-        const ObjectPointSet& object_configuration = current_world_state.object_configuration_;
         std::shared_ptr<DijkstrasCoverageTask> dijkstras_task = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
 
-        const std::vector<EigenHelpers::VectorVector3d> projected_paths = dijkstras_task->findPathFromObjectToTarget(object_configuration, dijkstras_task->getErrorThreshold());
+        #warning "Fix this magic number"
+        const size_t NUM_SIMSTEPS = 200;
+
+        const std_msgs::ColorRGBA gripper_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
+        const std_msgs::ColorRGBA gripper_rubber_band_safe_color = Visualizer::Black();
+        const std_msgs::ColorRGBA gripper_rubber_band_violation_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
+
+        //////////////////////////////////////////////////////////////////////////////////////////
+        // Constraint violation Version 1 - Purely cloth overstretch
+        //////////////////////////////////////////////////////////////////////////////////////////
+        ROS_INFO_NAMED("planner", "Starting future constraint violation detection - Version 1");
+
+        const std::vector<EigenHelpers::VectorVector3d> projected_paths = dijkstras_task->findPathFromObjectToTarget(current_world_state.object_configuration_, dijkstras_task->getErrorThreshold(), NUM_SIMSTEPS);
         const bool stretching_violations_exist = checkForClothStretchingViolations(projected_paths);
 
 
+        //////////////////////////////////////////////////////////////////////////////////////////
+        // Constraint violation Version 2a - Vector field forward "simulation" - rubber band
+        /////////////////////////////////////////////////////////////////////////////////////////
+        ROS_INFO_NAMED("planner", "Starting future constraint violation detection - Version 2a");
 
 
-#if 0
+
+//#if 0
         //////////////////////////////////////////////////////////////////////////////////////////
+        // Constraint violation Version 2b - Jacobian forward simulation - rubber band
         //////////////////////////////////////////////////////////////////////////////////////////
-        ROS_INFO_NAMED("planner", "Starting future constraint violation detection - Version 2b");
+        ROS_INFO_STREAM_NAMED("planner", "Starting future constraint violation detection - Version 2b - Total steps is " << NUM_SIMSTEPS);
         assert(num_models_ == 1 && current_world_state.all_grippers_single_pose_.size() == 2);
         const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
         {
 //            return task_specification_->calculateDesiredDirection(world_state);
             return task_specification_->calculateObjectErrorCorrectionDelta(world_state);
         };
-        const std_msgs::ColorRGBA gripper_violation_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
 
         // Create the initial rubber band if needed
-        if (unlikely(virtual_rubber_band_between_grippers_.size() == 0))
+        if (unlikely(virtual_rubber_band_between_grippers_version2b_.first.size() == 0))
         {
-            const size_t num_divs = GetClothNumDivsY(nh_);
-            virtual_rubber_band_between_grippers_.reserve(num_divs);
-            virtual_rubber_band_distance_running_sum_.reserve(num_divs);
-
-            const auto& start_point = current_world_state.all_grippers_single_pose_.at(0).translation();
-            const auto& end_point = current_world_state.all_grippers_single_pose_.at(1).translation();
-            const auto delta = end_point - start_point;
-
-            for (size_t i = 0; i < num_divs; ++i)
-            {
-                virtual_rubber_band_between_grippers_.push_back(start_point + (double)i/(double)(num_divs - 1) * delta);
-                virtual_rubber_band_distance_running_sum_.push_back((virtual_rubber_band_between_grippers_.back() - virtual_rubber_band_between_grippers_.front()).norm());
-                assert(dijkstras_task->environment_sdf_.Get(virtual_rubber_band_between_grippers_.back()) > 0.0);
-            }
-
-            max_gripper_distance_ = virtual_rubber_band_distance_running_sum_.back() + (double)(GetClothNumDivsY(nh_) - 1) * dijkstras_task->stretchingThreshold();
-            ROS_INFO_STREAM_NAMED("planner", "  -----   Max gripper distance: " << max_gripper_distance_);
+            virtual_rubber_band_between_grippers_version2b_ = createVirtualRubberBand(current_world_state, dijkstras_task);
         }
 
         // Visualize the initial rubber band
-        const std_msgs::ColorRGBA gripper_visualization_color = virtual_rubber_band_distance_running_sum_.back() <= max_gripper_distance_ ? Visualizer::Black() : gripper_violation_color;
-        vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_, gripper_visualization_color, 0);
-
-
-
+        const std_msgs::ColorRGBA& gripper_visualization_color = virtual_rubber_band_between_grippers_version2b_.second.back() <= max_gripper_distance_ ? gripper_rubber_band_safe_color : gripper_rubber_band_violation_color;
+        vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_version2b_.first, gripper_visualization_color, 0);
 
         //////////////////////////////////////////////////////////////////////////////////////////
         WorldState world_state_copy = current_world_state;
-        EigenHelpers::VectorVector3d virtual_rubber_band_between_grippers_copy = virtual_rubber_band_between_grippers_;
-        std::vector<double> virtual_rubber_band_distance_running_sum_copy = virtual_rubber_band_distance_running_sum_;
-        for (size_t t = 0; t < 200; ++t)
+        std::pair<EigenHelpers::VectorVector3d, std::vector<double>> virtual_rubber_band_between_grippers_copy = virtual_rubber_band_between_grippers_version2b_;
+        for (size_t t = 0; t < NUM_SIMSTEPS; ++t)
         {
+            // Make a copy so that we can reference this original state when we forward simulate the rubber band
             const AllGrippersSinglePose starting_grippers_single_pose = world_state_copy.all_grippers_single_pose_;
 
             // Move the grippers and cloth
@@ -296,30 +318,21 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
             world_state_copy.sim_time_ += robot_.dt_;
             world_state_copy.gripper_collision_data_ = robot_.checkGripperCollision(world_state_copy.all_grippers_single_pose_);
 
+            vis_.visualizeGrippers("forward_simulated_grippers", world_state_copy.all_grippers_single_pose_, gripper_color);
+
             // Move the virtual rubber band to follow the grippers, projecting out of collision as needed
-            std::pair<EigenHelpers::VectorVector3d, std::vector<double>> next_rubber_band_data = forwardSimulateVirtualRubberBand(
+            virtual_rubber_band_between_grippers_copy = forwardSimulateVirtualRubberBand(
                         dijkstras_task,
                         virtual_rubber_band_between_grippers_copy,
-                        virtual_rubber_band_distance_running_sum_copy,
                         starting_grippers_single_pose,
                         world_state_copy.all_grippers_single_pose_);
 
-
-            virtual_rubber_band_between_grippers_copy = next_rubber_band_data.first;
-            virtual_rubber_band_distance_running_sum_copy = next_rubber_band_data.second;
-
             // Visualize
-            const std_msgs::ColorRGBA gripper_visualization_color = next_rubber_band_data.second.back() <= max_gripper_distance_ ? Visualizer::Black() : gripper_violation_color;
-            vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_copy, gripper_visualization_color, (int32_t)t+1);
+            const std_msgs::ColorRGBA& gripper_visualization_color = virtual_rubber_band_between_grippers_copy.second.back() <= max_gripper_distance_ ? gripper_rubber_band_safe_color : gripper_rubber_band_violation_color;
+            vis_.visualizeXYZTrajectory("gripper_rubber_band", virtual_rubber_band_between_grippers_copy.first, gripper_visualization_color, (int32_t)t+1);
 
-            // If we are simulating the first step, then cache the results for the next call of this function - this 'ought' to be in the sendNextCommand function, however then we would be duplicating work
-            if (t == 0)
-            {
-                virtual_rubber_band_between_grippers_ = virtual_rubber_band_between_grippers_copy;
-                virtual_rubber_band_distance_running_sum_ = virtual_rubber_band_distance_running_sum_copy;
-            }
         }
-#endif
+//#endif
     }
     else
     {
@@ -407,20 +420,31 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     ROS_INFO_STREAM_NAMED("planner", "Task predicted deformable movment norm: " << EigenHelpers::WeightedNorm(predicted_object_delta_as_vector, task_desired_motion.weight));
     WorldState world_feedback = robot_.sendGrippersPoses(kinematics::applyTwist(current_world_state.all_grippers_single_pose_, selected_command));
 
+    if (virtual_rubber_band_between_grippers_version2b_.first.size() > 0)
+    {
+        virtual_rubber_band_between_grippers_version2b_ = forwardSimulateVirtualRubberBand(
+                    std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_),
+                    virtual_rubber_band_between_grippers_version2b_,
+                    current_world_state.all_grippers_single_pose_,
+                    world_feedback.all_grippers_single_pose_);
+    }
+
+    if (virtual_rubber_band_between_grippers_version2a_.first.size() > 0)
+    {
+        virtual_rubber_band_between_grippers_version2a_ = forwardSimulateVirtualRubberBand(
+                    std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_),
+                    virtual_rubber_band_between_grippers_version2a_,
+                    current_world_state.all_grippers_single_pose_,
+                    world_feedback.all_grippers_single_pose_);
+    }
+
+
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
     ROS_INFO_STREAM_NAMED("planner", "Correlation strength factor: " << correlation_strength_factor_);
     updateModels(current_world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
 
-#ifdef UCB_BANDIT
-    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getUCB(), model_to_use, individual_rewards, correlation_strength_factor_);
-#endif
-#ifdef KFMANB_BANDIT
-    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getVariance(), model_to_use, individual_rewards, correlation_strength_factor_);
-#endif
-#ifdef KFMANDB_BANDIT
-    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getCovariance(), model_to_use, individual_rewards, correlation_strength_factor_);
-#endif
+    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use, individual_rewards, correlation_strength_factor_);
 
     return world_feedback;
 }
