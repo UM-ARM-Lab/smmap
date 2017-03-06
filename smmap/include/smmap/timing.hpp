@@ -10,11 +10,12 @@ namespace smmap
     inline double stopwatch(const StopwatchControl control = READ)
     {
         static std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
+
+        const std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
         if (control == RESET)
         {
-            start_time = std::chrono::high_resolution_clock::now();
+            start_time = end_time;
         }
-        const std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
 
         return std::chrono::duration<double>(end_time - start_time).count();
     }

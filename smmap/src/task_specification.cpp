@@ -540,7 +540,7 @@ ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_imp
 
 DijkstrasCoverageTask::DijkstrasCoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type)
     : CoverageTask(nh, deformable_type, task_type, true)
-    , free_space_grid_(GetWorldXMin(nh), GetWorldXStep(nh), GetWorldXNumSteps(nh),
+    , work_space_grid_(GetWorldXMin(nh), GetWorldXStep(nh), GetWorldXNumSteps(nh),
                        GetWorldYMin(nh), GetWorldYStep(nh), GetWorldYNumSteps(nh),
                        GetWorldZMin(nh), GetWorldZStep(nh), GetWorldZNumSteps(nh))
     , environment_sdf_(GetEnvironmentSDF(nh))
@@ -684,9 +684,9 @@ std::tuple<ssize_t, double, ssize_t> DijkstrasCoverageTask::findNearestObjectPoi
         size_t target_ind_in_free_space_graph;
         {
             // If we are more than a grid cell away from the cover point, then lookup our position in the rest of the grid
-            if (straight_line_distance_squared > std::pow(free_space_grid_.minStepDimension(), 2))
+            if (straight_line_distance_squared > std::pow(work_space_grid_.minStepDimension(), 2))
             {
-                const ssize_t deformable_point_ind_in_free_space_graph = free_space_grid_.worldPosToGridIndexClamped(deformable_point);
+                const ssize_t deformable_point_ind_in_free_space_graph = work_space_grid_.worldPosToGridIndexClamped(deformable_point);
                 target_ind_in_free_space_graph = dijkstras_results_[(size_t)cover_ind].first[(size_t)deformable_point_ind_in_free_space_graph];
                 graph_dist = dijkstras_results_[(size_t)cover_ind].second[(size_t)deformable_point_ind_in_free_space_graph];
             }
@@ -758,7 +758,7 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_
 
 
 
-std::vector<EigenHelpers::VectorVector3d> DijkstrasCoverageTask::findPathFromObjectToTarget(const ObjectPointSet& object_configuration, const double minimum_threshold, const size_t max_ittr) const
+std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<std::vector<ssize_t>>> DijkstrasCoverageTask::findPathFromObjectToTarget(const ObjectPointSet& object_configuration, const double minimum_threshold, const size_t max_ittr) const
 {
     std::vector<std::vector<ssize_t>> cover_point_assignments(num_nodes_);
 
@@ -786,7 +786,7 @@ std::vector<EigenHelpers::VectorVector3d> DijkstrasCoverageTask::findPathFromObj
         dijkstras_paths[deformable_ind] = followCoverPointAssignments(object_configuration.col(deformable_ind), cover_point_assignments[deformable_ind], max_ittr);
     }
 
-    return dijkstras_paths;
+    return std::make_pair(dijkstras_paths, cover_point_assignments);
 }
 
 
@@ -800,26 +800,26 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
     {
         Eigen::Vector3d summed_dijkstras_deltas(0, 0, 0);
 
-        const ssize_t deformable_point_ind_in_free_space_graph = free_space_grid_.worldPosToGridIndexClamped(current_pos);
+        const ssize_t deformable_point_ind_in_work_space_graph = work_space_grid_.worldPosToGridIndexClamped(current_pos);
 
         // Combine the vector fields from each assignment
         for (size_t assignment_ind = 0; assignment_ind < cover_point_assignments.size(); ++assignment_ind)
         {
             const ssize_t cover_ind = cover_point_assignments[assignment_ind];
-            const ssize_t target_ind_in_free_space_graph = dijkstras_results_[(size_t)cover_ind].first[(size_t)deformable_point_ind_in_free_space_graph];
+            const ssize_t target_ind_in_work_space_graph = dijkstras_results_[(size_t)cover_ind].first[(size_t)deformable_point_ind_in_work_space_graph];
 
-            const ssize_t graph_aligned_current_ind = free_space_grid_.worldPosToGridIndexClamped(current_pos);
+            const ssize_t graph_aligned_current_ind = work_space_grid_.worldPosToGridIndexClamped(current_pos);
             const Eigen::Vector3d& graph_aligned_current_pos = free_space_graph_.GetNodeImmutable(graph_aligned_current_ind).GetValueImmutable();
-            const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(target_ind_in_free_space_graph).GetValueImmutable();
+            const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(target_ind_in_work_space_graph).GetValueImmutable();
 
             summed_dijkstras_deltas += (target_point - graph_aligned_current_pos) / 10.0;
         }
 
         // If the combined vector moves us at least into the next voxel, then move into the next voxel
-        progress = summed_dijkstras_deltas.squaredNorm() > std::pow(free_space_grid_.minStepDimension() / 2.0, 2);
+        progress = summed_dijkstras_deltas.squaredNorm() > std::pow(work_space_grid_.minStepDimension() / 2.0, 2);
         if (progress)
         {
-            const Eigen::Vector3d combined_delta = summed_dijkstras_deltas.normalized() * free_space_grid_.minStepDimension();
+            const Eigen::Vector3d combined_delta = summed_dijkstras_deltas.normalized() * work_space_grid_.minStepDimension();
 
             // Split the delta up into smaller steps to simulate "pulling" the cloth along with constant obstacle collision resolution
             Eigen::Vector3d net_delta = Eigen::Vector3d::Zero();
@@ -834,7 +834,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
                     const std::vector<double> gradient = environment_sdf_.GetGradient(current_pos + net_delta, enable_edge_gradients);
                     const Eigen::Vector3d grad_eigen = EigenHelpers::StdVectorDoubleToEigenVector3d(gradient);
 
-                    if (grad_eigen.norm() <= free_space_grid_.minStepDimension() / 4.0)
+                    if (grad_eigen.norm() <= work_space_grid_.minStepDimension() / 4.0)
                     {
                         const EigenHelpers::VectorVector3d vec_of_single_item(1, current_pos + net_delta);
                         vis_.visualizePoints("gradient_weirdness", vec_of_single_item, Visualizer::Red(), weirdness_num);
@@ -842,11 +842,11 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
                     }
                     else
                     {
-                        net_delta += grad_eigen.normalized() * free_space_grid_.minStepDimension() / 2.0;
+                        net_delta += grad_eigen.normalized() * work_space_grid_.minStepDimension() / 2.0;
                     }
-                    assert(grad_eigen.norm() > free_space_grid_.minStepDimension() / 4.0); // Sanity check
+                    assert(grad_eigen.norm() > work_space_grid_.minStepDimension() / 4.0); // Sanity check
 
-                    if (net_delta.norm() >= free_space_grid_.minStepDimension() * 1.5)
+                    if (net_delta.norm() >= work_space_grid_.minStepDimension() * 1.5)
                     {
                         trajectory.push_back(current_pos + net_delta);
                         vis_.visualizePoints("projected_point_path_weirdness", trajectory, Visualizer::Red(), weirdness_num);
@@ -863,35 +863,40 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
                 current_pos += net_delta;
                 trajectory.push_back(current_pos);
             }
-
-
-            // Align the result to the grid
-//            const ssize_t graph_aligned_next_ind = free_space_grid_.worldPosToGridIndexClamped(current_pos + net_delta);
-
-//            // Double check that we are still making progress
-//            progress = graph_aligned_next_ind != deformable_point_ind_in_free_space_graph;
-//            if (progress)
-//            {
-//                const Eigen::Vector3d& graph_aligned_next_pos = free_space_graph_.GetNodeImmutable(graph_aligned_next_ind).GetValueImmutable();
-//                // Check for length 2 cycles
-//                if (trajectory.size() >= 2)
-//                {
-//                    const Eigen::Vector3d& graph_aligned_pos_prev = trajectory[trajectory.size() - 2];
-//                    progress = (graph_aligned_next_pos - graph_aligned_pos_prev).norm() > 1e-5;
-//                }
-
-//                if (progress)
-//                {
-//                    trajectory.push_back(graph_aligned_next_pos);
-//                    current_pos = graph_aligned_next_pos;
-//                }
-//            }
         }
     }
 
     return trajectory;
 }
 
+
+ObjectDeltaAndWeight DijkstrasCoverageTask::getErrorCorrectionVectorsAndWeights(const ObjectPointSet& object_configuration, const std::vector<std::vector<ssize_t>>& cover_point_assignments) const
+{
+    ObjectDeltaAndWeight error_correction(num_nodes_ * 3);
+
+    for (ssize_t node_ind = 0; node_ind < num_nodes_; ++node_ind)
+    {
+        const Eigen::Vector3d& deformable_point = object_configuration.col(node_ind);
+        const ssize_t deformable_point_ind_in_work_space_graph = work_space_grid_.worldPosToGridIndexClamped(deformable_point);
+
+        for (size_t assignment_ind = 0; assignment_ind < cover_point_assignments[node_ind].size(); ++assignment_ind)
+        {
+            const ssize_t cover_ind = cover_point_assignments[node_ind][assignment_ind];
+            const ssize_t target_ind_in_work_space_graph = dijkstras_results_[(size_t)cover_ind].first[(size_t)deformable_point_ind_in_work_space_graph];
+            const double distance_to_cover_point = dijkstras_results_[(size_t)cover_ind].second[(size_t)deformable_point_ind_in_work_space_graph];
+
+            const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(target_ind_in_work_space_graph).GetValueImmutable();
+
+            error_correction.delta.segment<3>(node_ind * 3) += target_point - deformable_point;
+            const double weight = std::max(error_correction.weight(node_ind * 3), distance_to_cover_point);
+            error_correction.weight(node_ind * 3) = weight;
+            error_correction.weight(node_ind * 3 + 1) = weight;
+            error_correction.weight(node_ind * 3 + 2) = weight;
+        }
+    }
+
+    return error_correction;
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -68,7 +68,9 @@ DiminishingRigidityModel::DiminishingRigidityModel(
 // Virtual function overrides
 ////////////////////////////////////////////////////////////////////////////////
 
-void DiminishingRigidityModel::updateModel(const WorldState& previous, const WorldState& next)
+void DiminishingRigidityModel::updateModel(
+        const WorldState& previous,
+        const WorldState& next)
 {
     // This model doesn't do any updates, so tell the compiler that it's okay
     // that these values are unused.

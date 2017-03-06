@@ -259,7 +259,8 @@ namespace smmap
         public:
             DijkstrasCoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type);
 
-            std::vector<EigenHelpers::VectorVector3d> findPathFromObjectToTarget(const ObjectPointSet& object_configuration, const double minimum_threshold, const size_t max_ittr) const;
+            std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<std::vector<ssize_t>>> findPathFromObjectToTarget(const ObjectPointSet& object_configuration, const double minimum_threshold, const size_t max_ittr) const;
+            ObjectDeltaAndWeight getErrorCorrectionVectorsAndWeights(const ObjectPointSet& object_configuration, const std::vector<std::vector<ssize_t>>& cover_point_assignments) const;
 
         protected:
             bool saveDijkstrasResults();
@@ -275,11 +276,10 @@ namespace smmap
             arc_dijkstras::Graph<Eigen::Vector3d> free_space_graph_;
 
         public:
-            const XYZGrid free_space_grid_;
+            const XYZGrid work_space_grid_;
             const sdf_tools::SignedDistanceField environment_sdf_;
 
         private:
-
             /// Map between cover point indices and graph indices, with distances
             std::vector<int64_t> cover_ind_to_free_space_graph_ind_;
             /// Dijkstras results, indexed by goal index, then current node index - each entry is a (next_node, distance to goal) pair

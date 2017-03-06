@@ -36,21 +36,20 @@ namespace smmap
                     const WorldState &current_world_state,
                     std::shared_ptr<DijkstrasCoverageTask> dijkstras_task);
 
-            bool checkForClothStretchingViolations(const std::vector<EigenHelpers::VectorVector3d>& projected_paths);
-            void detectFutureConstraintViolations(const WorldState& current_world_state);
+            bool checkForClothStretchingViolations(
+                    const std::vector<EigenHelpers::VectorVector3d>& projected_paths);
 
-//            std::pair<EigenHelpers::VectorVector3d, std::vector<double>> forwardSimulateVirtualRubberBand(
-//                    std::shared_ptr<DijkstrasCoverageTask> task,
-//                    const EigenHelpers::VectorVector3d& starting_band,
-//                    const std::vector<double>& starting_dists,
-//                    const AllGrippersSinglePose& starting_grippers_single_pose,
-//                    const AllGrippersSinglePose& ending_grippers_single_pose) const;
+            void detectFutureConstraintViolations(
+                    const WorldState& current_world_state);
 
 
 
-            WorldState sendNextCommand(const WorldState& current_world_state);
-            void visualizeDesiredMotion(const WorldState& current_world_state,
-                                        const ObjectDeltaAndWeight& desired_motion);
+            WorldState sendNextCommand(
+                    const WorldState& current_world_state);
+
+            void visualizeDesiredMotion(
+                    const WorldState& current_world_state,
+                    const ObjectDeltaAndWeight& desired_motion);
 
         private:
             ////////////////////////////////////////////////////////////////////
@@ -88,13 +87,17 @@ namespace smmap
             const unsigned long seed_;
             std::mt19937_64 generator_;
 
-            void updateModels(const WorldState& starting_world_state,
+            void updateModels(
+                    const WorldState& starting_world_state,
                     const ObjectDeltaAndWeight& task_desired_motion,
-                    const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands,
+                    const std::vector<std::pair<AllGrippersSinglePoseDelta,
+                    ObjectPointSet>>& suggested_commands,
                     const ssize_t model_used,
                     const WorldState& world_feedback);
 
-            Eigen::MatrixXd calculateProcessNoise(const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands);
+            Eigen::MatrixXd calculateProcessNoise(
+                    const std::vector<std::pair<AllGrippersSinglePoseDelta,
+                    ObjectPointSet>>& suggested_commands);
 
 //            Eigen::VectorXd calculateObservedReward(
 //                    const WorldState& starting_world_state,

@@ -99,6 +99,12 @@ namespace smmap
                     const std_msgs::ColorRGBA& color,
                     const int32_t id = 0) const;
 
+            void visualizeLineStrip(
+                    const std::string& marker_name,
+                    const EigenHelpers::VectorVector3d& point_sequence,
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id) const;
+
             void visualizeXYZTrajectory(
                     const std::string& marker_name,
                     const EigenHelpers::VectorVector3d& point_sequence,

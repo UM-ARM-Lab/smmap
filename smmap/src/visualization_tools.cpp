@@ -355,7 +355,7 @@ void Visualizer::visualizeLines(
     visualization_marker_pub_.publish(marker);
 }
 
-void Visualizer::visualizeXYZTrajectory(
+void Visualizer::visualizeLineStrip(
         const std::string& marker_name,
         const EigenHelpers::VectorVector3d& point_sequence,
         const std_msgs::ColorRGBA& color,
@@ -374,6 +374,15 @@ void Visualizer::visualizeXYZTrajectory(
     marker.colors = std::vector<std_msgs::ColorRGBA>(marker.points.size(), color);
 
     visualization_marker_pub_.publish(marker);
+}
+
+void Visualizer::visualizeXYZTrajectory(
+        const std::string& marker_name,
+        const EigenHelpers::VectorVector3d& point_sequence,
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
+{
+    visualizeLineStrip(marker_name, point_sequence, color, id);
 }
 
 void Visualizer::deletePoints(

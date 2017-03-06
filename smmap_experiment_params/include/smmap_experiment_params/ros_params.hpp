@@ -579,9 +579,11 @@ namespace smmap
             case TaskType::ROPE_CYLINDER_COVERAGE:
                 return ROSHelpers::GetParam(nh, "world_y_min", GetTableSurfaceY(nh) - GetTableHalfExtentsY(nh));
 
-            case TaskType::CLOTH_TABLE_COVERAGE:
             case TaskType::CLOTH_COLAB_FOLDING:
                 return -0.05;
+
+            case TaskType::CLOTH_TABLE_COVERAGE:
+                return ROSHelpers::GetParam(nh, "world_y_min", GetClothCenterOfMassY(nh) - 0.65 * GetClothYSize(nh));
 
             case TaskType::CLOTH_CYLINDER_COVERAGE:
             case TaskType::CLOTH_WAFR:
@@ -602,8 +604,10 @@ namespace smmap
                 return ROSHelpers::GetParam(nh, "world_y_max", GetTableSurfaceY(nh) + GetTableHalfExtentsY(nh));
 
             case TaskType::CLOTH_COLAB_FOLDING:
-            case TaskType::CLOTH_TABLE_COVERAGE:
                 return 0.05;
+
+            case TaskType::CLOTH_TABLE_COVERAGE:
+                return ROSHelpers::GetParam(nh, "world_y_max", GetClothCenterOfMassY(nh) + 0.65 * GetClothYSize(nh));
 
             case TaskType::CLOTH_CYLINDER_COVERAGE:
             case TaskType::CLOTH_WAFR:
@@ -645,8 +649,10 @@ namespace smmap
                 return ROSHelpers::GetParam(nh, "world_z_min", GetTableSurfaceZ(nh));
 
             case TaskType::CLOTH_COLAB_FOLDING:
+                return -0.05;
+
             case TaskType::CLOTH_TABLE_COVERAGE:
-                    return -0.05;
+                return ROSHelpers::GetParam(nh, "world_z_min", GetClothCenterOfMassY(nh) - 0.65 * GetClothXSize(nh));
 
             case TaskType::CLOTH_CYLINDER_COVERAGE:
             case TaskType::CLOTH_WAFR:
