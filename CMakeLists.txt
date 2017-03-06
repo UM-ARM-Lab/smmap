@@ -7,8 +7,8 @@ set(CATKIN_PACKAGES
     geometry_msgs
     kinematics_toolbox
     sdf_tools
-    ${PROJECT_NAME}_msgs
-    ${PROJECT_NAME}_experiment_params
+    deformable_manipulation_msgs
+    deformable_manipulation_experiment_params
 )
 
 ## Add our local cmake modules to the list that can be found
