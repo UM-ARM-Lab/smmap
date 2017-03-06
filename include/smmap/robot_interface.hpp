@@ -5,7 +5,7 @@
 
 #include <ros/ros.h>
 #include <actionlib/client/simple_action_client.h>
-#include <smmap_msgs/messages.h>
+#include <deformable_manipulation_msgs/messages.h>
 
 #include "smmap/grippers.hpp"
 #include "smmap/task_function_pointer_types.h"
@@ -44,7 +44,7 @@ namespace smmap
             std::vector<GripperData> grippers_data_;
             GripperCollisionChecker gripper_collision_checker_;
             ros::ServiceClient execute_gripper_movement_client_;
-            actionlib::SimpleActionClient<smmap_msgs::TestGrippersPosesAction> test_grippers_poses_client_;
+            actionlib::SimpleActionClient<deformable_manipulation_msgs::TestGrippersPosesAction> test_grippers_poses_client_;
 
         // TODO: comments, and placement, and stuff
         public:
@@ -54,10 +54,10 @@ namespace smmap
         private:
             std::thread spin_thread_;
 
-            WorldState sendGrippersPoses_impl(const smmap_msgs::ExecuteGripperMovementRequest& movement);
+            WorldState sendGrippersPoses_impl(const deformable_manipulation_msgs::ExecuteGripperMovementRequest& movement);
 
-            smmap_msgs::ExecuteGripperMovementRequest noOpGripperMovement();
-            smmap_msgs::ExecuteGripperMovementRequest toRosGrippersPoses(const AllGrippersSinglePose& grippers_pose) const;
+            deformable_manipulation_msgs::ExecuteGripperMovementRequest noOpGripperMovement();
+            deformable_manipulation_msgs::ExecuteGripperMovementRequest toRosGrippersPoses(const AllGrippersSinglePose& grippers_pose) const;
 
             ////////////////////////////////////////////////////////////////////
             // Testing specific gripper movements
@@ -66,14 +66,14 @@ namespace smmap
             size_t feedback_counter_;
             std::vector<bool> feedback_recieved_;
             void internalTestPoseFeedbackCallback(
-                    const smmap_msgs::TestGrippersPosesActionFeedbackConstPtr& feedback,
+                    const deformable_manipulation_msgs::TestGrippersPosesActionFeedbackConstPtr& feedback,
                     const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback);
 
             bool testGrippersPoses_impl(
-                    const smmap_msgs::TestGrippersPosesGoal& goal,
+                    const deformable_manipulation_msgs::TestGrippersPosesGoal& goal,
                     const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback);
 
-            smmap_msgs::TestGrippersPosesGoal toRosTestPosesGoal(
+            deformable_manipulation_msgs::TestGrippersPosesGoal toRosTestPosesGoal(
                     const std::vector<AllGrippersSinglePose>& grippers_poses) const;
     };
 }

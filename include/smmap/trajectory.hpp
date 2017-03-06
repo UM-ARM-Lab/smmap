@@ -4,7 +4,7 @@
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <kinematics_toolbox/kinematics.h>
-#include <smmap_msgs/messages.h>
+#include <deformable_manipulation_msgs/messages.h>
 
 #include "smmap/grippers.hpp"
 
@@ -44,7 +44,7 @@ namespace smmap
      * @return
      */
     inline WorldState ConvertToEigenFeedback(
-            const smmap_msgs::SimulatorFeedback& feedback_ros)
+            const deformable_manipulation_msgs::SimulatorFeedback& feedback_ros)
     {
         WorldState feedback_eigen;
 

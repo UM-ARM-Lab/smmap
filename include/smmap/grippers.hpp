@@ -9,7 +9,7 @@
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/pretty_print.hpp>
 #include <kinematics_toolbox/kinematics.h>
-#include <smmap_experiment_params/ros_params.hpp>
+#include <deformable_manipulation_experiment_params/ros_params.hpp>
 
 namespace smmap
 {
@@ -434,7 +434,7 @@ namespace smmap
             GripperCollisionChecker(ros::NodeHandle& nh)
             {
                 collision_checker_client_ =
-                    nh.serviceClient<smmap_msgs::GetGripperCollisionReport>(GetGripperCollisionCheckTopic(nh));
+                    nh.serviceClient<deformable_manipulation_msgs::GetGripperCollisionReport>(GetGripperCollisionCheckTopic(nh));
 
                 collision_checker_client_.waitForExistence();
             }
@@ -442,7 +442,7 @@ namespace smmap
             std::vector<CollisionData> gripperCollisionCheck(
                     const AllGrippersSinglePose& gripper_poses)
             {
-                smmap_msgs::GetGripperCollisionReport collision_report_ros;
+                deformable_manipulation_msgs::GetGripperCollisionReport collision_report_ros;
                 collision_report_ros.request.pose =
                         EigenHelpersConversions::VectorAffine3dToVectorGeometryPose(gripper_poses);
 
