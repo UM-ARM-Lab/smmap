@@ -19,7 +19,8 @@ find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 
 ## System dependencies are found with CMake's conventions
 find_package(cmake_modules REQUIRED)
-find_package(Eigen REQUIRED)
+find_package(Eigen3 REQUIRED)
+set(Eigen3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 find_package(PythonLibs 2.7 REQUIRED)
 find_package(GUROBI REQUIRED)
 
@@ -37,9 +38,7 @@ catkin_package(
     INCLUDE_DIRS    include
     LIBRARIES       ${PROJECT_NAME}
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
-    DEPENDS         Eigen
-                    Boost
-                    PythonLibs
+    DEPENDS         Eigen3
                     GUROBI
 )
 
@@ -52,7 +51,7 @@ catkin_package(
 include_directories(include
     SYSTEM
     ${Boost_INCLUDE_DIRS}
-    ${Eigen_INCLUDE_DIRS}
+    ${EIGEN3_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
     ${PYTHON_INCLUDE_DIRS}
     ${GUROBI_INCLUDE_DIRS}
@@ -101,7 +100,7 @@ set_target_properties(${PROJECT_NAME}_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_
 
 ## Simulator tests
 add_executable(${PROJECT_NAME}_test_node_KFMANDB nodes/${PROJECT_NAME}_test_node.cpp)
-add_dependencies(${PROJECT_NAME}_test_node_KFMANDB ${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
+add_dependencies(${PROJECT_NAME}_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
 set_target_properties(${PROJECT_NAME}_test_node_KFMANDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANDB_BANDIT")
 
