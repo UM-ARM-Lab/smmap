@@ -1,4 +1,0 @@
-<launch>
-    <param name="deformable_type" value="rope"/>
-    <param name="task_type" value="rope_cylinder_coverage"/>
-</launch>
