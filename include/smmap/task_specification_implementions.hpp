@@ -315,11 +315,11 @@ namespace smmap
 
                 // Get the initial configuration of the object
                 ros::ServiceClient mirror_line_client =
-                    nh.serviceClient<smmap_msgs::GetMirrorLine>(GetMirrorLineTopic(nh));
+                    nh.serviceClient<deformable_manipulation_msgs::GetMirrorLine>(GetMirrorLineTopic(nh));
 
                 mirror_line_client.waitForExistence();
 
-                smmap_msgs::GetMirrorLine mirror_line_data;
+                deformable_manipulation_msgs::GetMirrorLine mirror_line_data;
                 mirror_line_client.call(mirror_line_data);
 
                 return PointReflector(mirror_line_data.response.mid_x,

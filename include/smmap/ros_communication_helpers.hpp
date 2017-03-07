@@ -5,8 +5,8 @@
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/dijkstras.hpp>
 #include <sdf_tools/sdf.hpp>
-#include <smmap_experiment_params/task_enums.h>
-#include <smmap_msgs/messages.h>
+#include <deformable_manipulation_experiment_params/task_enums.h>
+#include <deformable_manipulation_msgs/messages.h>
 
 #include "smmap/grippers.hpp"
 #include "smmap/trajectory.hpp"
@@ -20,10 +20,10 @@ namespace smmap
 
         // Service client to get the names of each gripper
         ros::ServiceClient gripper_names_client =
-            nh.serviceClient<smmap_msgs::GetGripperNames>(GetGripperNamesTopic(nh));
+            nh.serviceClient<deformable_manipulation_msgs::GetGripperNames>(GetGripperNamesTopic(nh));
         gripper_names_client.waitForExistence();
 
-        smmap_msgs::GetGripperNames names_srv_data;
+        deformable_manipulation_msgs::GetGripperNames names_srv_data;
         if (!gripper_names_client.call(names_srv_data))
         {
             ROS_FATAL_NAMED("ros_comms_helpers", "Unabled to retrieve gripper names.");
@@ -32,13 +32,13 @@ namespace smmap
 
         // Service client to get the attached nodes and transform for each gripper
         ros::ServiceClient gripper_node_indices_client =
-            nh.serviceClient<smmap_msgs::GetGripperAttachedNodeIndices>(GetGripperAttachedNodeIndicesTopic(nh));
+            nh.serviceClient<deformable_manipulation_msgs::GetGripperAttachedNodeIndices>(GetGripperAttachedNodeIndicesTopic(nh));
         gripper_node_indices_client.waitForExistence();
 
         grippers_data.reserve(gripper_names.size());
         for (size_t gripper_ind = 0; gripper_ind < gripper_names.size(); gripper_ind++)
         {
-            smmap_msgs::GetGripperAttachedNodeIndices node_indices_srv_data;
+            deformable_manipulation_msgs::GetGripperAttachedNodeIndices node_indices_srv_data;
             node_indices_srv_data.request.name = gripper_names[gripper_ind];
 
             if (gripper_node_indices_client.call(node_indices_srv_data))
@@ -61,11 +61,11 @@ namespace smmap
 
         // Get the initial configuration of the object
         ros::ServiceClient object_initial_configuration_client =
-            nh.serviceClient<smmap_msgs::GetPointSet>(GetObjectInitialConfigurationTopic(nh));
+            nh.serviceClient<deformable_manipulation_msgs::GetPointSet>(GetObjectInitialConfigurationTopic(nh));
 
         object_initial_configuration_client.waitForExistence();
 
-        smmap_msgs::GetPointSet srv_data;
+        deformable_manipulation_msgs::GetPointSet srv_data;
         object_initial_configuration_client.call(srv_data);
 
         ROS_INFO_NAMED("ros_comms_helpers" , "Number of points on object: %zu", srv_data.response.points.size());
@@ -79,11 +79,11 @@ namespace smmap
 
         // Get the initial configuration of the object
         ros::ServiceClient cover_points_client =
-            nh.serviceClient<smmap_msgs::GetPointSet>(GetCoverPointsTopic(nh));
+            nh.serviceClient<deformable_manipulation_msgs::GetPointSet>(GetCoverPointsTopic(nh));
 
         cover_points_client.waitForExistence();
 
-        smmap_msgs::GetPointSet srv_data;
+        deformable_manipulation_msgs::GetPointSet srv_data;
         cover_points_client.call(srv_data);
         ObjectPointSet cover_points =
             EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(srv_data.response.points);
@@ -100,11 +100,11 @@ namespace smmap
 
         // First we collect the data in serialzed form
         ros::ServiceClient free_space_graph_client =
-            nh.serviceClient<smmap_msgs::GetFreeSpaceGraph>(GetFreeSpaceGraphTopic(nh));
+            nh.serviceClient<deformable_manipulation_msgs::GetFreeSpaceGraph>(GetFreeSpaceGraphTopic(nh));
 
         free_space_graph_client.waitForExistence();
 
-        smmap_msgs::GetFreeSpaceGraph srv_data;
+        deformable_manipulation_msgs::GetFreeSpaceGraph srv_data;
         free_space_graph_client.call(srv_data);
 
         // Next we deserialize the graph itself
@@ -146,11 +146,11 @@ namespace smmap
 
         // First we collect the data in serialzed form
         ros::ServiceClient sdf_client =
-            nh.serviceClient<smmap_msgs::GetSignedDistanceField>(GetSignedDistanceFieldTopic(nh));
+            nh.serviceClient<deformable_manipulation_msgs::GetSignedDistanceField>(GetSignedDistanceFieldTopic(nh));
 
         sdf_client.waitForExistence();
 
-        smmap_msgs::GetSignedDistanceField srv_data;
+        deformable_manipulation_msgs::GetSignedDistanceField srv_data;
         sdf_client.call(srv_data);
 
         // Then parse the message and return the result

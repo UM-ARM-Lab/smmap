@@ -9,8 +9,8 @@
 #include <arc_utilities/dijkstras.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
 #include <sdf_tools/sdf.hpp>
-#include <smmap_experiment_params/task_enums.h>
-#include <smmap_experiment_params/xyzgrid.h>
+#include <deformable_manipulation_experiment_params/task_enums.h>
+#include <deformable_manipulation_experiment_params/xyzgrid.h>
 
 #include "smmap/ros_communication_helpers.hpp"
 #include "smmap/task_function_pointer_types.h"
