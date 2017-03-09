@@ -32,7 +32,14 @@ namespace smmap
             // The two functions that gets invoked repeatedly
             ////////////////////////////////////////////////////////////////////
 
-            std::pair<EigenHelpers::VectorVector3d, std::vector<double>> createVirtualRubberBand(
+            EigenHelpers::VectorVector3d forwardSimulateVirtualRubberBand(
+                    std::shared_ptr<DijkstrasCoverageTask> task,
+                    EigenHelpers::VectorVector3d rubber_band,
+                    const AllGrippersSinglePose& starting_grippers_single_pose,
+                    const AllGrippersSinglePose& ending_grippers_single_pose,
+                    bool verbose);
+
+            EigenHelpers::VectorVector3d createVirtualRubberBand(
                     const WorldState &current_world_state,
                     std::shared_ptr<DijkstrasCoverageTask> dijkstras_task);
 
@@ -115,8 +122,8 @@ namespace smmap
         ////////////////////////////////////
 
         private:
-            std::pair<EigenHelpers::VectorVector3d, std::vector<double>> virtual_rubber_band_between_grippers_version2a_;
-            std::pair<EigenHelpers::VectorVector3d, std::vector<double>> virtual_rubber_band_between_grippers_version2b_;
+            EigenHelpers::VectorVector3d virtual_rubber_band_between_grippers_version2a_;
+            EigenHelpers::VectorVector3d virtual_rubber_band_between_grippers_version2b_;
             double max_gripper_distance_;
     };
 }
