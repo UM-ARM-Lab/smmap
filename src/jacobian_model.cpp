@@ -51,6 +51,11 @@ JacobianModel::getSuggestedGrippersCommand(
     const size_t num_grippers = grippers_data_.size();
     const ssize_t num_nodes = world_initial_state.object_configuration_.cols();
 
+    ////////////////////////////////////////////////////////////////////////
+    // JacobianInputData
+    ////////////////////////////////////////////////////////////////////////
+    const JacobianInputData jacobianInputData(task_desired_object_delta_fn,world_initial_state);
+
 
     ////////////////////////////////////////////////////////////////////////
     // Find the velocities of each part of the algorithm
@@ -60,10 +65,14 @@ JacobianModel::getSuggestedGrippersCommand(
     const ObjectDeltaAndWeight desired_object_velocity = task_desired_object_delta_fn(world_initial_state);
 
     // Recalculate the jacobian at each timestep, because of rotations being non-linear
+    /*
     const MatrixXd jacobian =
             computeGrippersToObjectJacobian(
                 world_initial_state.all_grippers_single_pose_,
                 world_initial_state.object_configuration_);
+    */
+    const MatrixXd jacobian =
+            computeGrippersToObjectJacobian(jacobianInputData);
 
     // Find the least-squares fitting to the desired object velocity
     VectorXd grippers_delta_achieve_goal;
@@ -125,11 +134,10 @@ JacobianModel::getSuggestedGrippersCommand(
  * @return
  */
 ObjectPointSet JacobianModel::getObjectDelta(
-        const ObjectPointSet& object_initial_configuration,
-        const AllGrippersSinglePose & grippers_pose,
+        const JacobianInputData &input_data,
         const AllGrippersSinglePoseDelta& grippers_pose_delta) const
-{
-    const MatrixXd J = computeGrippersToObjectJacobian(grippers_pose, object_initial_configuration);
+{    
+    const MatrixXd J = computeGrippersToObjectJacobian(input_data);
 
     MatrixXd delta = MatrixXd::Zero(object_initial_configuration.cols() * 3, 1);
 

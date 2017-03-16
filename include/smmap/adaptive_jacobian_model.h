@@ -28,9 +28,7 @@ namespace smmap
             // Computation helpers
             ////////////////////////////////////////////////////////////////////
 
-            virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
-                    const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration) const override final;
+            virtual Eigen::MatrixXd computeGrippersToObjectJacobian(const JacobianInputData &input_data) const override final;
 
             ////////////////////////////////////////////////////////////////////
             // Private members

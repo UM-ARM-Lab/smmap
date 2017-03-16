@@ -82,10 +82,9 @@ void DiminishingRigidityModel::updateModel(const WorldState& previous, const Wor
 ////////////////////////////////////////////////////////////////////////////////
 
 Eigen::MatrixXd DiminishingRigidityModel::getGrippersToObjectJacobian(
-        const AllGrippersSinglePose& grippers_pose,
-        const ObjectPointSet& current_configuration) const
+        const JacobianInputData &input_data) const
 {
-    return computeGrippersToObjectJacobian(grippers_pose, current_configuration);
+    return computeGrippersToObjectJacobian(input_data);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -98,10 +97,11 @@ Eigen::MatrixXd DiminishingRigidityModel::getGrippersToObjectJacobian(
  * gripper frames into object velocities in the world frame
  * @param grippers_data
  */
-Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(
-        const AllGrippersSinglePose& grippers_pose,
-        const ObjectPointSet& current_configuration) const
+Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(const JacobianInputData &input_data) const
 {
+    const AllGrippersSinglePose& grippers_pose = input_data.world_initial_state_.all_grippers_single_pose_;
+    const ObjectPointSet& current_configuration = input_data.world_initial_state_.object_configuration_;
+
     const ssize_t num_grippers = (ssize_t)grippers_pose.size();
     const ssize_t num_Jcols = num_grippers * 6;
     const ssize_t num_Jrows = num_nodes_ * 3;

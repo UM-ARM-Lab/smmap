@@ -75,10 +75,9 @@ void LeastSquaresJacobianModel::updateModel(const WorldState& previous, const Wo
 ////////////////////////////////////////////////////////////////////
 
 Eigen::MatrixXd LeastSquaresJacobianModel::computeGrippersToObjectJacobian(
-        const AllGrippersSinglePose& grippers_pose,
-        const ObjectPointSet& current_configuration) const
+        const JacobianInputData &input_data) const
 {
-    (void)grippers_pose;
-    (void)current_configuration;
+    (void)input_data.world_initial_state_.all_grippers_single_pose_;
+    (void)input_data.world_initial_state_.object_configuration_;
     return current_jacobian_;
 }

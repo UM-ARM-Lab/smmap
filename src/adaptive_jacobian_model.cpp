@@ -61,10 +61,12 @@ void AdaptiveJacobianModel::updateModel(const WorldState& previous, const WorldS
 ////////////////////////////////////////////////////////////////////
 
 Eigen::MatrixXd AdaptiveJacobianModel::computeGrippersToObjectJacobian(
-        const AllGrippersSinglePose& grippers_pose,
-        const ObjectPointSet& current_configuration) const
+        const JacobianInputData &input_data) const
 {
-    (void)grippers_pose;
-    (void)current_configuration;
+    const AllGrippersSinglePose& grippers_pose = input_data.world_initial_state_.all_grippers_single_pose_;
+    const ObjectPointSet& current_configuration = input_data.world_initial_state_.object_configuration_;
+//    WorldState& world_state = input_data.world_initial_state_;
+    (void)(grippers_pose);
+    (void)(current_configuration);
     return current_jacobian_;
 }

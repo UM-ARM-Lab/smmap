@@ -5,6 +5,7 @@
 #include "smmap/diminishing_rigidity_model.h"
 #include "smmap/adaptive_jacobian_model.h"
 #include "smmap/least_squares_jacobian_model.h"
+#include "smmap/constraint_jacobian_model.h"
 
 #include "smmap/task.h"
 
@@ -135,6 +136,24 @@ void Task::initializeModelSet()
                               GetAdaptiveModelLearningRate(ph_),
                               optimization_enabled));
     }
+    // Mengyao's model here
+    else if (GetUseConstraintModel(ph_))
+    {
+        const double translation_dir_deformability=0.1;
+        const double translation_dis_deformability=0.1;
+        const double rotation_deformability=0.1;
+
+        // Douoble check this usage
+//        const ObjectDeltaAndWeight desired_object_velocity=task_specification_->calculateDesirsiredDirection() ;
+        const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(ph_));
+        planner_.addModel(std::make_shared<ConstraintJacobianModel>(
+                              translation_dir_deformability,
+                              translation_dis_deformability,
+                              rotation_deformability,
+                              environment_sdf,
+                              optimization_enabled));
+    }
+    // Mengyao's model above
     else
     {
         ROS_INFO_STREAM_NAMED("task", "Using default deformability value of "

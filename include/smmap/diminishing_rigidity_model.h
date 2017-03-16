@@ -33,9 +33,7 @@ namespace smmap
             // Find a better way to do this
             ////////////////////////////////////////////////////////////////////
 
-            Eigen::MatrixXd getGrippersToObjectJacobian(
-                    const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration) const;
+            Eigen::MatrixXd getGrippersToObjectJacobian(const JacobianInputData &input_data) const;
 
             ////////////////////////////////////////////////////////////////////
             // Static functions to set data for all models
@@ -56,9 +54,7 @@ namespace smmap
             // Computation helpers
             ////////////////////////////////////////////////////////////////////
 
-            virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
-                    const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration) const override final;
+            virtual Eigen::MatrixXd computeGrippersToObjectJacobian(const JacobianInputData &input_data) const override final;
 
             ////////////////////////////////////////////////////////////////////
             // Static members
