@@ -26,7 +26,7 @@ AdaptiveJacobianModel::AdaptiveJacobianModel(
 // Virtual function overrides
 ////////////////////////////////////////////////////////////////////
 
-void AdaptiveJacobianModel::updateModel(const WorldState& previous, const WorldState& next)
+void AdaptiveJacobianModel::updateModel_impl(const WorldState& previous, const WorldState& next)
 {
     const AllGrippersSinglePoseDelta grippers_pose_deltas =
             CalculateGrippersPoseDelta(previous.all_grippers_single_pose_,
@@ -56,12 +56,8 @@ void AdaptiveJacobianModel::updateModel(const WorldState& previous, const WorldS
     }
 }
 
-////////////////////////////////////////////////////////////////////
-// Computation helpers
-////////////////////////////////////////////////////////////////////
-
-Eigen::MatrixXd AdaptiveJacobianModel::computeGrippersToObjectJacobian(
-        const JacobianInputData &input_data) const
+Eigen::MatrixXd AdaptiveJacobianModel::computeGrippersToDeformableObjectJacobian_impl(
+        const DeformableModelInputData &input_data) const
 {
     const AllGrippersSinglePose& grippers_pose = input_data.world_initial_state_.all_grippers_single_pose_;
     const ObjectPointSet& current_configuration = input_data.world_initial_state_.object_configuration_;

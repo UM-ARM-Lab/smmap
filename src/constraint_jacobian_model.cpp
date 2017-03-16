@@ -41,14 +41,12 @@ ConstraintJacobianModel::ConstraintJacobianModel(
         const double translation_dir_deformability,
         const double translation_dis_deformability,
         const double rotation_deformability,
-        const ObjectDeltaAndWeight desired_object_velocity,
         const sdf_tools::SignedDistanceField environment_sdf,
         const bool optimize)
-    :ConstraintJacobianModel(
+    : ConstraintJacobianModel(
          translation_dir_deformability,
          translation_dis_deformability,
          rotation_deformability,
-         desired_object_velocity,
          environment_sdf,
          simpleFn,
          simpleFn,
@@ -59,7 +57,6 @@ ConstraintJacobianModel::ConstraintJacobianModel(
         const double translation_dir_deformability,
         const double translation_dis_deformability,
         const double rotation_deformability,
-        const ObjectDeltaAndWeight desired_object_velocity,
         const sdf_tools::SignedDistanceField environment_sdf,
         RigidityFnType trans_dir_fn,
         RigidityFnType trans_dis_fn,
@@ -68,11 +65,10 @@ ConstraintJacobianModel::ConstraintJacobianModel(
     , translation_dir_deformability_(translation_dir_deformability)
     , translation_dis_deformability_(translation_dis_deformability)
     , rotation_deformability_(rotation_deformability)
-    , desired_object_velocity_(desired_object_velocity)
-    , environment_sdf_(environment_sdf)
     , trans_dir_type_(trans_dir_fn)
     , trans_dis_type_(trans_dis_fn)
-    ,obstacle_threshold_(2.0)
+    , environment_sdf_(environment_sdf)
+    , obstacle_threshold_(2.0)
 {
     // Set obstacle distance threshold, to be modified later
     // Should check with Dale, whether it counts as #grids
@@ -100,64 +96,24 @@ ConstraintJacobianModel::ConstraintJacobianModel(
 ////////////////////////////////////////////////////////////////////////////////
 // Virtual function overrides
 ////////////////////////////////////////////////////////////////////////////////
-/*
-void ConstraintJacobianModel::updateModel(const WorldState& previous, const WorldState& next)
+
+void ConstraintJacobianModel::updateModel_impl(const WorldState& previous, const WorldState& next)
 {
     // This model doesn't do any updates, so tell the compiler that it's okay
     // that these values are unused.
     (void)previous;
     (void)next;
 }
-*/
-////////////////////////////////////////////////////////////////////////////////
-// Helper used only by AdaptiveJacobian (at the moment)
-// Find a better way to do this
-////////////////////////////////////////////////////////////////////////////////
-
-Eigen::MatrixXd ConstraintJacobianModel::getGrippersToObjectJacobian(
-        const JacobianInputData &input_data) const
-{
-    return computeGrippersToObjectJacobian(input_data);
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-// Candidate function to model rigidity weighting for translation Jacobian
-////////////////////////////////////////////////////////////////////////////////
-
-// Candidate function to count vector effect, return 3x3 matrix = diag{exp[beta(.,.)]}
-Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node_to_gripper, const Vector3d node_v) const
-{
-    Matrix3d beta_rigidity=MatrixXd::Zero(3,3);
-    Vector3d dot_product = node_to_gripper.cwiseProduct(node_v);
-    beta_rigidity(1,1) = std::exp(dot_product(1)-std::fabs(dot_product(1)));
-    beta_rigidity(2,2) = std::exp(dot_product(2)-std::fabs(dot_product(2)));
-    beta_rigidity(3,3) = std::exp(dot_product(3)-std::fabs(dot_product(3)));
-
-    return beta_rigidity;
-}
-
-
-double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, const double dist_rest) const
-{
-    double ration = dist_to_gripper/dist_rest;
-
-    return std::pow(ration,translation_dis_deformability_);
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-// Computation helpers
-////////////////////////////////////////////////////////////////////////////////
 
 /**
- * @brief ConstraintJacobianModel::computeObjectToGripperJacobian
+ * @brief ConstraintJacobianModel::computeGrippersToDeformableObjectJacobian_impl
  * Computes a Jacobian that converts gripper velocities in the individual
  * gripper frames into object velocities in the world frame
- * @param grippers_data
+ * @param input_data
+ * @return
  */
-Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToObjectJacobian(
-        const JacobianInputData &input_data) const
+Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobian_impl(
+        const DeformableModelInputData &input_data) const
 {
     const WorldState& world_state = input_data.world_initial_state_;
     const AllGrippersSinglePose& grippers_pose = world_state.all_grippers_single_pose_;
@@ -170,8 +126,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToObjectJacobian(
     MatrixXd J(num_Jrows, num_Jcols);
 
     // Retrieve the desired object velocity (p_dot)
-    //const ObjectDeltaAndWeight desired_object_velocity = task_desired_object_delta_fn(world_initial_state);
-    const Vector3d& object_p_dot = desired_object_velocity_.delta;
+    const VectorXd& object_p_dot = input_data.task_desired_object_delta_fn_(input_data.world_initial_state_).delta;
 
     // for each gripper
     for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
@@ -235,6 +190,31 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToObjectJacobian(
     return J;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Candidate function to model rigidity weighting for translation Jacobian
+////////////////////////////////////////////////////////////////////////////////
+
+// Candidate function to count vector effect, return 3x3 matrix = diag{exp[beta(.,.)]}
+Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node_to_gripper, const Vector3d node_v) const
+{
+    Matrix3d beta_rigidity=MatrixXd::Zero(3,3);
+    Vector3d dot_product = node_to_gripper.cwiseProduct(node_v);
+    beta_rigidity(1,1) = std::exp(dot_product(1)-std::fabs(dot_product(1)));
+    beta_rigidity(2,2) = std::exp(dot_product(2)-std::fabs(dot_product(2)));
+    beta_rigidity(3,3) = std::exp(dot_product(3)-std::fabs(dot_product(3)));
+
+    return beta_rigidity;
+}
+
+
+double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, const double dist_rest) const
+{
+    double ration = dist_to_gripper/dist_rest;
+
+    return std::pow(ration,translation_dis_deformability_);
+}
+
+
 /**
  * @brief ConstraintJacobianModel::computeObjectVelocityMask
  * @param current_configuration
@@ -244,14 +224,13 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToObjectJacobian(
 // q_dot = pinv(J)*Mask*P_dot
 
 Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
-        const ObjectPointSet &current_configuration)
+        const ObjectPointSet &current_configuration,
+        const VectorXd object_p_dot)
 {
     const ssize_t num_lines = num_nodes_ * 3;
     MatrixXd M(num_lines, num_lines);
     M.setIdentity(num_lines,num_lines);
     Matrix3d I3 = Matrix3d::Identity(3,3);
-
-    const Vector3d& object_p_dot = desired_object_velocity_.delta;
 
     for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
     {

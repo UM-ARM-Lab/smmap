@@ -68,7 +68,9 @@ DiminishingRigidityModel::DiminishingRigidityModel(
 // Virtual function overrides
 ////////////////////////////////////////////////////////////////////////////////
 
-void DiminishingRigidityModel::updateModel(const WorldState& previous, const WorldState& next)
+void DiminishingRigidityModel::updateModel_impl(
+        const WorldState& previous,
+        const WorldState& next)
 {
     // This model doesn't do any updates, so tell the compiler that it's okay
     // that these values are unused.
@@ -76,28 +78,14 @@ void DiminishingRigidityModel::updateModel(const WorldState& previous, const Wor
     (void)next;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Helper used only by AdaptiveJacobian (at the moment)
-// Find a better way to do this
-////////////////////////////////////////////////////////////////////////////////
-
-Eigen::MatrixXd DiminishingRigidityModel::getGrippersToObjectJacobian(
-        const JacobianInputData &input_data) const
-{
-    return computeGrippersToObjectJacobian(input_data);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Computation helpers
-////////////////////////////////////////////////////////////////////////////////
-
 /**
  * @brief DiminishingRigidityModel::computeObjectToGripperJacobian
  * Computes a Jacobian that converts gripper velocities in the individual
  * gripper frames into object velocities in the world frame
  * @param grippers_data
  */
-Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(const JacobianInputData &input_data) const
+Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToDeformableObjectJacobian_impl(
+        const DeformableModelInputData &input_data) const
 {
     const AllGrippersSinglePose& grippers_pose = input_data.world_initial_state_.all_grippers_single_pose_;
     const ObjectPointSet& current_configuration = input_data.world_initial_state_.object_configuration_;

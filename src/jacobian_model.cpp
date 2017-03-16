@@ -13,66 +13,69 @@ JacobianModel::JacobianModel(bool optimize)
     : optimize_(optimize)
 {}
 
+Eigen::MatrixXd JacobianModel::computeGrippersToDeformableObjectJacobian(
+        const DeformableModelInputData& input_data) const
+{
+    return computeGrippersToDeformableObjectJacobian_impl(input_data);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Virtual function overrides
 ////////////////////////////////////////////////////////////////////////////////
 
-ObjectPointSet JacobianModel::getObjectDelta(
-        const WorldState& world_initial_state,
-        const AllGrippersSinglePoseDelta& gripper_pose_delta,
-        const double dt) const
+/**
+ * @brief JacobianModel::getObjectDelta_impl
+ * @param input_data
+ * @param grippers_pose_delta
+ * @return
+ */
+ObjectPointSet JacobianModel::getObjectDelta_impl(
+        const DeformableModelInputData& input_data,
+        const AllGrippersSinglePoseDelta& grippers_pose_delta) const
 {
-    (void)dt;
+    const MatrixXd J = computeGrippersToDeformableObjectJacobian_impl(input_data);
 
-    return getObjectDelta(
-                world_initial_state.object_configuration_,
-                world_initial_state.all_grippers_single_pose_,
-                gripper_pose_delta);
+    MatrixXd delta = MatrixXd::Zero(input_data.world_initial_state_.object_configuration_.cols() * 3, 1);
+
+    // Move the object based on the movement of each gripper
+    for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
+    {
+        // Assume that our Jacobian is correct, and predict where we will end up
+        delta += J.block(0, 6 * (ssize_t)gripper_ind, J.rows(), 6) * grippers_pose_delta[gripper_ind];
+    }
+
+    delta.resizeLike(input_data.world_initial_state_.object_configuration_);
+    return delta;
 }
 
+
 /**
- * @brief JacobianModel::getSuggestedGrippersCommand
- * @param task_desired_object_delta_fn
- * @param world_initial_state
- * @param dt
+ * @brief JacobianModel::getSuggestedGrippersCommand_impl
+ * @param input_data
  * @param max_gripper_velocity
  * @param obstacle_avoidance_scale
  * @return
  */
 std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>
-JacobianModel::getSuggestedGrippersCommand(
-        TaskDesiredObjectDeltaFunctionType task_desired_object_delta_fn,
-        const WorldState& world_initial_state,
-        const double dt,
+JacobianModel::getSuggestedGrippersCommand_impl(
+        const DeformableModelInputData& input_data,
         const double max_gripper_velocity,
         const double obstacle_avoidance_scale) const
 {
-    const double max_step_size = max_gripper_velocity * dt;
+    const double max_step_size = max_gripper_velocity * input_data.dt_;
     const size_t num_grippers = grippers_data_.size();
-    const ssize_t num_nodes = world_initial_state.object_configuration_.cols();
-
-    ////////////////////////////////////////////////////////////////////////
-    // JacobianInputData
-    ////////////////////////////////////////////////////////////////////////
-    const JacobianInputData jacobianInputData(task_desired_object_delta_fn,world_initial_state);
-
+    const ssize_t num_nodes = input_data.world_initial_state_.object_configuration_.cols();
 
     ////////////////////////////////////////////////////////////////////////
     // Find the velocities of each part of the algorithm
     ////////////////////////////////////////////////////////////////////////
 
     // Retrieve the desired object velocity (p_dot)
-    const ObjectDeltaAndWeight desired_object_velocity = task_desired_object_delta_fn(world_initial_state);
+    const ObjectDeltaAndWeight desired_object_velocity =
+            input_data.task_desired_object_delta_fn_(input_data.world_initial_state_);
 
     // Recalculate the jacobian at each timestep, because of rotations being non-linear
-    /*
-    const MatrixXd jacobian =
-            computeGrippersToObjectJacobian(
-                world_initial_state.all_grippers_single_pose_,
-                world_initial_state.object_configuration_);
-    */
-    const MatrixXd jacobian =
-            computeGrippersToObjectJacobian(jacobianInputData);
+    const MatrixXd jacobian = computeGrippersToDeformableObjectJacobian_impl(input_data);
 
     // Find the least-squares fitting to the desired object velocity
     VectorXd grippers_delta_achieve_goal;
@@ -93,8 +96,8 @@ JacobianModel::getSuggestedGrippersCommand(
     // Find the collision avoidance data that we'll need
     const std::vector<CollisionAvoidanceResult> grippers_collision_avoidance_result =
             ComputeGripperObjectAvoidance(
-                world_initial_state.gripper_collision_data_,
-                world_initial_state.all_grippers_single_pose_,
+                input_data.world_initial_state_.gripper_collision_data_,
+                input_data.world_initial_state_.all_grippers_single_pose_,
                 max_step_size);
 
     ////////////////////////////////////////////////////////////////////////
@@ -120,34 +123,4 @@ JacobianModel::getSuggestedGrippersCommand(
     }
 
     return suggested_grippers_command;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Computation helpers
-////////////////////////////////////////////////////////////////////////////////
-
-/**
- * @brief JacobianModel::getObjectDelta
- * @param object_initial_configuration
- * @param grippers_pose
- * @param grippers_pose_delta
- * @return
- */
-ObjectPointSet JacobianModel::getObjectDelta(
-        const JacobianInputData &input_data,
-        const AllGrippersSinglePoseDelta& grippers_pose_delta) const
-{    
-    const MatrixXd J = computeGrippersToObjectJacobian(input_data);
-
-    MatrixXd delta = MatrixXd::Zero(object_initial_configuration.cols() * 3, 1);
-
-    // Move the object based on the movement of each gripper
-    for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
-    {
-        // Assume that our Jacobian is correct, and predict where we will end up
-        delta += J.block(0, 6 * (ssize_t)gripper_ind, J.rows(), 6) * grippers_pose_delta[gripper_ind];
-    }
-
-    delta.resizeLike(object_initial_configuration);
-    return delta;
 }

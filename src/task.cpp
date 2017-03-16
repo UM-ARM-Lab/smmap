@@ -23,7 +23,6 @@ Task::Task(RobotInterface& robot,
     , logging_fn_(createLoggingFunction())
     , planner_(robot_, vis_, task_specification_, logging_fn_)
 {
-    initializeModelSet();
     initializeLogging();
 }
 
@@ -35,6 +34,8 @@ void Task::execute()
     ROS_INFO_STREAM_NAMED("task", "Running our planner with a horizion of " << planning_horizion);
     WorldState world_feedback = robot_.start();
     const double start_time = world_feedback.sim_time_;
+
+    initializeModelSet(world_feedback);
 
     while (robot_.ok())
     {
@@ -57,7 +58,7 @@ void Task::execute()
 // Internal initialization helpers
 ////////////////////////////////////////////////////////////////////////////////
 
-void Task::initializeModelSet()
+void Task::initializeModelSet(const WorldState& initial_world_state)
 {
     // Initialze each model type with the shared data
     DeformableModel::SetGrippersData(robot_.getGrippersData());
@@ -111,10 +112,17 @@ void Task::initializeModelSet()
         const double learning_rate_min = 1e-10;
         const double learning_rate_max = 1.1e0;
         const double learning_rate_step = 10.0;
+
+        const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
+        {
+            return task_specification_->calculateDesiredDirection(world_state);
+        };
+
+        const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
         for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
         {
                 planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
-                                      DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+                                      DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
                                       learning_rate,
                                       optimization_enabled));
         }
@@ -131,8 +139,14 @@ void Task::initializeModelSet()
     }
     else if (GetUseAdaptiveModel(ph_))
     {
+        const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
+        {
+            return task_specification_->calculateDesiredDirection(world_state);
+        };
+
+        const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
         planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
-                              DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
+                              DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
                               GetAdaptiveModelLearningRate(ph_),
                               optimization_enabled));
     }

@@ -166,7 +166,7 @@ class JacobianBandit
             true_jacobian_ = MatrixXd::Identity(num_jacobian_rows, num_jacobian_cols);
             for (ssize_t col_ind = 0; col_ind < num_jacobian_cols; col_ind++)
             {
-                true_jacobian_(col_ind, col_ind) *= std::exp(-(double)col_ind * 2.0 / (num_jacobian_cols - 1.0));
+                true_jacobian_(col_ind, col_ind) *= std::exp(-(double)col_ind * 2.0 / ((double)num_jacobian_cols - 1.0));
                 for (ssize_t row_ind = 0; row_ind < num_jacobian_rows; row_ind++)
                 {
                     true_jacobian_(row_ind, col_ind) += uniform_dist(generator_);

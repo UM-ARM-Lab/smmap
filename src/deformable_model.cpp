@@ -46,3 +46,29 @@ void DeformableModel::SetCallbackFunctions(
     gripper_collision_check_fn_ = gripper_collision_check_fn;
     function_pointers_initialized_.store(true);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Interface wrappers
+////////////////////////////////////////////////////////////////////////////////
+
+void DeformableModel::updateModel(
+        const WorldState& previous,
+        const WorldState& next)
+{
+    return updateModel_impl(previous, next);
+}
+
+ObjectPointSet DeformableModel::getObjectDelta(
+        const DeformableModelInputData& input_data,
+        const AllGrippersSinglePoseDelta& grippers_pose_delta)
+{
+    return getObjectDelta_impl(input_data, grippers_pose_delta);
+}
+
+std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> DeformableModel::getSuggestedGrippersCommand(
+        const DeformableModelInputData& input_data,
+        const double max_gripper_velocity,
+        const double obstacle_avoidance_scale)
+{
+    return getSuggestedGrippersCommand_impl(input_data, max_gripper_velocity, obstacle_avoidance_scale);
+}

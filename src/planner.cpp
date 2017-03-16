@@ -127,6 +127,8 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
 //    visualizeDesiredMotion(current_world_state, task_desired_motion);
 
+    DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
+
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
     const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
@@ -142,9 +144,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
         {
             suggested_robot_commands[model_ind] =
                 model_list_[model_ind]->getSuggestedGrippersCommand(
-                        task_desired_direction_fn,
-                        current_world_state,
-                        robot_.dt_,
+                        model_input_data,
                         robot_.max_gripper_velocity_,
                         task_specification_->collisionScalingFactor());
         }
@@ -177,7 +177,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
 
     // Execute the command
     const AllGrippersSinglePoseDelta& selected_command = suggested_robot_commands[(size_t)model_to_use].first;
-    ObjectPointSet predicted_object_delta = model_list_[(size_t)model_to_use]->getObjectDelta(current_world_state, selected_command, robot_.dt_);
+    ObjectPointSet predicted_object_delta = model_list_[(size_t)model_to_use]->getObjectDelta(model_input_data, selected_command);
     const Eigen::Map<Eigen::VectorXd> predicted_object_delta_as_vector(predicted_object_delta.data(), predicted_object_delta.size());
     ROS_INFO_STREAM_NAMED("planner", "Sending command to robot, action norm:  " << MultipleGrippersVelocity6dNorm(selected_command));
     ROS_INFO_STREAM_NAMED("planner", "Task desired deformable movement norm:  " << EigenHelpers::WeightedNorm(task_desired_motion.delta, task_desired_motion.weight));

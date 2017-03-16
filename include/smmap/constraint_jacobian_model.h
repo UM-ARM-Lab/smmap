@@ -13,7 +13,7 @@ namespace smmap
             Eigen::Vector3d node_to_gripper, Eigen::Vector3d node_v
             )>
     translationDirectionFnPtr;
-    typedef std::function<const double(
+    typedef std::function<double(
             const double dist_to_gripper, const double dist_rest
             )>
     translationDistanceFnPtr;
@@ -36,7 +36,6 @@ namespace smmap
                     const double translation_dir_deformability,
                     const double translation_dis_deformability,
                     const double rotation_deformability,
-                    const ObjectDeltaAndWeight desired_object_velocity,
                     const sdf_tools::SignedDistanceField environment_sdf,
                     const bool optimize);
 /*
@@ -52,24 +51,10 @@ namespace smmap
                     const double translation_dir_deformability,
                     const double translation_dis_deformability,
                     const double rotation_deformability,
-                    const ObjectDeltaAndWeight desired_object_velocity,
                     const sdf_tools::SignedDistanceField environment_sdf,
                     RigidityFnType trans_dir_fn,
                     RigidityFnType trans_dis_fn,
                     const bool optimize);
-
-            ////////////////////////////////////////////////////////////////////
-            // Virtual function overrides
-            ////////////////////////////////////////////////////////////////////
-/*
-            virtual void updateModel(const WorldState& previous, const WorldState& next) final override;
-*/
-            ////////////////////////////////////////////////////////////////////
-            // Helper used only by AdaptiveJacobian (at the moment)
-            // Find a better way to do this
-            ////////////////////////////////////////////////////////////////////
-
-            Eigen::MatrixXd getGrippersToObjectJacobian(const JacobianInputData &input_data) const;
 
             ////////////////////////////////////////////////////////////////////
             // Static functions to set data for all models
@@ -79,6 +64,17 @@ namespace smmap
                     const ObjectPointSet& object_initial_configuration);
 
         private:
+
+            ////////////////////////////////////////////////////////////////////
+            // Virtual function overrides
+            ////////////////////////////////////////////////////////////////////
+
+            virtual void updateModel_impl(
+                    const WorldState& previous,
+                    const WorldState& next) final override;
+
+            virtual Eigen::MatrixXd computeGrippersToDeformableObjectJacobian_impl(
+                    const DeformableModelInputData &input_data) const final override;
 
             ////////////////////////////////////////////////////////////////////
             // Static helpers
@@ -112,13 +108,8 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
             // Obstacle information from sdf tool
             ////////////////////////////////////////////////////////////////////
-            const sdf_tools::SignedDistanceField environment_sdf_;
+            const sdf_tools::SignedDistanceField& environment_sdf_;
             const double obstacle_threshold_;
-
-            ////////////////////////////////////////////////////////////////////
-            // Planned Velocity
-            ////////////////////////////////////////////////////////////////////
-            const ObjectDeltaAndWeight desired_object_velocity_;
 
             ////////////////////////////////////////////////////////////////////
             // Function to adjust rigidity actually
@@ -132,24 +123,11 @@ namespace smmap
                     const double dist_rest) const;
 
             ////////////////////////////////////////////////////////////////////
-            // Computation helpers
-            ////////////////////////////////////////////////////////////////////
-
-            /*
-            virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
-                    const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration,
-                    const ObjectDeltaAndWeight desired_object_velocity) const override final;
-            */
-            virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
-                    const JacobianInputData &input_data) const override final;
-
-
-            ////////////////////////////////////////////////////////////////////
             // Computation of Mask Matrix M, q_dot = pinv(J)*M*P_dot
             ////////////////////////////////////////////////////////////////////
             Eigen::MatrixXd computeObjectVelocityMask(
-                    const ObjectPointSet& current_configuration);
+                    const ObjectPointSet& current_configuration,
+                    const Eigen::VectorXd object_p_dot);
 
 
     };

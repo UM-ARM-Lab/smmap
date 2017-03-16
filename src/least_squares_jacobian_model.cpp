@@ -29,7 +29,7 @@ LeastSquaresJacobianModel::LeastSquaresJacobianModel(
 // Virtual function overrides
 ////////////////////////////////////////////////////////////////////
 
-void LeastSquaresJacobianModel::updateModel(const WorldState& previous, const WorldState& next)
+void LeastSquaresJacobianModel::updateModel_impl(const WorldState& previous, const WorldState& next)
 {
     const AllGrippersSinglePoseDelta grippers_pose_deltas =
             CalculateGrippersPoseDelta(previous.all_grippers_single_pose_,
@@ -74,8 +74,8 @@ void LeastSquaresJacobianModel::updateModel(const WorldState& previous, const Wo
 // Computation helpers
 ////////////////////////////////////////////////////////////////////
 
-Eigen::MatrixXd LeastSquaresJacobianModel::computeGrippersToObjectJacobian(
-        const JacobianInputData &input_data) const
+Eigen::MatrixXd LeastSquaresJacobianModel::computeGrippersToDeformableObjectJacobian_impl(
+        const DeformableModelInputData &input_data) const
 {
     (void)input_data.world_initial_state_.all_grippers_single_pose_;
     (void)input_data.world_initial_state_.object_configuration_;
