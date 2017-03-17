@@ -108,7 +108,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
             // Obstacle information from sdf tool
             ////////////////////////////////////////////////////////////////////
-            const sdf_tools::SignedDistanceField& environment_sdf_;
+            const sdf_tools::SignedDistanceField environment_sdf_;
             const double obstacle_threshold_;
 
             ////////////////////////////////////////////////////////////////////
