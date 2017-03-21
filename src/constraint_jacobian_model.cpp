@@ -186,7 +186,12 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
 
         }
     }
-
+/*
+    std::cout << "Constraint Jacobian of the size" <<std::endl;
+    std::cout << J.rows() << std::endl;
+    std::cout << J.cols() << std::endl;
+    std::cout << "The above are rows and cols" << std::endl;
+*/
     return J;
 }
 
@@ -199,17 +204,30 @@ Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node
 {
     Matrix3d beta_rigidity=MatrixXd::Zero(3,3);
     Vector3d dot_product = node_to_gripper.cwiseProduct(node_v);
+    beta_rigidity(0,0) = std::exp(dot_product(0)-std::fabs(dot_product(0)));
+    beta_rigidity(1,1) = std::exp(dot_product(1)-std::fabs(dot_product(1)));
+    beta_rigidity(2,2) = std::exp(dot_product(2)-std::fabs(dot_product(2)));
+    /*
     beta_rigidity(1,1) = std::exp(dot_product(1)-std::fabs(dot_product(1)));
     beta_rigidity(2,2) = std::exp(dot_product(2)-std::fabs(dot_product(2)));
     beta_rigidity(3,3) = std::exp(dot_product(3)-std::fabs(dot_product(3)));
-
+    */
     return beta_rigidity;
 }
 
 
 double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, const double dist_rest) const
 {
-    double ration = dist_to_gripper/dist_rest;
+    double ration;
+    if (std::fabs(dist_rest)<0.00001)
+    {
+         ration = 1;
+    }
+    else
+    {
+        ration = dist_to_gripper/dist_rest;
+    }
+
 
     return std::pow(ration,translation_dis_deformability_);
 }
