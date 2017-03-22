@@ -273,7 +273,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
             // Check with Dale, whether the vector is normalized.
             const Matrix<double, 1, 3> surface_normal_inv
                     = EigenHelpers::Pinv(surface_normal, EigenHelpers::SuggestedRcond());
-            M.block<3,3>(node_ind*3,node_ind*3)=I3-surface_normal*surface_normal_inv;
+            M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
         }
 
     }
