@@ -83,10 +83,10 @@ void Planner::createBandits()
 
 Eigen::Vector3d projectOutOfObstacle(const sdf_tools::SignedDistanceField& sdf, Eigen::Vector3d vec)
 {
-    for (float sdf_dist = sdf.Get(vec); sdf_dist < 0; sdf_dist = sdf.Get(vec))
+    for (float sdf_dist = sdf.Get3d(vec); sdf_dist < 0; sdf_dist = sdf.Get3d(vec))
     {
         const bool enable_edge_gradients = true;
-        const std::vector<double> gradient = sdf.GetGradient(vec, enable_edge_gradients);
+        const std::vector<double> gradient = sdf.GetGradient3d(vec, enable_edge_gradients);
         const Eigen::Vector3d grad_eigen = EigenHelpers::StdVectorDoubleToEigenVector3d(gradient);
 
         assert(grad_eigen.norm() > sdf.GetResolution() / 4.0); // Sanity check
@@ -167,7 +167,7 @@ EigenHelpers::VectorVector3d Planner::forwardSimulateVirtualRubberBand(
 
 
     // Shortcut smoothing
-    const auto sdf_collision_fn = [&] (const Eigen::Vector3d& location) { return sdf.Get(location) < 0.0; };
+    const auto sdf_collision_fn = [&] (const Eigen::Vector3d& location) { return sdf.Get3d(location) < 0.0; };
     for (int smoothing_ittr = 0; smoothing_ittr < NUM_SMOOTHING_ITTRS; ++smoothing_ittr)
     {
         std::uniform_int_distribution<size_t> distribution(0, rubber_band.size() - 1);
@@ -189,7 +189,7 @@ EigenHelpers::VectorVector3d Planner::forwardSimulateVirtualRubberBand(
 
     if (verbose)
     {
-        int tmp = rubber_band.size();
+        size_t tmp = rubber_band.size();
         std::cout << tmp << "\n";
     }
 
@@ -219,7 +219,7 @@ EigenHelpers::VectorVector3d Planner::createVirtualRubberBand(
     for (size_t i = 0; i <= num_divs; ++i)
     {
         virtual_rubber_band.push_back(EigenHelpers::Interpolate(start_point, end_point, (double)i / (double)num_divs));
-        assert(dijkstras_task->environment_sdf_.Get(virtual_rubber_band.back()) > 0.0);
+        assert(dijkstras_task->environment_sdf_.Get3d(virtual_rubber_band.back()) > 0.0);
     }
 
     max_gripper_distance_ = EigenHelpers::CalculateTotalDistance(virtual_rubber_band) + (double)(GetClothNumDivsY(nh_) - 1) * dijkstras_task->stretchingThreshold();
@@ -339,7 +339,8 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
                 const AllGrippersSinglePose starting_grippers_single_pose = world_state_copy.all_grippers_single_pose_;
 
                 // Move the grippers and cloth
-                const std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command = model_list_[0]->getSuggestedGrippersCommand(task_desired_direction_fn, world_state_copy, robot_.dt_, dijkstras_task->work_space_grid_.minStepDimension() / robot_.dt_, task_specification_->collisionScalingFactor());
+                DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
+                const std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command = model_list_[0]->getSuggestedGrippersCommand(model_input_data, dijkstras_task->work_space_grid_.minStepDimension() / robot_.dt_, task_specification_->collisionScalingFactor());
                 world_state_copy.all_grippers_single_pose_ = kinematics::applyTwist(world_state_copy.all_grippers_single_pose_, robot_command.first);
                 world_state_copy.gripper_collision_data_ = robot_.checkGripperCollision(world_state_copy.all_grippers_single_pose_);
                 world_state_copy.sim_time_ += robot_.dt_;
@@ -394,7 +395,8 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
                 const AllGrippersSinglePose starting_grippers_single_pose = world_state_copy.all_grippers_single_pose_;
 
                 // Move the grippers and cloth
-                const std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command = model_list_[0]->getSuggestedGrippersCommand(task_desired_direction_fn, world_state_copy, robot_.dt_, robot_.max_gripper_velocity_, task_specification_->collisionScalingFactor());
+                DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
+                const std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command = model_list_[0]->getSuggestedGrippersCommand(model_input_data, robot_.max_gripper_velocity_, task_specification_->collisionScalingFactor());
                 world_state_copy.all_grippers_single_pose_ = kinematics::applyTwist(world_state_copy.all_grippers_single_pose_, robot_command.first);
                 world_state_copy.gripper_collision_data_ = robot_.checkGripperCollision(world_state_copy.all_grippers_single_pose_);
                 world_state_copy.sim_time_ += robot_.dt_;
@@ -439,6 +441,8 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
 //    visualizeDesiredMotion(current_world_state, task_desired_motion);
 
+    DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
+
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
     const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
@@ -454,9 +458,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
         {
             suggested_robot_commands[model_ind] =
                 model_list_[model_ind]->getSuggestedGrippersCommand(
-                        task_desired_direction_fn,
-                        current_world_state,
-                        robot_.dt_,
+                        model_input_data,
                         robot_.max_gripper_velocity_,
                         task_specification_->collisionScalingFactor());
         }
@@ -489,7 +491,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
 
     // Execute the command
     const AllGrippersSinglePoseDelta& selected_command = suggested_robot_commands[(size_t)model_to_use].first;
-    ObjectPointSet predicted_object_delta = model_list_[(size_t)model_to_use]->getObjectDelta(current_world_state, selected_command, robot_.dt_);
+    ObjectPointSet predicted_object_delta = model_list_[(size_t)model_to_use]->getObjectDelta(model_input_data, selected_command);
     const Eigen::Map<Eigen::VectorXd> predicted_object_delta_as_vector(predicted_object_delta.data(), predicted_object_delta.size());
     ROS_INFO_STREAM_NAMED("planner", "Sending command to robot, action norm:  " << MultipleGrippersVelocity6dNorm(selected_command));
     ROS_INFO_STREAM_NAMED("planner", "Task desired deformable movement norm:  " << EigenHelpers::WeightedNorm(task_desired_motion.delta, task_desired_motion.weight));

@@ -13,25 +13,39 @@ namespace smmap
         public:
             typedef std::shared_ptr<DeformableModel> Ptr;
 
+            struct DeformableModelInputData
+            {
+                public:
+                    DeformableModelInputData(
+                            const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn,
+                            const WorldState& world_initial_state,
+                            const double dt)
+                        : task_desired_object_delta_fn_(task_desired_object_delta_fn)
+                        , world_initial_state_(world_initial_state)
+                        , dt_(dt)
+                    {}
+
+                    const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn_;
+                    const WorldState& world_initial_state_;
+                    const double dt_;
+            };
+
             DeformableModel();
 
             ////////////////////////////////////////////////////////////////////
             // Virtual functions that define the interface
             ////////////////////////////////////////////////////////////////////
 
-            virtual void updateModel(const WorldState& previous, const WorldState& next) = 0;
+            void updateModel(const WorldState& previous, const WorldState& next);
 
-            virtual ObjectPointSet getObjectDelta(
-                    const WorldState& world_initial_state,
-                    const AllGrippersSinglePoseDelta& grippers_pose_delta,
-                    const double dt) const = 0;
+            ObjectPointSet getObjectDelta(
+                    const DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta);
 
-            virtual std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getSuggestedGrippersCommand(
-                    TaskDesiredObjectDeltaFunctionType task_desired_object_delta_fn,
-                    const WorldState& world_initial_state,
-                    const double dt,
+            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getSuggestedGrippersCommand(
+                    const DeformableModelInputData& input_data,
                     const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale) const = 0;
+                    const double obstacle_avoidance_scale);
 
             ////////////////////////////////////////////////////////////////////
             // Update/Set function for static members
@@ -60,6 +74,19 @@ namespace smmap
 
             static std::atomic_bool function_pointers_initialized_;
             static GripperCollisionCheckFunctionType gripper_collision_check_fn_;
+
+        private:
+            virtual void updateModel_impl(const WorldState& previous, const WorldState& next) = 0;
+
+            virtual ObjectPointSet getObjectDelta_impl(
+                    const DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const = 0;
+
+            virtual std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getSuggestedGrippersCommand_impl(
+                    const DeformableModelInputData& input_data,
+                    const double max_gripper_velocity,
+                    const double obstacle_avoidance_scale) const = 0;
+
     };
 }
 

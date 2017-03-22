@@ -828,10 +828,10 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
                 net_delta += combined_delta / 10.0;
 
                 // If we are inside an obstacle, then push ourselves back out
-                for (float sdf_dist = environment_sdf_.Get(current_pos + net_delta); sdf_dist < 0; sdf_dist = environment_sdf_.Get(current_pos + net_delta))
+                for (float sdf_dist = environment_sdf_.Get3d(current_pos + net_delta); sdf_dist < 0; sdf_dist = environment_sdf_.Get3d(current_pos + net_delta))
                 {
                     const bool enable_edge_gradients = true;
-                    const std::vector<double> gradient = environment_sdf_.GetGradient(current_pos + net_delta, enable_edge_gradients);
+                    const std::vector<double> gradient = environment_sdf_.GetGradient3d(current_pos + net_delta, enable_edge_gradients);
                     const Eigen::Vector3d grad_eigen = EigenHelpers::StdVectorDoubleToEigenVector3d(gradient);
 
                     if (grad_eigen.norm() <= work_space_grid_.minStepDimension() / 4.0)

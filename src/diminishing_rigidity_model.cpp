@@ -68,7 +68,7 @@ DiminishingRigidityModel::DiminishingRigidityModel(
 // Virtual function overrides
 ////////////////////////////////////////////////////////////////////////////////
 
-void DiminishingRigidityModel::updateModel(
+void DiminishingRigidityModel::updateModel_impl(
         const WorldState& previous,
         const WorldState& next)
 {
@@ -78,32 +78,18 @@ void DiminishingRigidityModel::updateModel(
     (void)next;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Helper used only by AdaptiveJacobian (at the moment)
-// Find a better way to do this
-////////////////////////////////////////////////////////////////////////////////
-
-Eigen::MatrixXd DiminishingRigidityModel::getGrippersToObjectJacobian(
-        const AllGrippersSinglePose& grippers_pose,
-        const ObjectPointSet& current_configuration) const
-{
-    return computeGrippersToObjectJacobian(grippers_pose, current_configuration);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Computation helpers
-////////////////////////////////////////////////////////////////////////////////
-
 /**
  * @brief DiminishingRigidityModel::computeObjectToGripperJacobian
  * Computes a Jacobian that converts gripper velocities in the individual
  * gripper frames into object velocities in the world frame
  * @param grippers_data
  */
-Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToObjectJacobian(
-        const AllGrippersSinglePose& grippers_pose,
-        const ObjectPointSet& current_configuration) const
+Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToDeformableObjectJacobian_impl(
+        const DeformableModelInputData &input_data) const
 {
+    const AllGrippersSinglePose& grippers_pose = input_data.world_initial_state_.all_grippers_single_pose_;
+    const ObjectPointSet& current_configuration = input_data.world_initial_state_.object_configuration_;
+
     const ssize_t num_grippers = (ssize_t)grippers_pose.size();
     const ssize_t num_Jcols = num_grippers * 6;
     const ssize_t num_Jrows = num_nodes_ * 3;

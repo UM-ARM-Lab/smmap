@@ -23,21 +23,6 @@ namespace smmap
                     const bool optimize);
 
             ////////////////////////////////////////////////////////////////////
-            // Virtual function overrides
-            ////////////////////////////////////////////////////////////////////
-
-            virtual void updateModel(const WorldState& previous, const WorldState& next) final override;
-
-            ////////////////////////////////////////////////////////////////////
-            // Helper used only by AdaptiveJacobian (at the moment)
-            // Find a better way to do this
-            ////////////////////////////////////////////////////////////////////
-
-            Eigen::MatrixXd getGrippersToObjectJacobian(
-                    const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration) const;
-
-            ////////////////////////////////////////////////////////////////////
             // Static functions to set data for all models
             ////////////////////////////////////////////////////////////////////
 
@@ -53,12 +38,15 @@ namespace smmap
             static void ComputeObjectNodeDistanceMatrix();
 
             ////////////////////////////////////////////////////////////////////
-            // Computation helpers
+            // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            virtual Eigen::MatrixXd computeGrippersToObjectJacobian(
-                    const AllGrippersSinglePose& grippers_pose,
-                    const ObjectPointSet& current_configuration) const override final;
+            virtual void updateModel_impl(
+                    const WorldState& previous,
+                    const WorldState& next) final override;
+
+            virtual Eigen::MatrixXd computeGrippersToDeformableObjectJacobian_impl(
+                    const DeformableModelInputData &input_data) const override final;
 
             ////////////////////////////////////////////////////////////////////
             // Static members

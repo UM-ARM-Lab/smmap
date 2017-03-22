@@ -24,7 +24,7 @@ namespace smmap
             // Internal initialization helpers
             ////////////////////////////////////////////////////////////////////
 
-            void initializeModelSet();
+            void initializeModelSet(const WorldState& initial_world_state);
             void initializeLogging();
 
             ////////////////////////////////////////////////////////////////////
