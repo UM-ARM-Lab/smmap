@@ -375,6 +375,9 @@ namespace smmap
     inline Eigen::VectorXd ClampGripperPoseDeltas(Eigen::VectorXd velocities, const double max_pose_delta)
     {
         assert(velocities.size() % 6 == 0);
+        // debug assert
+        std::cout << "velocities size: " << std::endl;
+        std::cout << velocities.size() << std::endl;
         for (ssize_t vel_ind = 0; vel_ind < velocities.size(); vel_ind += 6)
         {
             const double velocity_norm = GripperVelocity6dNorm(velocities.segment<6>(vel_ind));

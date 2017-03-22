@@ -65,6 +65,7 @@ void Task::initializeModelSet(const WorldState& initial_world_state)
     // TODO: fix this interface so that I'm not passing a null ptr here
     DeformableModel::SetCallbackFunctions(gripper_collision_check_fn_);
     DiminishingRigidityModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
+    ConstraintJacobianModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
 
     const bool optimization_enabled = GetOptimizationEnabled(ph_);
 
@@ -154,18 +155,19 @@ void Task::initializeModelSet(const WorldState& initial_world_state)
     else if (GetUseConstraintModel(ph_))
     {
         const double translation_dir_deformability=0.1;
-        const double translation_dis_deformability=0.1;
+        const double translation_dis_deformability=1.0;
         const double rotation_deformability=0.1;
-
         // Douoble check this usage
-//        const ObjectDeltaAndWeight desired_object_velocity=task_specification_->calculateDesirsiredDirection() ;
-        const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(ph_));
+        const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+
         planner_.addModel(std::make_shared<ConstraintJacobianModel>(
                               translation_dir_deformability,
                               translation_dis_deformability,
                               rotation_deformability,
                               environment_sdf,
                               optimization_enabled));
+
     }
     // Mengyao's model above
     else
