@@ -126,7 +126,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
     MatrixXd J(num_Jrows, num_Jcols);
 
     // Retrieve the desired object velocity (p_dot)
-    const VectorXd& object_p_dot = input_data.task_desired_object_delta_fn_(input_data.world_initial_state_).delta;
+    const VectorXd& object_p_dot = input_data.task_desired_object_delta_fn_(world_state).delta;
 
     // for each gripper
     for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
@@ -235,7 +235,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
     for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
     {
         // if is far from obstacle
-        if (environment_sdf_.Get(current_configuration.col(node_ind))>obstacle_threshold_)
+        if (environment_sdf_.Get3d(current_configuration.col(node_ind))>obstacle_threshold_)
         {
             continue;
         }
@@ -244,7 +244,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
         {
             const Vector3d node_p_dot = object_p_dot.segment<3>(node_ind);
             std::vector<double> sur_n
-                    =environment_sdf_.GetGradient(current_configuration.col(node_ind));
+                    = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
 
             Vector3d surface_normal= Vector3d::Map(sur_n.data(),sur_n.size());
             // if node is moving outward from obstacle, unmask.
@@ -254,7 +254,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
             }
             // Check with Dale, whether the vector is normalized.
             const Matrix<double, 1, 3> surface_normal_inv
-                    =EigenHelpers::Pinv(surface_normal, EigenHelpers::SuggestedRcond());
+                    = EigenHelpers::Pinv(surface_normal, EigenHelpers::SuggestedRcond());
             M.block<3,3>(node_ind*3,node_ind*3)=I3-surface_normal*surface_normal_inv;
         }
 
