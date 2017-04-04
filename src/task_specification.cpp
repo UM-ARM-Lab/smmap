@@ -12,6 +12,8 @@ using namespace smmap;
 // used but making public as they are static - probably should be moved out of class
 ////////////////////////////////////////////////////////////////////////////////
 
+// Calculate each step task error, For every target points,
+// check its distance with the closest point on object
 double TaskSpecification::CalculateErrorWithTheshold(
         const ObjectPointSet& target_points,
         const ObjectPointSet& deformable_object,

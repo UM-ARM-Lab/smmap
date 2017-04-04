@@ -1,4 +1,4 @@
-#include "smmap/planner.h"
+#include "smmap/test_planner.h"
 
 #include <assert.h>
 #include <numeric>
@@ -22,7 +22,7 @@ using namespace EigenHelpersConversions;
  * @param vis
  * @param dt
  */
-Planner::Planner(
+TestPlanner::TestPlanner(
         RobotInterface& robot,
         Visualizer& vis,
         const std::shared_ptr<TaskSpecification>& task_specification,
@@ -51,12 +51,12 @@ Planner::Planner(
     }
 }
 
-void Planner::addModel(DeformableModel::Ptr model)
+void TestPlanner::addModel(DeformableModel::Ptr model)
 {
     model_list_.push_back(model);
 }
 
-void Planner::createBandits()
+void TestPlanner::createBandits()
 {
     num_models_ = (ssize_t)model_list_.size();
     ROS_INFO_STREAM_NAMED("planner", "Generating bandits for " << num_models_ << " bandits");
@@ -81,7 +81,7 @@ void Planner::createBandits()
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO: To be revised for test constraints violation
-void Planner::detectFutureConstraintViolations(const WorldState &current_world_state)
+void TestPlanner::detectFutureConstraintViolations(const WorldState &current_world_state)
 {
     ROS_INFO_NAMED("planner", "------------------------------------------------------------------------------------");
     if (task_specification_->is_dijkstras_type_task_)
@@ -118,7 +118,7 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
  * @param obstacle_avoidance_scale
  * @return
  */
-WorldState Planner::sendNextCommand(const WorldState& current_world_state)
+WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
 {
     ROS_INFO_NAMED("planner", "------------------------------------------------------------------------------------");
     const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
@@ -181,6 +181,9 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     ObjectPointSet predicted_object_delta = model_list_[(size_t)model_to_use]->getObjectDelta(model_input_data, selected_command);
     const Eigen::Map<Eigen::VectorXd> predicted_object_delta_as_vector(predicted_object_delta.data(), predicted_object_delta.size());
     ROS_INFO_STREAM_NAMED("planner", "Sending command to robot, action norm:  " << MultipleGrippersVelocity6dNorm(selected_command));
+
+    // TODO: Task_desired_direction has been revised in test, should correct this term
+    // Predicted one should be delta_p = J*delta_q
     ROS_INFO_STREAM_NAMED("planner", "Task desired deformable movement norm:  " << EigenHelpers::WeightedNorm(task_desired_motion.delta, task_desired_motion.weight));
     ROS_INFO_STREAM_NAMED("planner", "Task predicted deformable movment norm: " << EigenHelpers::WeightedNorm(predicted_object_delta_as_vector, task_desired_motion.weight));
     WorldState world_feedback = robot_.sendGrippersPoses(kinematics::applyTwist(current_world_state.all_grippers_single_pose_, selected_command));
@@ -203,7 +206,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     return world_feedback;
 }
 
-void Planner::visualizeDesiredMotion(const WorldState& current_world_state, const ObjectDeltaAndWeight& desired_motion)
+void TestPlanner::visualizeDesiredMotion(const WorldState& current_world_state, const ObjectDeltaAndWeight& desired_motion)
 {
     ssize_t num_nodes = current_world_state.object_configuration_.cols();
     std::vector<std_msgs::ColorRGBA> colors((size_t)num_nodes);
@@ -240,7 +243,7 @@ void Planner::visualizeDesiredMotion(const WorldState& current_world_state, cons
  * @param model_used
  * @param world_feedback
  */
-void Planner::updateModels(const WorldState& starting_world_state,
+void TestPlanner::updateModels(const WorldState& starting_world_state,
         const ObjectDeltaAndWeight& task_desired_motion,
         const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands,
         const ssize_t model_used,
@@ -293,7 +296,7 @@ void Planner::updateModels(const WorldState& starting_world_state,
     }
 }
 
-Eigen::MatrixXd Planner::calculateProcessNoise(const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands)
+Eigen::MatrixXd TestPlanner::calculateProcessNoise(const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands)
 {
     std::vector<double> grippers_velocity_norms((size_t)num_models_);
 

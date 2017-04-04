@@ -13,7 +13,7 @@ using namespace smmap;
 using namespace EigenHelpersConversions;
 
 
-/*
+
 Model_test::Model_test(RobotInterface& robot,
            Visualizer& vis,
            const TaskSpecification::Ptr& task_specification)
@@ -21,7 +21,7 @@ Model_test::Model_test(RobotInterface& robot,
     , ph_("~")
     , robot_(robot)
     , vis_(vis)
-    , task_specification_(task_specification)
+    , test_specification_(task_specification)
     , logging_fn_(createLoggingFunction())
     , planner_(robot_, vis_, task_specification_, logging_fn_)
 {
@@ -39,17 +39,31 @@ void Model_test::execute()
 
     initializeModelSet(world_feedback);
 
+    // Track last world state
+    WorldState last_world_state = world_feedback;
+    ObjectDeltaAndWeight model_delta_p = test_specification_->calculateDesiredDirection(last_world_state);
+
     while (robot_.ok())
     {
         const WorldState current_world_state = world_feedback;
-        const double current_error = task_specification_->calculateError(current_world_state.object_configuration_);
+        const ObjectPointSet real_delta_p = current_world_state.object_configuration_-last_world_state.object_configuration_;
+        last_world_state = current_world_state;
+
+        // TODO: implement error function for test_specification
+        // It should be the dynamics difference between real delta p and model delta p.
+        const double current_error = test_specification_->calculateError(real_delta_p, model_delta_p);
         ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << current_error);
 
-        planner_.detectFutureConstraintViolations(current_world_state);
+        // TODO: implement constraint violation function
+        planner_.detectFutureConstraintViolations(last_world_state);
 
-        world_feedback = planner_.sendNextCommand(current_world_state);
+        // TODO: Revise the sendNextCommand function to update the world state;
+        // in test_planner class; log data should also be updated
+        // model_delta_p calculated inside this function should be campared with the real_delta_p above
+        world_feedback = planner_.sendNextCommand(last_world_state);
+        model_delta_p = test_specification_->calculateDesiredDirection(last_world_state);
 
-        if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()))
+        if (unlikely(world_feedback.sim_time_ - start_time >= test_specification_->maxTime()));
         {
             robot_.shutdown();
         }
@@ -144,12 +158,17 @@ void Model_test::initializeModelSet(const WorldState& initial_world_state)
     {
         const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
         {
-            return task_specification_->calculateDesiredDirection(world_state);
+            // TODO : to be implemented, the function should generate the planned delta_p
+            // In my model, the effective portion of delta_p is actually just the grasping points
+            // Thus, the function should set all node_v zero, except for the nodes on the end-effector of gripper
+            // Such node should have the same velocity as gripper endeffector.
+            return test_specification_->calculateDesiredDirection(world_state);
         };
 
+        // TODO: fix the task_specification_->defaultDeformablility();
         const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
         planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
-                              DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
+                              DiminishingRigidityModel(test_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
                               GetAdaptiveModelLearningRate(ph_),
                               optimization_enabled));
     }
@@ -174,11 +193,13 @@ void Model_test::initializeModelSet(const WorldState& initial_world_state)
     // Mengyao's model above
     else
     {
+        // TODO: fix the task_specification_->defaultDeformablility();
         ROS_INFO_STREAM_NAMED("task", "Using default deformability value of "
-                               << task_specification_->defaultDeformability());
+                               << test_specification_->defaultDeformability());
 
+        // TODO: fix the task_specification_->defaultDeformablility();
         planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-                              task_specification_->defaultDeformability(),
+                              test_specification_->defaultDeformability(),
                               optimization_enabled));
 
 //        planner_.addModel(std::make_shared<LeastSquaresJacobianModel>(
@@ -189,6 +210,7 @@ void Model_test::initializeModelSet(const WorldState& initial_world_state)
     planner_.createBandits();
 }
 
+// TODO: To add the log for new defined error, data
 void Model_test::initializeLogging()
 {
     // Enable logging if it is requested
@@ -236,6 +258,9 @@ void Model_test::initializeLogging()
 
 void Model_test::logData(
         const WorldState& current_world_state,
+        const Eigen::VectorXd& delta_p_real,
+        const Eigen::VectorXd& delta_p_model,
+        const std::vector<double>& dynamic_error,
         const Eigen::VectorXd& model_utility_mean,
         const Eigen::MatrixXd& model_utility_covariance,
         const ssize_t model_used,
@@ -252,8 +277,9 @@ void Model_test::logData(
         LOG(loggers.at("time"),
              current_world_state.sim_time_);
 
+        // TODO, This function should return normed error
         LOG(loggers.at("error"),
-             task_specification_->calculateError(current_world_state.object_configuration_));
+             test_specification_->calculateError(current_world_state.object_configuration_));
 
         LOG(loggers.at("utility_mean"),
              model_utility_mean.format(single_line));
@@ -295,5 +321,7 @@ LoggingFunctionType Model_test::createLoggingFunction()
                      std::placeholders::_4,
                      std::placeholders::_5,
                      std::placeholders::_6);
+//                     std::placeholders::_7,
+//                     std::placeholders::_8,
+//                     std::placeholders::_9);
 }
-*/

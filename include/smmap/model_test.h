@@ -5,7 +5,7 @@
 #include <arc_utilities/log.hpp>
 
 #include "smmap/robot_interface.hpp"
-#include "smmap/planner.h"
+#include "smmap/test_planner.h"
 #include "smmap/test_specification.h"
 #include "smmap/task_function_pointer_types.h"
 
@@ -36,6 +36,9 @@ namespace smmap
             RobotInterface& robot_;
             Visualizer& vis_;
 
+            // Could be useful
+//            std::vector<GripperData>& gripperData_;
+
             ////////////////////////////////////////////////////////////////////
             // Task specific data
             ////////////////////////////////////////////////////////////////////
@@ -48,6 +51,7 @@ namespace smmap
 
             bool logging_enabled_;
             std::map<std::string, Log::Log> loggers;
+/*
             void logData(
                     const WorldState& current_world_state,
                     const Eigen::VectorXd& model_utility_mean,
@@ -55,6 +59,23 @@ namespace smmap
                     const ssize_t model_used,
                     const std::vector<double>& rewards_for_all_models,
                     const double correlation_strength_factor);
+*/
+
+            //////////////////////// Mengyao, define for test //////////////////
+            // More Log data to be added later:
+            // Constraint violation
+            void logData(
+                    const WorldState& current_world_state,
+                    const Eigen::VectorXd& delta_p_real,
+                    const Eigen::VectorXd& delta_p_model,
+                    const std::vector<double>& dynamic_error,
+                    const Eigen::VectorXd& model_utility_mean,
+                    const Eigen::MatrixXd& model_utility_covariance,
+                    const ssize_t model_used,
+                    const std::vector<double>& rewards_for_all_models,
+                    const double correlation_strength_factor);
+
+
 
             ////////////////////////////////////////////////////////////////////
             // Function pointers that are created in the construtor that are
@@ -85,7 +106,7 @@ namespace smmap
             // The planner itself
             ////////////////////////////////////////////////////////////////////
 
-            Planner planner_;
+            TestPlanner planner_;
 
     };
 }
