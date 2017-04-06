@@ -10,6 +10,7 @@
 #include "smmap/deformable_model.h"
 #include "smmap/kalman_filter_multiarm_bandit.hpp"
 #include "smmap/ucb_multiarm_bandit.hpp"
+#include "smmap/virtual_rubber_band.h"
 
 namespace smmap
 {
@@ -31,17 +32,6 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
             // The two functions that gets invoked repeatedly
             ////////////////////////////////////////////////////////////////////
-
-            EigenHelpers::VectorVector3d forwardSimulateVirtualRubberBand(
-                    std::shared_ptr<DijkstrasCoverageTask> task,
-                    EigenHelpers::VectorVector3d rubber_band,
-                    const AllGrippersSinglePose& starting_grippers_single_pose,
-                    const AllGrippersSinglePose& ending_grippers_single_pose,
-                    bool verbose);
-
-            EigenHelpers::VectorVector3d createVirtualRubberBand(
-                    const WorldState &current_world_state,
-                    std::shared_ptr<DijkstrasCoverageTask> dijkstras_task);
 
             bool checkForClothStretchingViolations(
                     const std::vector<EigenHelpers::VectorVector3d>& projected_paths);
@@ -122,9 +112,8 @@ namespace smmap
         ////////////////////////////////////
 
         private:
-            EigenHelpers::VectorVector3d virtual_rubber_band_between_grippers_version2a_;
-            EigenHelpers::VectorVector3d virtual_rubber_band_between_grippers_version2b_;
-            double max_gripper_distance_;
+            std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_version2a_;
+            std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_version2b_;
     };
 }
 
