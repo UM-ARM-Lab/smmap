@@ -11,10 +11,10 @@
 
 namespace smmap
 {
-    class Model_test
+    class modelTest
     {
         public:
-            Model_test(RobotInterface& robot,
+            modelTest(RobotInterface& robot,
                  Visualizer& vis,
                  const TestSpecification::Ptr& test_specification);
             void execute();
@@ -51,7 +51,8 @@ namespace smmap
 
             bool logging_enabled_;
             std::map<std::string, Log::Log> loggers;
-/*
+            std::map<std::string, Log::Log> test_loggers_;  //  LOG JUST FOR TEST MODEL USAGE
+
             void logData(
                     const WorldState& current_world_state,
                     const Eigen::VectorXd& model_utility_mean,
@@ -59,22 +60,15 @@ namespace smmap
                     const ssize_t model_used,
                     const std::vector<double>& rewards_for_all_models,
                     const double correlation_strength_factor);
-*/
+
 
             //////////////////////// Mengyao, define for test //////////////////
             // More Log data to be added later:
             // Constraint violation
-            void logData(
-                    const WorldState& current_world_state,
-                    const Eigen::VectorXd& delta_p_real,
-                    const Eigen::VectorXd& delta_p_model,
-                    const std::vector<double>& dynamic_error,
-                    const Eigen::VectorXd& model_utility_mean,
-                    const Eigen::MatrixXd& model_utility_covariance,
-                    const ssize_t model_used,
-                    const std::vector<double>& rewards_for_all_models,
-                    const double correlation_strength_factor);
-
+            // Test log data
+            void testLogData(const WorldState& current_world_state,
+                    const ObjectPointSet &real_delta_p,
+                    ObjectDeltaAndWeight &model_delta_p);
 
 
             ////////////////////////////////////////////////////////////////////
@@ -88,6 +82,8 @@ namespace smmap
 //            const TaskExecuteGripperTrajectoryFunctionType execute_trajectory_fn_;
 //            const TestGrippersPosesFunctionType test_grippers_poses_fn_;
             const LoggingFunctionType logging_fn_;
+            const TestLoggingFunctionType test_logging_fn_;  // log for test
+
 
             ////////////////////////////////////////////////////////////////////
             // Functions that are used to initialize function pointers in the
@@ -101,6 +97,7 @@ namespace smmap
 //            TaskExecuteGripperTrajectoryFunctionType createExecuteGripperTrajectoryFunction();
 //            TestGrippersPosesFunctionType createTestGrippersPosesFunction();
             LoggingFunctionType createLoggingFunction();
+            TestLoggingFunctionType createTestLogFunction();
 
             ////////////////////////////////////////////////////////////////////
             // The planner itself

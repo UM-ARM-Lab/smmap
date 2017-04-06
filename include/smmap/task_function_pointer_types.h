@@ -33,6 +33,15 @@ namespace smmap
             const double correlation_strength_factor
             )>
     LoggingFunctionType;
+
+    typedef std::function<void(
+            const WorldState& current_world_state,
+            const ObjectPointSet &real_delta_p,
+            ObjectDeltaAndWeight &model_delta_p
+            )>
+    TestLoggingFunctionType;
+
+
 }
 
 #endif // TASK_FUNCTION_POINTER_TYPES_H

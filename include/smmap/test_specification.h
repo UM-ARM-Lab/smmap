@@ -25,7 +25,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
             // Static helper functions - could be private given how they are
             // used but making public as they are static
-            ////////////////////////////////////////////////////////////////////        
+            ////////////////////////////////////////////////////////////////////
 
             // This function should calculate error at each step
             // error = norm(p_Delta_real-p_Delta_model)
@@ -37,19 +37,18 @@ namespace smmap
                     ObjectDeltaAndWeight& model_delta_p,
                     const double minimum_threshold);
 
-
+            /*
             // Do the helper function things:
             // p_Delta_real = p_current-p_last
             // p_Delta_model = J*q_Delta_last
             void UpdateState(const ObjectPointSet& object_congif_cur);
-
-
-            /*
-            static ObjectDeltaAndWeight CalculateObjectErrorCorrectionDeltaWithThreshold(
-                    const ObjectPointSet& target_points,
-                    const ObjectPointSet& deformable_object,
-                    const double minimum_threshold);
             */
+
+            // This function previously set the target delta p
+            // TODO: get a target dela_p from grippers delta q
+
+            static ObjectDeltaAndWeight CalculateObjectErrorCorrectionDeltaWithThreshold();
+
 
         public:
             typedef std::shared_ptr<TestSpecification> Ptr;
@@ -78,6 +77,9 @@ namespace smmap
             double stretchingScalingThreshold() const;  // lambda
             double maxTime() const;                     // max simulation time when scripting things
 
+            //////////// Mengyao: Initialize delta_q ///////////////////////////
+            void initializeGripperDelta(ros::NodeHandle& nh) const;
+
             void visualizeDeformableObject(
                     Visualizer& vis,
                     const std::string& marker_name,
@@ -90,6 +92,7 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const;
 
+            // Should Call the CalculateErrorWithThreshol, INPUT BEING REVISE BY Mengyao
             double calculateError(
                     const ObjectPointSet& real_delta_p,
                     ObjectDeltaAndWeight& model_delta_p) const;
@@ -195,8 +198,9 @@ namespace smmap
             const ssize_t num_nodes_;
 
             // NEW DEFINE
-            const AllGrippersSinglePoseDelta& grippers_pose_delta_;
-            WorldState last_world_state_;
+            const AllGrippersSinglePoseDelta grippers_pose_delta_;
+            const std::vector<GripperData> grippers_data_;
+//            WorldState last_world_state_;
 
 
         private:
@@ -210,6 +214,9 @@ namespace smmap
             virtual double stretchingScalingThreshold_impl() const = 0; // lambda
             virtual double maxTime_impl() const = 0;                    // max simulation time when scripting things
 
+            //////////// Mengyao: Initialize delta_q ///////////////////////////
+            virtual void initializeGripperDelta_impl(ros::NodeHandle& nh) const = 0;
+
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
                     const std::string& marker_name,
@@ -222,7 +229,7 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const = 0;
 
-            // Should Call the CalculateErrorWithThreshold
+            // Should Call the CalculateErrorWithThreshol, INPUT BEING REVISE BY Mengyao
             virtual double calculateError_impl(
                     const ObjectPointSet& real_delta_p,
                     ObjectDeltaAndWeight& model_delta_p) const = 0;
@@ -231,29 +238,6 @@ namespace smmap
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state) const = 0;
     };
-
-
-
-    class CoverageTask : public TestSpecification
-    {
-        public:
-            CoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type);
-
-            double getErrorThreshold() const;
-
-        protected:
-            virtual double getErrorThreshold_impl() const = 0;
-
-            /// Stores the points that we are trying to cover with the rope
-            const ObjectPointSet cover_points_;
-            const ssize_t num_cover_points_;
-
-        private:
-
-            virtual double calculateError_impl(
-                    const ObjectPointSet& real_delta_p) const final;
-    };
-
- }
+}
 
 #endif // TEST_SPECIFICATION_H

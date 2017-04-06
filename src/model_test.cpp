@@ -12,23 +12,22 @@
 using namespace smmap;
 using namespace EigenHelpersConversions;
 
-
-
-Model_test::Model_test(RobotInterface& robot,
+modelTest::modelTest(RobotInterface& robot,
            Visualizer& vis,
-           const TaskSpecification::Ptr& task_specification)
+           const TestSpecification::Ptr& test_specification)
     : nh_()
     , ph_("~")
     , robot_(robot)
     , vis_(vis)
-    , test_specification_(task_specification)
+    , test_specification_(test_specification)
     , logging_fn_(createLoggingFunction())
-    , planner_(robot_, vis_, task_specification_, logging_fn_)
+    , test_logging_fn_(createTestLogFunction())
+    , planner_(robot_, vis_, test_specification_, logging_fn_)
 {
     initializeLogging();
 }
 
-void Model_test::execute()
+void modelTest::execute()
 {
     const int planning_horizion = GetPlanningHorizon(ph_);
 
@@ -54,6 +53,9 @@ void Model_test::execute()
         const double current_error = test_specification_->calculateError(real_delta_p, model_delta_p);
         ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << current_error);
 
+        ///// Mengyao's Test Log Here
+        test_logging_fn_(current_world_state,real_delta_p,model_delta_p);
+
         // TODO: implement constraint violation function
         planner_.detectFutureConstraintViolations(last_world_state);
 
@@ -74,7 +76,7 @@ void Model_test::execute()
 // Internal initialization helpers
 ////////////////////////////////////////////////////////////////////////////////
 
-void Model_test::initializeModelSet(const WorldState& initial_world_state)
+void modelTest::initializeModelSet(const WorldState& initial_world_state)
 {
     // Initialze each model type with the shared data
     DeformableModel::SetGrippersData(robot_.getGrippersData());
@@ -132,14 +134,14 @@ void Model_test::initializeModelSet(const WorldState& initial_world_state)
 
         const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
         {
-            return task_specification_->calculateDesiredDirection(world_state);
+            return test_specification_->calculateDesiredDirection(world_state);
         };
 
         const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
         for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
         {
                 planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
-                                      DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
+                                      DiminishingRigidityModel(test_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
                                       learning_rate,
                                       optimization_enabled));
         }
@@ -211,7 +213,7 @@ void Model_test::initializeModelSet(const WorldState& initial_world_state)
 }
 
 // TODO: To add the log for new defined error, data
-void Model_test::initializeLogging()
+void modelTest::initializeLogging()
 {
     // Enable logging if it is requested
     logging_enabled_ = GetLoggingEnabled(nh_);
@@ -223,12 +225,12 @@ void Model_test::initializeLogging()
         ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
 
         loggers.insert(std::make_pair<std::string, Log::Log>(
-                            "time",
-                            Log::Log(log_folder + "time.txt", false)));
+                            "time_bandit",
+                            Log::Log(log_folder + "time_bandit.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log>(
-                            "error",
-                            Log::Log(log_folder + "error.txt", false)));
+//        loggers.insert(std::make_pair<std::string, Log::Log>(
+//                            "error",
+//                            Log::Log(log_folder + "error.txt", false)));
 
         loggers.insert(std::make_pair<std::string, Log::Log>(
                             "utility_mean",
@@ -249,6 +251,23 @@ void Model_test::initializeLogging()
         loggers.insert(std::make_pair<std::string, Log::Log>(
                             "correlation_scale_factor",
                             Log::Log(log_folder + "correlation_scale_factor.txt", false)));
+
+        // NEWLY ADD FOR TEST LOG
+        test_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "time_test",
+                            Log::Log(log_folder + "time_test.txt", false)));
+
+        test_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "error_realtime",
+                            Log::Log(log_folder + "error_realtime.txt", false)));
+
+        test_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "real_dp",
+                            Log::Log(log_folder + "real_dp.txt", false)));
+        test_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "model_dp",
+                            Log::Log(log_folder + "model_dp.txt", false)));
+
     }
 }
 
@@ -256,11 +275,8 @@ void Model_test::initializeLogging()
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-void Model_test::logData(
+void modelTest::logData(
         const WorldState& current_world_state,
-        const Eigen::VectorXd& delta_p_real,
-        const Eigen::VectorXd& delta_p_model,
-        const std::vector<double>& dynamic_error,
         const Eigen::VectorXd& model_utility_mean,
         const Eigen::MatrixXd& model_utility_covariance,
         const ssize_t model_used,
@@ -274,12 +290,12 @@ void Model_test::logData(
                     Eigen::DontAlignCols,
                     " ", " ", "", "");
 
-        LOG(loggers.at("time"),
+        LOG(loggers.at("time_bandit"),
              current_world_state.sim_time_);
 
         // TODO, This function should return normed error
-        LOG(loggers.at("error"),
-             test_specification_->calculateError(current_world_state.object_configuration_));
+//        LOG(loggers.at("error"),
+//             test_specification_->calculateError(current_world_state.object_configuration_));
 
         LOG(loggers.at("utility_mean"),
              model_utility_mean.format(single_line));
@@ -298,22 +314,52 @@ void Model_test::logData(
     }
 }
 
+///////////////////// Log Data for Mengyao's Test ///////////////////
+
+void modelTest::testLogData(
+        const WorldState& current_world_state,
+        const ObjectPointSet &real_delta_p,
+        ObjectDeltaAndWeight &model_delta_p)
+{
+    if (logging_enabled_)
+    {
+        const Eigen::IOFormat single_line(
+                    Eigen::StreamPrecision,
+                    Eigen::DontAlignCols,
+                    " ", " ", "", "");
+
+        LOG(test_loggers_.at("time_test"),
+             current_world_state.sim_time_);
+
+        // TODO, This function should return normed error
+        LOG(test_loggers_.at("error_realtime"),
+             test_specification_->calculateError(real_delta_p, model_delta_p));
+
+        LOG(test_loggers_.at("real_dp"),
+             real_delta_p.format(single_line));
+
+        LOG(test_loggers_.at("model_dp"),
+             model_delta_p.delta.format(single_line));
+    }
+}
+
+
 ////////////////////////////////////////////////////////////////////////////////
 // Functions that are used to initialize function pointers in the
 // constructor. These all require that task_type_ and
 // deformable_type_ have been set already
 ////////////////////////////////////////////////////////////////////////////////
 
-GripperCollisionCheckFunctionType Model_test::createGripperCollisionCheckFunction()
+GripperCollisionCheckFunctionType modelTest::createGripperCollisionCheckFunction()
 {
     return std::bind(&RobotInterface::checkGripperCollision,
                      &robot_,
                      std::placeholders::_1);
 }
 
-LoggingFunctionType Model_test::createLoggingFunction()
+LoggingFunctionType modelTest::createLoggingFunction()
 {
-    return std::bind(&Model_test::logData,
+    return std::bind(&modelTest::logData,
                      this,
                      std::placeholders::_1,
                      std::placeholders::_2,
@@ -322,6 +368,21 @@ LoggingFunctionType Model_test::createLoggingFunction()
                      std::placeholders::_5,
                      std::placeholders::_6);
 //                     std::placeholders::_7,
-//                     std::placeholders::_8,
+//                     std::placeholders::_8);
 //                     std::placeholders::_9);
 }
+
+///////////////////// Log Function for Mengyao's Test ///////////////////
+
+TestLoggingFunctionType modelTest::createTestLogFunction()
+{
+    return std::bind(&modelTest::testLogData,
+                     this,
+                     std::placeholders::_1,
+                     std::placeholders::_2,
+                     std::placeholders::_3);
+//                     std::placeholders::_4,
+//                     std::placeholders::_5);
+//                     std::placeholders::_6);
+}
+

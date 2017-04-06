@@ -4,7 +4,7 @@
 //#include <arc_utilities/log.hpp>
 
 #include "smmap/task_function_pointer_types.h"
-#include "smmap/task_specification.h"
+#include "smmap/test_specification.h"
 #include "smmap/visualization_tools.h"
 #include "smmap/robot_interface.hpp"
 #include "smmap/deformable_model.h"
@@ -22,7 +22,7 @@ namespace smmap
 
             TestPlanner(RobotInterface& robot,
                     Visualizer& vis,
-                    const std::shared_ptr<TaskSpecification>& task_specification,
+                    const std::shared_ptr<TestSpecification> &test_specification,
                     const LoggingFunctionType& logging_fn);
 
             void addModel(DeformableModel::Ptr model);
@@ -49,7 +49,7 @@ namespace smmap
 
             RobotInterface& robot_;
             Visualizer& vis_;
-            std::shared_ptr<TaskSpecification> task_specification_;
+            std::shared_ptr<TestSpecification> test_specification_;
 
             ////////////////////////////////////////////////////////////////////
             // Model list management

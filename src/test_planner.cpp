@@ -22,17 +22,16 @@ using namespace EigenHelpersConversions;
  * @param vis
  * @param dt
  */
-TestPlanner::TestPlanner(
-        RobotInterface& robot,
+TestPlanner::TestPlanner(RobotInterface& robot,
         Visualizer& vis,
-        const std::shared_ptr<TaskSpecification>& task_specification,
+        const std::shared_ptr<TestSpecification>& test_specification,
         const LoggingFunctionType& logging_fn)
     : nh_("")
     , ph_("~")
     , logging_fn_(logging_fn)
     , robot_(robot)
     , vis_(vis)
-    , task_specification_(task_specification)
+    , test_specification_(test_specification)
     , calculate_regret_(GetCalculateRegret(ph_))
     , reward_std_dev_scale_factor_(1.0)
     , process_noise_factor_(GetProcessNoiseFactor(ph_))
@@ -83,11 +82,15 @@ void TestPlanner::createBandits()
 // TODO: To be revised for test constraints violation
 void TestPlanner::detectFutureConstraintViolations(const WorldState &current_world_state)
 {
+#warning "Removed Djikstra, should setup constraint violation later"
     ROS_INFO_NAMED("planner", "------------------------------------------------------------------------------------");
-    if (task_specification_->is_dijkstras_type_task_)
+    ///////// No more dijkstras type in test, Should get another way to get the violation feedback
+    ///  SHOUDL ALSO ADD IT INTO LOGGING FILE LATER --------------  Mengyao ------------
+    /*
+    if (test_specification_->is_dijkstras_type_task_)
     {
         ROS_INFO_NAMED("planner", "Starting future constraint violation detection");
-        std::shared_ptr<DijkstrasCoverageTask> dijkstras_task = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
+        std::shared_ptr<DijkstrasCoverageTask> dijkstras_task = std::dynamic_pointer_cast<DijkstrasCoverageTask>(test_specification_);
 
         const std::vector<EigenHelpers::VectorVector3d> projected_paths = dijkstras_task->findPathFromObjectToTarget(current_world_state.object_configuration_, dijkstras_task->getErrorThreshold());
 
@@ -107,6 +110,7 @@ void TestPlanner::detectFutureConstraintViolations(const WorldState &current_wor
     {
         ROS_ERROR_NAMED("planner", "Unable to do future constraint violation detection");
     }
+    */
 }
 
 /**
@@ -123,7 +127,7 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
     ROS_INFO_NAMED("planner", "------------------------------------------------------------------------------------");
     const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
     {
-        return task_specification_->calculateDesiredDirection(world_state);
+        return test_specification_->calculateDesiredDirection(world_state);
     };
     const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
 //    visualizeDesiredMotion(current_world_state, task_desired_motion);
@@ -147,7 +151,7 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
                 model_list_[model_ind]->getSuggestedGrippersCommand(
                         model_input_data,
                         robot_.max_gripper_velocity_,
-                        task_specification_->collisionScalingFactor());
+                        test_specification_->collisionScalingFactor());
         }
     }
     // Measure the time it took to pick a model
@@ -158,10 +162,16 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
     if (calculate_regret_ && num_models_ > 1)
     {
         stopwatch(RESET);
-        const double prev_error = task_specification_->calculateError(current_world_state.object_configuration_);
+
+        // TO BE FIXED: CalculatedError been revised for test_specification ------------  Mengyao
+        //const double prev_error = test_specification_->calculateError(current_world_state.object_configuration_);
+# warning "Hide off calculateError function, it has been revised for test_specification, rewards not feasible"
+        const double prev_error = 10.1;
         const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
         {
-            individual_rewards[model_ind] = prev_error - task_specification_->calculateError(world_state.object_configuration_);
+            // TO BE FIXED: CalculatedError been revised for test_specification ------------  Mengyao
+            //individual_rewards[model_ind] = prev_error - test_specification_->calculateError(world_state.object_configuration_);
+            individual_rewards[model_ind] = 9.1;
             return;
         };
 
@@ -217,13 +227,13 @@ void TestPlanner::visualizeDesiredMotion(const WorldState& current_world_state, 
         colors[node_ind].b = 0.0f;
         colors[node_ind].a = desired_motion.weight((ssize_t)node_ind * 3) > 0 ? 1.0f : 0.0f;
     }
-    task_specification_->visualizeDeformableObject(
+    test_specification_->visualizeDeformableObject(
             vis_,
             "desired_position",
             AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
             colors);
 
-    if (task_specification_->deformable_type_ == DeformableType::CLOTH)
+    if (test_specification_->deformable_type_ == DeformableType::CLOTH)
     {
         vis_.visualizeObjectDelta(
                     "desired_position",
@@ -250,8 +260,12 @@ void TestPlanner::updateModels(const WorldState& starting_world_state,
         const WorldState& world_feedback)
 {
     // First we update the bandit algorithm
-    const double starting_error = task_specification_->calculateError(starting_world_state.object_configuration_);
-    const double true_error_reduction = starting_error - task_specification_->calculateError(world_feedback.object_configuration_);
+    // TO BE FIXED: CalculatedError been revised for test_specification ------------  Mengyao
+    //const double starting_error = test_specification_->calculateError(starting_world_state.object_configuration_);
+    //const double true_error_reduction = starting_error - test_specification_->calculateError(world_feedback.object_configuration_);
+    const double starting_error = 10.1;
+    const double true_error_reduction = 1.0;
+
     reward_std_dev_scale_factor_ = std::max(1e-10, 0.9 * reward_std_dev_scale_factor_ + 0.1 * std::abs(true_error_reduction));
     const double process_noise_scaling_factor = process_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);
     const double observation_noise_scaling_factor = observation_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);
