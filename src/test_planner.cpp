@@ -134,6 +134,8 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
 
     DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
 
+    // The commend-out is for multi-model rewards   ---- Mengyao
+
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
     const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
@@ -186,7 +188,9 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
     }
 
 
+
     // Execute the command
+    // The following line should be revised to use gripper comman sent from test_specification.   --Mengyao
     const AllGrippersSinglePoseDelta& selected_command = suggested_robot_commands[(size_t)model_to_use].first;
     ObjectPointSet predicted_object_delta = model_list_[(size_t)model_to_use]->getObjectDelta(model_input_data, selected_command);
     const Eigen::Map<Eigen::VectorXd> predicted_object_delta_as_vector(predicted_object_delta.data(), predicted_object_delta.size());

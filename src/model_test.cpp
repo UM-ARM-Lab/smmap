@@ -62,6 +62,7 @@ void modelTest::execute()
         // TODO: Revise the sendNextCommand function to update the world state;
         // in test_planner class; log data should also be updated
         // model_delta_p calculated inside this function should be campared with the real_delta_p above
+        // The input should be q_delta
         world_feedback = planner_.sendNextCommand(last_world_state);
         model_delta_p = test_specification_->calculateDesiredDirection(last_world_state);
 

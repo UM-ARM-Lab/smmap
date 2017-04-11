@@ -155,7 +155,7 @@ void Task::initializeModelSet(const WorldState& initial_world_state)
     else if (GetUseConstraintModel(ph_))
     {
         const double translation_dir_deformability=0.1;
-        const double translation_dis_deformability=1.0;
+        const double translation_dis_deformability=2.0;
         const double rotation_deformability=0.1;
         // Douoble check this usage
         const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
