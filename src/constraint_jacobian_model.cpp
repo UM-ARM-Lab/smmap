@@ -210,7 +210,8 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
     const VectorXd& object_p_dot = input_data.task_desired_object_delta_fn_(world_state).delta;
 
     // Mask:
-    Eigen::MatrixXd Mask = computeObjectVelocityMask(current_configuration,object_p_dot);
+//    Eigen::MatrixXd Mask = computeObjectVelocityMask(current_configuration,object_p_dot);
+    Eigen::MatrixXd Mask = computeObjectVelocityMask(current_configuration,grippers_pose);
 
     // for each gripper
     for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
@@ -243,6 +244,10 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
             // P dot of the node on object, grasped gripper
             const Vector3d& node_v = object_p_dot.segment<3>(nearest_node_on_gripper.second*3); // planner
 
+            // P dot of the node on object, at this node
+//            const Vector3d& target_p_dot = object_p_dot.segment<3>(node_ind*3); // planner
+
+
             // Mask from obstacle constrain:
             /*
             const Vector3d& target_node_v = object_p_dot.segment<3>(node_ind);
@@ -271,12 +276,12 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
             // Translation rigidity depends on both gamma(scalar) function and beta(vector) function
             // Gamma inputs are real distance between two nodes and distance at rest
             // Beta inputs are distance vector, node velocity
-//            const Matrix3d rigidity_translation =
-//                    disLinearModel(dist_real, nearest_node_on_gripper.first)
-//                    *dirPropotionalModel(dist_real_vec, node_v);
             const Matrix3d rigidity_translation =
-                    disLinearModel(dist_real, nearest_node_on_gripper.first)
-                    *dirPropotionalModel(dist_real_vec, node_v);
+                    disLinearModel(dist_real, nearest_node_on_gripper.first)*
+                    dirPropotionalModel(dist_real_vec, node_v);
+//            const Matrix3d rigidity_translation =
+//                    disLinearModel(dist_real, nearest_node_on_gripper.first)*
+//                    dirPropotionalModel(dist_real_vec, target_p_dot);
 
             // *M3
             J.block<3, 3>(node_ind * 3, gripper_ind * 6) =
@@ -314,10 +319,20 @@ Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node
     double dot1, dot2, dot3;
     if (node_to_gripper.size()>1 && node_v.size() >1 && node_to_gripper.norm()>0 && node_v.norm()>0)
     {
+        double dot_Value = dot_product(0)+dot_product(1)+dot_product(2);
+        dot_Value = dot_Value-std::fabs(dot_Value);
+        dot1 = dot_Value;
+        dot2 = dot_Value;
+        dot3 = dot_Value;
+        /*
         dot1 = (dot_product(0)-std::fabs(dot_product(0)))/(node_to_gripper.norm()*node_v.norm());
         dot2 = (dot_product(1)-std::fabs(dot_product(1)))/(node_to_gripper.norm()*node_v.norm());
         dot3 = (dot_product(2)-std::fabs(dot_product(2)))/(node_to_gripper.norm()*node_v.norm());
+        */
     }
+    else if (node_v.size()<1 || node_v.norm()<0.0001)
+    {   double dot_Value = -0.1;
+        dot1 = dot_Value; dot2 = dot_Value; dot3 =dot_Value; }
     else
     {
         dot1 = 0; dot2 = 0; dot3 = 0;
@@ -381,7 +396,8 @@ double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, con
  * @return
  */
 // q_dot = pinv(J)*Mask*P_dot
-
+// Back up Mask
+/*
 Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
         const ObjectPointSet &current_configuration,
         const VectorXd &object_p_dot) const
@@ -428,22 +444,27 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
     }
     return M;
 }
-
+*/
 
 // backup for mask
-/*
+
 
 Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
         const ObjectPointSet &current_configuration,
-        const VectorXd object_p_dot)
+        const AllGrippersSinglePose& grippers_pose) const
 {
     const ssize_t num_lines = num_nodes_ * 3;
     MatrixXd M(num_lines, num_lines);
     M.setIdentity(num_lines,num_lines);
     Matrix3d I3 = Matrix3d::Identity(3,3);
+//    MatrixXd v_mask = MatrixXd::Zero(num_lines,1);
+
+    const ssize_t num_grippers = (ssize_t)grippers_pose.size();
 
     for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
     {
+
+
         // if is far from obstacle
         if (environment_sdf_.Get3d(current_configuration.col(node_ind))>obstacle_threshold_)
         {
@@ -452,28 +473,57 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
         // if is close to obstacle
         else
         {
-            const Vector3d node_p_dot = object_p_dot.segment<3>(node_ind);
+            ssize_t nearest_g_ind=0;
+            double min_g_dis=0;
+
+            // BEGINE: Gripper position vector version
+            // Search for the gripper with min geodesic
+            // for each gripper
+            for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+            {
+                const std::pair<double, long> nearest_node_on_gripper =
+                        getMinimumDistanceIndexToGripper(
+                            grippers_data_[(size_t)gripper_ind].node_indices,
+                            node_ind, object_initial_node_distance_);
+                if(min_g_dis>nearest_node_on_gripper.first)
+                {
+                    min_g_dis = nearest_node_on_gripper.first;
+                    nearest_g_ind = nearest_node_on_gripper.second;
+                }
+
+            }
+            // node_p_dot is actually the vector from the node to the grasped node,
+            // its name here just for convinience.
+            const Vector3d node_p_dot =  grippers_pose[(size_t)nearest_g_ind].translation() -
+                    current_configuration.col(node_ind);
+            // END of gripper position vector version
+
+            // Node p Dot Version for Mask
+//            const Vector3d node_p_dot = object_p_dot.segment<3>(node_ind);
+
             std::vector<double> sur_n
                     = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
 
-            Vector3d surface_normal= Vector3d::Map(sur_n.data(),sur_n.size());
-            // if node is moving outward from obstacle, unmask.
-            if (node_p_dot.dot(surface_normal)>=0)
+            if(sur_n.size()>1)
             {
-                continue;
+                Vector3d surface_normal= Vector3d::Map(sur_n.data(),sur_n.size());
+                surface_normal = surface_normal/surface_normal.norm();
+                // if node is moving outward from obstacle, unmask.
+                if (node_p_dot.dot(surface_normal)<0)
+                {
+//                    v_mask.segment<3>(3*node_ind) = node_p_dot-node_p_dot.dot(surface_normal)*surface_normal;
+                    const Matrix<double, 1, 3> surface_normal_inv
+                            = EigenHelpers::Pinv(surface_normal, EigenHelpers::SuggestedRcond());
+                    M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
+                }
             }
             // Check with Dale, whether the vector is normalized.
-            const Matrix<double, 1, 3> surface_normal_inv
-                    = EigenHelpers::Pinv(surface_normal, EigenHelpers::SuggestedRcond());
-            M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
+//            const Matrix<double, 1, 3> surface_normal_inv
+//                    = EigenHelpers::Pinv(surface_normal, EigenHelpers::SuggestedRcond());
+//            M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
         }
 
     }
-
     return M;
 }
-
-*/
-
-
 

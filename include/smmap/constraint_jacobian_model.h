@@ -125,8 +125,11 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
             // Computation of Mask Matrix M, q_dot = pinv(J)*M*P_dot
             ////////////////////////////////////////////////////////////////////
+//            Eigen::MatrixXd computeObjectVelocityMask(const ObjectPointSet& current_configuration,
+//                    const Eigen::VectorXd &object_p_dot) const;
+
             Eigen::MatrixXd computeObjectVelocityMask(const ObjectPointSet& current_configuration,
-                    const Eigen::VectorXd &object_p_dot) const;
+                    const AllGrippersSinglePose& grippers_pose) const;
 
 
     };

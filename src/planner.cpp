@@ -130,7 +130,12 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
 
     // Pick an arm to use
-    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
+//    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
+
+    // Just for Visualization use: ----- Mengyao
+    const ssize_t model_to_use = 0;
+
+
     const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
 
@@ -194,8 +199,18 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     vis_.visualizeObjectDelta(
                 "Model back_generated position",
                 current_world_state.object_configuration_,
-                current_world_state.object_configuration_ + 200*predicted_object_delta,
+                current_world_state.object_configuration_ + 300*predicted_object_delta,
                 Visualizer::Blue());
+
+    // Just for Visualization diminishing results:  --- Mengyao
+    if (model_list_.size()>0){
+        ObjectPointSet diminishing_object_delta = model_list_[1]->getObjectDelta(model_input_data, selected_command);
+        vis_.visualizeObjectDelta(
+                    "Model back_generated position",
+                    current_world_state.object_configuration_,
+                    current_world_state.object_configuration_ + 300*diminishing_object_delta,
+                    Visualizer::Black());
+    }
 
 
 
