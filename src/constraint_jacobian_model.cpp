@@ -68,7 +68,7 @@ ConstraintJacobianModel::ConstraintJacobianModel(
     , trans_dir_type_(trans_dir_fn)
     , trans_dis_type_(trans_dis_fn)
     , environment_sdf_(environment_sdf)
-    , obstacle_threshold_(2.0)
+    , obstacle_threshold_(1.0)
 {
     // Set obstacle distance threshold, to be modified later
     // Should check with Dale, whether it counts as #grids
@@ -209,6 +209,9 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
     // Retrieve the desired object velocity (p_dot)
     const VectorXd& object_p_dot = input_data.task_desired_object_delta_fn_(world_state).delta;
 
+    // Mask:
+    Eigen::MatrixXd Mask = computeObjectVelocityMask(current_configuration,object_p_dot);
+
     // for each gripper
     for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
     {
@@ -241,6 +244,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
             const Vector3d& node_v = object_p_dot.segment<3>(nearest_node_on_gripper.second*3); // planner
 
             // Mask from obstacle constrain:
+            /*
             const Vector3d& target_node_v = object_p_dot.segment<3>(node_ind);
             Matrix3d M3 = Matrix3d::Identity(3,3);
 
@@ -259,6 +263,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
                     {   M3 = M3-surface_normal*(EigenHelpers::Pinv(surface_normal,EigenHelpers::SuggestedRcond())); }
                 }
             }
+            */
             // End of Mask
 
             const Matrix3d& J_trans = gripper_rot;
@@ -266,13 +271,16 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
             // Translation rigidity depends on both gamma(scalar) function and beta(vector) function
             // Gamma inputs are real distance between two nodes and distance at rest
             // Beta inputs are distance vector, node velocity
+//            const Matrix3d rigidity_translation =
+//                    disLinearModel(dist_real, nearest_node_on_gripper.first)
+//                    *dirPropotionalModel(dist_real_vec, node_v);
             const Matrix3d rigidity_translation =
                     disLinearModel(dist_real, nearest_node_on_gripper.first)
                     *dirPropotionalModel(dist_real_vec, node_v);
 
             // *M3
             J.block<3, 3>(node_ind * 3, gripper_ind * 6) =
-                    rigidity_translation *M3*J_trans;
+                     rigidity_translation *J_trans;
 
             //J.block<3, 3>(node_ind * 3, gripper_ind * 6) =
             //        std::exp(-translation_deformability_ * dist_to_gripper) * J_trans;
@@ -285,10 +293,10 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
 
             // *M3
             J.block<3, 3>(node_ind * 3, gripper_ind * 6 + 3) =
-                    std::exp(-rotation_deformability_ * nearest_node_on_gripper.first) * M3 * J_rot;
+                    std::exp(-rotation_deformability_ * nearest_node_on_gripper.first) * J_rot;
         }
     }
-    return J;
+    return Mask*J;
 }
 
 
@@ -303,10 +311,32 @@ Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node
 {
     Matrix3d beta_rigidity=MatrixXd::Zero(3,3);
     Vector3d dot_product = node_to_gripper.cwiseProduct(node_v);
-    beta_rigidity(0,0) = std::exp(dot_product(0)-std::fabs(dot_product(0)));
-    beta_rigidity(1,1) = std::exp(dot_product(1)-std::fabs(dot_product(1)));
-    beta_rigidity(2,2) = std::exp(dot_product(2)-std::fabs(dot_product(2)));
+    double dot1, dot2, dot3;
+    if (node_to_gripper.size()>1 && node_v.size() >1 && node_to_gripper.norm()>0 && node_v.norm()>0)
+    {
+        dot1 = (dot_product(0)-std::fabs(dot_product(0)))/(node_to_gripper.norm()*node_v.norm());
+        dot2 = (dot_product(1)-std::fabs(dot_product(1)))/(node_to_gripper.norm()*node_v.norm());
+        dot3 = (dot_product(2)-std::fabs(dot_product(2)))/(node_to_gripper.norm()*node_v.norm());
+    }
+    else
+    {
+        dot1 = 0; dot2 = 0; dot3 = 0;
+    }
+
+    beta_rigidity(0,0) = std::exp(translation_dir_deformability_*dot1);
+    beta_rigidity(1,1) = std::exp(translation_dir_deformability_*dot2);
+    beta_rigidity(2,2) = std::exp(translation_dir_deformability_*dot3);
+/*
+    beta_rigidity(0,0) = std::exp(translation_dir_deformability_*(dot_product(0)-std::fabs(dot_product(0))));
+    beta_rigidity(1,1) = std::exp(translation_dir_deformability_*(dot_product(1)-std::fabs(dot_product(1))));
+    beta_rigidity(2,2) = std::exp(translation_dir_deformability_*(dot_product(2)-std::fabs(dot_product(2))));
+*/
+
     /*
+    beta_rigidity.row(0) = beta_rigidity.row(0)*std::exp(translation_dir_deformability_*dot1);
+    beta_rigidity.row(1) = beta_rigidity.row(1)*std::exp(translation_dir_deformability_*dot2);
+    beta_rigidity.row(2) = beta_rigidity.row(2)*std::exp(translation_dir_deformability_*dot3);
+
     beta_rigidity(1,1) = std::exp(dot_product(1)-std::fabs(dot_product(1)));
     beta_rigidity(2,2) = std::exp(dot_product(2)-std::fabs(dot_product(2)));
     beta_rigidity(3,3) = std::exp(dot_product(3)-std::fabs(dot_product(3)));
@@ -319,17 +349,29 @@ double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, con
 {
     double ration;
     if (std::fabs(dist_rest)<0.00001)
-    {
-         ration = 1;
+    { ration = 1;
     }
     else
-    {
-        ration = dist_to_gripper/dist_rest;
-    }
+    { ration = dist_to_gripper/dist_rest;}
 
+//    return exp(-translation_dis_deformability_*(1-ration));
 
     return std::pow(ration,translation_dis_deformability_);
+
 }
+
+// Backup for dislinearModel
+/*
+double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, const double dist_rest) const
+{
+    double ration;
+    if (std::fabs(dist_rest)<0.00001)
+    {   ration = 1;}
+    else
+    {   ration = dist_to_gripper/dist_rest;}
+    return std::pow(ration,translation_dis_deformability_);
+}
+*/
 
 
 /**
@@ -339,6 +381,57 @@ double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, con
  * @return
  */
 // q_dot = pinv(J)*Mask*P_dot
+
+Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
+        const ObjectPointSet &current_configuration,
+        const VectorXd &object_p_dot) const
+{
+    const ssize_t num_lines = num_nodes_ * 3;
+    MatrixXd M(num_lines, num_lines);
+    M.setIdentity(num_lines,num_lines);
+    Matrix3d I3 = Matrix3d::Identity(3,3);
+//    MatrixXd v_mask = MatrixXd::Zero(num_lines,1);
+
+    for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
+    {
+        // if is far from obstacle
+        if (environment_sdf_.Get3d(current_configuration.col(node_ind))>obstacle_threshold_)
+        {
+            continue;
+        }
+        // if is close to obstacle
+        else
+        {
+            const Vector3d node_p_dot = object_p_dot.segment<3>(node_ind);
+            std::vector<double> sur_n
+                    = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
+
+            if(sur_n.size()>1)
+            {
+                Vector3d surface_normal= Vector3d::Map(sur_n.data(),sur_n.size());
+                surface_normal = surface_normal/surface_normal.norm();
+                // if node is moving outward from obstacle, unmask.
+                if (node_p_dot.dot(surface_normal)<0)
+                {
+//                    v_mask.segment<3>(3*node_ind) = node_p_dot-node_p_dot.dot(surface_normal)*surface_normal;
+                    const Matrix<double, 1, 3> surface_normal_inv
+                            = EigenHelpers::Pinv(surface_normal, EigenHelpers::SuggestedRcond());
+                    M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
+                }
+            }
+            // Check with Dale, whether the vector is normalized.
+//            const Matrix<double, 1, 3> surface_normal_inv
+//                    = EigenHelpers::Pinv(surface_normal, EigenHelpers::SuggestedRcond());
+//            M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
+        }
+
+    }
+    return M;
+}
+
+
+// backup for mask
+/*
 
 Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
         const ObjectPointSet &current_configuration,
@@ -378,9 +471,9 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
     }
 
     return M;
-
 }
 
+*/
 
 
 

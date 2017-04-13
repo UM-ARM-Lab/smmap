@@ -154,9 +154,9 @@ void Task::initializeModelSet(const WorldState& initial_world_state)
     // Mengyao's model here
     else if (GetUseConstraintModel(ph_))
     {
-        const double translation_dir_deformability=0.1;
+        const double translation_dir_deformability=20.0;
         const double translation_dis_deformability=2.0;
-        const double rotation_deformability=0.1;
+        const double rotation_deformability=10.0;
         // Douoble check this usage
         const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
 

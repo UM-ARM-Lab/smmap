@@ -194,8 +194,8 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     vis_.visualizeObjectDelta(
                 "Model back_generated position",
                 current_world_state.object_configuration_,
-                current_world_state.object_configuration_ + 1000*predicted_object_delta,
-                Visualizer::Red());
+                current_world_state.object_configuration_ + 200*predicted_object_delta,
+                Visualizer::Blue());
 
 
 
