@@ -19,6 +19,12 @@ Eigen::MatrixXd JacobianModel::computeGrippersToDeformableObjectJacobian(
     return computeGrippersToDeformableObjectJacobian_impl(input_data);
 }
 
+Eigen::MatrixXd JacobianModel::computeObjectVelocityMask(const ObjectPointSet& current_configuration,
+        const Eigen::MatrixXd &object_p_dot) const
+{
+    return computeObjectVelocityMask_impl(current_configuration,object_p_dot);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Virtual function overrides
 ////////////////////////////////////////////////////////////////////////////////
@@ -34,6 +40,7 @@ ObjectPointSet JacobianModel::getObjectDelta_impl(
         const AllGrippersSinglePoseDelta& grippers_pose_delta) const
 {
     const MatrixXd J = computeGrippersToDeformableObjectJacobian_impl(input_data);
+
 
     MatrixXd delta = MatrixXd::Zero(input_data.world_initial_state_.object_configuration_.cols() * 3, 1);
 
@@ -124,3 +131,28 @@ JacobianModel::getSuggestedGrippersCommand_impl(
 
     return suggested_grippers_command;
 }
+
+// Mengyao Add for projection
+ObjectPointSet JacobianModel::getProjectedObjectDelta_impl(
+        const DeformableModelInputData& input_data,
+        const AllGrippersSinglePoseDelta& grippers_pose_delta,
+        const ObjectPointSet& current_configuration) const
+{
+    const MatrixXd J = computeGrippersToDeformableObjectJacobian_impl(input_data);
+
+
+    MatrixXd delta = MatrixXd::Zero(input_data.world_initial_state_.object_configuration_.cols() * 3, 1);
+
+    // Move the object based on the movement of each gripper
+    for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
+    {
+        // Assume that our Jacobian is correct, and predict where we will end up
+        delta += J.block(0, 6 * (ssize_t)gripper_ind, J.rows(), 6) * grippers_pose_delta[gripper_ind];
+    }
+
+    delta = computeObjectVelocityMask(current_configuration, delta)*delta;
+
+    delta.resizeLike(input_data.world_initial_state_.object_configuration_);
+    return delta;
+}
+

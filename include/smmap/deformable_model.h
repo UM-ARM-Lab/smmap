@@ -38,14 +38,19 @@ namespace smmap
 
             void updateModel(const WorldState& previous, const WorldState& next);
 
-            ObjectPointSet getObjectDelta(
-                    const DeformableModelInputData& input_data,
+            ObjectPointSet getObjectDelta(const DeformableModelInputData& input_data,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta);
 
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getSuggestedGrippersCommand(
                     const DeformableModelInputData& input_data,
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale);
+
+            // Mengyao defined: Get ObjectDelta as a stacked vector, the above is the resized one
+            ObjectPointSet getProjectedObjectDelta(
+                    const DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta,
+                    const ObjectPointSet &current_configuration);
 
             ////////////////////////////////////////////////////////////////////
             // Update/Set function for static members
@@ -56,6 +61,7 @@ namespace smmap
 
             static void SetCallbackFunctions(
                     const GripperCollisionCheckFunctionType& gripper_collision_check_fn);
+
 
         protected:
 
@@ -86,6 +92,12 @@ namespace smmap
                     const DeformableModelInputData& input_data,
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale) const = 0;
+
+            // Mengyao defined: Get ObjectDelta as a stacked vector, the above is the resized one
+            virtual ObjectPointSet getProjectedObjectDelta_impl(
+                    const DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta,
+                    const ObjectPointSet& current_configuration) const =0 ;
 
     };
 }

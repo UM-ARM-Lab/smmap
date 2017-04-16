@@ -23,7 +23,8 @@ namespace smmap
             TestPlanner(RobotInterface& robot,
                     Visualizer& vis,
                     const std::shared_ptr<TestSpecification> &test_specification,
-                    const LoggingFunctionType& logging_fn);
+                    const LoggingFunctionType& logging_fn,
+                    const TestLoggingFunctionType& test_logging_fn);
 
             void addModel(DeformableModel::Ptr model);
             void createBandits();
@@ -48,6 +49,7 @@ namespace smmap
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
             const LoggingFunctionType logging_fn_;
+            const TestLoggingFunctionType test_logging_fn_;  // log for test
 
             RobotInterface& robot_;
             Visualizer& vis_;

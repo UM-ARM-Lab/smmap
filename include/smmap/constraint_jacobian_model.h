@@ -63,6 +63,10 @@ namespace smmap
             static void SetInitialObjectConfiguration(
                     const ObjectPointSet& object_initial_configuration);
 
+//            Eigen::MatrixXd computeObjectVelocityMask(const ObjectPointSet& current_configuration,
+//                    const Eigen::VectorXd &object_p_dot) const;
+
+
         private:
 
             ////////////////////////////////////////////////////////////////////
@@ -75,6 +79,10 @@ namespace smmap
 
             virtual Eigen::MatrixXd computeGrippersToDeformableObjectJacobian_impl(
                     const DeformableModelInputData &input_data) const final override;
+
+            // Null Projection --- Edit By Mengyao
+            virtual Eigen::MatrixXd computeObjectVelocityMask_impl(const ObjectPointSet& current_configuration,
+                    const Eigen::MatrixXd &object_p_dot) const override final;
 
             ////////////////////////////////////////////////////////////////////
             // Static helpers
@@ -128,8 +136,8 @@ namespace smmap
 //            Eigen::MatrixXd computeObjectVelocityMask(const ObjectPointSet& current_configuration,
 //                    const Eigen::VectorXd &object_p_dot) const;
 
-            Eigen::MatrixXd computeObjectVelocityMask(const ObjectPointSet& current_configuration,
-                    const AllGrippersSinglePose& grippers_pose) const;
+//            Eigen::MatrixXd computeObjectVelocityMask(const ObjectPointSet& current_configuration,
+//                    const AllGrippersSinglePose& grippers_pose) const;
 
 
     };

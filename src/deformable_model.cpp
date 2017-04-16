@@ -72,3 +72,14 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> DeformableModel::getSugges
 {
     return getSuggestedGrippersCommand_impl(input_data, max_gripper_velocity, obstacle_avoidance_scale);
 }
+
+// Mengyao defined: Get ObjectDelta as a stacked vector, the above is the resized one
+ObjectPointSet DeformableModel::getProjectedObjectDelta(
+        const DeformableModelInputData& input_data,
+        const AllGrippersSinglePoseDelta& grippers_pose_delta,
+        const ObjectPointSet& current_configuration)
+{
+    return getProjectedObjectDelta_impl(
+                input_data,grippers_pose_delta,current_configuration);
+}
+

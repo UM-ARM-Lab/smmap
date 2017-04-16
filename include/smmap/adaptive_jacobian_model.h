@@ -27,9 +27,16 @@ namespace smmap
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            virtual void updateModel_impl(const WorldState& previous, const WorldState& next) override final;
+            virtual void updateModel_impl(
+                    const WorldState& previous, const WorldState& next) override final;
 
-            virtual Eigen::MatrixXd computeGrippersToDeformableObjectJacobian_impl(const DeformableModelInputData &input_data) const override final;
+            virtual Eigen::MatrixXd computeGrippersToDeformableObjectJacobian_impl(
+                    const DeformableModelInputData &input_data) const override final;
+
+            // Null Projection --- Edit By Mengyao
+            virtual Eigen::MatrixXd computeObjectVelocityMask_impl(
+                    const ObjectPointSet& current_configuration,
+                    const Eigen::MatrixXd &object_p_dot) const override final;
 
             ////////////////////////////////////////////////////////////////////
             // Private members

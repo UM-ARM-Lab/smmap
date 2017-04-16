@@ -22,7 +22,7 @@ modelTest::modelTest(RobotInterface& robot,
     , test_specification_(test_specification)
     , logging_fn_(createLoggingFunction())
     , test_logging_fn_(createTestLogFunction())
-    , planner_(robot_, vis_, test_specification_, logging_fn_)
+    , planner_(robot_, vis_, test_specification_, logging_fn_, test_logging_fn_)
 {
     initializeLogging();
 }
@@ -46,6 +46,9 @@ void modelTest::execute()
     {
         const WorldState current_world_state = world_feedback;
         const ObjectPointSet real_delta_p = current_world_state.object_configuration_-last_world_state.object_configuration_;
+
+
+
         last_world_state = current_world_state;
 
         // TODO: implement error function for test_specification
@@ -64,6 +67,8 @@ void modelTest::execute()
         // model_delta_p calculated inside this function should be campared with the real_delta_p above
         // The input should be q_delta
         world_feedback = planner_.sendNextCommand(last_world_state);
+
+        // it is not the right way!!!!!! do it with model in test_planner
         model_delta_p = test_specification_->calculateDesiredDirection(last_world_state);
 
         if (unlikely(world_feedback.sim_time_ - start_time >= test_specification_->maxTime()));

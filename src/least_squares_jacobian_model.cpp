@@ -81,3 +81,14 @@ Eigen::MatrixXd LeastSquaresJacobianModel::computeGrippersToDeformableObjectJaco
     (void)input_data.world_initial_state_.object_configuration_;
     return current_jacobian_;
 }
+
+Eigen::MatrixXd LeastSquaresJacobianModel::computeObjectVelocityMask_impl(const ObjectPointSet& current_configuration,
+                    const MatrixXd &object_p_dot) const
+{
+//    const ssize_t num_lines = num_nodes_;
+    const ssize_t num_lines = current_configuration.cols();
+    MatrixXd M(num_lines, num_lines);
+    M.setIdentity(num_lines,num_lines);
+    return M;
+}
+

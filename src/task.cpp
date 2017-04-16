@@ -150,6 +150,7 @@ void Task::initializeModelSet(const WorldState& initial_world_state)
                               DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
                               GetAdaptiveModelLearningRate(ph_),
                               optimization_enabled));
+
     }
     // Mengyao's model here
     else if (GetUseConstraintModel(ph_))
@@ -181,6 +182,19 @@ void Task::initializeModelSet(const WorldState& initial_world_state)
 
         planner_.addModel(std::make_shared<DiminishingRigidityModel>(
                               task_specification_->defaultDeformability(),
+                              optimization_enabled));
+
+        // ADD a diminishing model at the same time, just for test usage
+        const double translation_dir_deformability=20.0;
+        const double translation_dis_deformability=4.0;
+        const double rotation_deformability=20.0;
+        // Douoble check this usage
+        const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+        planner_.addModel(std::make_shared<ConstraintJacobianModel>(
+                              translation_dir_deformability,
+                              translation_dis_deformability,
+                              rotation_deformability,
+                              environment_sdf,
                               optimization_enabled));
 
 //        planner_.addModel(std::make_shared<LeastSquaresJacobianModel>(

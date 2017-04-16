@@ -132,3 +132,14 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToDeformableObjectJacob
 
     return J;
 }
+
+Eigen::MatrixXd DiminishingRigidityModel::computeObjectVelocityMask_impl(const ObjectPointSet& current_configuration,
+                    const MatrixXd &object_p_dot) const
+{
+    const ssize_t num_lines = num_nodes_;
+//    const ssize_t num_lines = object_p_dot.rows();
+    MatrixXd M(num_lines, num_lines);
+    M.setIdentity(num_lines,num_lines);
+    return M;
+}
+

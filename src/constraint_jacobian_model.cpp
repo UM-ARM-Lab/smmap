@@ -211,7 +211,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
 
     // Mask:
 //    Eigen::MatrixXd Mask = computeObjectVelocityMask(current_configuration,object_p_dot);
-    Eigen::MatrixXd Mask = computeObjectVelocityMask(current_configuration,grippers_pose);
+//    Eigen::MatrixXd Mask = computeObjectVelocityMask(current_configuration,grippers_pose);
 
     // for each gripper
     for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
@@ -301,7 +301,8 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
                     std::exp(-rotation_deformability_ * nearest_node_on_gripper.first) * J_rot;
         }
     }
-    return Mask*J;
+    return J;
+//    return Mask*J;
 }
 
 
@@ -397,10 +398,10 @@ double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, con
  */
 // q_dot = pinv(J)*Mask*P_dot
 // Back up Mask
-/*
-Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
+
+Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask_impl(
         const ObjectPointSet &current_configuration,
-        const VectorXd &object_p_dot) const
+        const MatrixXd &object_p_dot) const
 {
     const ssize_t num_lines = num_nodes_ * 3;
     MatrixXd M(num_lines, num_lines);
@@ -418,7 +419,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
         // if is close to obstacle
         else
         {
-            const Vector3d node_p_dot = object_p_dot.segment<3>(node_ind);
+            const Vector3d node_p_dot = object_p_dot.block<3,1>(node_ind,0);
             std::vector<double> sur_n
                     = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
 
@@ -444,11 +445,13 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
     }
     return M;
 }
-*/
+
 
 // backup for mask
 
 
+// This version of Null-space projection use position vector
+/*
 Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
         const ObjectPointSet &current_configuration,
         const AllGrippersSinglePose& grippers_pose) const
@@ -526,4 +529,4 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
     }
     return M;
 }
-
+*/
