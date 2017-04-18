@@ -131,6 +131,9 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
     {
         return test_specification_->calculateDesiredDirection(world_state);
     };
+
+    // It is generated from preset gripper command, only the end-effector delta p matters; Far from true delta p;
+    // In My case it is actually a constant, not related to world state
     const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
 //    visualizeDesiredMotion(current_world_state, task_desired_motion);
 
@@ -193,7 +196,9 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
 
     // Execute the command
     // The following line should be revised to use gripper comman sent from test_specification.   --Mengyao
-    const AllGrippersSinglePoseDelta& selected_command = suggested_robot_commands[(size_t)model_to_use].first;
+//    const AllGrippersSinglePoseDelta& selected_command = suggested_robot_commands[(size_t)model_to_use].first;
+    const AllGrippersSinglePoseDelta& selected_command = test_specification_->getPresetGripperDelta();
+
     ObjectPointSet predicted_object_delta = model_list_[(size_t)model_to_use]->getObjectDelta(model_input_data, selected_command);
     const Eigen::Map<Eigen::VectorXd> predicted_object_delta_as_vector(predicted_object_delta.data(), predicted_object_delta.size());
     ROS_INFO_STREAM_NAMED("planner", "Sending command to robot, action norm:  " << MultipleGrippersVelocity6dNorm(selected_command));

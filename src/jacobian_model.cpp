@@ -150,8 +150,10 @@ ObjectPointSet JacobianModel::getProjectedObjectDelta_impl(
         delta += J.block(0, 6 * (ssize_t)gripper_ind, J.rows(), 6) * grippers_pose_delta[gripper_ind];
     }
 
+    // This delta is a stacked vector
     delta = computeObjectVelocityMask(current_configuration, delta)*delta;
 
+    // this delta is a 3xn vector
     delta.resizeLike(input_data.world_initial_state_.object_configuration_);
     return delta;
 }

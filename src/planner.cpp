@@ -210,7 +210,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
 
     // Just for Visualization diminishing results:  --- Mengyao
 
-
+/*
     if (model_list_.size()>0){
         ObjectPointSet diminishing_object_delta = model_list_[1]->getObjectDelta(model_input_data, selected_command);
         vis_.visualizeObjectDelta(
@@ -220,9 +220,8 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
                     Visualizer::Black());
 //                    Visualizer::Blue());
 
-
     }
-
+*/
 
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");

@@ -19,6 +19,8 @@ using namespace smmap;
 // p_Delta_model = J*q_Delta_last; The result could be obtained from calculateDesiredDirection
 // Also stored as (Last)first_step_desired_motion_;
 // It is called by CalculateError_impl in CalculateError, minimum_threshold depend on test
+/// No Use for test, but could copy the implementation here to model_test.cpp
+/**
 double CalculateErrorWithTheshold(
         const ObjectPointSet& real_delta_p,
         ObjectDeltaAndWeight& model_delta_p,
@@ -42,6 +44,9 @@ double CalculateErrorWithTheshold(
 
     return error.sum();
 }
+*/
+// TODO: Add CalculateObjectErrorCorrectionDeltaWithThreshold for p_delta
+// Might not need this one for my test, need a function to return gripper command
 
 
 ////////////////////////////////////////////////////////////////////
@@ -137,13 +142,6 @@ double TestSpecification::maxTime() const
     return maxTime_impl();
 }
 
-//////////// Mengyao: Initialize delta_q ///////////////////////////
-
-void TestSpecification::initializeGripperDelta(ros::NodeHandle& nh) const
-{
-    return initializeGripperDelta_impl(nh);
-}
-
 void TestSpecification::visualizeDeformableObject(
         Visualizer& vis,
         const std::string& marker_name,
@@ -162,16 +160,99 @@ void TestSpecification::visualizeDeformableObject(
     visualizeDeformableObject_impl(vis, marker_name, object_configuration, colors);
 }
 
+//////////// Mengyao: Initialize delta_q ///////////////////////////
+
+void TestSpecification::initializeGripperDelta(ros::NodeHandle& nh) const
+{
+    return initializeGripperDelta_impl(nh);
+}
+
+ObjectDeltaAndWeight TestSpecification::calculateDesiredDirection(const WorldState &world_state)
+{
+    return calculateDesiredDelta_impl(world_state);
+}
+
+AllGrippersSinglePoseDelta TestSpecification::getPresetGripperDelta()
+{
+    return grippers_pose_delta_;
+}
+
+
+//////////////////////////////////////////////////////////////////////
+// Mengyao: Desired p Delta for model use:
+//////////////////////////////////////////////////////////////////////
+ObjectDeltaAndWeight TestSpecification::calculateDesiredDelta_impl(const WorldState &world_state) const
+{
+    const AllGrippersSinglePose& grippers_pose = world_state.all_grippers_single_pose_;
+    ObjectDeltaAndWeight desired_object_delta(num_nodes_ * 3);
+    const ObjectPointSet& current_configuration = world_state.object_configuration_;
+
+    for (ssize_t node_ind = 0; node_ind <num_nodes_; node_ind++)
+    {
+        bool isGrasped = false;
+
+        // Chekc if the point is grasped by gripper, if it is, set its value to q_delta
+        for (ssize_t gripper_ind = 0; gripper_ind< (ssize_t)grippers_data_.size(); gripper_ind++)
+        {
+            const std::pair<double, long> nearest_node_on_gripper =
+                    getMinimumDistanceIndexToGripper(
+                        grippers_data_[(size_t)gripper_ind].node_indices,
+                        node_ind, object_initial_node_distance_);
+
+            if(nearest_node_on_gripper.second ==  node_ind)
+            {
+                isGrasped = true;
+                Eigen::MatrixXd J(3, 6);
+                const Eigen::Matrix3d& gripper_rot = grippers_pose[(size_t)gripper_ind].rotation();
+                const Eigen::Matrix3d& J_trans = gripper_rot;
+
+                const Eigen::Vector3d gripper_to_node =
+                        current_configuration.col(node_ind) -
+                        grippers_pose[(size_t)gripper_ind].translation();
+
+                Eigen::Matrix3d J_rot;
+                J_rot.col(0) = gripper_rot.col(0).cross(gripper_to_node);
+                J_rot.col(1) = gripper_rot.col(1).cross(gripper_to_node);
+                J_rot.col(2) = gripper_rot.col(2).cross(gripper_to_node);
+
+                J.block<3, 3>(0, 0) = J_trans;
+                J.block<3, 3>(0, 3) = J_rot;
+
+                desired_object_delta.delta.segment<3>(node_ind*3) =
+                        J*grippers_pose_delta_[gripper_ind];
+            }
+        }
+
+        // If it is not grasped by grippers, set the node p delta to be zeros.
+        if (isGrasped) {  continue;   }
+        else
+        {
+            const Eigen::Vector3d& node_p_delta = Eigen::MatrixXd::Zero(3,1);
+            desired_object_delta.delta.segment<3>(node_ind*3) = node_p_delta;
+        }
+    }
+
+    // TODO: set weight
+    // OR: Since I will not using GetSuggestedGripperCommand, The Weight doesn't matter
+
+    return desired_object_delta;
+}
+
+void TestSpecification::initializeGripperDelta_impl(ros::NodeHandle& nh) const{}
+
+
 ///////////////////////////////////////////////////////////////////////////////////
 // Can define specific error here, otherwise, could just use CalculateErrorWithTheshold
 ///////////////////////////////////////////////////////////////////////////////////
-
+/**
 double TestSpecification::calculateError(
         const ObjectPointSet& real_delta_p,
         ObjectDeltaAndWeight& model_delta_p) const
 {
     return calculateError_impl(real_delta_p, model_delta_p);
 }
+*/
+/**
 
 ///////////////////////////////////////////////////////////////////////////////////
 // Object Error is planned one, or set by q (gripper motion), should implement one
@@ -184,11 +265,7 @@ ObjectDeltaAndWeight TestSpecification::calculateObjectErrorCorrectionDelta(
 }
 
 // COPY DIRECTLY FROM TASKSPECIFICATION
-/**
- * @brief TaskSpecification::calculateStretchingCorrectionDelta
- * @param object_configuration
- * @return
- */
+
 ObjectDeltaAndWeight TestSpecification::calculateStretchingCorrectionDelta(
         const ObjectPointSet& object_configuration,
         bool visualize) const
@@ -254,11 +331,6 @@ ObjectDeltaAndWeight TestSpecification::calculateStretchingCorrectionDelta(
 }
 
 
-/**
- * @brief TaskSpecification::calculateStretchingCorrectionDelta
- * @param world_state
- * @return
- */
 ObjectDeltaAndWeight TestSpecification::calculateStretchingCorrectionDelta(
         const WorldState& world_state,
         bool visualize) const
@@ -267,11 +339,6 @@ ObjectDeltaAndWeight TestSpecification::calculateStretchingCorrectionDelta(
 }
 
 
-/**
- * @brief TaskSpecification::calculateStretchingError
- * @param object_configuration
- * @return
- */
 double TestSpecification::calculateStretchingError(
         const ObjectPointSet& object_configuration) const
 {
@@ -303,11 +370,6 @@ double TestSpecification::calculateStretchingError(
     return std::sqrt((double)squared_error) / (double)(num_nodes_ * num_nodes_);
 }
 
-/**
- * @brief TaskSpecification::calculateStretchingError
- * @param world_state
- * @return
- */
 double TestSpecification::calculateStretchingError(
         const WorldState& world_state) const
 {
@@ -317,12 +379,6 @@ double TestSpecification::calculateStretchingError(
 // THIS FUNCTION IS TO COMBINE THE CALCULATED/ PLANNED WITH STRETCHING CORRECTION
 // Don't acually need the stretching correction for test model utility though
 // can hide off the defiection correction term in FUNCTION  ObjectDesiredDirection()
-/**
- * @brief TaskSpecification::combineErrorCorrectionAndStretchingCorrection
- * @param error_correction
- * @param stretching_correction
- * @return
- */
 ObjectDeltaAndWeight TestSpecification::combineErrorCorrectionAndStretchingCorrection(
         const ObjectDeltaAndWeight& error_correction,
         const ObjectDeltaAndWeight& stretching_correction) const
@@ -390,7 +446,7 @@ ObjectDeltaAndWeight TestSpecification::calculateDesiredDirection(const WorldSta
     }
 }
 
-
+*/
 
 
 

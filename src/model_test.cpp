@@ -53,11 +53,11 @@ void modelTest::execute()
 
         // TODO: implement error function for test_specification
         // It should be the dynamics difference between real delta p and model delta p.
-        const double current_error = test_specification_->calculateError(real_delta_p, model_delta_p);
-        ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << current_error);
+//        const double current_error = test_specification_->calculateError(real_delta_p, model_delta_p);
+//        ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << current_error);
 
         ///// Mengyao's Test Log Here
-        test_logging_fn_(current_world_state,real_delta_p,model_delta_p);
+//        test_logging_fn_(current_world_state,real_delta_p,model_delta_p);
 
         // TODO: implement constraint violation function
         planner_.detectFutureConstraintViolations(last_world_state);
@@ -338,8 +338,8 @@ void modelTest::testLogData(
              current_world_state.sim_time_);
 
         // TODO, This function should return normed error
-        LOG(test_loggers_.at("error_realtime"),
-             test_specification_->calculateError(real_delta_p, model_delta_p));
+//        LOG(test_loggers_.at("error_realtime"),
+//             test_specification_->calculateError(real_delta_p, model_delta_p));
 
         LOG(test_loggers_.at("real_dp"),
              real_delta_p.format(single_line));

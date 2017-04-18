@@ -32,10 +32,13 @@ namespace smmap
             // p_Delta_real = p_current-p_last
             // p_Delta_model = J*q_Delta_last
             // It is called by CalculateError_impl in CalculateError, minimum_threshold depend on test
+            ////// No Use for test, it is for previous task error
+            /**
             static double CalculateErrorWithTheshold(
                     const ObjectPointSet& real_delta_p,
                     ObjectDeltaAndWeight& model_delta_p,
                     const double minimum_threshold);
+            ***/
 
             /*
             // Do the helper function things:
@@ -46,11 +49,11 @@ namespace smmap
 
             // This function previously set the target delta p
             // TODO: get a target dela_p from grippers delta q
+            // In previous Task Class, its return is the one without strethching correction
+            //// No Use at this moment
+//            static ObjectDeltaAndWeight CalculateObjectErrorCorrectionDeltaWithThreshold();
 
-            static ObjectDeltaAndWeight CalculateObjectErrorCorrectionDeltaWithThreshold();
 
-
-        public:
             typedef std::shared_ptr<TestSpecification> Ptr;
 
             ////////////////////////////////////////////////////////////////////
@@ -67,6 +70,7 @@ namespace smmap
             static TestSpecification::Ptr MakeTaskSpecification(
                     ros::NodeHandle& nh);
 
+
             ////////////////////////////////////////////////////////////////////
             // Virtual function wrappers
             ////////////////////////////////////////////////////////////////////
@@ -77,8 +81,6 @@ namespace smmap
             double stretchingScalingThreshold() const;  // lambda
             double maxTime() const;                     // max simulation time when scripting things
 
-            //////////// Mengyao: Initialize delta_q ///////////////////////////
-            void initializeGripperDelta(ros::NodeHandle& nh) const;
 
             void visualizeDeformableObject(
                     Visualizer& vis,
@@ -92,17 +94,30 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const;
 
+            //////////// Mengyao: Initialize delta_q ///////////////////////////
+            void initializeGripperDelta(ros::NodeHandle& nh) const;
+
+
+            // This is the Final target_delta_p, = calculated_delta_p (from endeffector)+stretching correction
+            // calculated_delta_p in this test class should map the preset delta q to desired delta p
+            // It only matters my model, since Mengyao's model need p_dot input, however, only need
+            // the data at grasped points, can set all other points zero
+            // IT IS THE ONE TO BE USED AS INPUT FUNCTION POINTER FOR DEFORMABLE MODEL
+            ObjectDeltaAndWeight calculateDesiredDirection(const WorldState& world_state);
+
+            AllGrippersSinglePoseDelta getPresetGripperDelta();
+
+
+
             // Should Call the CalculateErrorWithThreshol, INPUT BEING REVISE BY Mengyao
+            // No use at this momdent
+            /**
             double calculateError(
                     const ObjectPointSet& real_delta_p,
                     ObjectDeltaAndWeight& model_delta_p) const;
+            */
 
             /**
-             * @brief calculateObjectDesiredDelta
-             * @param world_state
-             * @return return.first is the desired movement of the object
-             *         return.second is the importance of that part of the movement
-             */
             // Planned P_dot; in the test, should be a function that set all nodes zeros;
             // Except for the grapsed point, whose value should be the same as that of
             // their corresponding end-effectors
@@ -114,54 +129,30 @@ namespace smmap
             // TODO: Should these be virtual? virtual final?
             ////////////////////////////////////////////////////////////////////
 
-            /**
-             * @brief calculateStretchingCorrectionDelta
-             * @param world_state
-             * @return
-             */
+
             ObjectDeltaAndWeight calculateStretchingCorrectionDelta(
                     const ObjectPointSet& object_configuration,
                     bool visualize) const;
 
-            /**
-             * @brief computeStretchingCorrection
-             * @param object_configuration
-             * @return
-             */
             ObjectDeltaAndWeight calculateStretchingCorrectionDelta(
                     const WorldState& world_state,
                     bool visualize) const;
 
-            /**
-             * @brief calculateStretchingError
-             * @param object_configuration
-             * @return
-             */
+
             double calculateStretchingError(
                     const ObjectPointSet& object_configuration) const;
 
-            /**
-             * @brief calculateStretchingError
-             * @param world_state
-             * @return
-             */
+
             double calculateStretchingError(
                     const WorldState& world_state) const;
 
-            /**
-             * @brief combineErrorCorrectionAndStretchingCorrection
-             * @param error_correction
-             * @param stretching_correction
-             * @return
-             */
+
             ObjectDeltaAndWeight combineErrorCorrectionAndStretchingCorrection(
                     const ObjectDeltaAndWeight& error_correction,
                     const ObjectDeltaAndWeight& stretching_correction) const;
+            */
 
 
-            // This is the Final target_delta_p, = calculated_delta_p (from endeffector)+stretching correction
-            // calculated_delta_p in this test class should map the preset delta q to desired delta p
-            ObjectDeltaAndWeight calculateDesiredDirection(const WorldState& world_state);
 
         private:
             ObjectDeltaAndWeight first_step_desired_motion_;
@@ -197,9 +188,10 @@ namespace smmap
             const Eigen::MatrixXd object_initial_node_distance_;
             const ssize_t num_nodes_;
 
-            // NEW DEFINE
+            // NEW DEFINE, make sure their index matchup each other in Initialization
             const AllGrippersSinglePoseDelta grippers_pose_delta_;
-            const std::vector<GripperData> grippers_data_;
+//            const std::vector<GripperData> grippers_data_;
+            std::vector<GripperData> grippers_data_;
 //            WorldState last_world_state_;
 
 
@@ -214,9 +206,6 @@ namespace smmap
             virtual double stretchingScalingThreshold_impl() const = 0; // lambda
             virtual double maxTime_impl() const = 0;                    // max simulation time when scripting things
 
-            //////////// Mengyao: Initialize delta_q ///////////////////////////
-            virtual void initializeGripperDelta_impl(ros::NodeHandle& nh) const = 0;
-
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
                     const std::string& marker_name,
@@ -230,13 +219,20 @@ namespace smmap
                     const std::vector<std_msgs::ColorRGBA>& colors) const = 0;
 
             // Should Call the CalculateErrorWithThreshol, INPUT BEING REVISE BY Mengyao
+            /**
             virtual double calculateError_impl(
                     const ObjectPointSet& real_delta_p,
                     ObjectDeltaAndWeight& model_delta_p) const = 0;
+            */
 
-            // delta_p = target/planned delta_p
-            virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
-                    const WorldState& world_state) const = 0;
+            //////////// Mengyao: Initialize delta_q ///////////////////////////
+            void initializeGripperDelta_impl(ros::NodeHandle& nh) const;
+
+            // delta_p = target/planned delta_p, might not need this function though
+            ObjectDeltaAndWeight calculateDesiredDelta_impl(
+                    const WorldState& world_state) const;
+//            virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
+//                    const WorldState& world_state) const = 0;
     };
 }
 
