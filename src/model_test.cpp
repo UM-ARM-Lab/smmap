@@ -54,7 +54,7 @@ void modelTest::execute()
         // TODO: implement error function for test_specification
         // It should be the dynamics difference between real delta p and model delta p.
 //        const double current_error = test_specification_->calculateError(real_delta_p, model_delta_p);
-//        ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << current_error);
+        ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << world_feedback.sim_time_);
 
         ///// Mengyao's Test Log Here
 //        test_logging_fn_(current_world_state,real_delta_p,model_delta_p);
@@ -71,8 +71,10 @@ void modelTest::execute()
         // it is not the right way!!!!!! do it with model in test_planner
         model_delta_p = test_specification_->calculateDesiredDirection(last_world_state);
 
-        if (unlikely(world_feedback.sim_time_ - start_time >= test_specification_->maxTime()));
+//        if (unlikely(world_feedback.sim_time_ - start_time >= test_specification_->maxTime()));
+        if (world_feedback.sim_time_ - start_time < 0)
         {
+            ROS_INFO_STREAM_NAMED("task", "Robot Shut dwom in Model_test " << current_world_state.sim_time_ << "\t ****: " << start_time);
             robot_.shutdown();
         }
     }
@@ -173,6 +175,9 @@ void modelTest::initializeModelSet(const WorldState& initial_world_state)
             return test_specification_->calculateDesiredDirection(world_state);
         };
 
+        ROS_INFO_STREAM_NAMED("task", "Using Constraint Model default deformability value of "
+                               << test_specification_->defaultDeformability());
+
         // TODO: fix the task_specification_->defaultDeformablility();
         const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
         planner_.addModel(std::make_shared<AdaptiveJacobianModel>(
@@ -189,6 +194,8 @@ void modelTest::initializeModelSet(const WorldState& initial_world_state)
         // Douoble check this usage
         const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
 
+        ROS_INFO_STREAM_NAMED("task", "Using Constraint Model default deformability value of "
+                               << test_specification_->defaultDeformability());
 
         planner_.addModel(std::make_shared<ConstraintJacobianModel>(
                               translation_dir_deformability,
@@ -322,10 +329,10 @@ void modelTest::logData(
 
 ///////////////////// Log Data for Mengyao's Test ///////////////////
 
-void modelTest::testLogData(
-        const WorldState& current_world_state,
+void modelTest::testLogData(const WorldState& current_world_state,
         const ObjectPointSet &real_delta_p,
-        ObjectDeltaAndWeight &model_delta_p)
+        const ObjectPointSet &model_delta_p,
+                            Eigen::VectorXd real_time_error)
 {
     if (logging_enabled_)
     {
@@ -338,14 +345,14 @@ void modelTest::testLogData(
              current_world_state.sim_time_);
 
         // TODO, This function should return normed error
-//        LOG(test_loggers_.at("error_realtime"),
-//             test_specification_->calculateError(real_delta_p, model_delta_p));
+        LOG(test_loggers_.at("error_realtime"),
+             real_time_error);
 
         LOG(test_loggers_.at("real_dp"),
              real_delta_p.format(single_line));
 
         LOG(test_loggers_.at("model_dp"),
-             model_delta_p.delta.format(single_line));
+             model_delta_p.format(single_line));
     }
 }
 
@@ -386,8 +393,8 @@ TestLoggingFunctionType modelTest::createTestLogFunction()
                      this,
                      std::placeholders::_1,
                      std::placeholders::_2,
-                     std::placeholders::_3);
-//                     std::placeholders::_4,
+                     std::placeholders::_3,
+                     std::placeholders::_4);
 //                     std::placeholders::_5);
 //                     std::placeholders::_6);
 }

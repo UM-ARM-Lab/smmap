@@ -68,7 +68,8 @@ namespace smmap
             // Test log data
             void testLogData(const WorldState& current_world_state,
                     const ObjectPointSet &real_delta_p,
-                    ObjectDeltaAndWeight &model_delta_p);
+                    const ObjectPointSet &model_delta_p,
+                             Eigen::VectorXd real_time_error);
 
 
             ////////////////////////////////////////////////////////////////////

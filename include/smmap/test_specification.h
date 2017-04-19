@@ -33,12 +33,11 @@ namespace smmap
             // p_Delta_model = J*q_Delta_last
             // It is called by CalculateError_impl in CalculateError, minimum_threshold depend on test
             ////// No Use for test, it is for previous task error
-            /**
-            static double CalculateErrorWithTheshold(
+
+            double CalculateErrorWithTheshold(
                     const ObjectPointSet& real_delta_p,
-                    ObjectDeltaAndWeight& model_delta_p,
-                    const double minimum_threshold);
-            ***/
+                    const ObjectPointSet& model_delta_p) const;
+
 
             /*
             // Do the helper function things:
@@ -95,7 +94,7 @@ namespace smmap
                     const std::vector<std_msgs::ColorRGBA>& colors) const;
 
             //////////// Mengyao: Initialize delta_q ///////////////////////////
-            void initializeGripperDelta(ros::NodeHandle& nh) const;
+            void initializeGripperDelta();
 
 
             // This is the Final target_delta_p, = calculated_delta_p (from endeffector)+stretching correction
@@ -189,7 +188,7 @@ namespace smmap
             const ssize_t num_nodes_;
 
             // NEW DEFINE, make sure their index matchup each other in Initialization
-            const AllGrippersSinglePoseDelta grippers_pose_delta_;
+            AllGrippersSinglePoseDelta grippers_pose_delta_;
 //            const std::vector<GripperData> grippers_data_;
             std::vector<GripperData> grippers_data_;
 //            WorldState last_world_state_;
@@ -226,7 +225,7 @@ namespace smmap
             */
 
             //////////// Mengyao: Initialize delta_q ///////////////////////////
-            void initializeGripperDelta_impl(ros::NodeHandle& nh) const;
+            virtual void initializeGripperDelta_impl() = 0;
 
             // delta_p = target/planned delta_p, might not need this function though
             ObjectDeltaAndWeight calculateDesiredDelta_impl(

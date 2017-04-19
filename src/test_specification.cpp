@@ -3,7 +3,7 @@
 #include <deformable_manipulation_msgs/messages.h>
 
 #include "smmap/test_specification.h"
-//#include "smmap/task_specification_implementions.hpp"
+#include "smmap/test_specification_implementions.hpp"
 
 using namespace smmap;
 
@@ -20,31 +20,34 @@ using namespace smmap;
 // Also stored as (Last)first_step_desired_motion_;
 // It is called by CalculateError_impl in CalculateError, minimum_threshold depend on test
 /// No Use for test, but could copy the implementation here to model_test.cpp
-/**
-double CalculateErrorWithTheshold(
+
+double TestSpecification::CalculateErrorWithTheshold(
         const ObjectPointSet& real_delta_p,
-        ObjectDeltaAndWeight& model_delta_p,
-        const double minimum_threshold)
+        const ObjectPointSet& model_delta_p) const
 {
     Eigen::VectorXd error(real_delta_p);
-    const Eigen::VectorXd& model_delta_p_value = model_delta_p.delta;
+//    const Eigen::VectorXd& model_delta_p_value = model_delta_p.delta;
 
     // for every cover point, find the nearest deformable object point
     #pragma omp parallel for
     for (ssize_t real_ind = 0; real_ind < real_delta_p.cols(); ++real_ind)
     {
         const Eigen::Vector3d& real_point = real_delta_p.col(real_ind);
-        const Eigen::Vector3d& model_point = model_delta_p_value.segment<3>(real_ind*3);
+        const Eigen::Vector3d& model_point = model_delta_p.col(real_ind);
         const double point_error = (real_point-model_point).squaredNorm();
 
+        /*
         if (std::sqrt(point_error) >= minimum_threshold)
         { error(real_ind) = std::sqrt(point_error); }
         else{ error(real_ind) = 0; }
+        */
+
+        error(real_ind) = std::sqrt(point_error);
     }
 
     return error.sum();
 }
-*/
+
 // TODO: Add CalculateObjectErrorCorrectionDeltaWithThreshold for p_delta
 // Might not need this one for my test, need a function to return gripper command
 
@@ -67,7 +70,9 @@ TestSpecification::TestSpecification(ros::NodeHandle& nh, Visualizer vis, const 
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
     , num_nodes_(object_initial_node_distance_.cols())
     , grippers_data_(GetGrippersData(nh))
-{}
+{
+//    initializeGripperDelta();
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -82,6 +87,10 @@ TestSpecification::Ptr TestSpecification::MakeTaskSpecification(ros::NodeHandle&
     // TODO: DEFINE MORE SUB CLASS FOR SPECIFIC TEST CASE DESING
     switch (task_type)
     {
+        case TaskType::ROPE_CYLINDER_COVERAGE:
+            return std::make_shared<RopeCylinderCoverage>(nh);
+
+
     /*
         case TaskType::ROPE_CYLINDER_COVERAGE:
             return std::make_shared<RopeCylinderCoverage>(nh);
@@ -109,11 +118,11 @@ TestSpecification::Ptr TestSpecification::MakeTaskSpecification(ros::NodeHandle&
 
         case TaskType::ROPE_MAZE:
             return std::make_shared<RopeMaze>(nh);
-
+    */
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
             return nullptr;
-    */
+
     }
 }
 
@@ -162,9 +171,9 @@ void TestSpecification::visualizeDeformableObject(
 
 //////////// Mengyao: Initialize delta_q ///////////////////////////
 
-void TestSpecification::initializeGripperDelta(ros::NodeHandle& nh) const
+void TestSpecification::initializeGripperDelta()
 {
-    return initializeGripperDelta_impl(nh);
+    return initializeGripperDelta_impl();
 }
 
 ObjectDeltaAndWeight TestSpecification::calculateDesiredDirection(const WorldState &world_state)
@@ -238,7 +247,7 @@ ObjectDeltaAndWeight TestSpecification::calculateDesiredDelta_impl(const WorldSt
     return desired_object_delta;
 }
 
-void TestSpecification::initializeGripperDelta_impl(ros::NodeHandle& nh) const{}
+// void TestSpecification::initializeGripperDelta_impl(ros::NodeHandle& nh) const{}
 
 
 ///////////////////////////////////////////////////////////////////////////////////

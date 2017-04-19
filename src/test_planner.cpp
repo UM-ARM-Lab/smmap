@@ -209,6 +209,25 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
     ROS_INFO_STREAM_NAMED("planner", "Task predicted deformable movment norm: " << EigenHelpers::WeightedNorm(predicted_object_delta_as_vector, task_desired_motion.weight));
     WorldState world_feedback = robot_.sendGrippersPoses(kinematics::applyTwist(current_world_state.all_grippers_single_pose_, selected_command));
 
+    // Mengyao: Get real p_dot, projected p dot from model from simulation
+    ObjectPointSet real_p_dot = world_feedback.object_configuration_-current_world_state.object_configuration_;
+    ObjectPointSet p_projected = model_list_[(size_t)model_to_use]->getProjectedObjectDelta(
+                model_input_data, selected_command,current_world_state.object_configuration_);
+
+    //////////// Calculate Error /////////////////////
+//    ObjectPointSet real_time_error_vec = p_projected - real_p_dot;
+    Eigen::VectorXd real_time_error(real_p_dot);
+
+    #pragma omp parallel for
+    for (ssize_t real_ind = 0; real_ind < real_p_dot.cols(); ++real_ind)
+    {
+        const Eigen::Vector3d& real_point = real_p_dot.col(real_ind);
+        const Eigen::Vector3d& model_point = p_projected.col(real_ind);
+        const double point_error = (real_point-model_point).squaredNorm();
+
+        real_time_error(real_ind) = std::sqrt(point_error);
+    }
+
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
     ROS_INFO_STREAM_NAMED("planner", "Correlation strength factor: " << correlation_strength_factor_);
@@ -216,6 +235,7 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
 
 #ifdef UCB_BANDIT
     logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getUCB(), model_to_use, individual_rewards, correlation_strength_factor_);
+    test_logging_fn_(world_feedback,real_p_dot,p_projected, real_time_error);
 #endif
 #ifdef KFMANB_BANDIT
     logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getVariance(), model_to_use, individual_rewards, correlation_strength_factor_);

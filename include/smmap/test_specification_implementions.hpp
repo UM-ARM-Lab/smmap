@@ -7,6 +7,74 @@
 namespace smmap
 {
 
+// For debuging use: rope cylinder
+class RopeCylinderCoverage : public TestSpecification
+{   public:
+        RopeCylinderCoverage(ros::NodeHandle& nh)
+            : TestSpecification(nh, DeformableType::ROPE, TaskType::ROPE_CYLINDER_COVERAGE)
+        {
+            initializeGripperDelta_impl();
+        }
+
+    private:
+        virtual double deformability_impl() const
+        {
+            return 10.0; // k
+        }
+
+        virtual double collisionScalingFactor_impl() const
+        {
+            return  200.0; // beta
+        }
+
+        virtual double stretchingScalingThreshold_impl() const
+        {
+            return 0.005; // lambda
+        }
+
+        virtual double maxTime_impl() const
+        {
+            return 15.0;
+        }
+
+        virtual void visualizeDeformableObject_impl(
+                Visualizer& vis,
+                const std::string& marker_name,
+                const ObjectPointSet& object_configuration,
+                const std_msgs::ColorRGBA& color) const
+        {
+            vis.visualizeRope(marker_name, object_configuration, color);
+        }
+
+        virtual void visualizeDeformableObject_impl(
+                Visualizer& vis,
+                const std::string& marker_name,
+                const ObjectPointSet& object_configuration,
+                const std::vector<std_msgs::ColorRGBA>& colors) const
+        {
+            vis.visualizeRope(marker_name, object_configuration, colors);
+        }
+
+        virtual double getErrorThreshold_impl() const
+        {
+            return 0.01;
+        }
+
+        virtual void initializeGripperDelta_impl()
+        {
+            grippers_pose_delta_.clear();
+
+            for (size_t gripper_ind=0; gripper_ind< grippers_data_.size(); gripper_ind++)
+            {
+                kinematics::Vector6d singel_q_dot = Eigen::MatrixXd::Zero(6,1);
+                singel_q_dot(0,0) = 0.002f;
+                grippers_pose_delta_.push_back(singel_q_dot);
+            }
+        }
+};
+
+
+
 // Pull the rope in the opposite direction along table surface
 class RopeTablePull : public TestSpecification
 {
@@ -127,6 +195,17 @@ class RopeTableDrag : public TestSpecification
         virtual double getErrorThreshold_impl() const
         {
             return 0.002;
+        }
+
+        virtual void initializeGripperDelta_impl()
+        {
+            grippers_pose_delta_.clear();
+            kinematics::Vector6d singel_q_dot = Eigen::MatrixXd::Zero(6,0);
+            singel_q_dot(0,0) = 0.001;
+            for (size_t gripper_ind=0; gripper_ind< grippers_data_.size(); gripper_ind++)
+            {
+                grippers_pose_delta_.push_back(singel_q_dot);
+            }
         }
 
     private:

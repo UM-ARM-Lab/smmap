@@ -38,6 +38,7 @@ WorldState RobotInterface::start()
 
 bool RobotInterface::ok() const
 {
+    ROS_INFO_NAMED("robot_bridge", "Robot is OK");
     return ros::ok();
 }
 
