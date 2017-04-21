@@ -34,7 +34,7 @@ class RopeCylinderCoverage : public TestSpecification
 
         virtual double maxTime_impl() const
         {
-            return 15.0;
+            return 2.5;
         }
 
         virtual void visualizeDeformableObject_impl(
@@ -68,6 +68,8 @@ class RopeCylinderCoverage : public TestSpecification
             {
                 kinematics::Vector6d singel_q_dot = Eigen::MatrixXd::Zero(6,1);
                 singel_q_dot(0,0) = 0.002f;
+                singel_q_dot(5,0) = 0.002f;
+
                 grippers_pose_delta_.push_back(singel_q_dot);
             }
         }
@@ -298,7 +300,7 @@ class RopeTowardTable : public TestSpecification
             for (size_t gripper_ind=0; gripper_ind< grippers_data_.size(); gripper_ind++)
             {
                 kinematics::Vector6d singel_q_dot = Eigen::MatrixXd::Zero(6,1);
-                singel_q_dot(0,0) = -0.0001f;
+                singel_q_dot(0,0) = -0.0000f;
                 singel_q_dot(2,0) = -0.001f;
                 grippers_pose_delta_.push_back(singel_q_dot);
             }

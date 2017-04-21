@@ -239,11 +239,12 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
         real_time_error(0,real_ind) = std::sqrt(point_error);
 
         // Constraint Violation
-        if (environment_sdf.Get3d(current_world_state.object_configuration_.col(real_ind)) < 1)
+        if (environment_sdf.Get3d(current_world_state.object_configuration_.col(real_ind)) < 0)
         {
             std::vector<double> sur_n
                     = environment_sdf.GetGradient3d(current_world_state.object_configuration_.col(real_ind));
             Eigen::Vector3d surface_normal = Eigen::Vector3d::Map(sur_n.data(),sur_n.size());
+
 
             if(model_point.dot(surface_normal)<0 & model_point.norm()>0.000001)
             {
