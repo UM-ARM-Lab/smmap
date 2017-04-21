@@ -134,7 +134,10 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
 
     // It is generated from preset gripper command, only the end-effector delta p matters; Far from true delta p;
     // In My case it is actually a constant, not related to world state
-    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
+    /////////// Comment out when run Dale's model
+//    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
+    ////////////////////
+
 //    visualizeDesiredMotion(current_world_state, task_desired_motion);
 
     DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
@@ -205,8 +208,10 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
 
     // TODO: Task_desired_direction has been revised in test, should correct this term
     // Predicted one should be delta_p = J*delta_q
+    /**
     ROS_INFO_STREAM_NAMED("planner", "Task desired deformable movement norm:  " << EigenHelpers::WeightedNorm(task_desired_motion.delta, task_desired_motion.weight));
     ROS_INFO_STREAM_NAMED("planner", "Task predicted deformable movment norm: " << EigenHelpers::WeightedNorm(predicted_object_delta_as_vector, task_desired_motion.weight));
+    **/
     WorldState world_feedback = robot_.sendGrippersPoses(kinematics::applyTwist(current_world_state.all_grippers_single_pose_, selected_command));
 
     // Mengyao: Get real p_dot, projected p dot from model from simulation
@@ -214,28 +219,52 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
     ObjectPointSet p_projected = model_list_[(size_t)model_to_use]->getProjectedObjectDelta(
                 model_input_data, selected_command,current_world_state.object_configuration_);
 
-    //////////// Calculate Error /////////////////////
+    ////////////////// Calculate Error /////////////////////
+    ////////////////// Constraint Violation ///////////////////////
+
+    const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
 //    ObjectPointSet real_time_error_vec = p_projected - real_p_dot;
-    Eigen::VectorXd real_time_error(real_p_dot);
+    Eigen::MatrixXd real_time_error = Eigen::MatrixXd(1,real_p_dot.cols());
+    Eigen::MatrixXd constraint_violation = Eigen::MatrixXd(1,real_p_dot.cols());
 
     #pragma omp parallel for
     for (ssize_t real_ind = 0; real_ind < real_p_dot.cols(); ++real_ind)
     {
+        // Error Computation
         const Eigen::Vector3d& real_point = real_p_dot.col(real_ind);
         const Eigen::Vector3d& model_point = p_projected.col(real_ind);
         const double point_error = (real_point-model_point).squaredNorm();
 
-        real_time_error(real_ind) = std::sqrt(point_error);
+        real_time_error(0,real_ind) = std::sqrt(point_error);
+
+        // Constraint Violation
+        if (environment_sdf.Get3d(current_world_state.object_configuration_.col(real_ind)) < 1)
+        {
+            std::vector<double> sur_n
+                    = environment_sdf.GetGradient3d(current_world_state.object_configuration_.col(real_ind));
+            Eigen::Vector3d surface_normal = Eigen::Vector3d::Map(sur_n.data(),sur_n.size());
+
+            if(model_point.dot(surface_normal)<0 & model_point.norm()>0.000001)
+            {
+                const double point_violation = -model_point.dot(surface_normal);
+                constraint_violation(0,real_ind) = point_violation/model_point.norm();
+            }
+            else { constraint_violation(0,real_ind) = 0; }
+        }
+        else { constraint_violation(0,real_ind) = 0; }
+
     }
+
 
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
     ROS_INFO_STREAM_NAMED("planner", "Correlation strength factor: " << correlation_strength_factor_);
-    updateModels(current_world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
+//    updateModels(current_world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
 
 #ifdef UCB_BANDIT
     logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getUCB(), model_to_use, individual_rewards, correlation_strength_factor_);
-    test_logging_fn_(world_feedback,real_p_dot,p_projected, real_time_error);
+    test_logging_fn_(world_feedback,real_p_dot,p_projected, real_time_error, constraint_violation);
 #endif
 #ifdef KFMANB_BANDIT
     logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getVariance(), model_to_use, individual_rewards, correlation_strength_factor_);

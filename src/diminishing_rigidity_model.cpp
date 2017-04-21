@@ -138,8 +138,8 @@ Eigen::MatrixXd DiminishingRigidityModel::computeObjectVelocityMask_impl(const O
 {
     const ssize_t num_lines = num_nodes_;
 //    const ssize_t num_lines = object_p_dot.rows();
-    MatrixXd M(num_lines, num_lines);
-    M.setIdentity(num_lines,num_lines);
+    MatrixXd M(num_lines*3, num_lines*3);
+    M.setIdentity(num_lines*3,num_lines*3);
     return M;
 }
 

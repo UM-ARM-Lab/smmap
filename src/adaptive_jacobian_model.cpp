@@ -71,7 +71,7 @@ Eigen::MatrixXd AdaptiveJacobianModel::computeObjectVelocityMask_impl(const Obje
                     const MatrixXd &object_p_dot) const
 {
 //    const ssize_t num_lines = num_nodes_;
-    const ssize_t num_lines = current_configuration.cols();
+    const ssize_t num_lines = current_configuration.cols()*3;
     MatrixXd M(num_lines, num_lines);
     M.setIdentity(num_lines,num_lines);
     return M;

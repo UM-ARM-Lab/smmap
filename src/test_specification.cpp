@@ -90,6 +90,15 @@ TestSpecification::Ptr TestSpecification::MakeTaskSpecification(ros::NodeHandle&
         case TaskType::ROPE_CYLINDER_COVERAGE:
             return std::make_shared<RopeCylinderCoverage>(nh);
 
+        case TaskType::ROPE_DRAG_ALONG_TABLE:
+            return std::make_shared<RopeTableDrag>(nh);
+
+        case TaskType::ROPE_DRAG_OPPOSITE_TABLE:
+            return std::make_shared<RopeTablePull>(nh);
+
+        case TaskType::ROPE_TOWARD_TABLE:
+            return std::make_shared<RopeTowardTable>(nh);
+
 
     /*
         case TaskType::ROPE_CYLINDER_COVERAGE:

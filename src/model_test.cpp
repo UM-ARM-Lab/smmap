@@ -188,9 +188,9 @@ void modelTest::initializeModelSet(const WorldState& initial_world_state)
     // Mengyao's model here
     else if (GetUseConstraintModel(ph_))
     {
-        const double translation_dir_deformability=0.1;
-        const double translation_dis_deformability=1.0;
-        const double rotation_deformability=0.1;
+        const double translation_dir_deformability=20.0;
+        const double translation_dis_deformability=3.0;
+        const double rotation_deformability=20;
         // Douoble check this usage
         const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
 
@@ -277,9 +277,14 @@ void modelTest::initializeLogging()
         test_loggers_.insert(std::make_pair<std::string, Log::Log>(
                             "real_dp",
                             Log::Log(log_folder + "real_dp.txt", false)));
+
         test_loggers_.insert(std::make_pair<std::string, Log::Log>(
                             "model_dp",
                             Log::Log(log_folder + "model_dp.txt", false)));
+
+        test_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "constraint_violation",
+                            Log::Log(log_folder + "constraint_violation.txt", false)));
 
     }
 }
@@ -332,7 +337,8 @@ void modelTest::logData(
 void modelTest::testLogData(const WorldState& current_world_state,
         const ObjectPointSet &real_delta_p,
         const ObjectPointSet &model_delta_p,
-                            Eigen::VectorXd real_time_error)
+                            Eigen::MatrixXd &real_time_error,
+                            Eigen::MatrixXd &constraint_violation)
 {
     if (logging_enabled_)
     {
@@ -353,6 +359,10 @@ void modelTest::testLogData(const WorldState& current_world_state,
 
         LOG(test_loggers_.at("model_dp"),
              model_delta_p.format(single_line));
+
+        LOG(test_loggers_.at("constraint_violation"),
+             constraint_violation);
+
     }
 }
 
@@ -394,8 +404,8 @@ TestLoggingFunctionType modelTest::createTestLogFunction()
                      std::placeholders::_1,
                      std::placeholders::_2,
                      std::placeholders::_3,
-                     std::placeholders::_4);
-//                     std::placeholders::_5);
+                     std::placeholders::_4,
+                     std::placeholders::_5);
 //                     std::placeholders::_6);
 }
 

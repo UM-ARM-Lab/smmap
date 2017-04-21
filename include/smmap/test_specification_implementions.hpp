@@ -86,7 +86,9 @@ class RopeTablePull : public TestSpecification
             , table_min_y_(GetTableSurfaceY(nh) - GetTableHalfExtentsY(nh))
             , table_max_y_(GetTableSurfaceY(nh) + GetTableHalfExtentsY(nh))
             , table_z_(GetTableSurfaceZ(nh))
-        {}
+        {
+            initializeGripperDelta_impl();
+        }
 
     private:
         virtual double deformability_impl() const
@@ -106,7 +108,7 @@ class RopeTablePull : public TestSpecification
 
         virtual double maxTime_impl() const
         {
-            return 2.0;
+            return 1.8;
         }
 
         virtual void visualizeDeformableObject_impl(
@@ -131,6 +133,17 @@ class RopeTablePull : public TestSpecification
         {
             return 0.002;
         }
+        virtual void initializeGripperDelta_impl()
+        {
+            grippers_pose_delta_.clear();
+
+            for (size_t gripper_ind=0; gripper_ind< grippers_data_.size(); gripper_ind++)
+            {
+                kinematics::Vector6d singel_q_dot = Eigen::MatrixXd::Zero(6,1);
+                singel_q_dot(0,0) = 0.002f;
+                grippers_pose_delta_.push_back(singel_q_dot);
+            }
+        }
 
     private:
         const double table_min_x_;
@@ -151,7 +164,9 @@ class RopeTableDrag : public TestSpecification
             , table_min_y_(GetTableSurfaceY(nh) - GetTableHalfExtentsY(nh))
             , table_max_y_(GetTableSurfaceY(nh) + GetTableHalfExtentsY(nh))
             , table_z_(GetTableSurfaceZ(nh))
-        {}
+        {
+            initializeGripperDelta_impl();
+        }
 
     private:
         virtual double deformability_impl() const
@@ -171,7 +186,7 @@ class RopeTableDrag : public TestSpecification
 
         virtual double maxTime_impl() const
         {
-            return 2.0;
+            return 1.8;
         }
 
         virtual void visualizeDeformableObject_impl(
@@ -200,10 +215,11 @@ class RopeTableDrag : public TestSpecification
         virtual void initializeGripperDelta_impl()
         {
             grippers_pose_delta_.clear();
-            kinematics::Vector6d singel_q_dot = Eigen::MatrixXd::Zero(6,0);
-            singel_q_dot(0,0) = 0.001;
+
             for (size_t gripper_ind=0; gripper_ind< grippers_data_.size(); gripper_ind++)
             {
+                kinematics::Vector6d singel_q_dot = Eigen::MatrixXd::Zero(6,1);
+                singel_q_dot(0,0) = -0.002f;
                 grippers_pose_delta_.push_back(singel_q_dot);
             }
         }
@@ -227,7 +243,9 @@ class RopeTowardTable : public TestSpecification
             , table_min_y_(GetTableSurfaceY(nh) - GetTableHalfExtentsY(nh))
             , table_max_y_(GetTableSurfaceY(nh) + GetTableHalfExtentsY(nh))
             , table_z_(GetTableSurfaceZ(nh))
-        {}
+        {
+            initializeGripperDelta_impl();
+        }
 
     private:
         virtual double deformability_impl() const
@@ -247,7 +265,7 @@ class RopeTowardTable : public TestSpecification
 
         virtual double maxTime_impl() const
         {
-            return 2.0;
+            return 1.8;
         }
 
         virtual void visualizeDeformableObject_impl(
@@ -272,6 +290,20 @@ class RopeTowardTable : public TestSpecification
         {
             return 0.002;
         }
+
+        virtual void initializeGripperDelta_impl()
+        {
+            grippers_pose_delta_.clear();
+
+            for (size_t gripper_ind=0; gripper_ind< grippers_data_.size(); gripper_ind++)
+            {
+                kinematics::Vector6d singel_q_dot = Eigen::MatrixXd::Zero(6,1);
+                singel_q_dot(0,0) = -0.0001f;
+                singel_q_dot(2,0) = -0.001f;
+                grippers_pose_delta_.push_back(singel_q_dot);
+            }
+        }
+
 
     private:
         const double table_min_x_;
