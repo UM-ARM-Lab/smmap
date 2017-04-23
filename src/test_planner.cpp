@@ -33,6 +33,7 @@ TestPlanner::TestPlanner(RobotInterface& robot,
     , test_logging_fn_(test_logging_fn)
     , robot_(robot)
     , vis_(vis)
+    , environment_sdf_(GetEnvironmentSDF(nh_))
     , test_specification_(test_specification)
     , calculate_regret_(GetCalculateRegret(ph_))
     , reward_std_dev_scale_factor_(1.0)
@@ -222,8 +223,6 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
     ////////////////// Calculate Error /////////////////////
     ////////////////// Constraint Violation ///////////////////////
 
-    const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
-
 //    ObjectPointSet real_time_error_vec = p_projected - real_p_dot;
     Eigen::MatrixXd real_time_error = Eigen::MatrixXd(1,real_p_dot.cols());
     Eigen::MatrixXd constraint_violation = Eigen::MatrixXd(1,real_p_dot.cols());
@@ -239,10 +238,10 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
         real_time_error(0,real_ind) = std::sqrt(point_error);
 
         // Constraint Violation
-        if (environment_sdf.Get3d(current_world_state.object_configuration_.col(real_ind)) < 0)
+        if (environment_sdf_.Get3d(current_world_state.object_configuration_.col(real_ind)) < 0)
         {
             std::vector<double> sur_n
-                    = environment_sdf.GetGradient3d(current_world_state.object_configuration_.col(real_ind));
+                    = environment_sdf_.GetGradient3d(current_world_state.object_configuration_.col(real_ind));
             Eigen::Vector3d surface_normal = Eigen::Vector3d::Map(sur_n.data(),sur_n.size());
 
 

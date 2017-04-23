@@ -53,6 +53,7 @@ namespace smmap
 
             RobotInterface& robot_;
             Visualizer& vis_;
+            const sdf_tools::SignedDistanceField environment_sdf_;
             std::shared_ptr<TestSpecification> test_specification_;
 
             ////////////////////////////////////////////////////////////////////

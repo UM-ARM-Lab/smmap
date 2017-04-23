@@ -221,7 +221,7 @@ class RopeTableDrag : public TestSpecification
             for (size_t gripper_ind=0; gripper_ind< grippers_data_.size(); gripper_ind++)
             {
                 kinematics::Vector6d singel_q_dot = Eigen::MatrixXd::Zero(6,1);
-                singel_q_dot(0,0) = -0.002f;
+                singel_q_dot(0,0) = -0.002;
                 grippers_pose_delta_.push_back(singel_q_dot);
             }
         }
