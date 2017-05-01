@@ -222,9 +222,9 @@ void Task::initializeLogging()
                             "rewards_for_all_models",
                             Log::Log(log_folder + "rewards_for_all_models.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log>(
-                            "correlation_scale_factor",
-                            Log::Log(log_folder + "correlation_scale_factor.txt", false)));
+//        loggers.insert(std::make_pair<std::string, Log::Log>(
+//                            "correlation_scale_factor",
+//                            Log::Log(log_folder + "correlation_scale_factor.txt", false)));
     }
 }
 
@@ -237,12 +237,11 @@ void Task::logData(
         const Eigen::VectorXd& model_utility_mean,
         const Eigen::MatrixXd& model_utility_covariance,
         const ssize_t model_used,
-        const std::vector<double>& rewards_for_all_models,
-        const double correlation_strength_factor)
+        const std::vector<double>& rewards_for_all_models)
 {
     if (logging_enabled_)
     {
-        const Eigen::IOFormat single_line(
+        const static Eigen::IOFormat single_line(
                     Eigen::StreamPrecision,
                     Eigen::DontAlignCols,
                     " ", " ", "", "");
@@ -265,8 +264,8 @@ void Task::logData(
         LOG(loggers.at("rewards_for_all_models"),
             PrettyPrint::PrettyPrint(rewards_for_all_models, false, " "));
 
-        LOG(loggers.at("correlation_scale_factor"),
-            correlation_strength_factor);
+//        LOG(loggers.at("correlation_scale_factor"),
+//            correlation_strength_factor);
     }
 }
 
@@ -291,6 +290,5 @@ LoggingFunctionType Task::createLoggingFunction()
                      std::placeholders::_2,
                      std::placeholders::_3,
                      std::placeholders::_4,
-                     std::placeholders::_5,
-                     std::placeholders::_6);
+                     std::placeholders::_5);
 }

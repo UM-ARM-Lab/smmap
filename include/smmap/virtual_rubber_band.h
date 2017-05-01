@@ -10,8 +10,9 @@ namespace smmap
     {
         public:
             VirtualRubberBand(
-                    const WorldState &current_world_state,
-                    std::shared_ptr<DijkstrasCoverageTask> task,
+                    const Eigen::Vector3d& start_point,
+                    const Eigen::Vector3d& end_point,
+                    const std::shared_ptr<DijkstrasCoverageTask>& task,
                     const Visualizer& vis);
 
             const EigenHelpers::VectorVector3d& forwardSimulateVirtualRubberBand(

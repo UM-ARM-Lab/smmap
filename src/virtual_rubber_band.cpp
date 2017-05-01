@@ -6,25 +6,23 @@ using namespace smmap;
 
 #warning "Magic numbers in virtual band constructor"
 VirtualRubberBand::VirtualRubberBand(
-        const WorldState &current_world_state,
-        std::shared_ptr<DijkstrasCoverageTask> task,
+        const Eigen::Vector3d& start_point,
+        const Eigen::Vector3d& end_point,
+        const std::shared_ptr<DijkstrasCoverageTask>& task,
         const Visualizer& vis)
     : task_(task)
     , sdf_(task_->environment_sdf_)
     , vis_(vis)
     , max_integration_step_size_(sdf_.GetResolution() / 10.0)
     , max_distance_between_rubber_band_points_(task_->work_space_grid_.minStepDimension() / 2.0)
-    , num_smoothing_ittrs_(20000)
+    , num_smoothing_ittrs_(200)
     , min_object_radius_(0.04)
-    , max_total_band_distance_(0.0)
+    , max_total_band_distance_((end_point - start_point).norm() * task_->stretchingThreshold())
 {
 //    max_gripper_distance_ = EigenHelpers::CalculateTotalDistance(virtual_rubber_band) + (double)(GetClothNumDivsY(nh_) - 1) * dijkstras_task->stretchingThreshold();
 //    ROS_INFO_STREAM_NAMED("planner", "  -----   Max gripper distance: " << max_gripper_distance_ << " Num rubber band nodes: " << virtual_rubber_band.size());
 
     assert(task_->deformable_type_ == DeformableType::CLOTH);
-
-    const auto& start_point = current_world_state.all_grippers_single_pose_.at(0).translation();
-    const auto& end_point = current_world_state.all_grippers_single_pose_.at(1).translation();
 
     const size_t num_divs = (size_t)std::ceil((end_point - start_point ).norm() / max_distance_between_rubber_band_points_);
 
@@ -80,17 +78,18 @@ const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRub
         }
     }
 
-
     // Shortcut smoothing
     const auto sdf_collision_fn = [&] (const Eigen::Vector3d& location) { return sdf_.Get3d(location) < 0.0; };
     for (int smoothing_ittr = 0; smoothing_ittr < num_smoothing_ittrs_; ++smoothing_ittr)
     {
-        std::uniform_int_distribution<size_t> distribution(0, band_.size() - 1);
+        std::uniform_int_distribution<ssize_t> first_distribution(0, band_.size() - 1);
+        const size_t first_ind = first_distribution(generator_);
 
-        const size_t first_ind = distribution(generator_);
-        const size_t second_ind = distribution(generator_);
+        const ssize_t max_smooth_distance = std::max((ssize_t)10, (ssize_t)std::floor(sdf_.Get3d(band_[first_ind]) / max_distance_between_rubber_band_points_));
+        std::uniform_int_distribution<ssize_t> second_distribution(-max_smooth_distance, max_smooth_distance);
+        const size_t second_ind = (size_t)arc_helpers::ClampValue<ssize_t>(first_ind + second_distribution(generator_), 0, band_.size() - 1);
 
-        if (first_ind != second_ind && (band_[first_ind] - band_[second_ind]).squaredNorm() < min_object_radius_ * min_object_radius_)
+        if (first_ind != second_ind)// && (band_[first_ind] - band_[second_ind]).squaredNorm() < min_object_radius_ * min_object_radius_)
         {
             band_ = shortcut_smoothing::ShortcutSmooth(band_, first_ind, second_ind, max_distance_between_rubber_band_points_, sdf_collision_fn);
         }

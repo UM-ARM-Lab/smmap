@@ -1,5 +1,6 @@
 #include "smmap/planner.h"
 
+#include <future>
 #include <assert.h>
 #include <numeric>
 #include <arc_utilities/pretty_print.hpp>
@@ -139,16 +140,16 @@ bool Planner::checkForClothStretchingViolations(
 void Planner::detectFutureConstraintViolations(const WorldState &current_world_state)
 {
     ROS_INFO_NAMED("planner", "------------------------------------------------------------------------------------");
-    if (task_specification_->is_dijkstras_type_task_)
+    if (task_specification_->is_dijkstras_type_task_ && current_world_state.all_grippers_single_pose_.size() == 2)
     {
         std::shared_ptr<DijkstrasCoverageTask> dijkstras_task = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
 
         #warning "Fix this magic number"
-        const size_t NUM_SIMSTEPS = 50;
+        const size_t NUM_SIMSTEPS = 20;
 
-        const std_msgs::ColorRGBA gripper_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
-        const std_msgs::ColorRGBA gripper_rubber_band_safe_color = Visualizer::Black();
-        const std_msgs::ColorRGBA gripper_rubber_band_violation_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
+        const static std_msgs::ColorRGBA gripper_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
+        const static std_msgs::ColorRGBA gripper_rubber_band_safe_color = Visualizer::Black();
+        const static std_msgs::ColorRGBA gripper_rubber_band_violation_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
         const bool verbose = false;
 
         //////////////////////////////////////////////////////////////////////////////////////////
@@ -156,14 +157,16 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
         //////////////////////////////////////////////////////////////////////////////////////////
         stopwatch(RESET);
         const auto projected_deformable_point_paths = dijkstras_task->findPathFromObjectToTarget(current_world_state.object_configuration_, dijkstras_task->getErrorThreshold(), NUM_SIMSTEPS);
-        const bool stretching_violations_exist = checkForClothStretchingViolations(projected_deformable_point_paths.first);
+        ROS_INFO_STREAM_NAMED("planner", "Calculated projected cloth paths                 - Version 1 - in " << stopwatch(READ) << " seconds");
+//        const bool stretching_violations_exist = checkForClothStretchingViolations(projected_deformable_point_paths.first);
         ROS_INFO_STREAM_NAMED("planner", "Calculated future constraint violation detection - Version 1 - in " << stopwatch(READ) << " seconds");
 
         //////////////////////////////////////////////////////////////////////////////////////////
         // Constraint violation Version 2a - Vector field forward "simulation" - rubber band
-        /////////////////////////////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////////////////////////////
         if (true)
         {
+//            stopwatch(RESET);
             ROS_INFO_STREAM_NAMED("planner", "Starting future constraint violation detection - Version 2a - Total steps is " << NUM_SIMSTEPS);
             assert(num_models_ == 1 && current_world_state.all_grippers_single_pose_.size() == 2);
             const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
@@ -174,7 +177,7 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
             // Create the initial rubber band if needed
             if (unlikely(virtual_rubber_band_between_grippers_version2a_ == nullptr))
             {
-                virtual_rubber_band_between_grippers_version2a_ = std::make_shared<VirtualRubberBand>(current_world_state, dijkstras_task, vis_);
+                virtual_rubber_band_between_grippers_version2a_ = std::make_shared<VirtualRubberBand>(current_world_state.all_grippers_single_pose_[0].translation(), current_world_state.all_grippers_single_pose_[1].translation(), dijkstras_task, vis_);
             }
 
             // Visualize the initial rubber band
@@ -182,6 +185,8 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
             virtual_rubber_band_between_grippers_version2a_->visualize("gripper_rubber_band_version2a", gripper_visualization_color, 0);
 
             //////////////////////////////////////////////////////////////////////////////////////////
+
+            std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
             WorldState world_state_copy = current_world_state;
             VirtualRubberBand virtual_rubber_band_between_grippers_copy = *virtual_rubber_band_between_grippers_version2a_.get();
             for (size_t t = 0; t < NUM_SIMSTEPS; ++t)
@@ -190,10 +195,22 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
                 const AllGrippersSinglePose starting_grippers_single_pose = world_state_copy.all_grippers_single_pose_;
 
                 // Move the grippers and cloth
+//                stopwatch(RESET);
                 DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
+                task_desired_direction_fn(current_world_state);
+//                ROS_INFO_STREAM_NAMED("planner", "Get desird directiontime " << stopwatch(READ) << " seconds");
+
+
                 const std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command = model_list_[0]->getSuggestedGrippersCommand(model_input_data, dijkstras_task->work_space_grid_.minStepDimension() / robot_.dt_, task_specification_->collisionScalingFactor());
+//                ROS_INFO_STREAM_NAMED("planner", "Get robot command time   " << stopwatch(READ) << " seconds");
+
+
                 world_state_copy.all_grippers_single_pose_ = kinematics::applyTwist(world_state_copy.all_grippers_single_pose_, robot_command.first);
-                world_state_copy.gripper_collision_data_ = robot_.checkGripperCollision(world_state_copy.all_grippers_single_pose_);
+                auto collision_check_future = std::async(std::launch::async, &RobotInterface::checkGripperCollision, &robot_, world_state_copy.all_grippers_single_pose_);
+//                ROS_INFO_STREAM_NAMED("planner", "Check gripper collision  " << stopwatch(READ) << " seconds");
+
+
+                // Copy the projected state of the cloth into the world_state_copy
                 world_state_copy.sim_time_ += robot_.dt_;
                 for (ssize_t node_ind = 0; node_ind < world_state_copy.object_configuration_.cols(); ++node_ind)
                 {
@@ -202,18 +219,24 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
                         world_state_copy.object_configuration_.col(node_ind) = projected_deformable_point_paths.first[node_ind][t + 1];
                     }
                 }
+//                ROS_INFO_STREAM_NAMED("planner", "Post copy data           " << stopwatch(READ) << " seconds");
 
                 // Move the virtual rubber band to follow the grippers, projecting out of collision as needed
                 virtual_rubber_band_between_grippers_copy.forwardSimulateVirtualRubberBand(
                             world_state_copy.all_grippers_single_pose_[0].translation() - starting_grippers_single_pose[0].translation(),
                             world_state_copy.all_grippers_single_pose_[1].translation() - starting_grippers_single_pose[1].translation(),
                             verbose);
+//                ROS_INFO_STREAM_NAMED("planner", "Post virtual rubber band " << stopwatch(READ) << " seconds\n");
 
                 // Visualize
                 const std_msgs::ColorRGBA& gripper_visualization_color =  virtual_rubber_band_between_grippers_copy.isOverstreched() ? gripper_rubber_band_violation_color : gripper_rubber_band_safe_color;
                 virtual_rubber_band_between_grippers_copy.visualize("gripper_rubber_band_version2a", gripper_visualization_color, (int32_t)t+1);
                 vis_.visualizeGrippers("forward_simulated_grippers_version2a", world_state_copy.all_grippers_single_pose_, gripper_color);
+
+                world_state_copy.gripper_collision_data_ = collision_check_future.get();
             }
+            std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
+            ROS_INFO_STREAM_NAMED("planner", "Calculated future constraint violation detection - Version 2a - in " << std::chrono::duration<double>(end_time - start_time).count() << " seconds");
         }
 
         //////////////////////////////////////////////////////////////////////////////////////////
@@ -232,7 +255,7 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
             // Create the initial rubber band if needed
             if (unlikely(virtual_rubber_band_between_grippers_version2b_ == nullptr))
             {
-                virtual_rubber_band_between_grippers_version2b_ = std::make_shared<VirtualRubberBand>(current_world_state, dijkstras_task, vis_);
+                virtual_rubber_band_between_grippers_version2b_ = std::make_shared<VirtualRubberBand>(current_world_state.all_grippers_single_pose_[0].translation(), current_world_state.all_grippers_single_pose_[1].translation(), dijkstras_task, vis_);
             }
 
             // Visualize the initial rubber band
@@ -343,11 +366,11 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
 
     // Execute the command
     const AllGrippersSinglePoseDelta& selected_command = suggested_robot_commands[(size_t)model_to_use].first;
-    ObjectPointSet predicted_object_delta = model_list_[(size_t)model_to_use]->getObjectDelta(model_input_data, selected_command);
-    const Eigen::Map<Eigen::VectorXd> predicted_object_delta_as_vector(predicted_object_delta.data(), predicted_object_delta.size());
+//    ObjectPointSet predicted_object_delta = model_list_[(size_t)model_to_use]->getObjectDelta(model_input_data, selected_command);
+//    const Eigen::Map<Eigen::VectorXd> predicted_object_delta_as_vector(predicted_object_delta.data(), predicted_object_delta.size());
     ROS_INFO_STREAM_NAMED("planner", "Sending command to robot, action norm:  " << MultipleGrippersVelocity6dNorm(selected_command));
-    ROS_INFO_STREAM_NAMED("planner", "Task desired deformable movement norm:  " << EigenHelpers::WeightedNorm(task_desired_motion.delta, task_desired_motion.weight));
-    ROS_INFO_STREAM_NAMED("planner", "Task predicted deformable movment norm: " << EigenHelpers::WeightedNorm(predicted_object_delta_as_vector, task_desired_motion.weight));
+//    ROS_INFO_STREAM_NAMED("planner", "Task desired deformable movement norm:  " << EigenHelpers::WeightedNorm(task_desired_motion.delta, task_desired_motion.weight));
+//    ROS_INFO_STREAM_NAMED("planner", "Task predicted deformable movment norm: " << EigenHelpers::WeightedNorm(predicted_object_delta_as_vector, task_desired_motion.weight));
     WorldState world_feedback = robot_.sendGrippersPoses(kinematics::applyTwist(current_world_state.all_grippers_single_pose_, selected_command));
 
     const bool verbose = false;
@@ -368,10 +391,9 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     }
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
-    ROS_INFO_STREAM_NAMED("planner", "Correlation strength factor: " << correlation_strength_factor_);
     updateModels(current_world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
 
-    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use, individual_rewards, correlation_strength_factor_);
+    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use, individual_rewards);
 
     return world_feedback;
 }

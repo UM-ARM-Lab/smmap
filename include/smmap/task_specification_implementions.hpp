@@ -4,7 +4,8 @@
 #include "smmap/task_specification.h"
 #include "smmap/point_reflector.hpp"
 
-#define CLOTH_STRECH_THRESHOLD 0.002
+#define CLOTH_STRETCH_THRESHOLD ((0.012 + 0.002) / 0.012)
+#define ROPE_STRETCH_THRESHOLD  ((0.025 + 0.005) / 0.025)
 
 namespace smmap
 {
@@ -32,7 +33,7 @@ namespace smmap
 
             virtual double stretchingThreshold_impl() const
             {
-                return 0.005; // lambda
+                return ROPE_STRETCH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -95,7 +96,7 @@ namespace smmap
 
             virtual double stretchingThreshold_impl() const
             {
-                return CLOTH_STRECH_THRESHOLD; // lambda
+                return CLOTH_STRETCH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -163,7 +164,7 @@ namespace smmap
 
             virtual double stretchingThreshold_impl() const
             {
-                return CLOTH_STRECH_THRESHOLD; // lambda
+                return CLOTH_STRETCH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -235,7 +236,7 @@ namespace smmap
 
             virtual double stretchingThreshold_impl() const
             {
-                return CLOTH_STRECH_THRESHOLD; // lambda
+                return CLOTH_STRETCH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -379,7 +380,7 @@ namespace smmap
 
             virtual double stretchingThreshold_impl() const
             {
-                return CLOTH_STRECH_THRESHOLD; // lambda
+                return CLOTH_STRETCH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -442,7 +443,7 @@ namespace smmap
 
             virtual double stretchingThreshold_impl() const
             {
-                return CLOTH_STRECH_THRESHOLD; // lambda
+                return CLOTH_STRETCH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -505,7 +506,7 @@ namespace smmap
 
             virtual double stretchingThreshold_impl() const
             {
-                return CLOTH_STRECH_THRESHOLD; // lambda
+                return CLOTH_STRETCH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -568,7 +569,7 @@ namespace smmap
 
             virtual double stretchingThreshold_impl() const
             {
-                return CLOTH_STRECH_THRESHOLD; // lambda
+                return CLOTH_STRETCH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -631,7 +632,7 @@ namespace smmap
 
             virtual double stretchingThreshold_impl() const
             {
-                return 0.005; // lambda
+                return ROPE_STRETCH_THRESHOLD; // lambda
             }
 
             virtual double maxTime_impl() const
