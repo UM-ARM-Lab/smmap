@@ -126,27 +126,6 @@ namespace smmap
                     const WorldState& world_state,
                     bool visualize) const;
 
-
-
-
-
-
-            /**
-             * @brief calculateStretchingError
-             * @param object_configuration
-             * @return
-             */
-            double calculateStretchingError(
-                    const ObjectPointSet& object_configuration) const;
-
-            /**
-             * @brief calculateStretchingError
-             * @param world_state
-             * @return
-             */
-            double calculateStretchingError(
-                    const WorldState& world_state) const;
-
             /**
              * @brief combineErrorCorrectionAndStretchingCorrection
              * @param error_correction
@@ -269,8 +248,7 @@ namespace smmap
             std::tuple<ssize_t, double, ssize_t> findNearestObjectPoint(const ObjectPointSet& object_configuration, const ssize_t cover_ind) const;
             EigenHelpers::VectorVector3d followCoverPointAssignments(Eigen::Vector3d current_pos, const std::vector<ssize_t>& cover_point_assignments, const size_t maximum_itterations) const;
 
-            ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_Dijkstras(
-                    const ObjectPointSet& object_configuration, const double minimum_threshold) const;
+            ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_Dijkstras(const ObjectPointSet& object_configuration, const double minimum_threshold) const;
 
             /// Free space graph that creates a vector field for the deformable object to follow
             arc_dijkstras::Graph<Eigen::Vector3d> free_space_graph_;
@@ -290,6 +268,7 @@ namespace smmap
                     const WorldState& world_state) const final;
     };
 
+
     class LineNeighbours
     {
         public:
@@ -299,7 +278,6 @@ namespace smmap
         private:
             const ssize_t num_nodes_;
     };
-
 
     class Grid4Neighbours
     {

@@ -128,14 +128,14 @@ namespace smmap
     {
         assert (obj.cols() > 0);
         const ssize_t num_nodes = obj.cols();
-        Eigen::MatrixXd squared_dist(num_nodes, num_nodes);
 
-        #pragma omp parallel for schedule(guided)
+        Eigen::MatrixXd squared_dist(num_nodes, num_nodes);
+        #pragma omp parallel for
         for (ssize_t i = 0; i < num_nodes; i++)
         {
             for (ssize_t j = i; j < num_nodes; j++)
             {
-                const double sq_dist = (obj.block< 3, 1>(0, i) - obj.block< 3, 1>(0, j)).squaredNorm();
+                const double sq_dist = (obj.col(i) - obj.col(j)).squaredNorm();
                 squared_dist(i, j) = sq_dist;
                 squared_dist(j, i) = sq_dist;
             }
@@ -157,47 +157,25 @@ namespace smmap
         return CalculateSquaredDistanceMatrix(obj).cwiseSqrt();
     }
 
-    // TODO: vectorize this
-    // TODO: use this for the coverage task error functions?
-    inline ssize_t closestPointInSet(const ObjectPointSet& obj,
-                                     const Eigen::Vector3d& point)
+    // TODO: This is in the wrong spot
+    inline Eigen::VectorXd CalculateSquaredDistanceToSet(const ObjectPointSet& obj, const Eigen::Vector3d& point)
     {
-        assert (obj.cols() > 0);
-        long min_ind = 0;
-        double min_dist = (obj.block<3, 1>(0, 0) - point).norm();
-
-        for (long ind = 1; ind < obj.cols(); ind++)
-        {
-            double dist = (obj.block<3, 1>(0, ind) - point).norm();
-            if (dist < min_dist)
-            {
-                min_ind = ind;
-                min_dist = dist;
-            }
-        }
-
-        return min_ind;
+        return (obj.colwise() - point).colwise().squaredNorm();
     }
 
-    // TODO: vectorize this
+    // TODO: This is in the wrong spot
+    inline Eigen::VectorXd CalculateDistanceToSet(const ObjectPointSet& obj, const Eigen::Vector3d& point)
+    {
+        return CalculateSquaredDistanceToSet(obj, point). cwiseSqrt();
+    }
+
     // TODO: use this for the coverage task error functions?
-    inline ssize_t closestPointInSet(const ObjectPointSet& obj,
-                                     Eigen::Vector3d&& point)
+    inline ssize_t ClosestPointInSet(const ObjectPointSet& obj, const Eigen::Vector3d& point)
     {
         assert (obj.cols() > 0);
-        long min_ind = 0;
-        double min_dist = (obj.block<3, 1>(0, 0) - point).norm();
-
-        for (long ind = 1; ind < obj.cols(); ind++)
-        {
-            double dist = (obj.block<3, 1>(0, ind) - point).norm();
-            if (dist < min_dist)
-            {
-                min_ind = ind;
-                min_dist = dist;
-            }
-        }
-
+        ssize_t min_ind = 0;
+        const Eigen::VectorXd squared_dist = CalculateSquaredDistanceToSet(obj, point);
+        squared_dist.minCoeff(&min_ind);
         return min_ind;
     }
 }

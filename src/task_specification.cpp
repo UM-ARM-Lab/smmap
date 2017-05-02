@@ -52,8 +52,6 @@ ObjectDeltaAndWeight TaskSpecification::CalculateObjectErrorCorrectionDeltaWithT
         const ObjectPointSet& deformable_object,
         const double minimum_threshold)
 {
-    stopwatch(RESET);
-
     const ssize_t num_nodes = deformable_object.cols();
     ObjectDeltaAndWeight desired_object_delta(num_nodes * 3);
 
@@ -89,8 +87,6 @@ ObjectDeltaAndWeight TaskSpecification::CalculateObjectErrorCorrectionDeltaWithT
             desired_object_delta.weight(min_ind * 3 + 2) = weight;
         }
     }
-
-    ROS_INFO_STREAM_NAMED("target_point_task", "Found best delta in " << stopwatch(READ) << " seconds");
 
     return desired_object_delta;
 }
@@ -248,8 +244,8 @@ bool TaskSpecification::stretchingConstraintViolated(
         const Eigen::Vector3d& second_node) const
 {
     const double dist = (first_node - second_node).norm();
-    const double node_distance_delta = dist - object_initial_node_distance_(first_node_ind, second_node_ind);
-    return node_distance_delta > stretchingThreshold();
+    const double max_dist = object_initial_node_distance_(first_node_ind, second_node_ind) * stretchingThreshold();
+    return dist > max_dist;
 }
 
 
@@ -264,11 +260,8 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyC
         bool visualize) const
 {
     ObjectDeltaAndWeight stretching_correction(num_nodes_ * 3);
-
-    const Eigen::MatrixXd node_distance =
-            CalculateDistanceMatrix(object_configuration);
-
-    const double max_delta = stretchingThreshold();
+    const double max_threshold_multiplier = stretchingThreshold();
+    const Eigen::MatrixXd object_current_node_distance = CalculateDistanceMatrix(object_configuration);
 
     EigenHelpers::VectorVector3d vis_start_points;
     EigenHelpers::VectorVector3d vis_end_points;
@@ -277,11 +270,11 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyC
     {
         for (ssize_t second_node = first_node + 1; second_node < num_nodes_; ++second_node)
         {
-            const double node_distance_delta = node_distance(first_node, second_node)
-                    - object_initial_node_distance_(first_node, second_node);
-            if (node_distance_delta > max_delta)
+            const double max_dist = object_initial_node_distance_(first_node, second_node) * max_threshold_multiplier;
+            const double dist = object_current_node_distance(first_node, second_node);
+            if (max_dist < dist)
             {
-                addStrechingCorrectionVector(stretching_correction, object_configuration, first_node, second_node, node_distance_delta);
+                addStrechingCorrectionVector(stretching_correction, object_configuration, first_node, second_node, dist - object_initial_node_distance_(first_node, second_node));
 
                 if (visualize)
                 {
@@ -311,24 +304,23 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaPairwi
         bool visualize) const
 {
     ObjectDeltaAndWeight stretching_correction(num_nodes_ * 3);
+    const double max_threshold_multiplier = stretchingThreshold();
 
     EigenHelpers::VectorVector3d vis_start_points;
     EigenHelpers::VectorVector3d vis_end_points;
-
-    const double max_delta = stretchingThreshold();
 
     for (ssize_t first_node = 0; first_node < num_nodes_; ++first_node)
     {
         for (ssize_t second_node : getNodeNeighbours(first_node))
         {
             // Only calculate corrections for nodes beyond the first so as to avoid duplicating work
-            if (second_node > first_node)
+            if (first_node < second_node)
             {
+                const double max_dist = object_initial_node_distance_(first_node, second_node) * max_threshold_multiplier;
                 const double dist = (object_configuration.col(second_node) - object_configuration.col(first_node)).norm();
-                const double node_distance_delta = dist - object_initial_node_distance_(first_node, second_node);
-                if (node_distance_delta > max_delta)
+                if (max_dist < dist)
                 {
-                    addStrechingCorrectionVector(stretching_correction, object_configuration, first_node, second_node, node_distance_delta);
+                    addStrechingCorrectionVector(stretching_correction, object_configuration, first_node, second_node, dist - object_initial_node_distance_(first_node, second_node));
 
                     if (visualize)
                     {
@@ -362,67 +354,6 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
     return calculateStretchingCorrectionDeltaPairwise(world_state.object_configuration_, visualize);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-/**
- * @brief TaskSpecification::calculateStretchingError
- * @param object_configuration
- * @return
- */
-double TaskSpecification::calculateStretchingError(
-        const ObjectPointSet& object_configuration) const
-{
-    assert(false && "This function has not been used in long enough that the implementation is suspect.");
-
-    const Eigen::MatrixXd node_squared_distance =
-            CalculateSquaredDistanceMatrix(object_configuration);
-
-    const double stretching_correction_threshold = stretchingThreshold();
-
-    ssize_t squared_error = 0;
-    #pragma omp parallel for reduction(+ : squared_error)
-    for (ssize_t first_node = 0; first_node < num_nodes_; ++first_node)
-    {
-        // A node is never overstretched relative to itself, so we can start at the next node
-        int node_overstretches = 0;
-        for (ssize_t second_node = 0; second_node < num_nodes_; ++second_node)
-        {
-            if (first_node != second_node)
-            {
-                const double max_distance = stretching_correction_threshold + object_initial_node_distance_(first_node, second_node);
-                if (node_squared_distance(first_node, second_node) > (max_distance * max_distance))
-                {
-                    ++node_overstretches;
-                }
-            }
-        }
-        squared_error += node_overstretches * node_overstretches;
-    }
-
-    return std::sqrt((double)squared_error) / (double)(num_nodes_ * num_nodes_);
-}
-
-/**
- * @brief TaskSpecification::calculateStretchingError
- * @param world_state
- * @return
- */
-double TaskSpecification::calculateStretchingError(
-        const WorldState& world_state) const
-{
-    return calculateStretchingError(world_state.object_configuration_);
-}
 
 /**
  * @brief TaskSpecification::combineErrorCorrectionAndStretchingCorrection
@@ -477,13 +408,18 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
         }
         else
         {
-            ROS_INFO_NAMED("task", "Determining desired direction");
+            stopwatch(RESET);
             first_step_error_correction_ = calculateObjectErrorCorrectionDelta(world_state);
+            ROS_INFO_STREAM_NAMED("task_specification", "Found best error correction delta in " << stopwatch(READ) << " seconds");
 
+            stopwatch(RESET);
             first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, true);
+            ROS_INFO_STREAM_NAMED("task_specification", "Found stretching correction delta in " << stopwatch(READ) << " seconds");
 
+            stopwatch(RESET);
             first_step_desired_motion_ = combineErrorCorrectionAndStretchingCorrection(
                         first_step_error_correction_, first_step_stretching_correction_);
+            ROS_INFO_STREAM_NAMED("task_specification", "Combined deltas in                   " << stopwatch(READ) << " seconds");
 
             sim_time_last_time_first_step_calced_ = world_state.sim_time_;
             first_step_calculated_.store(true);
@@ -529,7 +465,6 @@ DirectCoverageTask::DirectCoverageTask(ros::NodeHandle& nh, const DeformableType
 
 ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_impl(const WorldState& world_state) const
 {
-    ROS_INFO_NAMED("direct_coverage_task" , "Finding 'best' object delta");
     return CalculateObjectErrorCorrectionDeltaWithThreshold(
                 cover_points_, world_state.object_configuration_, getErrorThreshold());
 }
@@ -688,7 +623,7 @@ std::tuple<ssize_t, double, ssize_t> DijkstrasCoverageTask::findNearestObjectPoi
             {
                 const ssize_t deformable_point_ind_in_free_space_graph = work_space_grid_.worldPosToGridIndexClamped(deformable_point);
                 target_ind_in_free_space_graph = dijkstras_results_[(size_t)cover_ind].first[(size_t)deformable_point_ind_in_free_space_graph];
-                graph_dist = dijkstras_results_[(size_t)cover_ind].second[(size_t)deformable_point_ind_in_free_space_graph];
+                graph_dist                     = dijkstras_results_[(size_t)cover_ind].second[(size_t)deformable_point_ind_in_free_space_graph];
             }
             // Otherwise, use the cover point directly
             else
@@ -710,14 +645,77 @@ std::tuple<ssize_t, double, ssize_t> DijkstrasCoverageTask::findNearestObjectPoi
     return std::make_tuple(closest_deformable_ind, min_dist, best_target_ind_in_free_space_graph);
 }
 
+/*
+std::tuple<ssize_t, double, ssize_t> DijkstrasCoverageTask::findNearestObjectPoint(const ObjectPointSet& object_configuration, const ssize_t cover_ind) const
+{
+    const Eigen::Vector3d& cover_point = cover_points_.col(cover_ind);
+    const auto& single_dijkstras_result = dijkstras_results_[(size_t)cover_ind];
+    const ssize_t cover_ind_in_freespace_graph = cover_ind_to_free_space_graph_ind_[(size_t)cover_ind];
+
+    // Create caches for each omp thread
+    std::vector<ssize_t> per_thread_closest_deformable_ind(arc_helpers::GetNumOMPThreads(), -1);
+    std::vector<double> per_thread_min_dist(arc_helpers::GetNumOMPThreads(), std::numeric_limits<double>::infinity());
+    std::vector<ssize_t> per_thread_best_target_ind_in_free_space_graph(arc_helpers::GetNumOMPThreads(), -1);
+    #pragma omp parallel for
+    for (ssize_t deformable_ind = 0; deformable_ind < num_nodes_; ++deformable_ind)
+    {
+        const Eigen::Vector3d& deformable_point = object_configuration.col(deformable_ind);
+        const double straight_line_distance_squared = (cover_point - deformable_point).squaredNorm();
+
+        // First calculate the distance as defined by Dijkstras
+        double graph_dist;
+        size_t target_ind_in_free_space_graph;
+        {
+            // If we are more than a grid cell away from the cover point, then lookup our position in the rest of the grid
+            if (straight_line_distance_squared > std::pow(work_space_grid_.minStepDimension(), 2))
+            {
+                const ssize_t deformable_point_ind_in_free_space_graph = work_space_grid_.worldPosToGridIndexClamped(deformable_point);
+                target_ind_in_free_space_graph = single_dijkstras_result.first[(size_t)deformable_point_ind_in_free_space_graph];
+                graph_dist                     = single_dijkstras_result.second[(size_t)deformable_point_ind_in_free_space_graph];
+            }
+            // Otherwise, use the cover point directly
+            else
+            {
+                target_ind_in_free_space_graph = cover_ind_in_freespace_graph;
+                graph_dist = std::sqrt(straight_line_distance_squared);
+            }
+        }
+
+        // Next, if we've found something closer than our record, update our record of the closest point on the deformable object
+        const size_t current_thread_id = (size_t)omp_get_thread_num();
+        if (graph_dist < per_thread_min_dist[current_thread_id])
+        {
+            per_thread_closest_deformable_ind[current_thread_id] = deformable_ind;
+            per_thread_min_dist[current_thread_id] = graph_dist;
+            per_thread_best_target_ind_in_free_space_graph[current_thread_id] = target_ind_in_free_space_graph;
+        }
+    }
+
+    // Manually reduce down to a single value
+    ssize_t closest_deformable_ind = per_thread_closest_deformable_ind[0];
+    double min_dist = per_thread_min_dist[0];
+    ssize_t best_target_ind_in_free_space_graph = per_thread_best_target_ind_in_free_space_graph[0];
+    for (size_t thread_ind = 1; thread_ind < per_thread_min_dist.size(); ++thread_ind)
+    {
+        if (per_thread_min_dist[thread_ind] < min_dist)
+        {
+            closest_deformable_ind = per_thread_closest_deformable_ind[thread_ind];
+            min_dist = per_thread_min_dist[thread_ind];
+            best_target_ind_in_free_space_graph = per_thread_best_target_ind_in_free_space_graph[thread_ind];
+        }
+    }
+
+    return std::make_tuple(closest_deformable_ind, min_dist, best_target_ind_in_free_space_graph);
+}
+*/
+
+
+
 ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_Dijkstras(
         const ObjectPointSet& object_configuration, const double minimum_threshold) const
 {
-    ROS_INFO_NAMED("coverage_task" , "Finding 'best' object delta");
-
     ObjectDeltaAndWeight desired_object_delta(num_nodes_ * 3);
 
-    stopwatch(RESET);
     // For every cover point, find the nearest deformable object point
     for (ssize_t cover_ind = 0; cover_ind < num_cover_points_; ++cover_ind)
     {
@@ -744,14 +742,12 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_
             desired_object_delta.weight(closest_deformable_ind * 3 + 2) = weight;
         }
     }
-    ROS_INFO_STREAM_NAMED("coverage_task", "Found best delta in " << stopwatch(READ) << " seconds");
 
     return desired_object_delta;
 }
 
 ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_impl(const WorldState& world_state) const
 {
-    ROS_INFO_NAMED("dijkstras_coverage_task" , "Finding 'best' object delta");
     return calculateObjectErrorCorrectionDelta_Dijkstras(world_state.object_configuration_, getErrorThreshold());
 }
 
