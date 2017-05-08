@@ -33,6 +33,9 @@ namespace smmap
             // The two functions that gets invoked repeatedly
             ////////////////////////////////////////////////////////////////////
 
+            void visualizeProjectedPaths(
+                    const std::vector<EigenHelpers::VectorVector3d>& projected_paths);
+
             bool checkForClothStretchingViolations(
                     const std::vector<EigenHelpers::VectorVector3d>& projected_paths);
 

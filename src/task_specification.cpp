@@ -753,7 +753,13 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_
 
 
 
-
+/**
+ * @brief DijkstrasCoverageTask::findPathFromObjectToTarget
+ * @param object_configuration
+ * @param minimum_threshold
+ * @param max_ittr
+ * @return std::pair<paths, cover_point_assignments>
+ */
 std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<std::vector<ssize_t>>> DijkstrasCoverageTask::findPathFromObjectToTarget(const ObjectPointSet& object_configuration, const double minimum_threshold, const size_t max_ittr) const
 {
     std::vector<std::vector<ssize_t>> cover_point_assignments(num_nodes_);
@@ -788,7 +794,6 @@ std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<std::vector<ssi
 
 EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(Eigen::Vector3d current_pos, const std::vector<ssize_t>& cover_point_assignments, const size_t maximum_itterations) const
 {
-    static int32_t weirdness_num = 0;
     EigenHelpers::VectorVector3d trajectory(1, current_pos);
 
     bool progress = cover_point_assignments.size() > 0;
@@ -811,7 +816,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             summed_dijkstras_deltas += (target_point - graph_aligned_current_pos) / 10.0;
         }
 
-        // If the combined vector moves us at least into the next voxel, then move into the next voxel
+        // If the combined vector moves us at least some minimum distance, then accept the delta.
         progress = summed_dijkstras_deltas.squaredNorm() > std::pow(work_space_grid_.minStepDimension() / 2.0, 2);
         if (progress)
         {
@@ -822,35 +827,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             for (int i = 0; i < 10; i++)
             {
                 net_delta += combined_delta / 10.0;
-
-                // If we are inside an obstacle, then push ourselves back out
-                for (float sdf_dist = environment_sdf_.Get3d(current_pos + net_delta); sdf_dist < 0; sdf_dist = environment_sdf_.Get3d(current_pos + net_delta))
-                {
-                    const bool enable_edge_gradients = true;
-                    const std::vector<double> gradient = environment_sdf_.GetGradient3d(current_pos + net_delta, enable_edge_gradients);
-                    const Eigen::Vector3d grad_eigen = EigenHelpers::StdVectorDoubleToEigenVector3d(gradient);
-
-                    if (grad_eigen.norm() <= work_space_grid_.minStepDimension() / 4.0)
-                    {
-                        const EigenHelpers::VectorVector3d vec_of_single_item(1, current_pos + net_delta);
-                        vis_.visualizePoints("gradient_weirdness", vec_of_single_item, Visualizer::Red(), weirdness_num);
-                        ++weirdness_num;
-                    }
-                    else
-                    {
-                        net_delta += grad_eigen.normalized() * work_space_grid_.minStepDimension() / 2.0;
-                    }
-                    assert(grad_eigen.norm() > work_space_grid_.minStepDimension() / 4.0); // Sanity check
-
-                    if (net_delta.norm() >= work_space_grid_.minStepDimension() * 1.5)
-                    {
-                        trajectory.push_back(current_pos + net_delta);
-                        vis_.visualizePoints("projected_point_path_weirdness", trajectory, Visualizer::Red(), weirdness_num);
-                        ++weirdness_num;
-                        std::cerr << PrettyPrint::PrettyPrint(trajectory) << std::endl << std::endl << std::endl;
-                    }
-//                    assert(net_delta.norm() < free_space_grid_.minStepDimension() * 1.5); // Sanity check
-                }
+                net_delta = environment_sdf_.ProjectOutOfCollision3d(current_pos + net_delta, 1.0  / 10.0) - current_pos;
             }
 
             progress = net_delta.squaredNorm() > 1e-6;

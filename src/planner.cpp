@@ -81,6 +81,24 @@ void Planner::createBandits()
 // Helpers
 ////////////////////////////////////////////////////////////////////////////////
 
+void Planner::visualizeProjectedPaths(const std::vector<EigenHelpers::VectorVector3d>& projected_paths)
+{
+    for (ssize_t node_ind = 0; node_ind < (ssize_t)projected_paths.size(); ++node_ind)
+    {
+        if (projected_paths[node_ind].size() > 1)
+        {
+            vis_.visualizePoints("projected_point_path", projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind);
+            vis_.visualizeXYZTrajectory("projected_point_path_lines", projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind);
+        }
+        else
+        {
+            const EigenHelpers::VectorVector3d empty_path;
+            vis_.visualizePoints("projected_point_path", empty_path,Visualizer::Magenta(), (int32_t)node_ind);
+            vis_.visualizeXYZTrajectory("projected_point_path_lines", empty_path, Visualizer::Magenta(), (int32_t)node_ind);
+        }
+    }
+}
+
 /**
  * @brief Planner::checkForClothStretchingViolations
  * @param projected_paths
@@ -91,7 +109,6 @@ bool Planner::checkForClothStretchingViolations(
 {
     bool violations_exist = false;
 
-    const EigenHelpers::VectorVector3d empty_path;
     EigenHelpers::VectorVector3d vis_start_points;
     EigenHelpers::VectorVector3d vis_end_points;
 
@@ -100,9 +117,6 @@ bool Planner::checkForClothStretchingViolations(
     {
         if (projected_paths[node_ind].size() > 1)
         {
-            vis_.visualizePoints("projected_point_path", projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind);
-            vis_.visualizeXYZTrajectory("projected_point_path_lines", projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind);
-
             // For each neighbour, check for violations
             for (ssize_t neighbour_ind : task_specification_->getNodeNeighbours(node_ind))
             {
@@ -124,11 +138,6 @@ bool Planner::checkForClothStretchingViolations(
                 }
             }
 
-        }
-        else
-        {
-            vis_.visualizePoints("projected_point_path", empty_path,Visualizer::Magenta(), (int32_t)node_ind);
-            vis_.visualizeXYZTrajectory("projected_point_path_lines", empty_path, Visualizer::Magenta(), (int32_t)node_ind);
         }
     }
 
@@ -158,6 +167,7 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
         stopwatch(RESET);
         const auto projected_deformable_point_paths = dijkstras_task->findPathFromObjectToTarget(current_world_state.object_configuration_, dijkstras_task->getErrorThreshold(), NUM_SIMSTEPS);
         ROS_INFO_STREAM_NAMED("planner", "Calculated projected cloth paths                 - Version 1 - in " << stopwatch(READ) << " seconds");
+        visualizeProjectedPaths(projected_deformable_point_paths.first);
 //        const bool stretching_violations_exist = checkForClothStretchingViolations(projected_deformable_point_paths.first);
         ROS_INFO_STREAM_NAMED("planner", "Calculated future constraint violation detection - Version 1 - in " << stopwatch(READ) << " seconds");
 
@@ -196,8 +206,7 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
 
                 // Move the grippers and cloth
 //                stopwatch(RESET);
-                DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
-                task_desired_direction_fn(current_world_state);
+                const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, world_state_copy, robot_.dt_);
 //                ROS_INFO_STREAM_NAMED("planner", "Get desird directiontime " << stopwatch(READ) << " seconds");
 
 
@@ -207,6 +216,7 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
 
                 world_state_copy.all_grippers_single_pose_ = kinematics::applyTwist(world_state_copy.all_grippers_single_pose_, robot_command.first);
                 auto collision_check_future = std::async(std::launch::async, &RobotInterface::checkGripperCollision, &robot_, world_state_copy.all_grippers_single_pose_);
+//                world_state_copy.gripper_collision_data_ = robot_.checkGripperCollision(world_state_copy.all_grippers_single_pose_);
 //                ROS_INFO_STREAM_NAMED("planner", "Check gripper collision  " << stopwatch(READ) << " seconds");
 
 
@@ -234,6 +244,8 @@ void Planner::detectFutureConstraintViolations(const WorldState &current_world_s
                 vis_.visualizeGrippers("forward_simulated_grippers_version2a", world_state_copy.all_grippers_single_pose_, gripper_color);
 
                 world_state_copy.gripper_collision_data_ = collision_check_future.get();
+//                std::cout << PrettyPrint::PrettyPrint(world_state_copy.gripper_collision_data_, true, "\n") << std::endl;
+//                ROS_INFO_STREAM_NAMED("planner", "Post collision check future get() in " << stopwatch(READ) << " seconds\n");
             }
             std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
             ROS_INFO_STREAM_NAMED("planner", "Calculated future constraint violation detection - Version 2a - in " << std::chrono::duration<double>(end_time - start_time).count() << " seconds");

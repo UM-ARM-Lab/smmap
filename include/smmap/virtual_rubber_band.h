@@ -30,9 +30,6 @@ namespace smmap
                     const int32_t id) const;
 
         private:
-            Eigen::Vector3d projectOutOfObstacle(Eigen::Vector3d vec) const;
-
-
             const std::shared_ptr<DijkstrasCoverageTask> task_;
             const sdf_tools::SignedDistanceField& sdf_;
             const Visualizer& vis_;

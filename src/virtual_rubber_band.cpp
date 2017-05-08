@@ -52,7 +52,7 @@ const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRub
             const Eigen::Vector3d& current_pos = band_[rubber_band_node_ind];
             const double distance_to_first_endpoint = cummulative_distances_along_band[rubber_band_node_ind];
             const Eigen::Vector3d delta = EigenHelpers::Interpolate(first_endpoint_translation, second_endpoint_translation, distance_to_first_endpoint / cummulative_distances_along_band.back()) / (double)num_integration_steps;
-            band_[rubber_band_node_ind] = projectOutOfObstacle(current_pos + delta);
+            band_[rubber_band_node_ind] = sdf_.ProjectOutOfCollision3d(current_pos + delta, 1.0 / 10.0);
         }
         if (verbose)
         {
@@ -69,7 +69,7 @@ const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRub
             assert(dist_between_nodes < 2 * max_distance_between_rubber_band_points_);
             if (dist_between_nodes > max_distance_between_rubber_band_points_)
             {
-                band_.insert(band_.begin() + rubber_band_node_ind, projectOutOfObstacle(EigenHelpers::Interpolate(prev, curr, 0.5)));
+                band_.insert(band_.begin() + rubber_band_node_ind, sdf_.ProjectOutOfCollision3d(EigenHelpers::Interpolate(prev, curr, 0.5), 1.0 / 10.0));
             }
         }
         if (verbose)
@@ -121,21 +121,3 @@ void VirtualRubberBand::visualize(
     vis_.visualizeXYZTrajectory(marker_name, band_, color, id);
 }
 
-
-
-
-
-Eigen::Vector3d VirtualRubberBand::projectOutOfObstacle(Eigen::Vector3d vec) const
-{
-    for (float sdf_dist = sdf_.Get3d(vec); sdf_dist < 0; sdf_dist = sdf_.Get3d(vec))
-    {
-        const bool enable_edge_gradients = true;
-        const std::vector<double> gradient = sdf_.GetGradient3d(vec, enable_edge_gradients);
-        const Eigen::Vector3d grad_eigen = EigenHelpers::StdVectorDoubleToEigenVector3d(gradient);
-
-        assert(grad_eigen.norm() > sdf_.GetResolution() / 4.0); // Sanity check
-        vec += grad_eigen.normalized() * sdf_.GetResolution() / 10.0;
-    }
-
-    return vec;
-}

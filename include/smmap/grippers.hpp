@@ -4,6 +4,7 @@
 #include <limits>
 #include <memory>
 #include <assert.h>
+#include <ostream>
 
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
@@ -431,10 +432,16 @@ namespace smmap
                 , distance_to_obstacle_(distance_to_obstacle)
             {}
 
-            Eigen::Vector3d nearest_point_to_obstacle_;
-            Eigen::Vector3d obstacle_surface_normal_;
-            double distance_to_obstacle_;
+            const Eigen::Vector3d nearest_point_to_obstacle_;
+            const Eigen::Vector3d obstacle_surface_normal_;
+            const double distance_to_obstacle_;
     };
+
+    inline std::ostream& operator<<(std::ostream& os, const smmap::CollisionData& data)
+    {
+        os << "Dist: " << data.distance_to_obstacle_ << " Nearest: " << data.nearest_point_to_obstacle_.transpose() << " SNormal: " << data.obstacle_surface_normal_.transpose();
+        return os;
+    }
 
     /// Stores the result of a collision avoidance calculation for a single gripper
     struct CollisionAvoidanceResult
