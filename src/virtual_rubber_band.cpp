@@ -55,7 +55,7 @@ const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRub
             const Eigen::Vector3d& current_pos = band_[rubber_band_node_ind];
             const double distance_to_first_endpoint = cummulative_distances_along_band[rubber_band_node_ind];
             const Eigen::Vector3d delta = EigenHelpers::Interpolate(first_endpoint_translation, second_endpoint_translation, distance_to_first_endpoint / cummulative_distances_along_band.back()) / (double)num_integration_steps;
-            band_[rubber_band_node_ind] = sdf_.ProjectOutOfCollision3d(current_pos + delta, 1.0 / 10.0);
+            band_[rubber_band_node_ind] = sdf_.ProjectOutOfCollision3d(current_pos + delta);
         }
         visualize("post_forward_step", Visualizer::Green(), Visualizer::Green(), integration_step_ind, verbose);
 
@@ -69,7 +69,7 @@ const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRub
             assert(dist_between_nodes < 2 * max_distance_between_rubber_band_points_);
             if (dist_between_nodes > max_distance_between_rubber_band_points_)
             {
-                band_.insert(band_.begin() + rubber_band_node_ind, sdf_.ProjectOutOfCollision3d(EigenHelpers::Interpolate(prev, curr, 0.5), 1.0 / 10.0));
+                band_.insert(band_.begin() + rubber_band_node_ind, sdf_.ProjectOutOfCollision3d(EigenHelpers::Interpolate(prev, curr, 0.5)));
             }
         }
         visualize("post_subdivide_step", Visualizer::Magenta(), Visualizer::Magenta(), integration_step_ind, verbose);

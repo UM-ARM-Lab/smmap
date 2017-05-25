@@ -53,6 +53,7 @@ namespace smmap
             RobotInterface& robot_;
             Visualizer& vis_;
             std::shared_ptr<TaskSpecification> task_specification_;
+            std::shared_ptr<DijkstrasCoverageTask> dijkstras_task_;
 
             ////////////////////////////////////////////////////////////////////
             // Model list management
@@ -82,6 +83,7 @@ namespace smmap
             // Constraint violation detection
             ////////////////////////////////////////////////////////////////////
 
+            const size_t num_lookahead_steps_;
             std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_;
 
             void visualizeProjectedPaths(
@@ -92,7 +94,7 @@ namespace smmap
                     const std::vector<EigenHelpers::VectorVector3d>& projected_paths,
                     const bool visualization_enabled = true);
 
-            std::vector<VirtualRubberBand> detectFutureConstraintViolations(
+            std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<VirtualRubberBand>> detectFutureConstraintViolations(
                     const WorldState& current_world_state,
                     const bool visualization_enabled = true);
 
@@ -104,9 +106,18 @@ namespace smmap
             size_t global_plan_current_timestep_;
             AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
 
+            EigenHelpers::VectorVector3d findPathBetweenPositions(
+                    const Eigen::Vector3d& start,
+                    const Eigen::Vector3d& goal) const;
+
+            AllGrippersSinglePose getGripperTargets(
+                    const WorldState& current_world_state,
+                    const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths) const;
+
             void planGlobalGripperTrajectory(
                     const WorldState& current_world_state,
-                    std::vector<VirtualRubberBand> predicted_future_rubber_bands);
+                    const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths,
+                    const std::vector<VirtualRubberBand>& projected_virtual_rubber_bands);
 
 
             ////////////////////////////////////////////////////////////////////
@@ -119,6 +130,9 @@ namespace smmap
             WorldState sendNextCommandUsingGlobalGripperPlannerResults(
                     const WorldState& current_world_state);
 
+            ////////////////////////////////////////////////////////////////////
+            // Model utility functions
+            ////////////////////////////////////////////////////////////////////
 
             void updateModels(
                     const WorldState& starting_world_state,
@@ -131,16 +145,6 @@ namespace smmap
             Eigen::MatrixXd calculateProcessNoise(
                     const std::vector<std::pair<AllGrippersSinglePoseDelta,
                     ObjectPointSet>>& suggested_commands);
-
-//            Eigen::VectorXd calculateObservedReward(
-//                    const WorldState& starting_world_state,
-//                    const ObjectDeltaAndWeight& task_desired_motion,
-//                    const ssize_t model_used,
-//                    const WorldState& world_feedback);
-
-//            Eigen::MatrixXd calculateObservationNoise(
-//                    const Eigen::MatrixXd& process_noise,
-//                    const ssize_t model_used);
     };
 }
 

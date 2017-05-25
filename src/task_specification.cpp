@@ -827,7 +827,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             for (int i = 0; i < 10; i++)
             {
                 net_delta += combined_delta / 10.0;
-                net_delta = environment_sdf_.ProjectOutOfCollision3d(current_pos + net_delta, 1.0  / 10.0) - current_pos;
+                net_delta = environment_sdf_.ProjectOutOfCollision3d(current_pos + net_delta) - current_pos;
             }
 
             progress = net_delta.squaredNorm() > 1e-6;
