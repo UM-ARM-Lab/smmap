@@ -33,23 +33,13 @@ namespace smmap
             // The two functions that gets invoked repeatedly
             ////////////////////////////////////////////////////////////////////
 
-            void visualizeProjectedPaths(
-                    const std::vector<EigenHelpers::VectorVector3d>& projected_paths);
-
-            bool checkForClothStretchingViolations(
-                    const std::vector<EigenHelpers::VectorVector3d>& projected_paths);
-
-            void detectFutureConstraintViolations(
-                    const WorldState& current_world_state);
-
-
-
             WorldState sendNextCommand(
                     const WorldState& current_world_state);
 
             void visualizeDesiredMotion(
                     const WorldState& current_world_state,
-                    const ObjectDeltaAndWeight& desired_motion);
+                    const ObjectDeltaAndWeight& desired_motion,
+                    const bool visualization_enabled = true);
 
         private:
             ////////////////////////////////////////////////////////////////////
@@ -87,6 +77,49 @@ namespace smmap
             const unsigned long seed_;
             std::mt19937_64 generator_;
 
+
+            ////////////////////////////////////////////////////////////////////
+            // Constraint violation detection
+            ////////////////////////////////////////////////////////////////////
+
+            std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_;
+
+            void visualizeProjectedPaths(
+                    const std::vector<EigenHelpers::VectorVector3d>& projected_paths,
+                    const bool visualization_enabled = true);
+
+            bool checkForClothStretchingViolations(
+                    const std::vector<EigenHelpers::VectorVector3d>& projected_paths,
+                    const bool visualization_enabled = true);
+
+            std::vector<VirtualRubberBand> detectFutureConstraintViolations(
+                    const WorldState& current_world_state,
+                    const bool visualization_enabled = true);
+
+            ////////////////////////////////////////////////////////////////////
+            // Global gripper planner functions and data
+            ////////////////////////////////////////////////////////////////////
+
+            bool executing_global_gripper_trajectory_;
+            size_t global_plan_current_timestep_;
+            AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
+
+            void planGlobalGripperTrajectory(
+                    const WorldState& current_world_state,
+                    std::vector<VirtualRubberBand> predicted_future_rubber_bands);
+
+
+            ////////////////////////////////////////////////////////////////////
+            // Sending gripper commands
+            ////////////////////////////////////////////////////////////////////
+
+            WorldState sendNextCommandUsingLocalController(
+                    const WorldState& current_world_state);
+
+            WorldState sendNextCommandUsingGlobalGripperPlannerResults(
+                    const WorldState& current_world_state);
+
+
             void updateModels(
                     const WorldState& starting_world_state,
                     const ObjectDeltaAndWeight& task_desired_motion,
@@ -108,15 +141,6 @@ namespace smmap
 //            Eigen::MatrixXd calculateObservationNoise(
 //                    const Eigen::MatrixXd& process_noise,
 //                    const ssize_t model_used);
-
-
-        ////////////////////////////////////
-        // Random stuff to be properly managed later
-        ////////////////////////////////////
-
-        private:
-            std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_version2a_;
-            std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_version2b_;
     };
 }
 

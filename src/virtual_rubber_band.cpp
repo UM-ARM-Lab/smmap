@@ -4,6 +4,9 @@
 
 using namespace smmap;
 
+//static std::default_random_engine VirtualRubberBand::generator_(std::chrono::system_clock::now().time_since_epoch().count());
+std::default_random_engine VirtualRubberBand::generator_;
+
 #warning "Magic numbers in virtual band constructor"
 VirtualRubberBand::VirtualRubberBand(
         const Eigen::Vector3d& start_point,
@@ -54,10 +57,7 @@ const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRub
             const Eigen::Vector3d delta = EigenHelpers::Interpolate(first_endpoint_translation, second_endpoint_translation, distance_to_first_endpoint / cummulative_distances_along_band.back()) / (double)num_integration_steps;
             band_[rubber_band_node_ind] = sdf_.ProjectOutOfCollision3d(current_pos + delta, 1.0 / 10.0);
         }
-        if (verbose)
-        {
-            visualize("post_forward_step", Visualizer::Green(), integration_step_ind);
-        }
+        visualize("post_forward_step", Visualizer::Green(), Visualizer::Green(), integration_step_ind, verbose);
 
         // Next subdivide the band if needed
         for (size_t rubber_band_node_ind = 1; rubber_band_node_ind < band_.size(); ++rubber_band_node_ind)
@@ -72,10 +72,8 @@ const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRub
                 band_.insert(band_.begin() + rubber_band_node_ind, sdf_.ProjectOutOfCollision3d(EigenHelpers::Interpolate(prev, curr, 0.5), 1.0 / 10.0));
             }
         }
-        if (verbose)
-        {
-            visualize("post_subdivide_step", Visualizer::Magenta(), integration_step_ind);
-        }
+        visualize("post_subdivide_step", Visualizer::Magenta(), Visualizer::Magenta(), integration_step_ind, verbose);
+
     }
 
     // Shortcut smoothing
@@ -108,16 +106,28 @@ const EigenHelpers::VectorVector3d& VirtualRubberBand::getVectorRepresentation()
     return band_;
 }
 
-bool VirtualRubberBand::isOverstreched() const
+bool VirtualRubberBand::isOverstretched() const
 {
     return EigenHelpers::CalculateTotalDistance(band_) > max_total_band_distance_;
 }
 
 void VirtualRubberBand::visualize(
         const std::string& marker_name,
-        const std_msgs::ColorRGBA& color,
-        const int32_t id) const
+        const std_msgs::ColorRGBA& safe_color,
+        const std_msgs::ColorRGBA& overstretched_color,
+        const int32_t id,
+        const bool visualization_enabled) const
 {
-    vis_.visualizeXYZTrajectory(marker_name, band_, color, id);
+    if (visualization_enabled)
+    {
+        if (isOverstretched())
+        {
+            vis_.visualizeXYZTrajectory(marker_name, band_, overstretched_color, id);
+        }
+        else
+        {
+            vis_.visualizeXYZTrajectory(marker_name, band_, safe_color, id);
+        }
+    }
 }
 

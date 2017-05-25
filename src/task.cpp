@@ -43,8 +43,6 @@ void Task::execute()
         const double current_error = task_specification_->calculateError(current_world_state.object_configuration_);
         ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << current_error);
 
-        planner_.detectFutureConstraintViolations(current_world_state);
-
         world_feedback = planner_.sendNextCommand(current_world_state);
 
         if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()))

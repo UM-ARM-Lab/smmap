@@ -22,12 +22,14 @@ namespace smmap
 
             const EigenHelpers::VectorVector3d& getVectorRepresentation() const;
 
-            bool isOverstreched() const;
+            bool isOverstretched() const;
 
             void visualize(
                     const std::string& marker_name,
-                    const std_msgs::ColorRGBA& color,
-                    const int32_t id) const;
+                    const std_msgs::ColorRGBA& safe_color,
+                    const std_msgs::ColorRGBA& overstretched_color,
+                    const int32_t id,
+                    const bool visualization_enabled) const;
 
         private:
             const std::shared_ptr<DijkstrasCoverageTask> task_;
@@ -42,8 +44,8 @@ namespace smmap
 
             EigenHelpers::VectorVector3d band_;
 
-//            std::default_random_engine generator_(std::chrono::system_clock::now().time_since_epoch().count());
-            std::default_random_engine generator_;
+//            static std::default_random_engine generator_(std::chrono::system_clock::now().time_since_epoch().count());
+            static std::default_random_engine generator_;
     };
 }
 
