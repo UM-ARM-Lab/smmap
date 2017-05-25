@@ -158,9 +158,20 @@ void Planner::visualizeDesiredMotion(const WorldState& current_world_state, cons
 
 void Planner::planGlobalGripperTrajectory(const WorldState& current_world_state, std::vector<VirtualRubberBand> predicted_future_rubber_bands)
 {
+    (void)predicted_future_rubber_bands;
     global_plan_current_timestep_ = 0;
     executing_global_gripper_trajectory_ = true;
     global_plan_gripper_trajectory_ = AllGrippersPoseTrajectory(10, current_world_state.all_grippers_single_pose_);
+
+    std::pair<std::pair<Eigen::Affine3d, Eigen::Affine3d>, VirtualRubberBand> start_node(
+                std::pair<Eigen::Affine3d, Eigen::Affine3d>(
+                            current_world_state.all_grippers_single_pose_[0],
+                            current_world_state.all_grippers_single_pose_[1]),
+                *virtual_rubber_band_between_grippers_);
+//    start_node.first = std::make_pair<Eigen::Affine3d, Eigen::Affine3d>(
+//                current_world_state.all_grippers_single_pose_[0],
+//                current_world_state.all_grippers_single_pose_[1]);
+//    start_node.second = *virtual_rubber_band_between_grippers_;
 
 //    arc_utilities::FirstOrderVisibilityGraph::CheckFirstOrderVisibility(100, 100, nullptr, true);
 }
