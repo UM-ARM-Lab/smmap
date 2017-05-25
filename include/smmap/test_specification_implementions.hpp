@@ -37,6 +37,8 @@ class RopeCylinderCoverage : public TestSpecification
             return 2.5;
         }
 
+        virtual void updateGripperDelta_impl() {}
+
         virtual void visualizeDeformableObject_impl(
                 Visualizer& vis,
                 const std::string& marker_name,
@@ -142,8 +144,24 @@ class RopeTablePull : public TestSpecification
             for (size_t gripper_ind=0; gripper_ind< grippers_data_.size(); gripper_ind++)
             {
                 kinematics::Vector6d singel_q_dot = Eigen::MatrixXd::Zero(6,1);
-                singel_q_dot(0,0) = 0.002f;
+                singel_q_dot(4,0) = 0.09f;
+                singel_q_dot(0,0) = -0.004f;
                 grippers_pose_delta_.push_back(singel_q_dot);
+            }
+        }
+
+        virtual void updateGripperDelta_impl()
+        {
+            if(grippers_delta_count_ == 34)
+            {
+                grippers_pose_delta_.clear();
+
+                for (size_t gripper_ind=0; gripper_ind< grippers_data_.size(); gripper_ind++)
+                {
+                    kinematics::Vector6d singel_q_dot = Eigen::MatrixXd::Zero(6,1);
+                    singel_q_dot(0,0) = -0.003f;
+                    grippers_pose_delta_.push_back(singel_q_dot);
+                }
             }
         }
 
@@ -221,10 +239,13 @@ class RopeTableDrag : public TestSpecification
             for (size_t gripper_ind=0; gripper_ind< grippers_data_.size(); gripper_ind++)
             {
                 kinematics::Vector6d singel_q_dot = Eigen::MatrixXd::Zero(6,1);
-                singel_q_dot(0,0) = -0.002;
+                singel_q_dot(0,0) = -0.008;
+//                singel_q_dot(2,0) = 0.0001;
                 grippers_pose_delta_.push_back(singel_q_dot);
             }
         }
+
+        virtual void updateGripperDelta_impl() {}
 
     private:
         const double table_min_x_;
@@ -300,11 +321,13 @@ class RopeTowardTable : public TestSpecification
             for (size_t gripper_ind=0; gripper_ind< grippers_data_.size(); gripper_ind++)
             {
                 kinematics::Vector6d singel_q_dot = Eigen::MatrixXd::Zero(6,1);
-                singel_q_dot(0,0) = -0.0000f;
-                singel_q_dot(2,0) = -0.001f;
+//                singel_q_dot(0,0) = -0.0005f;
+                singel_q_dot(2,0) = -0.004f;
                 grippers_pose_delta_.push_back(singel_q_dot);
             }
         }
+
+        virtual void updateGripperDelta_impl() {}
 
 
     private:

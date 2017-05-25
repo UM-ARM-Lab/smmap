@@ -70,6 +70,7 @@ TestSpecification::TestSpecification(ros::NodeHandle& nh, Visualizer vis, const 
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
     , num_nodes_(object_initial_node_distance_.cols())
     , grippers_data_(GetGrippersData(nh))
+    , grippers_delta_count_(0)
 {
 //    initializeGripperDelta();
 }
@@ -192,6 +193,8 @@ ObjectDeltaAndWeight TestSpecification::calculateDesiredDirection(const WorldSta
 
 AllGrippersSinglePoseDelta TestSpecification::getPresetGripperDelta()
 {
+    updateGripperDelta_impl();
+    grippers_delta_count_++;
     return grippers_pose_delta_;
 }
 

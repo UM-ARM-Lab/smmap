@@ -68,7 +68,7 @@ ConstraintJacobianModel::ConstraintJacobianModel(
     , trans_dir_type_(trans_dir_fn)
     , trans_dis_type_(trans_dis_fn)
     , environment_sdf_(environment_sdf)
-    , obstacle_threshold_(0.0)
+    , obstacle_threshold_(2.1)
 {
     // Set obstacle distance threshold, to be modified later
     // Should check with Dale, whether it counts as #grids

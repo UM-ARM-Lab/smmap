@@ -146,6 +146,7 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
     // The commend-out is for multi-model rewards   ---- Mengyao
 
     // Pick an arm to use
+
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
     const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
@@ -154,8 +155,10 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
     stopwatch(RESET);
     std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>> suggested_robot_commands(num_models_);
     #pragma omp parallel for
+
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
     {
+        /*
         if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
         {
             suggested_robot_commands[model_ind] =
@@ -164,9 +167,11 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
                         robot_.max_gripper_velocity_,
                         test_specification_->collisionScalingFactor());
         }
+        */
     }
+
     // Measure the time it took to pick a model
-    ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in " << stopwatch(READ) << " seconds");
+//    ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in " << stopwatch(READ) << " seconds");
 
     //
     std::vector<double> individual_rewards(num_models_, std::numeric_limits<double>::infinity());
@@ -238,11 +243,12 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
         real_time_error(0,real_ind) = std::sqrt(point_error);
 
         // Constraint Violation
-        if (environment_sdf_.Get3d(current_world_state.object_configuration_.col(real_ind)) < 0)
+        if (environment_sdf_.Get3d(current_world_state.object_configuration_.col(real_ind)) < 1.0 )
         {
             std::vector<double> sur_n
                     = environment_sdf_.GetGradient3d(current_world_state.object_configuration_.col(real_ind));
             Eigen::Vector3d surface_normal = Eigen::Vector3d::Map(sur_n.data(),sur_n.size());
+            surface_normal = surface_normal/surface_normal.norm();
 
 
             if(model_point.dot(surface_normal)<0 & model_point.norm()>0.000001)
@@ -255,6 +261,12 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
         else { constraint_violation(0,real_ind) = 0; }
 
     }
+
+    vis_.visualizeObjectDelta(
+                "Model back_generated position",
+                current_world_state.object_configuration_,
+                current_world_state.object_configuration_ + 100*p_projected,
+                Visualizer::Blue());
 
 
 

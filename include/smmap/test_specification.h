@@ -193,6 +193,8 @@ namespace smmap
             std::vector<GripperData> grippers_data_;
 //            WorldState last_world_state_;
 
+            size_t grippers_delta_count_;
+
 
         private:
             ////////////////////////////////////////////////////////////////////////////////
@@ -226,6 +228,8 @@ namespace smmap
 
             //////////// Mengyao: Initialize delta_q ///////////////////////////
             virtual void initializeGripperDelta_impl() = 0;
+
+            virtual void updateGripperDelta_impl() = 0;
 
             // delta_p = target/planned delta_p, might not need this function though
             ObjectDeltaAndWeight calculateDesiredDelta_impl(
