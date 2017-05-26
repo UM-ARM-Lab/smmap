@@ -1,14 +1,15 @@
 #ifndef RRT_HELPER_H
 #define RRT_HELPER_H
 
-#include <iostream>
-#include <stdio.h>
-#include <vector>
+//#include <iostream>
+//#include <stdio.h>
+//#include <vector>
 
 
 #include <arc_utilities/arc_helpers.hpp>
 #include "smmap/virtual_rubber_band.h"
 
+#include <arc_utilities/simple_rrt_planner.hpp>
 
 #define ERRORTHRESHOLD 0.002
 #define GOALERROR 0.3
@@ -19,13 +20,99 @@
 #define DOFCONFIG 6
 #define STRETCHING_THRESHOLD 0
 
-using namespace std;
-using namespace Eigen;
-
 namespace smmap {
 
-    typedef std::vector<double> configuration;
-    typedef std::vector<configuration> configSet;
+    typedef std::pair<std::pair<Eigen::Affine3d, Eigen::Affine3d>, VirtualRubberBand> rrtConfig;
+
+    namespace Rrt_function{
+
+        // * nearest_neighbor_fn - given all nodes explored so far, and a new state, return the index of the "closest" node
+        template<typename T, typename Allocator = std::allocator<T>>
+        inline int64_t nearestNeighbor(
+                std::vector<simple_rrt_planner::SimpleRRTPlannerState<T, Allocator>>& nodes,
+                const T& config)
+        {
+
+
+
+
+            int64_t res;
+            return res;
+        }
+
+        // const std::function<void(SimpleRRTPlannerState<T, Allocator>&, SimpleRRTPlannerState<T, Allocator>&)>& state_added_fn
+        // * state_added_fn - callback function that takes (parent, child) for each extension
+        template<typename T, typename Allocator = std::allocator<T>>
+        inline void stateAdd(
+                simple_rrt_planner::SimpleHybridRRTPlanner<T,Allocator>& parent,
+                simple_rrt_planner::SimpleHybridRRTPlanner<T,Allocator>& child)
+        {
+
+
+
+        }
+
+
+        // const std::function<bool(const T&)>& goal_reached_fn,
+        // * goal_reached_fn - return if a given state meets the goal conditions (for example, within a radius of a goal state)
+        // const std::function<void(SimpleRRTPlannerState<T, Allocator>&)>& goal_reached_callback_fn,
+        // CAN USE DISTANCE FUNCTION INSTEAD
+
+
+        // const std::function<T(void)>& sampling_fn,
+        // * state_sampling_fn - returns a new state (randomly- or deterministically-sampled)
+        template<typename T>
+        inline T rrtSampling()
+        {
+            T randSample;
+
+
+            return randSample;
+        }
+
+
+        // const std::function<std::vector<std::pair<T, int64_t>>(const T&, const T&)>& forward_propagation_fn,
+        // * forward_propagation_fn - given the nearest neighbor and a new target state, returns the states that would grow the tree towards the target
+        // * SHOULD : collosion checking, constraint violation checking
+        // Determine the parent index of the new state
+        // This process deserves some explanation
+        // The "current relative parent index" is the index of the parent, relative to the list of propagated nodes.
+        // A negative value means the nearest neighbor in the tree, zero means the first propagated node, and so on.
+        // NOTE - the relative parent index *must* be lower than the index in the list of prograted nodes
+        // i.e. the first node must have a negative value, and so on.
+        template <typename T>
+        inline std::vector<std::pair<T, int64_t>> takeStep(const T&, const T&)
+        {
+            std::vector<std::pair<T, int64_t>> propagation;
+
+
+
+            return propagation;
+        }
+
+
+        // const std::function<bool(void)>& termination_check_fn
+        // * termination_check_fn - returns if the planner should terminate (for example, if it has exceeded time/space limits)
+
+
+
+
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+    typedef Vector3d configuration;
+    typedef VectorVector3d configSet;
     typedef std::pair<Eigen::Affine3d, Eigen::Affine3d> tConfigSet;
 
     typedef configSet* configSetPtr;
@@ -124,9 +211,9 @@ namespace smmap {
         void SetGoal(configSet goal);
 
         // To simplify the problem, I assume all grippers having the same boundary
-        std::vector<double> lowerBound;
-        std::vector<double> upperBound;
-        std::vector<double> weight;
+        Vector3d lowerBound;
+        Vector3d upperBound;
+        Vector3d weight;
 
         int numGrippers = 2;
 //        configSet geodesicConfig;
@@ -241,7 +328,7 @@ namespace smmap {
 
 
     };
-
+*/
 
 }
 

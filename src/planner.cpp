@@ -12,6 +12,8 @@
 
 #include "smmap/timing.hpp"
 
+#include "smmap/rrt_Helper.h"
+
 using namespace smmap;
 using namespace EigenHelpersConversions;
 
@@ -342,6 +344,13 @@ void Planner::planGlobalGripperTrajectory(const WorldState& current_world_state,
 
         return true;
     };
+
+    //////////////////////// From Mengyao /////////////////////////////////////
+
+//    const auto results = simple_rrt_planner::SimpleHybridRRTPlanner::Plan<rrtConfig, std::allocator<rrtConfig>>(start, goal, nearest_neighbor_fn, goal_reached_fn, state_sampling_fn, forward_propagation_fn, goal_bias, time_limit, rng);
+
+
+    //////////////////////// Mengyao End //////////////////////////////////////
 
     stopwatch(RESET);
     const bool first_order_visibility = arc_utilities::FirstOrderDeformation::CheckFirstOrderDeformation(first_path.size(), second_path.size(), straight_line_collision_check_fn, false);
