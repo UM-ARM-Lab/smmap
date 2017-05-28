@@ -12,7 +12,7 @@
 
 #include "smmap/timing.hpp"
 
-#include "smmap/rrt_Helper.h"
+#include "smmap/rrt_Helper.hpp"
 
 using namespace smmap;
 using namespace EigenHelpersConversions;

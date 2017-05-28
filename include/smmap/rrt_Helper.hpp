@@ -10,6 +10,7 @@
 #include "smmap/virtual_rubber_band.h"
 
 #include <arc_utilities/simple_rrt_planner.hpp>
+#include <uncertainty_planning_core/include/uncertainty_planning_core/simple_samplers.hpp>
 
 #define ERRORTHRESHOLD 0.002
 #define GOALERROR 0.3
@@ -29,16 +30,47 @@ namespace smmap {
         // * nearest_neighbor_fn - given all nodes explored so far, and a new state, return the index of the "closest" node
         template<typename T, typename Allocator = std::allocator<T>>
         inline int64_t nearestNeighbor(
-                std::vector<simple_rrt_planner::SimpleRRTPlannerState<T, Allocator>>& nodes,
-                const T& config)
+                const std::vector<simple_rrt_planner::SimpleRRTPlannerState<T, Allocator>>& nodes,
+                const T& config,
+                const std::function<double(const T&, const T&)>& distance_fn)
         {
-
-
-
-
-            int64_t res;
+            int64_t res = -1;
+            double best_distance = INFINITY;
+            for (size_t inode = 0; inode < nodes.size(); cluster++)
+            {
+                const T& neighbor = nodes[inode];
+                const double distance = distance_fn(neighbor, config);
+                if (distance < best_distance)
+                {
+                    best_distance = distance;
+                    res = (int64_t)inode;
+                }
+            }
+            assert(res >= 0);
             return res;
         }
+
+        // distance function for T = rrtConfig
+        // std::pair<std::pair<Eigen::Affine3d, Eigen::Affine3d>, VirtualRubberBand>
+        // ??????? QUESTION: SHOULD I FORWARD SIMULATING RUBBERBAND TO SEE IF THE TWO STATES ARE TRANSFERABLE ??????
+        double withBand_distance(const rrtConfig& Anode, const rrtConfig& Bnode)
+        {
+            double distance = 0;
+
+
+            return distance;
+        }
+
+        // returned distance is the euclidian distance of two grippers pos
+        double grippers_distance(const std::pair<Eigen::Affine3d, Eigen::Affine3d>& Anode, const std::pair<Eigen::Affine3d, Eigen::Affine3d>& Bnode)
+        {
+            double distance = 0;
+            Eigen::Vector3d transA = Anode.translation();
+            Eigen::Vector3d transB = Bnode.translation();
+            distance = (transA-transB).norm();
+            return distance;
+        }
+
 
         // const std::function<void(SimpleRRTPlannerState<T, Allocator>&, SimpleRRTPlannerState<T, Allocator>&)>& state_added_fn
         // * state_added_fn - callback function that takes (parent, child) for each extension
@@ -47,7 +79,6 @@ namespace smmap {
                 simple_rrt_planner::SimpleHybridRRTPlanner<T,Allocator>& parent,
                 simple_rrt_planner::SimpleHybridRRTPlanner<T,Allocator>& child)
         {
-
 
 
         }
@@ -61,11 +92,17 @@ namespace smmap {
 
         // const std::function<T(void)>& sampling_fn,
         // * state_sampling_fn - returns a new state (randomly- or deterministically-sampled)
-        template<typename T>
-        inline T rrtSampling()
+        // ????????? Should I do forward simulation to make sure it is feasible from current configuration ?????
+        template <typename Generator>
+        inline std::pair<Eigen::Affine3d, Eigen::Affine3d> se3Pair_Sampling(
+                Generator& prng,
+                simple_samplers::SimpleSE3BaseSampler se3Sampler)
         {
-            T randSample;
+            std::srand(std::time(0));
+            std::pair<Eigen::Affine3d, Eigen::Affine3d> randSample;
 
+            randSample.first = se3Sampler.Sample(prng);
+            randSample.second = se3Sampler.Sample(prng);
 
             return randSample;
         }
