@@ -347,6 +347,40 @@ void Planner::planGlobalGripperTrajectory(const WorldState& current_world_state,
 
     //////////////////////// From Mengyao /////////////////////////////////////
 
+    const auto distance_fn = [] (const rrtConfig& c1, const rrtConfig& c2)
+    {
+        return Rrt_function::affine3dPairDistance(c1,c2);
+    };
+
+    const auto nearest_neighbor_fn = [&] (
+            const std::vector<simple_rrt_planner::SimpleRRTPlannerState<rrtConfig,std::allocator<rrtConfig>>>& nodes,
+            const rrtConfig& config)
+    {
+        std::vector<rrtConfig> nodes_config;
+
+        for (int ind = 0; ind<nodes.size(); ind++)
+        {
+            simple_rrt_planner::SimpleRRTPlannerState<rrtConfig,std::allocator<rrtConfig>> node_ind = nodes.at(ind);
+            nodes_config.push_back(node_ind.GetValueMutable());
+            // What is GetValueMutable, Immutable in simple_rrt_planner?(const)
+        }
+
+        return Rrt_function::nearestNeighbor(nodes_config, config, distance_fn);
+    };
+
+
+    /*
+    rrtConfig goal_node_;
+
+    const auto goal_reached_fn = [&] (const rrtConfig& config)
+    {
+        // goal_config_, THRESHOLD to be defined
+        if (Rrt_function::affine3dPairDistance(config,goal_config_) < THRESHOLD )
+        {   return true;   }
+        return false;
+    };
+    */
+
 //    const auto results = simple_rrt_planner::SimpleHybridRRTPlanner::Plan<rrtConfig, std::allocator<rrtConfig>>(start, goal, nearest_neighbor_fn, goal_reached_fn, state_sampling_fn, forward_propagation_fn, goal_bias, time_limit, rng);
 
 

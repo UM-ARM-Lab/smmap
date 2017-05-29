@@ -30,7 +30,7 @@ namespace smmap {
         // * nearest_neighbor_fn - given all nodes explored so far, and a new state, return the index of the "closest" node
         template<typename T, typename Allocator = std::allocator<T>>
         inline int64_t nearestNeighbor(
-                const std::vector<simple_rrt_planner::SimpleRRTPlannerState<T, Allocator>>& nodes,
+                const std::vector<T, Allocator>& nodes,
                 const T& config,
                 const std::function<double(const T&, const T&)>& distance_fn)
         {
