@@ -73,13 +73,13 @@ namespace smmap
                 std::srand(std::time(0));
                 std::pair<Eigen::Vector3d, Eigen::Vector3d> rand_sample;
 
-                const double x1 = EigenHelpers::Interpolate(world_xyz.x_limits_.first, world_xyz.x_limits_.second, world_xyz.uniform_unit_distribution_(prng));
-                const double y1 = EigenHelpers::Interpolate(world_xyz.y_limits_.first, world_xyz.y_limits_.second, world_xyz.uniform_unit_distribution_(prng));
-                const double z1 = EigenHelpers::Interpolate(world_xyz.z_limits_.first, world_xyz.z_limits_.second, world_xyz.uniform_unit_distribution_(prng));
+                const double x1 = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_distribution_(prng));
+                const double y1 = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_distribution_(prng));
+                const double z1 = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_distribution_(prng));
 
-                const double x2 = EigenHelpers::Interpolate(world_xyz.x_limits_.first, world_xyz.x_limits_.second, world_xyz.uniform_unit_distribution_(prng));
-                const double y2 = EigenHelpers::Interpolate(world_xyz.y_limits_.first, world_xyz.y_limits_.second, world_xyz.uniform_unit_distribution_(prng));
-                const double z2 = EigenHelpers::Interpolate(world_xyz.z_limits_.first, world_xyz.z_limits_.second, world_xyz.uniform_unit_distribution_(prng));
+                const double x2 = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_distribution_(prng));
+                const double y2 = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_distribution_(prng));
+                const double z2 = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_distribution_(prng));
 
                 rand_sample.first(0) = x1;
                 rand_sample.first(1) = y1;
@@ -104,6 +104,8 @@ namespace smmap
              * i.e. the first node must have a negative value, and so on.
              */
             // Overstretch checking has been in sendNextCommand(), need constraint violation, and collision checking
+
+
             inline std::vector<std::pair<RRTConfig, int64_t>> forwardPropogationFunction(
                     const RRTConfig& nearest_neighbor,
                     const RRTConfig& random_target)
