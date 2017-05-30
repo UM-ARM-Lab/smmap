@@ -171,7 +171,8 @@ void Planner::visualizeDesiredMotion(const WorldState& current_world_state, cons
 // Global gripper planner functions
 ////////////////////////////////////////////////////////////////////////////////
 
-EigenHelpers::VectorVector3d GetEndpoints(const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths)
+EigenHelpers::VectorVector3d GetEndpoints(
+        const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths)
 {
     EigenHelpers::VectorVector3d endpoints;
 
@@ -187,7 +188,9 @@ EigenHelpers::VectorVector3d GetEndpoints(const std::vector<EigenHelpers::Vector
     return endpoints;
 }
 
-EigenHelpers::VectorVector3d Planner::findPathBetweenPositions(const Eigen::Vector3d& start, const Eigen::Vector3d& goal) const
+EigenHelpers::VectorVector3d Planner::findPathBetweenPositions(
+        const Eigen::Vector3d& start,
+        const Eigen::Vector3d& goal) const
 {
     const auto safe_config_fn = [&] (const Eigen::Vector3d& config)
     {
@@ -244,7 +247,9 @@ EigenHelpers::VectorVector3d Planner::findPathBetweenPositions(const Eigen::Vect
     return goal_config_possible_band.getVectorRepresentation();
 }
 
-AllGrippersSinglePose Planner::getGripperTargets(const WorldState& current_world_state, const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths) const
+AllGrippersSinglePose Planner::getGripperTargets(
+        const WorldState& current_world_state,
+        const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths) const
 {
     const EigenHelpers::VectorVector3d target_points = GetEndpoints(projected_deformable_point_paths);
 
@@ -396,7 +401,9 @@ void Planner::planGlobalGripperTrajectory(
 // Constraint violation detection
 ////////////////////////////////////////////////////////////////////////////////
 
-void Planner::visualizeProjectedPaths(const std::vector<EigenHelpers::VectorVector3d>& projected_paths, const bool visualization_enabled)
+void Planner::visualizeProjectedPaths(
+        const std::vector<EigenHelpers::VectorVector3d>& projected_paths,
+        const bool visualization_enabled)
 {
     if (visualization_enabled)
     {
@@ -471,7 +478,9 @@ bool Planner::checkForClothStretchingViolations(
     return violations_exist;
 }
 
-std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<VirtualRubberBand>> Planner::detectFutureConstraintViolations(const WorldState &current_world_state, const bool visualization_enabled)
+std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<VirtualRubberBand>> Planner::detectFutureConstraintViolations(
+        const WorldState &current_world_state,
+        const bool visualization_enabled)
 {
     assert(task_specification_->is_dijkstras_type_task_ && current_world_state.all_grippers_single_pose_.size() == 2);
     std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<VirtualRubberBand>> projected_deformable_point_paths_and_projected_virtual_rubber_bands;

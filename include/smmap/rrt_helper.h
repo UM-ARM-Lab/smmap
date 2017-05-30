@@ -20,7 +20,7 @@ namespace smmap
             typedef std::pair<std::pair<Eigen::Vector3d, Eigen::Vector3d>, VirtualRubberBand> RRTConfig;
             typedef std::allocator<RRTConfig> Allocator;
 
-            #warning "Replace these magic numbers
+            #warning "Replace these magic numbers"
             RRTHelper(const double step_size = 1.0)
                 : step_size_(step_size)
             {
