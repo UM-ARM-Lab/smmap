@@ -55,6 +55,18 @@ VirtualRubberBand::VirtualRubberBand(
     shortcutSmoothBand(false);
 }
 
+VirtualRubberBand::VirtualRubberBand(const VirtualRubberBand& other)
+    : task_(other.task_)
+    , sdf_(other.task_->environment_sdf_)
+    , vis_(other.vis_)
+    , max_integration_step_size_(other.max_integration_step_size_)
+    , max_distance_between_rubber_band_points_(other.max_distance_between_rubber_band_points_)
+    , num_smoothing_ittrs_(other.num_smoothing_ittrs_)
+    , min_object_radius_(other.min_object_radius_)
+    , max_total_band_distance_(other.max_total_band_distance_)
+    , band_(other.band_)
+{}
+
 
 
 const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRubberBand(

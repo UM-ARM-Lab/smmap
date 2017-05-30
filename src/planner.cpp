@@ -11,8 +11,7 @@
 #include <arc_utilities/get_neighbours.hpp>
 
 #include "smmap/timing.hpp"
-
-#include "smmap/rrt_Helper.hpp"
+#include "smmap/rrt_helper.h"
 
 using namespace smmap;
 using namespace EigenHelpersConversions;
@@ -335,13 +334,12 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& current_world
     return target_gripper_poses;
 }
 
-void Planner::planGlobalGripperTrajectory(const WorldState& current_world_state, const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths, const std::vector<VirtualRubberBand>& projected_virtual_rubber_bands)
+void Planner::planGlobalGripperTrajectory(
+        const WorldState& current_world_state,
+        const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths,
+        const std::vector<VirtualRubberBand>& projected_virtual_rubber_bands)
 {
     const AllGrippersSinglePose target_gripper_poses = getGripperTargets(current_world_state, projected_deformable_point_paths);
-
-    global_plan_current_timestep_ = 0;
-    executing_global_gripper_trajectory_ = true;
-    global_plan_gripper_trajectory_ = AllGrippersPoseTrajectory(10, current_world_state.all_grippers_single_pose_);
 
     std::pair<std::pair<Eigen::Affine3d, Eigen::Affine3d>, VirtualRubberBand> start_node(
                 std::pair<Eigen::Affine3d, Eigen::Affine3d>(
@@ -376,52 +374,22 @@ void Planner::planGlobalGripperTrajectory(const WorldState& current_world_state,
         return true;
     };
 
-    //////////////////////// From Mengyao /////////////////////////////////////
-
-    // I simply defined the distance be the sum of distances for two grippers.
-    const auto distance_fn = [] (const rrtConfig& c1, const rrtConfig& c2)
-    {
-        std::pair<double, double> pair_distance = Rrt_function::affine3dPairDistance(c1,c2);
-        return pair_distance.first + pair_distance.second;
-    };
-
-    const auto nearest_neighbor_fn = [&] (
-            const std::vector<simple_rrt_planner::SimpleRRTPlannerState<rrtConfig,std::allocator<rrtConfig>>>& nodes,
-            const rrtConfig& config)
-    {
-        std::vector<rrtConfig> nodes_config;
-
-        for (int ind = 0; ind<nodes.size(); ind++)
-        {
-            simple_rrt_planner::SimpleRRTPlannerState<rrtConfig,std::allocator<rrtConfig>> node_ind = nodes.at(ind);
-            nodes_config.push_back(node_ind.GetValueMutable());
-            // What is GetValueMutable, Immutable in simple_rrt_planner?(const)
-        }
-
-        return Rrt_function::nearestNeighbor(nodes_config, config, distance_fn);
-    };
-
-
-    /*
-    rrtConfig goal_node_;
-
-    const auto goal_reached_fn = [&] (const rrtConfig& config)
-    {
-        // goal_config_, THRESHOLD to be defined
-        if (distance_fn(config,goal_config_) < THRESHOLD )
-        {   return true;   }
-        return false;
-    };
-    */
-
-//    const auto results = simple_rrt_planner::SimpleHybridRRTPlanner::Plan<rrtConfig, std::allocator<rrtConfig>>(start, goal, nearest_neighbor_fn, goal_reached_fn, state_sampling_fn, forward_propagation_fn, goal_bias, time_limit, rng);
-
-
-    //////////////////////// Mengyao End //////////////////////////////////////
-
     stopwatch(RESET);
     const bool first_order_visibility = arc_utilities::FirstOrderDeformation::CheckFirstOrderDeformation(first_path.size(), second_path.size(), straight_line_collision_check_fn, false);
     ROS_INFO_STREAM_NAMED("planner", "First order visibility check result: " << first_order_visibility << " in " << stopwatch(READ) << " seconds");
+
+
+    global_plan_current_timestep_ = 0;
+    executing_global_gripper_trajectory_ = true;
+    global_plan_gripper_trajectory_ = AllGrippersPoseTrajectory(10, current_world_state.all_grippers_single_pose_);
+
+    //////////////////////// From Mengyao /////////////////////////////////////
+
+    // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
+    RRTHelper rrt_helper;
+//    const auto results = rrt_helper.plan(start, goal);
+
+    //////////////////////// Mengyao End //////////////////////////////////////
 }
 
 ////////////////////////////////////////////////////////////////////////////////
