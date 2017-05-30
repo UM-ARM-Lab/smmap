@@ -55,19 +55,6 @@ VirtualRubberBand::VirtualRubberBand(
     shortcutSmoothBand(false);
 }
 
-VirtualRubberBand::VirtualRubberBand(const VirtualRubberBand& other)
-    : task_(other.task_)
-    , sdf_(other.task_->environment_sdf_)
-    , vis_(other.vis_)
-    , max_integration_step_size_(other.max_integration_step_size_)
-    , max_distance_between_rubber_band_points_(other.max_distance_between_rubber_band_points_)
-    , num_smoothing_ittrs_(other.num_smoothing_ittrs_)
-    , min_object_radius_(other.min_object_radius_)
-    , max_total_band_distance_(other.max_total_band_distance_)
-    , band_(other.band_)
-{}
-
-
 
 const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRubberBand(
         const Eigen::Vector3d first_endpoint_translation,
@@ -163,12 +150,16 @@ void VirtualRubberBand::resampleBand(const bool verbose)
 
 void VirtualRubberBand::shortcutSmoothBand(const bool verbose)
 {
-    const auto sdf_collision_fn = [&] (const Eigen::Vector3d& location) { return sdf_.Get3d(location) < 0.0; };
+    const auto sdf_collision_fn = [&] (const Eigen::Vector3d& location)
+    {
+        return sdf_.Get3d(location) < 0.0;
+    };
     for (int smoothing_ittr = 0; smoothing_ittr < num_smoothing_ittrs_; ++smoothing_ittr)
     {
         std::uniform_int_distribution<ssize_t> first_distribution(0, band_.size() - 1);
         const size_t first_ind = first_distribution(generator_);
 
+        #warning "Magic number for smoothing distance here"
         const ssize_t max_smooth_distance = std::max((ssize_t)10, (ssize_t)std::floor(sdf_.Get3d(band_[first_ind]) / max_distance_between_rubber_band_points_));
         std::uniform_int_distribution<ssize_t> second_distribution(-max_smooth_distance, max_smooth_distance);
         const size_t second_ind = (size_t)arc_helpers::ClampValue<ssize_t>(first_ind + second_distribution(generator_), 0, band_.size() - 1);

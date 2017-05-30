@@ -21,9 +21,6 @@ namespace smmap
                     const std::shared_ptr<DijkstrasCoverageTask>& task,
                     const Visualizer& vis);
 
-            VirtualRubberBand(
-                    const VirtualRubberBand& other);
-
             const EigenHelpers::VectorVector3d& forwardSimulateVirtualRubberBand(
                     const Eigen::Vector3d first_endpoint_translation,
                     const Eigen::Vector3d second_endpoint_translation,

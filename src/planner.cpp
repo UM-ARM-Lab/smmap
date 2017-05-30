@@ -14,6 +14,8 @@
 #include "smmap/rrt_helper.h"
 
 using namespace smmap;
+using namespace Eigen;
+using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,13 +83,13 @@ void Planner::createBandits()
 #endif
 #ifdef KFMANB_BANDIT
     model_utility_bandit_ = KalmanFilterMANB<std::mt19937_64>(
-                Eigen::VectorXd::Zero(num_models_),
-                Eigen::VectorXd::Ones(num_models_) * 1e6);
+                VectorXd::Zero(num_models_),
+                VectorXd::Ones(num_models_) * 1e6);
 #endif
 #ifdef KFMANDB_BANDIT
     model_utility_bandit_ = KalmanFilterMANDB<std::mt19937_64>(
-                Eigen::VectorXd::Zero(num_models_),
-                Eigen::MatrixXd::Identity(num_models_, num_models_) * 1e6);
+                VectorXd::Zero(num_models_),
+                MatrixXd::Identity(num_models_, num_models_) * 1e6);
 #endif
 }
 
@@ -100,7 +102,8 @@ void Planner::createBandits()
  * @param current_world_state
  * @return
  */
-WorldState Planner::sendNextCommand(const WorldState& current_world_state)
+WorldState Planner::sendNextCommand(
+        const WorldState& current_world_state)
 {
     ROS_INFO_NAMED("planner", "------------------------------------------------------------------------------------");
     if (task_specification_->is_dijkstras_type_task_ && current_world_state.all_grippers_single_pose_.size() == 2)
@@ -111,7 +114,7 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
         }
         else
         {
-            const std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<VirtualRubberBand>> projected_deformable_point_paths_and_projected_virtual_rubber_bands =
+            const auto projected_deformable_point_paths_and_projected_virtual_rubber_bands =
                     detectFutureConstraintViolations(current_world_state);
             ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
 
@@ -137,7 +140,10 @@ WorldState Planner::sendNextCommand(const WorldState& current_world_state)
     }
 }
 
-void Planner::visualizeDesiredMotion(const WorldState& current_world_state, const ObjectDeltaAndWeight& desired_motion, const bool visualization_enabled)
+void Planner::visualizeDesiredMotion(
+        const WorldState& current_world_state,
+        const ObjectDeltaAndWeight& desired_motion,
+        const bool visualization_enabled)
 {
     if (visualization_enabled)
     {
@@ -171,10 +177,10 @@ void Planner::visualizeDesiredMotion(const WorldState& current_world_state, cons
 // Global gripper planner functions
 ////////////////////////////////////////////////////////////////////////////////
 
-EigenHelpers::VectorVector3d GetEndpoints(
-        const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths)
+VectorVector3d GetEndpoints(
+        const std::vector<VectorVector3d>& projected_deformable_point_paths)
 {
-    EigenHelpers::VectorVector3d endpoints;
+    VectorVector3d endpoints;
 
     endpoints.reserve(projected_deformable_point_paths.size());
     for (size_t idx = 0; idx < projected_deformable_point_paths.size(); ++idx)
@@ -188,23 +194,23 @@ EigenHelpers::VectorVector3d GetEndpoints(
     return endpoints;
 }
 
-EigenHelpers::VectorVector3d Planner::findPathBetweenPositions(
-        const Eigen::Vector3d& start,
-        const Eigen::Vector3d& goal) const
+VectorVector3d Planner::findPathBetweenPositions(
+        const Vector3d& start,
+        const Vector3d& goal) const
 {
-    const auto safe_config_fn = [&] (const Eigen::Vector3d& config)
+    const auto safe_config_fn = [&] (const Vector3d& config)
     {
         return dijkstras_task_->environment_sdf_.Get3d(config) > 0.0;
     };
     assert(safe_config_fn(start) && safe_config_fn(goal));
-    const auto round_to_grid_fn = [&] (const Eigen::Vector3d& config)
+    const auto round_to_grid_fn = [&] (const Vector3d& config)
     {
         return dijkstras_task_->work_space_grid_.roundToGrid(config);
     };
 
-    const auto neighbour_fn = [&] (const Eigen::Vector3d& config)
+    const auto neighbour_fn = [&] (const Vector3d& config)
     {
-        return arc_utilities::GetNeighbours::ThreeDimensional8Connected<Eigen::Vector3d, double, Eigen::aligned_allocator<Eigen::Vector3d>>(
+        return arc_utilities::GetNeighbours::ThreeDimensional8Connected<Vector3d, double, aligned_allocator<Vector3d>>(
                             config,
                             dijkstras_task_->work_space_grid_.getXMin(), dijkstras_task_->work_space_grid_.getXMax(),
                             dijkstras_task_->work_space_grid_.getYMin(), dijkstras_task_->work_space_grid_.getYMax(),
@@ -212,32 +218,21 @@ EigenHelpers::VectorVector3d Planner::findPathBetweenPositions(
                             dijkstras_task_->work_space_grid_.minStepDimension(),
                             round_to_grid_fn,
                             safe_config_fn);
-//        const ssize_t graph_ind = dijkstras_task_->work_space_grid_.worldPosToGridIndexClamped(config);
-//        const auto out_edges = dijkstras_task_->getFreeSpaceGraphNodeImmutable(graph_ind).GetOutEdgesImmutable();
-
-//        EigenHelpers::VectorVector3d neighbours(out_edges.size());
-//        for (size_t edge_idx = 0; edge_idx < out_edges.size(); ++edge_idx)
-//        {
-//            const ssize_t neighbour_idx = out_edges[edge_idx].GetToIndex();
-//            neighbours.push_back(dijkstras_task_->getFreeSpaceGraphNodeImmutable(neighbour_idx).GetValueImmutable());
-//        }
-
-//        return neighbours;
     };
-    const auto distance_fn = [] (const Eigen::Vector3d& c1, const Eigen::Vector3d& c2)
+    const auto distance_fn = [] (const Vector3d& c1, const Vector3d& c2)
     {
         return (c1 - c2).norm();
     };
-    const auto heuristic_fn = [&] (const Eigen::Vector3d& config)
+    const auto heuristic_fn = [&] (const Vector3d& config)
     {
         return (config - goal).norm();
     };
-    const auto goal_reached_fn = [&] (const Eigen::Vector3d& config)
+    const auto goal_reached_fn = [&] (const Vector3d& config)
     {
         return (config - goal).norm() < dijkstras_task_->work_space_grid_.minStepDimension() / 1.5;
     };
 
-    auto results = simple_astar_planner::SimpleAStarPlanner<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>::Plan(start, neighbour_fn, distance_fn, heuristic_fn, goal_reached_fn);
+    auto results = simple_astar_planner::SimpleAStarPlanner<Vector3d, aligned_allocator<Vector3d>>::Plan(start, neighbour_fn, distance_fn, heuristic_fn, goal_reached_fn);
     // Add the 2nd end of the configuration, using the rubber band smoothing process to remove it if it was extraneous
     results.first.push_back(goal);
     VirtualRubberBand goal_config_possible_band(results.first, virtual_rubber_band_between_grippers_->max_total_band_distance_, dijkstras_task_, vis_);
@@ -249,26 +244,32 @@ EigenHelpers::VectorVector3d Planner::findPathBetweenPositions(
 
 AllGrippersSinglePose Planner::getGripperTargets(
         const WorldState& current_world_state,
-        const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths) const
+        const std::vector<VectorVector3d>& projected_deformable_point_paths) const
 {
-    const EigenHelpers::VectorVector3d target_points = GetEndpoints(projected_deformable_point_paths);
+    const VectorVector3d target_points = GetEndpoints(projected_deformable_point_paths);
 
     vis_.visualizePoints("points_to_be_clustered", target_points, Visualizer::Blue(), 1);
 
-    const Eigen::Matrix3Xd target_points_as_matrix = VectorEigenVector3dToEigenMatrix3Xd(target_points);
-    const Eigen::MatrixXd distance_matrix = CalculateSquaredDistanceMatrix(target_points_as_matrix);
+    const Matrix3Xd target_points_as_matrix = VectorEigenVector3dToEigenMatrix3Xd(target_points);
+    const MatrixXd distance_matrix = CalculateSquaredDistanceMatrix(target_points_as_matrix);
 
     // Get the 2 most disparate points to initialize the clustering
     ssize_t row, col;
     distance_matrix.maxCoeff(&row, &col);
     assert(row != col);
-    const EigenHelpers::VectorVector3d starting_cluster_centers = {target_points[row], target_points[col]};
+    const VectorVector3d starting_cluster_centers = {target_points[row], target_points[col]};
 
     // Cluster the target points using K-means, then extract the cluster centers
-    const std::function<double(const Eigen::Vector3d&, const Eigen::Vector3d&)> distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2) { return (v1 - v2).norm(); };
-    const std::function<Eigen::Vector3d(const EigenHelpers::VectorVector3d&)> average_fn = [] (const EigenHelpers::VectorVector3d& data) { return EigenHelpers::AverageEigenVector3d(data); };
+    const std::function<double(const Vector3d&, const Vector3d&)> distance_fn = [] (const Vector3d& v1, const Vector3d& v2)
+    {
+        return (v1 - v2).norm();
+    };
+    const std::function<Vector3d(const VectorVector3d&)> average_fn = [] (const VectorVector3d& data)
+    {
+        return AverageEigenVector3d(data);
+    };
     const auto cluster_results = simple_kmeans_clustering::SimpleKMeansClustering::Cluster(target_points, distance_fn, average_fn, starting_cluster_centers);
-    EigenHelpers::VectorVector3d cluster_centers = cluster_results.second;
+    VectorVector3d cluster_centers = cluster_results.second;
 
     vis_.visualizePoints("cluster_centers", cluster_centers, Visualizer::Green(), 1);
 
@@ -333,35 +334,44 @@ AllGrippersSinglePose Planner::getGripperTargets(
     }
 
     // Pull the grippers closer to each other if they are too far apart
-    const EigenHelpers::VectorVector3d path = findPathBetweenPositions(target_gripper_poses[0].translation(), target_gripper_poses[1].translation());
-    const std::vector<double> cummulative_distance = EigenHelpers::CalculateCumulativeDistances(path);
+    const VectorVector3d path = findPathBetweenPositions(target_gripper_poses[0].translation(), target_gripper_poses[1].translation());
+    const std::vector<double> cummulative_distance = CalculateCumulativeDistances(path);
 
     return target_gripper_poses;
 }
 
 void Planner::planGlobalGripperTrajectory(
         const WorldState& current_world_state,
-        const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths,
+        const std::vector<VectorVector3d>& projected_deformable_point_paths,
         const std::vector<VirtualRubberBand>& projected_virtual_rubber_bands)
 {
-    const AllGrippersSinglePose target_gripper_poses = getGripperTargets(current_world_state, projected_deformable_point_paths);
-
-    std::pair<std::pair<Eigen::Affine3d, Eigen::Affine3d>, VirtualRubberBand> start_node(
-                std::pair<Eigen::Affine3d, Eigen::Affine3d>(
-                            current_world_state.all_grippers_single_pose_[0],
-                            current_world_state.all_grippers_single_pose_[1]),
+    RRTHelper::RRTConfig start_config(
+                std::pair<Vector3d, Vector3d>(
+                            current_world_state.all_grippers_single_pose_[0].translation(),
+                            current_world_state.all_grippers_single_pose_[1].translation()),
                 *virtual_rubber_band_between_grippers_);
 
-    const EigenHelpers::VectorVector3d& first_path = start_node.second.getVectorRepresentation();
-    const EigenHelpers::VectorVector3d& second_path = projected_virtual_rubber_bands.back().getVectorRepresentation();
+    // Note that the rubber band part of the target is ignored at the present time
+    const AllGrippersSinglePose target_gripper_poses = getGripperTargets(current_world_state, projected_deformable_point_paths);
+    RRTHelper::RRTConfig goal_config(std::pair<Vector3d, Vector3d>(
+                                         target_gripper_poses[0].translation(),
+                                         target_gripper_poses[1].translation()),
+                             *virtual_rubber_band_between_grippers_);
 
-    const auto straight_line_collision_check_fn = [&] (const ssize_t row, const ssize_t col)
+
+    ///////////////////// Start: To be moved into the RRTHelper class
+
+    const VectorVector3d& first_path = start_config.second.getVectorRepresentation();
+    const VectorVector3d& second_path = projected_virtual_rubber_bands.back().getVectorRepresentation();
+
+    // Checks if the straight line between elements of the two paths is collision free
+    const auto straight_line_collision_check_fn = [&] (const ssize_t first_path_ind, const ssize_t second_path_ind)
     {
-        assert(0 <= row && row < (ssize_t)first_path.size());
-        assert(0 <= col && col < (ssize_t)second_path.size());
+        assert(0 <= first_path_ind && first_path_ind < (ssize_t)first_path.size());
+        assert(0 <= second_path_ind && second_path_ind < (ssize_t)second_path.size());
 
-        const Eigen::Vector3d& first_node = first_path[row];
-        const Eigen::Vector3d& second_node = second_path[col];
+        const Vector3d& first_node = first_path[first_path_ind];
+        const Vector3d& second_node = second_path[second_path_ind];
 
         const ssize_t num_steps = (ssize_t)std::ceil((second_node - first_node).norm() / dijkstras_task_->environment_sdf_.GetResolution());
 
@@ -369,7 +379,7 @@ void Planner::planGlobalGripperTrajectory(
         for (ssize_t ind = 1; ind < num_steps; ++ind)
         {
             const double ratio = (double)ind/(double)num_steps;
-            const Eigen::Vector3d interpolated_point = EigenHelpers::Interpolate(first_node, second_node, ratio);
+            const Vector3d interpolated_point = Interpolate(first_node, second_node, ratio);
             if (dijkstras_task_->environment_sdf_.Get3d(interpolated_point) < 0.0)
             {
                 return false;
@@ -383,6 +393,7 @@ void Planner::planGlobalGripperTrajectory(
     const bool first_order_visibility = arc_utilities::FirstOrderDeformation::CheckFirstOrderDeformation(first_path.size(), second_path.size(), straight_line_collision_check_fn, false);
     ROS_INFO_STREAM_NAMED("planner", "First order visibility check result: " << first_order_visibility << " in " << stopwatch(READ) << " seconds");
 
+    ///////////////////// End: To be moved into the RRTHelper class
 
     global_plan_current_timestep_ = 0;
     executing_global_gripper_trajectory_ = true;
@@ -392,7 +403,7 @@ void Planner::planGlobalGripperTrajectory(
 
     // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
     RRTHelper rrt_helper;
-//    const auto results = rrt_helper.plan(start, goal);
+//    const auto results = rrt_helper.plan(start_config, goal_config);
 
     //////////////////////// Mengyao End //////////////////////////////////////
 }
@@ -402,7 +413,7 @@ void Planner::planGlobalGripperTrajectory(
 ////////////////////////////////////////////////////////////////////////////////
 
 void Planner::visualizeProjectedPaths(
-        const std::vector<EigenHelpers::VectorVector3d>& projected_paths,
+        const std::vector<VectorVector3d>& projected_paths,
         const bool visualization_enabled)
 {
     if (visualization_enabled)
@@ -416,7 +427,7 @@ void Planner::visualizeProjectedPaths(
             }
             else
             {
-                const EigenHelpers::VectorVector3d empty_path;
+                const VectorVector3d empty_path;
                 vis_.visualizePoints("projected_point_path", empty_path,Visualizer::Magenta(), (int32_t)node_ind + 1);
                 vis_.visualizeXYZTrajectory("projected_point_path_lines", empty_path, Visualizer::Magenta(), (int32_t)node_ind + 1);
             }
@@ -430,13 +441,13 @@ void Planner::visualizeProjectedPaths(
  * @return
  */
 bool Planner::checkForClothStretchingViolations(
-        const std::vector<EigenHelpers::VectorVector3d>& projected_paths,
+        const std::vector<VectorVector3d>& projected_paths,
         const bool visualization_enabled)
 {
     bool violations_exist = false;
 
-    EigenHelpers::VectorVector3d vis_start_points;
-    EigenHelpers::VectorVector3d vis_end_points;
+    VectorVector3d vis_start_points;
+    VectorVector3d vis_end_points;
 
     // For each node, check it's projected path against it's neighbours
     for (ssize_t node_ind = 0; node_ind < (ssize_t)projected_paths.size(); ++node_ind)
@@ -478,12 +489,12 @@ bool Planner::checkForClothStretchingViolations(
     return violations_exist;
 }
 
-std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<VirtualRubberBand>> Planner::detectFutureConstraintViolations(
+std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::detectFutureConstraintViolations(
         const WorldState &current_world_state,
         const bool visualization_enabled)
 {
     assert(task_specification_->is_dijkstras_type_task_ && current_world_state.all_grippers_single_pose_.size() == 2);
-    std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<VirtualRubberBand>> projected_deformable_point_paths_and_projected_virtual_rubber_bands;
+    std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 
     const static std_msgs::ColorRGBA gripper_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
     const static std_msgs::ColorRGBA rubber_band_safe_color = Visualizer::Black();
@@ -494,7 +505,7 @@ std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<VirtualRubberBa
     // Constraint violation Version 1 - Purely cloth overstretch
     //////////////////////////////////////////////////////////////////////////////////////////
     stopwatch(RESET);
-    const std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<std::vector<ssize_t>>> projected_deformable_point_paths =
+    const std::pair<std::vector<VectorVector3d>, std::vector<std::vector<ssize_t>>> projected_deformable_point_paths =
             dijkstras_task_->findPathFromObjectToTarget(current_world_state.object_configuration_, dijkstras_task_->getErrorThreshold(), num_lookahead_steps_);
     ROS_INFO_STREAM_NAMED("planner", "Calculated projected cloth paths                 - Version 1 - in " << stopwatch(READ) << " seconds");
     visualizeProjectedPaths(projected_deformable_point_paths.first, visualization_enabled);
@@ -708,20 +719,16 @@ void Planner::updateModels(const WorldState& starting_world_state,
 #ifdef KFMANB_BANDIT
     (void)task_desired_motion;
     (void)suggested_commands;
-    model_utility_bandit_.updateArms(process_noise_scaling_factor * Eigen::VectorXd::Ones(num_models_), model_used, true_error_reduction, observation_noise_scaling_factor * 1.0);
+    model_utility_bandit_.updateArms(process_noise_scaling_factor * VectorXd::Ones(num_models_), model_used, true_error_reduction, observation_noise_scaling_factor * 1.0);
 #endif
 #ifdef KFMANDB_BANDIT
     (void)task_desired_motion;
 
-    const Eigen::MatrixXd process_noise = calculateProcessNoise(suggested_commands);
-//    const Eigen::VectorXd observed_reward = calculateObservedReward(starting_world_state, task_desired_motion, model_used, world_feedback);
-//    const Eigen::MatrixXd observation_matrix = Eigen::MatrixXd::Identity(num_models_, num_models_);
-//    const Eigen::MatrixXd observation_noise = calculateObservationNoise(process_noise, model_used);
-
-    Eigen::MatrixXd observation_matrix = Eigen::RowVectorXd::Zero(num_models_);
+    const MatrixXd process_noise = calculateProcessNoise(suggested_commands);
+    MatrixXd observation_matrix = RowVectorXd::Zero(num_models_);
     observation_matrix(0, model_used) = 1.0;
-    const Eigen::VectorXd observed_reward = Eigen::VectorXd::Ones(1) * true_error_reduction;
-    const Eigen::MatrixXd observation_noise = Eigen::MatrixXd::Ones(1, 1);
+    const VectorXd observed_reward = VectorXd::Ones(1) * true_error_reduction;
+    const MatrixXd observation_noise = MatrixXd::Ones(1, 1);
 
     model_utility_bandit_.updateArms(
                 process_noise_scaling_factor * process_noise,
@@ -743,7 +750,7 @@ void Planner::updateModels(const WorldState& starting_world_state,
  * @param suggested_commands
  * @return
  */
-Eigen::MatrixXd Planner::calculateProcessNoise(const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands)
+MatrixXd Planner::calculateProcessNoise(const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands)
 {
     std::vector<double> grippers_velocity_norms((size_t)num_models_);
 
@@ -752,7 +759,7 @@ Eigen::MatrixXd Planner::calculateProcessNoise(const std::vector<std::pair<AllGr
         grippers_velocity_norms[model_ind] = MultipleGrippersVelocity6dNorm(suggested_commands[model_ind].first);
     }
 
-    Eigen::MatrixXd process_noise = Eigen::MatrixXd::Identity(num_models_, num_models_);
+    MatrixXd process_noise = MatrixXd::Identity(num_models_, num_models_);
     for (ssize_t i = 0; i < num_models_; i++)
     {
         for (ssize_t j = i+1; j < num_models_; j++)
@@ -780,5 +787,5 @@ Eigen::MatrixXd Planner::calculateProcessNoise(const std::vector<std::pair<AllGr
         }
     }
 
-    return correlation_strength_factor_ * process_noise + (1.0 - correlation_strength_factor_) * Eigen::MatrixXd::Identity(num_models_, num_models_);
+    return correlation_strength_factor_ * process_noise + (1.0 - correlation_strength_factor_) * MatrixXd::Identity(num_models_, num_models_);
 }
