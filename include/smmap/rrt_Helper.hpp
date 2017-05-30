@@ -62,12 +62,18 @@ namespace smmap {
         }
 
         // returned distance is the euclidian distance of two grippers pos
-        double affine3dPairDistance(const std::pair<Eigen::Affine3d, Eigen::Affine3d>& Anode, const std::pair<Eigen::Affine3d, Eigen::Affine3d>& Bnode)
+        // ?????????????? Here I simply define it as the sum of two grippers distance, ????????????????????????
+        std::pair<double, double> affine3dPairDistance(
+                const std::pair<Eigen::Affine3d, Eigen::Affine3d>& Anode,
+                const std::pair<Eigen::Affine3d, Eigen::Affine3d>& Bnode)
         {
-            double distance = 0;
-            Eigen::Vector3d transA = Anode.translation();
-            Eigen::Vector3d transB = Bnode.translation();
-            distance = (transA-transB).norm();
+            std::pair<double, double> distance = 0;
+            Eigen::Vector3d transA_first = Anode.first.translation();
+            Eigen::Vector3d transB_first = Bnode.first.translation();
+            Eigen::Vector3d transA_second = Anode.second.translation();
+            Eigen::Vector3d transB_second = Bnode.second.translation();
+            distance.first = (transA_first-transB_first).norm();
+            distance.second = (transA_second-transB_second).norm();
             return distance;
         }
 
@@ -133,9 +139,11 @@ namespace smmap {
             // ???? share_ptr ?????????????
             VirtualRubberBand band_copy = nearest_neighbor.second.get();
 
+            rrtConfig& last_node = nearest_neighbor;
             // keep stepping if not within one stepsize to random_target
             while(affine3dPairDistance(start_pos,random_target)>step_size)
             {
+
 
             }
 
@@ -145,6 +153,7 @@ namespace smmap {
         }
 
         // one candidate for step_fn above, generate uniform step based on euclidian distance
+        // I defined the step distance as the some of step distances of two grippers
         std::pair<Eigen::Affine3d, Eigen::Affine3d> getPairEuclidianStep(
                 const std::pair<Eigen::Affine3d, Eigen::Affine3d>& start,
                 const std::pair<Eigen::Affine3d, Eigen::Affine3d>& goal,
@@ -152,7 +161,15 @@ namespace smmap {
         {
             std::pair<Eigen::Affine3d, Eigen::Affine3d> step_to_take;
 
+            const Eigen::Vector3d first_vector = goal.first.translation()-start.first.translation();
+            const Eigen::Vector3d second_vector = goal.second.translation()-start.second.translation();
+            const std::pair<double, double> pair_distance = affine3dPairDistance(start,goal);
+            const double sum_distance = pair_distance.first + pair_distance.second;
 
+            if(sum_distance < step_size)
+            {   return goal;  }
+            step_to_take.first = first_vector * step_size/sum_distance;
+            step_to_take.second = second_vector * step_size/sum_distance;
             return step_to_take;
         }
 

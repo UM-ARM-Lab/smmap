@@ -347,9 +347,11 @@ void Planner::planGlobalGripperTrajectory(const WorldState& current_world_state,
 
     //////////////////////// From Mengyao /////////////////////////////////////
 
+    // I simply defined the distance be the sum of distances for two grippers.
     const auto distance_fn = [] (const rrtConfig& c1, const rrtConfig& c2)
     {
-        return Rrt_function::affine3dPairDistance(c1,c2);
+        std::pair<double, double> pair_distance = Rrt_function::affine3dPairDistance(c1,c2);
+        return pair_distance.first + pair_distance.second;
     };
 
     const auto nearest_neighbor_fn = [&] (
@@ -375,7 +377,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& current_world_state,
     const auto goal_reached_fn = [&] (const rrtConfig& config)
     {
         // goal_config_, THRESHOLD to be defined
-        if (Rrt_function::affine3dPairDistance(config,goal_config_) < THRESHOLD )
+        if (distance_fn(config,goal_config_) < THRESHOLD )
         {   return true;   }
         return false;
     };
