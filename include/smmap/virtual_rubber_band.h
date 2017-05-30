@@ -15,6 +15,12 @@ namespace smmap
                     const std::shared_ptr<DijkstrasCoverageTask>& task,
                     const Visualizer& vis);
 
+            VirtualRubberBand(
+                    EigenHelpers::VectorVector3d starting_points,
+                    const double max_total_band_distance,
+                    const std::shared_ptr<DijkstrasCoverageTask>& task,
+                    const Visualizer& vis);
+
             const EigenHelpers::VectorVector3d& forwardSimulateVirtualRubberBand(
                     const Eigen::Vector3d first_endpoint_translation,
                     const Eigen::Vector3d second_endpoint_translation,
@@ -32,16 +38,21 @@ namespace smmap
                     const bool visualization_enabled) const;
 
         private:
+            void resampleBand(const bool verbose);
+            void shortcutSmoothBand(const bool verbose);
+
             const std::shared_ptr<DijkstrasCoverageTask> task_;
             const sdf_tools::SignedDistanceField& sdf_;
             const Visualizer& vis_;
 
+        public:
             const double max_integration_step_size_;
             const double max_distance_between_rubber_band_points_;
             const int num_smoothing_ittrs_;
             const double min_object_radius_;
             const double max_total_band_distance_;
 
+        private:
             EigenHelpers::VectorVector3d band_;
 
 //            static std::default_random_engine generator_(std::chrono::system_clock::now().time_since_epoch().count());

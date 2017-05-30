@@ -177,7 +177,10 @@ EigenHelpers::VectorVector3d GetEndpoints(const std::vector<EigenHelpers::Vector
     endpoints.reserve(projected_deformable_point_paths.size());
     for (size_t idx = 0; idx < projected_deformable_point_paths.size(); ++idx)
     {
-        endpoints.push_back(projected_deformable_point_paths[idx].back());
+        if (projected_deformable_point_paths[idx].size() > 1)
+        {
+            endpoints.push_back(projected_deformable_point_paths[idx].back());
+        }
     }
 
     return endpoints;
@@ -189,15 +192,33 @@ EigenHelpers::VectorVector3d Planner::findPathBetweenPositions(const Eigen::Vect
     {
         return dijkstras_task_->environment_sdf_.Get3d(config) > 0.0;
     };
+    assert(safe_config_fn(start) && safe_config_fn(goal));
+    const auto round_to_grid_fn = [&] (const Eigen::Vector3d& config)
+    {
+        return dijkstras_task_->work_space_grid_.roundToGrid(config);
+    };
+
     const auto neighbour_fn = [&] (const Eigen::Vector3d& config)
     {
         return arc_utilities::GetNeighbours::ThreeDimensional8Connected<Eigen::Vector3d, double, Eigen::aligned_allocator<Eigen::Vector3d>>(
                             config,
                             dijkstras_task_->work_space_grid_.getXMin(), dijkstras_task_->work_space_grid_.getXMax(),
-                            dijkstras_task_->work_space_grid_.getXMin(), dijkstras_task_->work_space_grid_.getXMax(),
-                            dijkstras_task_->work_space_grid_.getXMin(), dijkstras_task_->work_space_grid_.getXMax(),
+                            dijkstras_task_->work_space_grid_.getYMin(), dijkstras_task_->work_space_grid_.getYMax(),
+                            dijkstras_task_->work_space_grid_.getZMin(), dijkstras_task_->work_space_grid_.getZMax(),
                             dijkstras_task_->work_space_grid_.minStepDimension(),
+                            round_to_grid_fn,
                             safe_config_fn);
+//        const ssize_t graph_ind = dijkstras_task_->work_space_grid_.worldPosToGridIndexClamped(config);
+//        const auto out_edges = dijkstras_task_->getFreeSpaceGraphNodeImmutable(graph_ind).GetOutEdgesImmutable();
+
+//        EigenHelpers::VectorVector3d neighbours(out_edges.size());
+//        for (size_t edge_idx = 0; edge_idx < out_edges.size(); ++edge_idx)
+//        {
+//            const ssize_t neighbour_idx = out_edges[edge_idx].GetToIndex();
+//            neighbours.push_back(dijkstras_task_->getFreeSpaceGraphNodeImmutable(neighbour_idx).GetValueImmutable());
+//        }
+
+//        return neighbours;
     };
     const auto distance_fn = [] (const Eigen::Vector3d& c1, const Eigen::Vector3d& c2)
     {
@@ -209,17 +230,25 @@ EigenHelpers::VectorVector3d Planner::findPathBetweenPositions(const Eigen::Vect
     };
     const auto goal_reached_fn = [&] (const Eigen::Vector3d& config)
     {
-        return config.isApprox(goal);
+        return (config - goal).norm() < dijkstras_task_->work_space_grid_.minStepDimension() / 1.5;
     };
 
-    const auto results = simple_astar_planner::SimpleAStarPlanner<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>::Plan(start, neighbour_fn, distance_fn, heuristic_fn, goal_reached_fn);
+    auto results = simple_astar_planner::SimpleAStarPlanner<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>::Plan(start, neighbour_fn, distance_fn, heuristic_fn, goal_reached_fn);
+    // Add the 2nd end of the configuration, using the rubber band smoothing process to remove it if it was extraneous
+    results.first.push_back(goal);
+    VirtualRubberBand goal_config_possible_band(results.first, virtual_rubber_band_between_grippers_->max_total_band_distance_, dijkstras_task_, vis_);
+
+    vis_.visualizeLineStrip("path_between_gripper_target_positions", goal_config_possible_band.getVectorRepresentation(), Visualizer::Green(), 1);
     ROS_INFO_STREAM_NAMED("planner", "AStar path between configs statistics:\n" << PrettyPrint::PrettyPrint(results.second, true, "\n"));
-    return results.first;
+    return goal_config_possible_band.getVectorRepresentation();
 }
 
 AllGrippersSinglePose Planner::getGripperTargets(const WorldState& current_world_state, const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths) const
 {
     const EigenHelpers::VectorVector3d target_points = GetEndpoints(projected_deformable_point_paths);
+
+    vis_.visualizePoints("points_to_be_clustered", target_points, Visualizer::Blue(), 1);
+
     const Eigen::Matrix3Xd target_points_as_matrix = VectorEigenVector3dToEigenMatrix3Xd(target_points);
     const Eigen::MatrixXd distance_matrix = CalculateSquaredDistanceMatrix(target_points_as_matrix);
 
@@ -234,6 +263,8 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& current_world
     const std::function<Eigen::Vector3d(const EigenHelpers::VectorVector3d&)> average_fn = [] (const EigenHelpers::VectorVector3d& data) { return EigenHelpers::AverageEigenVector3d(data); };
     const auto cluster_results = simple_kmeans_clustering::SimpleKMeansClustering::Cluster(target_points, distance_fn, average_fn, starting_cluster_centers);
     EigenHelpers::VectorVector3d cluster_centers = cluster_results.second;
+
+    vis_.visualizePoints("cluster_centers", cluster_centers, Visualizer::Green(), 1);
 
     // Project the cluster centers to be out of collision
     cluster_centers[0] = dijkstras_task_->environment_sdf_.ProjectOutOfCollision3d(cluster_centers[0], 1.0 / 10.0);
@@ -295,7 +326,7 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& current_world
         }
     }
 
-    // Pull the grippers clsoser to each other if they are too far apart
+    // Pull the grippers closer to each other if they are too far apart
     const EigenHelpers::VectorVector3d path = findPathBetweenPositions(target_gripper_poses[0].translation(), target_gripper_poses[1].translation());
     const std::vector<double> cummulative_distance = EigenHelpers::CalculateCumulativeDistances(path);
 
@@ -360,14 +391,14 @@ void Planner::visualizeProjectedPaths(const std::vector<EigenHelpers::VectorVect
         {
             if (projected_paths[node_ind].size() > 1)
             {
-                vis_.visualizePoints("projected_point_path", projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind);
-                vis_.visualizeXYZTrajectory("projected_point_path_lines", projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind);
+                vis_.visualizePoints("projected_point_path", projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind + 1);
+                vis_.visualizeXYZTrajectory("projected_point_path_lines", projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind + 1);
             }
             else
             {
                 const EigenHelpers::VectorVector3d empty_path;
-                vis_.visualizePoints("projected_point_path", empty_path,Visualizer::Magenta(), (int32_t)node_ind);
-                vis_.visualizeXYZTrajectory("projected_point_path_lines", empty_path, Visualizer::Magenta(), (int32_t)node_ind);
+                vis_.visualizePoints("projected_point_path", empty_path,Visualizer::Magenta(), (int32_t)node_ind + 1);
+                vis_.visualizeXYZTrajectory("projected_point_path_lines", empty_path, Visualizer::Magenta(), (int32_t)node_ind + 1);
             }
         }
     }

@@ -40,6 +40,7 @@ catkin_package(
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
     DEPENDS         Eigen3
                     GUROBI
+                    PythonLibs
 )
 
 ###########
@@ -85,40 +86,43 @@ FILE(GLOB cpp_SRC "src/*.cpp")
 
 #add_library(${PROJECT_NAME}_KFMANDB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 #add_dependencies(${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(${PROJECT_NAME}_KFMANDB ${GUROBI_LIBRARIES} ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
+#target_link_libraries(${PROJECT_NAME}_KFMANDB ${GUROBI_LIBRARIES} ${catkin_LIBRARIES})
 #set_target_properties(${PROJECT_NAME}_KFMANDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANDB_BANDIT")
 
 #add_library(${PROJECT_NAME}_KFMANB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 #add_dependencies(${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(${PROJECT_NAME}_KFMANB ${GUROBI_LIBRARIES} ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
+#target_link_libraries(${PROJECT_NAME}_KFMANB ${GUROBI_LIBRARIES} ${catkin_LIBRARIES})
 #set_target_properties(${PROJECT_NAME}_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
 
-add_library(${PROJECT_NAME}_UCB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
-add_dependencies(${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_UCB ${GUROBI_LIBRARIES} ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
-set_target_properties(${PROJECT_NAME}_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
+#add_library(${PROJECT_NAME}_UCB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
+#add_dependencies(${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
+#target_link_libraries(${PROJECT_NAME}_UCB ${GUROBI_LIBRARIES} ${catkin_LIBRARIES})
+#set_target_properties(${PROJECT_NAME}_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
 
 ## Simulator tests
 #add_executable(${PROJECT_NAME}_test_node_KFMANDB nodes/${PROJECT_NAME}_test_node.cpp)
 #add_dependencies(${PROJECT_NAME}_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(${PROJECT_NAME}_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
+#target_link_libraries(${PROJECT_NAME}_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_LIBRARIES})
 #set_target_properties(${PROJECT_NAME}_test_node_KFMANDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANDB_BANDIT")
 
 #add_executable(${PROJECT_NAME}_test_node_KFMANB nodes/${PROJECT_NAME}_test_node.cpp)
 #add_dependencies(${PROJECT_NAME}_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(${PROJECT_NAME}_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
+#target_link_libraries(${PROJECT_NAME}_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES})
 #set_target_properties(${PROJECT_NAME}_test_node_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
 
-add_executable(${PROJECT_NAME}_test_node_UCB nodes/${PROJECT_NAME}_test_node.cpp)
-add_dependencies(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_LIBRARIES} ${PYTHON_LIBRARIES})
+add_executable(${PROJECT_NAME}_test_node_UCB nodes/${PROJECT_NAME}_test_node.cpp ${hpp_SRC} ${h_SRC} ${cpp_SRC})
+add_dependencies(${PROJECT_NAME}_test_node_UCB ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_test_node_UCB ${catkin_LIBRARIES} ${GUROBI_LIBRARIES})
+#add_executable(${PROJECT_NAME}_test_node_UCB nodes/${PROJECT_NAME}_test_node.cpp)
+#add_dependencies(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
+#target_link_libraries(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_LIBRARIES})
 set_target_properties(${PROJECT_NAME}_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
 
 ## Synthethic trials
-add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp src/cvxopt_solvers.cpp src/gurobi_solvers.cpp)
-add_dependencies(kalman_filter_synthetic_trials ${catkin_EXPORTED_TARGETS})
-target_link_libraries(kalman_filter_synthetic_trials ${catkin_LIBRARIES} ${PYTHON_LIBRARIES} ${GUROBI_LIBRARIES})
-set_target_properties(kalman_filter_synthetic_trials PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS}")
+#add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp src/cvxopt_solvers.cpp src/gurobi_solvers.cpp)
+#add_dependencies(kalman_filter_synthetic_trials ${catkin_EXPORTED_TARGETS})
+#target_link_libraries(kalman_filter_synthetic_trials ${catkin_LIBRARIES} ${PYTHON_LIBRARIES} ${GUROBI_LIBRARIES})
+#set_target_properties(kalman_filter_synthetic_trials PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS}")
 
 #############
 ## Install ##

@@ -266,7 +266,7 @@ void Visualizer::visualizeObjectDelta(
     marker.type = visualization_msgs::Marker::LINE_LIST;
     marker.ns = marker_name;
     marker.id = 0;
-    marker.scale.x = 0.1;
+    marker.scale.x = 0.001;
     marker.points.reserve((size_t)current.cols() * 2);
     marker.colors.reserve((size_t)current.cols() * 2);
     for (ssize_t col = 0; col < current.cols(); col++)
