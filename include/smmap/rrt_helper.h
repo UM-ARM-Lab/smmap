@@ -65,19 +65,32 @@ namespace smmap
             // const std::function<T(void)>& sampling_fn,
             // * state_sampling_fn - returns a new state (randomly- or deterministically-sampled)
             // ????????? Should I do forward simulation to make sure it is feasible from current configuration ?????
-//            template <typename Generator>
-//            inline std::pair<Eigen::Affine3d, Eigen::Affine3d> SE3PairSampling(
-//                    Generator& prng,
-//                    simple_samplers::SimpleSE3BaseSampler se3_sampler)
-//            {
-//                std::srand(std::time(0));
-//                std::pair<Eigen::Affine3d, Eigen::Affine3d> rand_sample;
 
-//                rand_sample.first = se3_sampler.Sample(prng);
-//                rand_sample.second = se3_sampler.Sample(prng);
+            template <typename Generator>
+            inline std::pair<Eigen::Vector3d, Eigen::Vector3d> posPairSampling(
+                    Generator& prng)
+            {
+                std::srand(std::time(0));
+                std::pair<Eigen::Vector3d, Eigen::Vector3d> rand_sample;
 
-//                return rand_sample;
-//            }
+                const double x1 = EigenHelpers::Interpolate(world_xyz.x_limits_.first, world_xyz.x_limits_.second, world_xyz.uniform_unit_distribution_(prng));
+                const double y1 = EigenHelpers::Interpolate(world_xyz.y_limits_.first, world_xyz.y_limits_.second, world_xyz.uniform_unit_distribution_(prng));
+                const double z1 = EigenHelpers::Interpolate(world_xyz.z_limits_.first, world_xyz.z_limits_.second, world_xyz.uniform_unit_distribution_(prng));
+
+                const double x2 = EigenHelpers::Interpolate(world_xyz.x_limits_.first, world_xyz.x_limits_.second, world_xyz.uniform_unit_distribution_(prng));
+                const double y2 = EigenHelpers::Interpolate(world_xyz.y_limits_.first, world_xyz.y_limits_.second, world_xyz.uniform_unit_distribution_(prng));
+                const double z2 = EigenHelpers::Interpolate(world_xyz.z_limits_.first, world_xyz.z_limits_.second, world_xyz.uniform_unit_distribution_(prng));
+
+                rand_sample.first(0) = x1;
+                rand_sample.first(1) = y1;
+                rand_sample.first(2) = z1;
+                rand_sample.second(0) = x2;
+                rand_sample.second(1) = y1;
+                rand_sample.second(2) = z1;
+
+                return rand_sample;
+            }
+
 
 
             /* const std::function<std::vector<std::pair<T, int64_t>>(const T&, const T&)>& forward_propagation_fn,
@@ -135,7 +148,13 @@ namespace smmap
 
         private:
             const double step_size_;
-
+            const std::pair<double, double> x_limits_;
+            const std::pair<double, double> y_limits_;
+            const std::pair<double, double> z_limits_;
+            const std::uniform_real_distribution<double> uniform_unit_distribution_;
+            const sdf_tools::SignedDistanceField environment_sdf_;
+            const RRTConfig start_;
+            const RRTConfig goal_;
 
 //             const std::function<bool(void)>& termination_check_fn
 //             * termination_check_fn - returns if the planner should terminate (for example, if it has exceeded time/space limits)
