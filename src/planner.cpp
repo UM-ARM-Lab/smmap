@@ -381,7 +381,6 @@ void Planner::planGlobalGripperTrajectory(
                                          target_gripper_poses[1].translation()),
                              *virtual_rubber_band_between_grippers_);
 
-
     ///////////////////// Start: To be moved into the RRTHelper class
 
     const VectorVector3d& first_path = start_config.second.getVectorRepresentation();
@@ -424,9 +423,28 @@ void Planner::planGlobalGripperTrajectory(
 
     //////////////////////// From Mengyao /////////////////////////////////////
 
+    #warning "Replace these magic numbers"
+    const double step_size = 1.0;
+    const double obstacle_threshold = 0;
+    const double x_limits_lower = dijkstras_task_->work_space_grid_.getXMin();
+    const double x_limits_upper = dijkstras_task_->work_space_grid_.getXMax();
+    const double y_limits_lower = dijkstras_task_->work_space_grid_.getYMin();
+    const double y_limits_upper = dijkstras_task_->work_space_grid_.getYMax();
+    const double z_limits_lower = dijkstras_task_->work_space_grid_.getZMin();
+    const double z_limits_upper = dijkstras_task_->work_space_grid_.getZMax();
+    const double goal_reach_radius = 1.0;
+    const sdf_tools::SignedDistanceField& environment_sdf(GetEnvironmentSDF(nh_));
+
     // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
-    RRTHelper rrt_helper;
-//    const auto results = rrt_helper.plan(start_config, goal_config);
+    RRTHelper rrt_helper(environment_sdf,
+                         step_size, obstacle_threshold,
+                         x_limits_lower, x_limits_upper, y_limits_lower, y_limits_upper,
+                         z_limits_lower, z_limits_upper, goal_reach_radius);
+
+    #warning "Goal_node, time_limit, rng to be specified later"
+    const std::chrono::duration<double> time_limit(600);
+
+    const auto results = rrt_helper.rrtPlan(start_config, goal_config, time_limit, generator_);
 
     //////////////////////// Mengyao End //////////////////////////////////////
 }
