@@ -93,7 +93,7 @@ Visualizer::Visualizer(ros::NodeHandle& nh)
 
 void Visualizer::visualizePoints(
         const std::string& marker_name,
-        const EigenHelpers::VectorVector3d points,
+        const EigenHelpers::VectorVector3d& points,
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
@@ -104,7 +104,7 @@ void Visualizer::visualizePoints(
 
 void Visualizer::visualizePoints(
         const std::string& marker_name,
-        const EigenHelpers::VectorVector3d points,
+        const EigenHelpers::VectorVector3d& points,
         const std::vector<std_msgs::ColorRGBA>& colors,
         const int32_t id) const
 {
@@ -123,20 +123,42 @@ void Visualizer::visualizePoints(
     visualization_marker_pub_.publish(marker);
 }
 
-void Visualizer::visualizeRope(
+void Visualizer::visualizeCubes(
         const std::string& marker_name,
-        const ObjectPointSet& rope,
-        const std_msgs::ColorRGBA& color) const
+        const EigenHelpers::VectorVector3d& points,
+        const Eigen::Vector3d& scale,
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
 {
-    std::vector<std_msgs::ColorRGBA> colors((size_t)rope.cols(), color);
+    visualization_msgs::Marker marker;
 
-    visualizeRope(marker_name, rope, colors);
+    marker.header.frame_id = world_frame_name_;
+
+    marker.type = visualization_msgs::Marker::CUBE_LIST;
+    marker.ns = marker_name;
+    marker.id = id;
+    marker.scale = EigenHelpersConversions::EigenVector3dToGeometryVector3(scale);
+    marker.points = EigenHelpersConversions::VectorEigenVector3dToVectorGeometryPoint(points);
+    marker.color = color;
+
+    visualization_marker_pub_.publish(marker);
 }
 
 void Visualizer::visualizeRope(
         const std::string& marker_name,
         const ObjectPointSet& rope,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
+{
+    const std::vector<std_msgs::ColorRGBA> colors((size_t)rope.cols(), color);
+    visualizeRope(marker_name, rope, colors, id);
+}
+
+void Visualizer::visualizeRope(
+        const std::string& marker_name,
+        const ObjectPointSet& rope,
+        const std::vector<std_msgs::ColorRGBA>& colors,
+        const int32_t id) const
 {
     visualization_msgs::Marker marker;
 
@@ -144,7 +166,7 @@ void Visualizer::visualizeRope(
 
     marker.type = visualization_msgs::Marker::LINE_STRIP;
     marker.ns = marker_name;
-    marker.id = 0;
+    marker.id = id;
     marker.scale.x = 0.15;
     marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint(rope);
     marker.colors = colors;
@@ -160,17 +182,18 @@ void Visualizer::visualizeRope(
 void Visualizer::visualizeCloth(
         const std::string& marker_name,
         const ObjectPointSet& cloth,
-        const std_msgs::ColorRGBA& color) const
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
 {
-    std::vector<std_msgs::ColorRGBA> colors((size_t)cloth.cols(), color);
-
+    const std::vector<std_msgs::ColorRGBA> colors((size_t)cloth.cols(), color);
     visualizeCloth(marker_name, cloth, colors);
 }
 
 void Visualizer::visualizeCloth(
         const std::string& marker_name,
         const ObjectPointSet& cloth,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
+        const std::vector<std_msgs::ColorRGBA>& colors,
+        const int32_t id) const
 {
     visualization_msgs::Marker marker;
 
@@ -178,7 +201,7 @@ void Visualizer::visualizeCloth(
 
     marker.type = visualization_msgs::Marker::POINTS;
     marker.ns = marker_name;
-    marker.id = 0;
+    marker.id = id;
     marker.scale.x = 0.005;
     marker.scale.y = 0.005;
     marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint(cloth);
@@ -190,7 +213,8 @@ void Visualizer::visualizeCloth(
 visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
         const std::string& marker_name,
         const Eigen::Affine3d& eigen_pose,
-        const std_msgs::ColorRGBA& color) const
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
 {
     visualization_msgs::MarkerArray::_markers_type markers;
     markers.resize(2);
@@ -199,7 +223,7 @@ visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
 
     markers[0].type = visualization_msgs::Marker::CUBE;
     markers[0].ns = marker_name;
-    markers[0].id = 0;
+    markers[0].id = id;
     markers[0].scale.x = 0.03;
     markers[0].scale.y = 0.03;
     markers[0].scale.z = 0.01;
@@ -210,7 +234,7 @@ visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
 
     markers[1].type = visualization_msgs::Marker::CUBE;
     markers[1].ns = marker_name;
-    markers[1].id = 1;
+    markers[1].id = id + 1;
     markers[1].scale.x = 0.03;
     markers[1].scale.y = 0.03;
     markers[1].scale.z = 0.01;
@@ -223,30 +247,27 @@ visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
 void Visualizer::visualizeGripper(
         const std::string& marker_name,
         const Eigen::Affine3d& eigen_pose,
-        const std_msgs::ColorRGBA& color) const
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
 {
     visualization_msgs::MarkerArray marker;
-
-    marker.markers = createGripperMarker(marker_name, eigen_pose, color);
-
+    marker.markers = createGripperMarker(marker_name, eigen_pose, color, id);
     visualization_marker_array_pub_.publish(marker);
 }
 
 void Visualizer::visualizeGrippers(
         const std::string& marker_name,
         const EigenHelpers::VectorAffine3d eigen_poses,
-        const std_msgs::ColorRGBA& color) const
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
 {
     visualization_msgs::MarkerArray marker;
     marker.markers.reserve(2 * eigen_poses.size());
 
     for (size_t gripper_ind = 0; gripper_ind < eigen_poses.size(); ++gripper_ind)
     {
-        const auto m = createGripperMarker(marker_name, eigen_poses[gripper_ind], color);
+        const auto m = createGripperMarker(marker_name, eigen_poses[gripper_ind], color, id + (int32_t)(2*gripper_ind));
         marker.markers.insert(marker.markers.end(), m.begin(), m.end());
-
-        marker.markers[2*gripper_ind].id = (int)(2*gripper_ind);
-        marker.markers[2*gripper_ind + 1].id = (int)(2*gripper_ind + 1);
     }
 
     visualization_marker_array_pub_.publish(marker);
@@ -257,7 +278,8 @@ void Visualizer::visualizeObjectDelta(
         const std::string& marker_name,
         const ObjectPointSet& current,
         const ObjectPointSet& desired,
-        const std_msgs::ColorRGBA& color) const
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
 {
     visualization_msgs::Marker marker;
 
@@ -265,7 +287,7 @@ void Visualizer::visualizeObjectDelta(
 
     marker.type = visualization_msgs::Marker::LINE_LIST;
     marker.ns = marker_name;
-    marker.id = 0;
+    marker.id = id;
     marker.scale.x = 0.001;
     marker.points.reserve((size_t)current.cols() * 2);
     marker.colors.reserve((size_t)current.cols() * 2);
@@ -284,7 +306,8 @@ void Visualizer::visualizeTranslation(
         const std::string& marker_name,
         const geometry_msgs::Point& start,
         const geometry_msgs::Point& end,
-        const std_msgs::ColorRGBA& color) const
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
 {
     visualization_msgs::Marker marker;
 
@@ -292,8 +315,8 @@ void Visualizer::visualizeTranslation(
 
     marker.type = visualization_msgs::Marker::LINE_STRIP;
     marker.ns = marker_name;
-    marker.id = 0;
-    marker.scale.x = 0.1;
+    marker.id = id;
+    marker.scale.x = 0.01;
     marker.points.push_back(start);
     marker.points.push_back(end);
     marker.colors.push_back(color);
@@ -306,24 +329,29 @@ void Visualizer::visualizeTranslation(
         const std::string& marker_name,
         const Eigen::Vector3d& start,
         const Eigen::Vector3d& end,
-        const std_msgs::ColorRGBA& color) const
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
 {
-    visualizeTranslation(marker_name,
-                          EigenHelpersConversions::EigenVector3dToGeometryPoint(start),
-                          EigenHelpersConversions::EigenVector3dToGeometryPoint(end),
-                          color);
+    visualizeTranslation(
+                marker_name,
+                EigenHelpersConversions::EigenVector3dToGeometryPoint(start),
+                EigenHelpersConversions::EigenVector3dToGeometryPoint(end),
+                color,
+                id);
 }
 
-void Visualizer::visualizeTranslation(
-        const std::string& marker_name,
+void Visualizer::visualizeTranslation(const std::string& marker_name,
         const Eigen::Affine3d &start,
         const Eigen::Affine3d &end,
-        const std_msgs::ColorRGBA& color) const
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
 {
-    Visualizer::visualizeTranslation(marker_name,
-                          start.translation(),
-                          end.translation(),
-                          color);
+    Visualizer::visualizeTranslation(
+                marker_name,
+                start.translation(),
+                end.translation(),
+                color,
+                id);
 }
 
 void Visualizer::visualizeLines(

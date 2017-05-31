@@ -24,100 +24,119 @@ namespace smmap
 
             void visualizePoints(
                     const std::string& marker_name,
-                    const EigenHelpers::VectorVector3d points,
+                    const EigenHelpers::VectorVector3d& points,
                     const std_msgs::ColorRGBA& color,
-                    const int32_t id = 0) const;
+                    const int32_t id = 1) const;
 
-            void visualizePoints(const std::string& marker_name,
-                    const EigenHelpers::VectorVector3d points,
+            void visualizePoints(
+                    const std::string& marker_name,
+                    const EigenHelpers::VectorVector3d& points,
                     const std::vector<std_msgs::ColorRGBA>& colors,
-                    const int32_t id) const;
+                    const int32_t id = 1) const;
+
+            void visualizeCubes(
+                    const std::string& marker_name,
+                    const EigenHelpers::VectorVector3d& points,
+                    const Eigen::Vector3d& scale,
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 1) const;
 
             void visualizeRope(
                     const std::string& marker_name,
                     const ObjectPointSet& rope,
-                    const std_msgs::ColorRGBA& color) const;
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 1) const;
 
             void visualizeRope(
                     const std::string& marker_name,
                     const ObjectPointSet& rope,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const;
+                    const std::vector<std_msgs::ColorRGBA>& colors,
+                    const int32_t id = 1) const;
 
             void visualizeCloth(
                     const std::string& marker_name,
                     const ObjectPointSet& cloth,
-                    const std_msgs::ColorRGBA& color) const;
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 1) const;
 
             void visualizeCloth(
                     const std::string& marker_name,
                     const ObjectPointSet& cloth,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const;
+                    const std::vector<std_msgs::ColorRGBA>& colors,
+                    const int32_t id = 1) const;
 
             visualization_msgs::MarkerArray::_markers_type createGripperMarker(
                     const std::string& marker_name,
                     const Eigen::Affine3d& eigen_pose,
-                    const std_msgs::ColorRGBA& color) const;
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 1) const;
 
             void visualizeGripper(
                     const std::string& marker_name,
                     const Eigen::Affine3d& eigen_pose,
-                    const std_msgs::ColorRGBA& color) const;
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 1) const;
 
             void visualizeGrippers(
                     const std::string& marker_name,
                     const EigenHelpers::VectorAffine3d eigen_poses,
-                    const std_msgs::ColorRGBA& color) const;
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 1) const;
 
             void visualizeObjectDelta(
                     const std::string& marker_name,
                     const ObjectPointSet& current,
                     const ObjectPointSet& desired,
-                    const std_msgs::ColorRGBA& color) const;
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 1) const;
 
             void visualizeTranslation(
                     const std::string& marker_name,
                     const geometry_msgs::Point& start,
                     const geometry_msgs::Point& end,
-                    const std_msgs::ColorRGBA& color) const;
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 1) const;
 
             void visualizeTranslation(
                     const std::string& marker_name,
                     const Eigen::Vector3d& start,
                     const Eigen::Vector3d& end,
-                    const std_msgs::ColorRGBA& color) const;
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 1) const;
 
             void visualizeTranslation(
                     const std::string& marker_name,
                     const Eigen::Affine3d &start,
                     const Eigen::Affine3d &end,
-                    const std_msgs::ColorRGBA& color) const;
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 1) const;
 
             void visualizeLines(
                     const std::string& marker_name,
                     const EigenHelpers::VectorVector3d& start,
                     const EigenHelpers::VectorVector3d& end,
                     const std_msgs::ColorRGBA& color,
-                    const int32_t id = 0) const;
+                    const int32_t id = 1) const;
 
             void visualizeLineStrip(
                     const std::string& marker_name,
                     const EigenHelpers::VectorVector3d& point_sequence,
                     const std_msgs::ColorRGBA& color,
-                    const int32_t id) const;
+                    const int32_t id = 1) const;
 
             void visualizeXYZTrajectory(
                     const std::string& marker_name,
                     const EigenHelpers::VectorVector3d& point_sequence,
                     const std_msgs::ColorRGBA& color,
-                    const int32_t id = 0) const;
+                    const int32_t id = 1) const;
 
             void deletePoints(
                     const std::string& marker_name,
-                    const int32_t id = 0) const;
+                    const int32_t id = 1) const;
 
             void deleteXYZTrajectory(
                     const std::string& marker_name,
-                    const int32_t id = 0) const;
+                    const int32_t id = 1) const;
 
         private:
             const std::string world_frame_name_;

@@ -254,6 +254,8 @@ namespace smmap
             arc_dijkstras::Graph<Eigen::Vector3d> free_space_graph_;
 
         public:
+            // Note that work_space_grid_ and the environment_sdf_ are using different resolutions due to the way the sdf
+            // is created in CustomScene
             const XYZGrid work_space_grid_;
             const sdf_tools::SignedDistanceField environment_sdf_;
 

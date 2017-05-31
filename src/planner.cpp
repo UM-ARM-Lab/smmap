@@ -177,10 +177,12 @@ void Planner::visualizeDesiredMotion(
 // Global gripper planner functions
 ////////////////////////////////////////////////////////////////////////////////
 
-VectorVector3d GetEndpoints(
+std::pair<VectorVector3d, std::vector<double>> GetEndpoints(
         const std::vector<VectorVector3d>& projected_deformable_point_paths)
 {
-    VectorVector3d endpoints;
+    std::pair<VectorVector3d, std::vector<double>> results;
+    VectorVector3d& endpoints = results.first;
+    std::vector<double>& weights = results.second;
 
     endpoints.reserve(projected_deformable_point_paths.size());
     for (size_t idx = 0; idx < projected_deformable_point_paths.size(); ++idx)
@@ -188,10 +190,11 @@ VectorVector3d GetEndpoints(
         if (projected_deformable_point_paths[idx].size() > 1)
         {
             endpoints.push_back(projected_deformable_point_paths[idx].back());
+            weights.push_back((double)projected_deformable_point_paths[idx].size());
         }
     }
 
-    return endpoints;
+    return results;
 }
 
 VectorVector3d Planner::findPathBetweenPositions(
@@ -229,10 +232,15 @@ VectorVector3d Planner::findPathBetweenPositions(
     };
     const auto goal_reached_fn = [&] (const Vector3d& config)
     {
-        return (config - goal).norm() < dijkstras_task_->work_space_grid_.minStepDimension() / 1.5;
+        // Note that we can use "withing a 8-connected grid cell" as a goal check because we
+        // are explicitly adding the goal to the end of the path, and we just need to find a
+        // path to a node that is adjacent to the goal, as we know the goal is in free space
+        return (config - goal).norm() <= dijkstras_task_->work_space_grid_.minStepDimension() * 1.5;
     };
 
     auto results = simple_astar_planner::SimpleAStarPlanner<Vector3d, aligned_allocator<Vector3d>>::Plan(start, neighbour_fn, distance_fn, heuristic_fn, goal_reached_fn);
+    assert(results.first.size() >= 2 && "AStar must have returned a valid path for any of the rest of this to work");
+
     // Add the 2nd end of the configuration, using the rubber band smoothing process to remove it if it was extraneous
     results.first.push_back(goal);
     VirtualRubberBand goal_config_possible_band(results.first, virtual_rubber_band_between_grippers_->max_total_band_distance_, dijkstras_task_, vis_);
@@ -246,7 +254,9 @@ AllGrippersSinglePose Planner::getGripperTargets(
         const WorldState& current_world_state,
         const std::vector<VectorVector3d>& projected_deformable_point_paths) const
 {
-    const VectorVector3d target_points = GetEndpoints(projected_deformable_point_paths);
+    const std::pair<VectorVector3d, std::vector<double>> endpoints_and_weights = GetEndpoints(projected_deformable_point_paths);
+    const VectorVector3d target_points = endpoints_and_weights.first;
+    const std::vector<double> target_point_weights = endpoints_and_weights.second;
 
     vis_.visualizePoints("points_to_be_clustered", target_points, Visualizer::Blue(), 1);
 
@@ -264,18 +274,21 @@ AllGrippersSinglePose Planner::getGripperTargets(
     {
         return (v1 - v2).norm();
     };
-    const std::function<Vector3d(const VectorVector3d&)> average_fn = [] (const VectorVector3d& data)
+    const std::function<Vector3d(const VectorVector3d&, const std::vector<double>&)> average_fn = [] (const VectorVector3d& data, const std::vector<double> weights)
     {
-        return AverageEigenVector3d(data);
+        return AverageEigenVector3d(data, weights);
     };
-    const auto cluster_results = simple_kmeans_clustering::SimpleKMeansClustering::Cluster(target_points, distance_fn, average_fn, starting_cluster_centers);
+    const auto cluster_results = simple_kmeans_clustering::SimpleKMeansClustering::ClusterWeighted(target_points, target_point_weights, distance_fn, average_fn, starting_cluster_centers);
     VectorVector3d cluster_centers = cluster_results.second;
 
-    vis_.visualizePoints("cluster_centers", cluster_centers, Visualizer::Green(), 1);
+    vis_.visualizeCubes("cluster_centers_pre_project", cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Red(), 1);
 
     // Project the cluster centers to be out of collision
     cluster_centers[0] = dijkstras_task_->environment_sdf_.ProjectOutOfCollision3d(cluster_centers[0], 1.0 / 10.0);
     cluster_centers[1] = dijkstras_task_->environment_sdf_.ProjectOutOfCollision3d(cluster_centers[1], 1.0 / 10.0);
+    assert(dijkstras_task_->environment_sdf_.Get3d(cluster_centers[0]) > 0.0);
+    assert(dijkstras_task_->environment_sdf_.Get3d(cluster_centers[1]) > 0.0);
+    vis_.visualizeCubes("cluster_centers_post_project", cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Green(), 1);
 
     // Ensure that the shortest path between the grippers does not overstretch the deformable object
 
@@ -336,6 +349,16 @@ AllGrippersSinglePose Planner::getGripperTargets(
     // Pull the grippers closer to each other if they are too far apart
     const VectorVector3d path = findPathBetweenPositions(target_gripper_poses[0].translation(), target_gripper_poses[1].translation());
     const std::vector<double> cummulative_distance = CalculateCumulativeDistances(path);
+    size_t starting_ind = 0, ending_ind = path.size() - 1;
+    while (cummulative_distance[ending_ind] - cummulative_distance[starting_ind] >= virtual_rubber_band_between_grippers_->max_total_band_distance_)
+    {
+        ++starting_ind;
+        --ending_ind;
+        assert(starting_ind < ending_ind);
+    }
+
+    target_gripper_poses[0].translation() = path[starting_ind];
+    target_gripper_poses[1].translation() = path[ending_ind];
 
     return target_gripper_poses;
 }
