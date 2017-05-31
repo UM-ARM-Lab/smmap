@@ -66,6 +66,7 @@ namespace smmap
             // * state_sampling_fn - returns a new state (randomly- or deterministically-sampled)
             // ????????? Should I do forward simulation to make sure it is feasible from current configuration ?????
 
+            /*
             template <typename Generator>
             inline std::pair<Eigen::Vector3d, Eigen::Vector3d> posPairSampling(
                     Generator& prng)
@@ -90,6 +91,7 @@ namespace smmap
 
                 return rand_sample;
             }
+            */
 
 
 
@@ -155,8 +157,8 @@ namespace smmap
             const std::pair<double, double> z_limits_;
             const std::uniform_real_distribution<double> uniform_unit_distribution_;
             const sdf_tools::SignedDistanceField environment_sdf_;
-            const RRTConfig start_;
-            const RRTConfig goal_;
+//            const RRTConfig start_;
+//            const RRTConfig goal_;
 
 //             const std::function<bool(void)>& termination_check_fn
 //             * termination_check_fn - returns if the planner should terminate (for example, if it has exceeded time/space limits)
