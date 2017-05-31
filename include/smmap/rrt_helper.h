@@ -12,26 +12,63 @@
 
 #include "smmap/virtual_rubber_band.h"
 
+//////////////////////////////// General Question ///////////////////////////////////
+// what does state_added_fn do? (*Call the state added callback*)
+/////////////////////////////////////////////////////////////////////////////////////
+
+
 namespace smmap
 {
     class RRTHelper
     {
+
+        public:
+            std::uniform_real_distribution<double> uniform_unit_distribution_;
+    //            const std::chrono::duration<double>& time_limit_,
+
+        private:
+            const std::pair<double, double> x_limits_;
+            const std::pair<double, double> y_limits_;
+            const std::pair<double, double> z_limits_;
+            const double goal_reach_radius_;
+            const double step_size_;
+            const double obstacle_threshold_;
+            const sdf_tools::SignedDistanceField& environment_sdf_;
+
         public:
             typedef std::pair<std::pair<Eigen::Vector3d, Eigen::Vector3d>, VirtualRubberBand> RRTConfig;
             typedef std::allocator<RRTConfig> Allocator;
 
             #warning "Replace these magic numbers
-            RRTHelper(const double step_size = 1.0)
-                : step_size_(step_size)
+            // Initialization problem to be fixed
+
+            RRTHelper(const sdf_tools::SignedDistanceField& environment_sdf,
+                      const double step_size = 1.0,
+                      const double obstacle_threshold = 0,
+                      const double x_limits_lower = -10.0,
+                      const double x_limits_upper = 10.0,
+                      const double y_limits_lower = -10.0,
+                      const double y_limits_upper = 10.0,
+                      const double z_limits_lower = -10.0,
+                      const double z_limits_upper = 10.0,
+                      const double goal_reach_radius = 1.0)
+                : environment_sdf_(environment_sdf)
+                , uniform_unit_distribution_(0.0, 1.0)
+                , step_size_(step_size)
+                , obstacle_threshold_(obstacle_threshold)
+                , x_limits_(std::make_pair(x_limits_lower,x_limits_upper))
+                , y_limits_(std::make_pair(y_limits_lower,y_limits_upper))
+                , z_limits_(std::make_pair(z_limits_lower,z_limits_upper))
+                , goal_reach_radius_(goal_reach_radius)
+//                , uniform_unit_distribution_(uniform_unit_distribution)
             {
             }
 
 
             // returned distance is the euclidian distance of two grippers pos
-            // ?????????????? Here I simply define it as the sum of two grippers distance, ????????????????????????
             double distance(
                     const RRTConfig& a_node,
-                    const RRTConfig& b_node)
+                    const RRTConfig& b_node) const
             {
                 const Eigen::Vector3d& transA_first = a_node.first.first;
                 const Eigen::Vector3d& transB_first = b_node.first.first;
@@ -42,7 +79,7 @@ namespace smmap
 
             int64_t nearestNeighbour(
                     const std::vector<simple_rrt_planner::SimpleRRTPlannerState<RRTConfig, Allocator>>& nodes,
-                    const RRTConfig& config)
+                    const RRTConfig& config) const
             {
                 const std::function<double(const simple_rrt_planner::SimpleRRTPlannerState<RRTConfig, Allocator>&, const RRTConfig&)> distance_fn = [&] (
                         const simple_rrt_planner::SimpleRRTPlannerState<RRTConfig, Allocator>& rrt_state,
@@ -55,23 +92,11 @@ namespace smmap
                 return arc_helpers::GetKNearestNeighbors(nodes, config, distance_fn, K)[0].first;
             }
 
-            /* const std::function<bool(const T&)>& goal_reached_fn,
-             * goal_reached_fn - return if a given state meets the goal conditions (for example, within a radius of a goal state)
-             const std::function<void(SimpleRRTPlannerState<T, Allocator>&)>& goal_reached_callback_fn,
-             CAN USE DISTANCE FUNCTION INSTEAD
-            */
-
-
             // const std::function<T(void)>& sampling_fn,
-            // * state_sampling_fn - returns a new state (randomly- or deterministically-sampled)
-            // ????????? Should I do forward simulation to make sure it is feasible from current configuration ?????
-
-            /*
-            template <typename Generator>
+            template <typename RNG>
             inline std::pair<Eigen::Vector3d, Eigen::Vector3d> posPairSampling(
-                    Generator& prng)
+                    RNG& prng)
             {
-                std::srand(std::time(0));
                 std::pair<Eigen::Vector3d, Eigen::Vector3d> rand_sample;
 
                 const double x1 = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_distribution_(prng));
@@ -86,13 +111,11 @@ namespace smmap
                 rand_sample.first(1) = y1;
                 rand_sample.first(2) = z1;
                 rand_sample.second(0) = x2;
-                rand_sample.second(1) = y1;
-                rand_sample.second(2) = z1;
+                rand_sample.second(1) = y2;
+                rand_sample.second(2) = z2;
 
                 return rand_sample;
             }
-            */
-
 
 
             /* const std::function<std::vector<std::pair<T, int64_t>>(const T&, const T&)>& forward_propagation_fn,
@@ -106,9 +129,7 @@ namespace smmap
              * i.e. the first node must have a negative value, and so on.
              */
             // Overstretch checking has been in sendNextCommand(), need constraint violation, and collision checking
-
-
-            inline std::vector<std::pair<RRTConfig, int64_t>> forwardPropogationFunction(
+            std::vector<std::pair<RRTConfig, int64_t>> forwardPropogationFunction(
                     const RRTConfig& nearest_neighbor,
                     const RRTConfig& random_target)
             {
@@ -131,6 +152,9 @@ namespace smmap
                     const Eigen::Vector3d gripper_b_interpolated = EigenHelpers::Interpolate(nearest_neighbor.first.second, random_target.first.second, ratio);
 
                     // TODO: collision check gripper positions
+                    if((environment_sdf_.Get3d(gripper_a_interpolated) < obstacle_threshold_ )
+                            || (environment_sdf_.Get3d(gripper_b_interpolated) < obstacle_threshold_))
+                    {   continue;   }
 
                     VirtualRubberBand next_rubber_band(prev_node.second);
                     next_rubber_band.forwardSimulateVirtualRubberBand(
@@ -139,9 +163,11 @@ namespace smmap
                                 rubber_band_verbose);
 
                     // TODO: check rubber band overstretch
+                    if(next_rubber_band.isOverstretched())
+                    {   continue;   }
 
                     const RRTConfig next_node(std::make_pair(gripper_a_interpolated, gripper_b_interpolated), next_rubber_band);
-                    propagated_states.push_back(std::make_pair(next_node, parent_offset));
+                    propagated_states.push_back(std::pair<RRTConfig, int64_t>(next_node, parent_offset));
 
                     ++parent_offset;
                     ++step_index;
@@ -150,13 +176,57 @@ namespace smmap
                 return propagated_states;
             }
 
-        private:
-            const double step_size_;
-            const std::pair<double, double> x_limits_;
-            const std::pair<double, double> y_limits_;
-            const std::pair<double, double> z_limits_;
-            const std::uniform_real_distribution<double> uniform_unit_distribution_;
-            const sdf_tools::SignedDistanceField environment_sdf_;
+            template<typename RNG>
+            std::vector<RRTConfig, Allocator> rrtPlan (const RRTConfig& start,
+                                                       const RRTConfig& goal,
+                                                       const std::chrono::duration<double>& time_limit,
+                                                       RNG& rng)
+            {
+                const std::function<bool(const RRTConfig&)> goal_reached_fn = [&] (const RRTConfig& node)
+                {
+                    if (distance(node, goal) < goal_reach_radius_)
+                    {
+                        return true;
+                    }
+                    return false;
+                };
+
+                const std::function<RRTConfig(void)> sampling_fn = [&] ()
+                {
+                    RRTConfig sample_config(posPairSampling(rng), start.second);
+                    return sample_config;
+                };
+
+                const std::function<int64_t(const std::vector<simple_rrt_planner::SimpleRRTPlannerState<RRTConfig, Allocator>>&, const RRTConfig&)> nearest_neighbor_fn = [&] (
+                        const std::vector<simple_rrt_planner::SimpleRRTPlannerState<RRTConfig, Allocator>>& nodes,
+                        const RRTConfig& config )
+                {
+                    return nearestNeighbour(nodes, config);
+                };
+
+                const std::function<std::vector<std::pair<RRTConfig, int64_t>>(const RRTConfig&, const RRTConfig&)> forward_propagation_fn = [&] (
+                        const RRTConfig& nearest_neighbor,
+                        const RRTConfig& random_target )
+                {
+                    return forwardPropogationFunction(nearest_neighbor, random_target);
+                };
+
+
+                const auto rrt_results = simple_rrt_planner::SimpleHybridRRTPlanner::Plan(
+                            start,
+                            nearest_neighbor_fn,
+                            goal_reached_fn,
+                            sampling_fn,
+                            forward_propagation_fn,
+                            time_limit);
+
+                std::cout << PrettyPrint::PrettyPrint(rrt_results.second, true, "\n") << std::endl;
+                return rrt_results.first;
+            }
+
+
+
+
 //            const RRTConfig start_;
 //            const RRTConfig goal_;
 
@@ -188,4 +258,4 @@ namespace smmap
 
 
 
-#endif
+#endif // ifndef RRT_HELPER_H

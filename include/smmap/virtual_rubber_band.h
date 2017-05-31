@@ -29,6 +29,12 @@ namespace smmap
                     const Eigen::Vector3d second_endpoint_translation,
                     bool verbose);
 
+            smmap::VirtualRubberBand& operator=(const smmap::VirtualRubberBand& other)
+            {
+                assert(false);
+                return *this;
+            }
+
             const EigenHelpers::VectorVector3d& getVectorRepresentation() const;
 
             bool isOverstretched() const;

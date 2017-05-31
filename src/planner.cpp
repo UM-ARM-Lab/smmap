@@ -341,10 +341,10 @@ void Planner::planGlobalGripperTrajectory(
 {
     const AllGrippersSinglePose target_gripper_poses = getGripperTargets(current_world_state, projected_deformable_point_paths);
 
-    std::pair<std::pair<Eigen::Affine3d, Eigen::Affine3d>, VirtualRubberBand> start_node(
-                std::pair<Eigen::Affine3d, Eigen::Affine3d>(
-                            current_world_state.all_grippers_single_pose_[0],
-                            current_world_state.all_grippers_single_pose_[1]),
+    RRTHelper::RRTConfig start_node(
+                std::pair<Eigen::Vector3d, Eigen::Vector3d>(
+                            current_world_state.all_grippers_single_pose_[0].translation(),
+                            current_world_state.all_grippers_single_pose_[1].translation()),
                 *virtual_rubber_band_between_grippers_);
 
     const EigenHelpers::VectorVector3d& first_path = start_node.second.getVectorRepresentation();
@@ -385,8 +385,30 @@ void Planner::planGlobalGripperTrajectory(
 
     //////////////////////// From Mengyao /////////////////////////////////////
 
+    #warning "Replace these magic numbers"
+    const double step_size = 1.0;
+    const double obstacle_threshold = 0;
+    const double x_limits_lower = dijkstras_task_->work_space_grid_.getXMin();
+    const double x_limits_upper = dijkstras_task_->work_space_grid_.getXMax();
+    const double y_limits_lower = dijkstras_task_->work_space_grid_.getYMin();
+    const double y_limits_upper = dijkstras_task_->work_space_grid_.getYMax();
+    const double z_limits_lower = dijkstras_task_->work_space_grid_.getZMin();
+    const double z_limits_upper = dijkstras_task_->work_space_grid_.getZMax();
+    const double goal_reach_radius = 1.0;
+    const sdf_tools::SignedDistanceField& environment_sdf(GetEnvironmentSDF(nh_));
+
     // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
-    RRTHelper rrt_helper;
+    RRTHelper rrt_helper(environment_sdf,
+                         step_size, obstacle_threshold,
+                         x_limits_lower, x_limits_upper, y_limits_lower, y_limits_upper,
+                         z_limits_lower, z_limits_upper, goal_reach_radius);
+
+    #warning "Goal_node, time_limit, rng to be specified later"
+    const RRTHelper::RRTConfig goal_node = std::make_pair(start_node.first, start_node.second);
+    const std::chrono::duration<double> time_limit(600);
+
+    const auto results = rrt_helper.rrtPlan(start_node, goal_node, time_limit, generator_);
+
 //    const auto results = rrt_helper.plan(start, goal);
 
     //////////////////////// Mengyao End //////////////////////////////////////
