@@ -440,7 +440,6 @@ void Planner::planGlobalGripperTrajectory(
     ///////////////////// End: To be moved into the RRTHelper class
 
     // Plan a path to the specified goal using an RRT
-    #warning "Replace these magic numbers"
     const double step_size = dijkstras_task_->work_space_grid_.minStepDimension();
     const double x_limits_lower = dijkstras_task_->work_space_grid_.getXMin();
     const double x_limits_upper = dijkstras_task_->work_space_grid_.getXMax();
@@ -451,14 +450,12 @@ void Planner::planGlobalGripperTrajectory(
     const double goal_reach_radius = dijkstras_task_->work_space_grid_.minStepDimension();
 
     // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
-    RRTHelper rrt_helper(dijkstras_task_->environment_sdf_, vis_, step_size,
+    #warning "Time limit for RRT magic number here; replace with ROS Param"
+    const std::chrono::duration<double> time_limit(600);
+    RRTHelper rrt_helper(dijkstras_task_->environment_sdf_, vis_, generator_, step_size,
                          x_limits_lower, x_limits_upper, y_limits_lower, y_limits_upper,
                          z_limits_lower, z_limits_upper, goal_reach_radius);
-
-    #warning "Goal_node, time_limit, rng to be specified later"
-    const std::chrono::duration<double> time_limit(600);
-
-    const auto rrt_results = rrt_helper.rrtPlan(start_config, goal_config, time_limit, generator_);
+    const auto rrt_results = rrt_helper.rrtPlan(start_config, goal_config, time_limit);
 
     rrt_helper.visualize(rrt_results);
 

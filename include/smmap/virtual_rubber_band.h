@@ -78,5 +78,4 @@ namespace smmap
 }
 
 
-
 #endif // VIRTUAL_RUBBER_BAND_H

@@ -12,6 +12,8 @@ std_msgs::ColorRGBA Visualizer::green_;
 std_msgs::ColorRGBA Visualizer::blue_;
 std_msgs::ColorRGBA Visualizer::black_;
 std_msgs::ColorRGBA Visualizer::magenta_;
+std_msgs::ColorRGBA Visualizer::yellow_;
+std_msgs::ColorRGBA Visualizer::cyan_;
 
 void Visualizer::InitializeStandardColors()
 {
@@ -39,6 +41,16 @@ void Visualizer::InitializeStandardColors()
     magenta_.g = 0.0f;
     magenta_.b = 1.0f;
     magenta_.a = 1.0f;
+
+    yellow_.r = 1.0f;
+    yellow_.g = 1.0f;
+    yellow_.b = 0.0f;
+    yellow_.a = 1.0f;
+
+    cyan_.r = 0.0f;
+    cyan_.g = 1.0f;
+    cyan_.b = 1.0f;
+    cyan_.a = 1.0f;
 
     standard_colors_initialized_ = true;
 }
@@ -73,6 +85,18 @@ std_msgs::ColorRGBA Visualizer::Magenta()
     return magenta_;
 }
 
+std_msgs::ColorRGBA Visualizer::Yellow()
+{
+    assert(standard_colors_initialized_);
+    return yellow_;
+}
+
+std_msgs::ColorRGBA Visualizer::Cyan()
+{
+    assert(standard_colors_initialized_);
+    return cyan_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 ////////////////////////////////////////////////////////////////////////////////
@@ -89,6 +113,17 @@ Visualizer::Visualizer(ros::NodeHandle& nh)
 
     visualization_marker_array_pub_ =
             nh.advertise<visualization_msgs::MarkerArray>(GetVisualizationMarkerArrayTopic(nh), 3000);
+}
+
+void Visualizer::deleteObjects(
+        const std::string& marker_name) const
+{
+    visualization_msgs::Marker marker;
+
+    marker.action = visualization_msgs::Marker::DELETE;
+    marker.ns = marker_name;
+
+    visualization_marker_pub_.publish(marker);
 }
 
 void Visualizer::visualizePoints(
@@ -186,7 +221,7 @@ void Visualizer::visualizeCloth(
         const int32_t id) const
 {
     const std::vector<std_msgs::ColorRGBA> colors((size_t)cloth.cols(), color);
-    visualizeCloth(marker_name, cloth, colors);
+    visualizeCloth(marker_name, cloth, colors, id);
 }
 
 void Visualizer::visualizeCloth(

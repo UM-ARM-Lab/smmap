@@ -18,9 +18,14 @@ namespace smmap
             static std_msgs::ColorRGBA Blue();
             static std_msgs::ColorRGBA Black();
             static std_msgs::ColorRGBA Magenta();
+            static std_msgs::ColorRGBA Yellow();
+            static std_msgs::ColorRGBA Cyan();
 
         public:
             Visualizer(ros::NodeHandle& nh);
+
+            void deleteObjects(
+                    const std::string& marker_name) const;
 
             void visualizePoints(
                     const std::string& marker_name,
@@ -150,6 +155,8 @@ namespace smmap
             static std_msgs::ColorRGBA blue_;
             static std_msgs::ColorRGBA black_;
             static std_msgs::ColorRGBA magenta_;
+            static std_msgs::ColorRGBA yellow_;
+            static std_msgs::ColorRGBA cyan_;
     };
 }
 
