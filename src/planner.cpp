@@ -177,7 +177,7 @@ void Planner::visualizeDesiredMotion(
 // Global gripper planner functions
 ////////////////////////////////////////////////////////////////////////////////
 
-std::pair<VectorVector3d, std::vector<double>> GetEndpoints(
+static std::pair<VectorVector3d, std::vector<double>> GetEndpoints(
         const std::vector<VectorVector3d>& projected_deformable_point_paths)
 {
     std::pair<VectorVector3d, std::vector<double>> results;
@@ -196,6 +196,28 @@ std::pair<VectorVector3d, std::vector<double>> GetEndpoints(
 
     return results;
 }
+
+
+static AllGrippersPoseTrajectory ConvertRRTResultIntoGripperTrajectory(
+        const AllGrippersSinglePose& starting_poses,
+        const std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>& rrt_result)
+{
+    assert(starting_poses.size() == 2);
+
+    AllGrippersPoseTrajectory traj;
+    traj.reserve(rrt_result.size());
+
+    for (size_t ind = 0; ind < rrt_result.size(); ++ind)
+    {
+        AllGrippersSinglePose grippers_poses(starting_poses);
+        grippers_poses[0].translation() = rrt_result[ind].first.first;
+        grippers_poses[1].translation() = rrt_result[ind].first.second;
+        traj.push_back(grippers_poses);
+    }
+
+    return traj;
+}
+
 
 VectorVector3d Planner::findPathBetweenPositions(
         const Vector3d& start,
@@ -417,12 +439,7 @@ void Planner::planGlobalGripperTrajectory(
 
     ///////////////////// End: To be moved into the RRTHelper class
 
-    global_plan_current_timestep_ = 0;
-    executing_global_gripper_trajectory_ = true;
-    global_plan_gripper_trajectory_ = AllGrippersPoseTrajectory(10, current_world_state.all_grippers_single_pose_);
-
-    //////////////////////// From Mengyao /////////////////////////////////////
-
+    // Plan a path to the specified goal using an RRT
     #warning "Replace these magic numbers"
     const double step_size = dijkstras_task_->work_space_grid_.minStepDimension();
     const double x_limits_lower = dijkstras_task_->work_space_grid_.getXMin();
@@ -441,9 +458,14 @@ void Planner::planGlobalGripperTrajectory(
     #warning "Goal_node, time_limit, rng to be specified later"
     const std::chrono::duration<double> time_limit(600);
 
-    const auto results = rrt_helper.rrtPlan(start_config, goal_config, time_limit, generator_);
+    const auto rrt_results = rrt_helper.rrtPlan(start_config, goal_config, time_limit, generator_);
 
-    //////////////////////// Mengyao End //////////////////////////////////////
+    rrt_helper.visualize(rrt_results);
+
+    global_plan_current_timestep_ = 0;
+    executing_global_gripper_trajectory_ = true;
+    global_plan_gripper_trajectory_ = ConvertRRTResultIntoGripperTrajectory(current_world_state.all_grippers_single_pose_, rrt_results);
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -684,9 +706,9 @@ WorldState Planner::sendNextCommandUsingLocalController(
     ROS_INFO_STREAM_NAMED("planner", "Sending command to robot, action norm:  " << MultipleGrippersVelocity6dNorm(selected_command));
     const WorldState world_feedback = robot_.sendGrippersPoses(kinematics::applyTwist(current_world_state.all_grippers_single_pose_, selected_command));
 
-    const bool verbose = false;
     if (virtual_rubber_band_between_grippers_ != nullptr)
     {
+        const bool verbose = false;
         virtual_rubber_band_between_grippers_->forwardSimulateVirtualRubberBand(
                     world_feedback.all_grippers_single_pose_[0].translation() - current_world_state.all_grippers_single_pose_[0].translation(),
                     world_feedback.all_grippers_single_pose_[1].translation() - current_world_state.all_grippers_single_pose_[1].translation(),
@@ -712,6 +734,12 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
     assert(global_plan_current_timestep_ < global_plan_gripper_trajectory_.size());
 
     const WorldState world_feedback = robot_.sendGrippersPoses(global_plan_gripper_trajectory_[global_plan_current_timestep_]);
+    const bool verbose = false;
+    virtual_rubber_band_between_grippers_->forwardSimulateVirtualRubberBand(
+                world_feedback.all_grippers_single_pose_[0].translation() - current_world_state.all_grippers_single_pose_[0].translation(),
+                world_feedback.all_grippers_single_pose_[1].translation() - current_world_state.all_grippers_single_pose_[1].translation(),
+                verbose);
+
     ++global_plan_current_timestep_;
     if (global_plan_current_timestep_ == global_plan_gripper_trajectory_.size())
     {

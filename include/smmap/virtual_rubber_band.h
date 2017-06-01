@@ -28,7 +28,18 @@ namespace smmap
 
             smmap::VirtualRubberBand& operator=(const smmap::VirtualRubberBand& other)
             {
-                assert(false);
+                assert(task_ == other.task_);
+                assert(&sdf_ == &(other.sdf_));
+                assert(&vis_ == &(other.vis_));
+
+                assert(max_integration_step_size_ == other.max_integration_step_size_);
+                assert(max_distance_between_rubber_band_points_ == other.max_distance_between_rubber_band_points_);
+                assert(num_smoothing_ittrs_ == other.num_smoothing_ittrs_);
+                assert(min_object_radius_ == other.min_object_radius_);
+                assert(max_total_band_distance_ == other.max_total_band_distance_);
+
+                band_ = other.band_;
+
                 return *this;
             }
 

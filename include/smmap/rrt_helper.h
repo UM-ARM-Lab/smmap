@@ -23,6 +23,10 @@ namespace smmap
             const sdf_tools::SignedDistanceField& environment_sdf_;
             const Visualizer& vis_;
             int32_t marker_id_;
+            const std_msgs::ColorRGBA rubber_band_safe_color_;
+            const std_msgs::ColorRGBA rubber_band_overstretched_color_;
+
+            std::pair<Eigen::Vector3d, Eigen::Vector3d> gripper_goal_positions_;
 
         public:
             typedef std::pair<std::pair<Eigen::Vector3d, Eigen::Vector3d>, VirtualRubberBand> RRTConfig;
@@ -48,6 +52,8 @@ namespace smmap
                 , environment_sdf_(environment_sdf)
                 , vis_(vis)
                 , marker_id_(1)
+                , rubber_band_safe_color_(Visualizer::Black())
+                , rubber_band_overstretched_color_(arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f))
             {}
 
 
@@ -84,17 +90,25 @@ namespace smmap
                     RNG& prng)
             {
                 std::pair<Eigen::Vector3d, Eigen::Vector3d> rand_sample;
+                const bool sample_goal = uniform_unit_distribution_(prng) < 0.1;
 
-                const double x1 = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_distribution_(prng));
-                const double y1 = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_distribution_(prng));
-                const double z1 = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_distribution_(prng));
+                if (sample_goal)
+                {
+                    rand_sample = gripper_goal_positions_;
+                }
+                else
+                {
+                    const double x1 = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_distribution_(prng));
+                    const double y1 = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_distribution_(prng));
+                    const double z1 = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_distribution_(prng));
 
-                const double x2 = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_distribution_(prng));
-                const double y2 = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_distribution_(prng));
-                const double z2 = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_distribution_(prng));
+                    const double x2 = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_distribution_(prng));
+                    const double y2 = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_distribution_(prng));
+                    const double z2 = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_distribution_(prng));
 
-                rand_sample.first = Eigen::Vector3d(x1, y1, z1);
-                rand_sample.second = Eigen::Vector3d(x2, y2, z2);
+                    rand_sample.first = Eigen::Vector3d(x1, y1, z1);
+                    rand_sample.second = Eigen::Vector3d(x2, y2, z2);
+                }
 
 //                vis_.visualizePoints("sampled_configuration", {rand_sample.first, rand_sample.second}, Visualizer::Red(), 1);
 
@@ -117,8 +131,13 @@ namespace smmap
                     const RRTConfig& nearest_neighbor,
                     const RRTConfig& random_target)
             {
-                vis_.visualizeCubes("forward_propogation_start_config", {nearest_neighbor.first.first, nearest_neighbor.first.second}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 1);
+                vis_.visualizeCubes("forward_propogation_start_config", {nearest_neighbor.first.first, nearest_neighbor.first.second}, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 1);
                 vis_.visualizePoints("random_target", {random_target.first.first, random_target.first.second}, Visualizer::Red(), 1);
+
+                for (int32_t id = 1; id < 50; id++)
+                {
+                    nearest_neighbor.second.visualize("rubber_band_post_rrt_step", rubber_band_safe_color_, rubber_band_overstretched_color_, id, true);
+                }
 
                 std::vector<std::pair<RRTConfig, int64_t>> propagated_states;
                 int64_t parent_offset = -1;
@@ -152,6 +171,8 @@ namespace smmap
                                 gripper_b_interpolated - prev_node.first.second,
                                 rubber_band_verbose);
 
+                    next_rubber_band.visualize("rubber_band_post_rrt_step", Visualizer::Black(), arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f), (int32_t)parent_offset + 2, true);
+
                     // If the rubber band becomes overstretched, then return however far we were able to get
                     if (next_rubber_band.isOverstretched())
                     {
@@ -159,13 +180,18 @@ namespace smmap
                     }
 
                     const RRTConfig next_node(std::make_pair(gripper_a_interpolated, gripper_b_interpolated), next_rubber_band);
-                    vis_.visualizeLineStrip("rrt_gripper_tree_gripper_a", {prev_node.first.first, next_node.first.first}, Visualizer::Red(), marker_id_);
-                    vis_.visualizeLineStrip("rrt_gripper_tree_gripper_b", {prev_node.first.second, next_node.first.second}, Visualizer::Blue(), marker_id_);
+//                    vis_.visualizeLineStrip("rrt_gripper_tree_gripper_a", {prev_node.first.first, next_node.first.first}, Visualizer::Red(), marker_id_);
+//                    vis_.visualizeLineStrip("rrt_gripper_tree_gripper_b", {prev_node.first.second, next_node.first.second}, Visualizer::Blue(), marker_id_);
                     propagated_states.push_back(std::pair<RRTConfig, int64_t>(next_node, parent_offset));
 
                     ++marker_id_;
                     ++parent_offset;
                     ++step_index;
+                }
+
+                for (int32_t id = 1; id < 50; id++)
+                {
+                    nearest_neighbor.second.visualize("rubber_band_post_rrt_step", rubber_band_safe_color_, rubber_band_overstretched_color_, id, true);
                 }
 
                 return propagated_states;
@@ -177,6 +203,8 @@ namespace smmap
                                                        const std::chrono::duration<double>& time_limit,
                                                        RNG& rng)
             {
+                gripper_goal_positions_ = goal.first;
+
                 const std::function<bool(const RRTConfig&)> goal_reached_fn = [&] (const RRTConfig& node)
                 {
                     if (distance(node, goal) < goal_reach_radius_)
@@ -215,8 +243,22 @@ namespace smmap
                             forward_propagation_fn,
                             time_limit);
 
-                std::cout << PrettyPrint::PrettyPrint(r`rt_results.second, true, "\n") << std::endl;
+                std::cout << PrettyPrint::PrettyPrint(rrt_results.second, true, "\n") << std::endl;
                 return rrt_results.first;
+            }
+
+            void visualize(const std::vector<RRTConfig, Allocator>& path)
+            {
+                for (size_t ind = 0; ind < path.size(); ++ind)
+                {
+                    const RRTConfig& config = path[ind];
+                    const auto& gripper_positions = config.first;
+                    const VirtualRubberBand& rubber_band = config.second;
+
+                    rubber_band.visualize("rubber_band_rrt_solution", rubber_band_safe_color_, rubber_band_overstretched_color_, (int32_t)ind + 1, true);
+                    vis_.visualizeCubes("gripper_a_rrt_solution", {gripper_positions.first}, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Blue(), (int32_t)ind + 1);
+                    vis_.visualizeCubes("gripper_b_rrt_solution", {gripper_positions.second}, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), (int32_t)ind + 1);
+                }
             }
     };
 }
