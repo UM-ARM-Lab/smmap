@@ -3,6 +3,7 @@
 
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/simple_rrt_planner.hpp>
+#include <arc_utilities/shortcut_smoothing.hpp>
 #include <uncertainty_planning_core/simple_samplers.hpp>
 
 #include "smmap/visualization_tools.h"
@@ -18,6 +19,9 @@ namespace smmap
             const std::pair<double, double> z_limits_;
             const double goal_reach_radius_;
             const double step_size_;
+            const double max_shortcut_fraction_;
+            const uint32_t max_iterations_;
+            const uint32_t max_failed_iterations_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
 
             const sdf_tools::SignedDistanceField& environment_sdf_;
@@ -42,12 +46,18 @@ namespace smmap
                       const double y_limits_upper = 10.0,
                       const double z_limits_lower = -10.0,
                       const double z_limits_upper = 10.0,
-                      const double goal_reach_radius = 1.0)
+                      const double goal_reach_radius = 1.0,
+                      const double max_shortcut_fraction = 1.0,
+                      const uint32_t max_iterations = 200,
+                      const uint32_t max_failed_iterations = 500)
                 : x_limits_(x_limits_lower,x_limits_upper)
                 , y_limits_(y_limits_lower,y_limits_upper)
                 , z_limits_(z_limits_lower,z_limits_upper)
                 , goal_reach_radius_(goal_reach_radius)
                 , step_size_(step_size)
+                , max_shortcut_fraction_(max_shortcut_fraction)
+                , max_iterations_(max_iterations)
+                , max_failed_iterations_(max_failed_iterations)
                 , uniform_unit_distribution_(0.0, 1.0)
                 , environment_sdf_(environment_sdf)
                 , vis_(vis)
@@ -56,6 +66,9 @@ namespace smmap
                 , rubber_band_overstretched_color_(arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f))
             {}
 
+            ///////////////////////////////////////////////////////////////////////////////////////////////
+            // Helper function for original rrt planning
+            ///////////////////////////////////////////////////////////////////////////////////////////////
 
             // returned distance is the euclidian distance of two grippers pos
             double distance(
@@ -126,7 +139,6 @@ namespace smmap
              NOTE - the relative parent index *must* be lower than the index in the list of prograted nodes
              * i.e. the first node must have a negative value, and so on.
              */
-            // Overstretch checking has been in sendNextCommand(), need constraint violation, and collision checking
             std::vector<std::pair<RRTConfig, int64_t>> forwardPropogationFunction(
                     const RRTConfig& nearest_neighbor,
                     const RRTConfig& random_target)
@@ -246,6 +258,101 @@ namespace smmap
                 std::cout << PrettyPrint::PrettyPrint(rrt_results.second, true, "\n") << std::endl;
                 return rrt_results.first;
             }
+
+            ///////////////////////////////////////////////////////////////////////////////////////
+            // Helper function for shortcur smoothing
+            ///////////////////////////////////////////////////////////////////////////////////////
+
+            /* const std::function<bool(const Configuration&, const Configuration&)>& edge_validity_check_fn
+             */
+
+
+            template<typename RNG>
+            std::vector<RRTConfig, Allocator> rrtShortcurSmooth (const std::vector<RRTConfig, Allocator>& path,
+                                                                 RNG & rng)
+            {
+                const std::function<bool(const RRTConfig&, const RRTConfig&)> edge_validity_check_fn = [&] (
+                        const RRTConfig& start_node,
+                        const RRTConfig& end_node)
+                {
+                    vis_.visualizeCubes("shortcut_smoothing_start_config", {start_node.first.first, start_node.first.second}, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 1);
+                    vis_.visualizePoints("shortcut_smoothing_end_config", {end_node.first.first, end_node.first.second}, Visualizer::Red(), 1);
+
+                    for (int32_t id = 1; id < 50; id++)
+                    {
+                        start_node.second.visualize("rubber_band_post_rrt_step", rubber_band_safe_color_, rubber_band_overstretched_color_, id, true);
+                    }
+
+                    std::vector<std::pair<RRTConfig, int64_t>> propagated_states;
+                    int64_t parent_offset = -1;
+
+                    const double total_distance = distance(start_node, end_node);
+                    const uint32_t max_total_steps = (uint32_t)ceil(total_distance / step_size_);
+                    propagated_states.reserve(max_total_steps);
+
+                    const bool rubber_band_verbose = false;
+                    uint32_t step_index = 0;
+
+                    while (step_index < max_total_steps)
+                    {
+                        // Using ternary operator here so that we can avoid making copies, and still take advantage of const correctness
+                        const bool use_start_node_as_prev = (parent_offset == -1);
+                        const RRTConfig& prev_node = (use_start_node_as_prev ? start_node : propagated_states[parent_offset].first);
+
+                        const double ratio = std::min(1.0, (double)(step_index + 1) * step_size_ / total_distance);
+                        const Eigen::Vector3d gripper_a_interpolated = EigenHelpers::Interpolate(start_node.first.first, end_node.first.first, ratio);
+                        const Eigen::Vector3d gripper_b_interpolated = EigenHelpers::Interpolate(start_node.first.second, end_node.first.second, ratio);
+
+                        // If the grippers enter collision, shortcut smoothing fails
+                        if ((environment_sdf_.Get3d(gripper_a_interpolated) < 0.0)
+                                || (environment_sdf_.Get3d(gripper_b_interpolated) < 0.0))
+                        {
+                            return false;
+                        }
+
+                        VirtualRubberBand next_rubber_band(prev_node.second);
+                        next_rubber_band.forwardSimulateVirtualRubberBand(
+                                    gripper_a_interpolated - prev_node.first.first,
+                                    gripper_b_interpolated - prev_node.first.second,
+                                    rubber_band_verbose);
+
+                        next_rubber_band.visualize("rubber_band_in_smoothing_step", Visualizer::Black(), arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f), (int32_t)parent_offset + 2, true);
+
+                        // If the rubber band becomes overstretched, shortcut smoothing fails
+                        if (next_rubber_band.isOverstretched())
+                        {
+                            return false;
+                        }
+
+                        const RRTConfig next_node(std::make_pair(gripper_a_interpolated, gripper_b_interpolated), next_rubber_band);
+    //                    vis_.visualizeLineStrip("rrt_gripper_tree_gripper_a", {prev_node.first.first, next_node.first.first}, Visualizer::Red(), marker_id_);
+    //                    vis_.visualizeLineStrip("rrt_gripper_tree_gripper_b", {prev_node.first.second, next_node.first.second}, Visualizer::Blue(), marker_id_);
+                        propagated_states.push_back(std::pair<RRTConfig, int64_t>(next_node, parent_offset));
+
+                        ++marker_id_;
+                        ++parent_offset;
+                        ++step_index;
+                    }
+                    return true;
+                };
+
+
+                const auto rrt_shortcut_results = shortcut_smoothing::ShortcutSmoothPath(
+                            path,
+                            max_iterations_,
+                            max_failed_iterations_,
+                            max_shortcut_fraction_,
+                            edge_validity_check_fn,
+                            rng);
+
+                return rrt_shortcut_results;
+            }
+
+
+            ///////////////////////////////////////////////////////////////////////////////////////
+            // Visualization and other debugging tools
+            ///////////////////////////////////////////////////////////////////////////////////////
+
 
             void visualize(const std::vector<RRTConfig, Allocator>& path)
             {
