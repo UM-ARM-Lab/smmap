@@ -1,21 +1,12 @@
 #ifndef RRT_HELPER_H
 #define RRT_HELPER_H
 
-//#include <iostream>
-//#include <stdio.h>
-//#include <vector>
-
-
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/simple_rrt_planner.hpp>
 #include <uncertainty_planning_core/simple_samplers.hpp>
 
+#include "smmap/visualization_tools.h"
 #include "smmap/virtual_rubber_band.h"
-
-//////////////////////////////// General Question ///////////////////////////////////
-// what does state_added_fn do? (*Call the state added callback*)
-/////////////////////////////////////////////////////////////////////////////////////
-
 
 namespace smmap
 {
@@ -27,20 +18,20 @@ namespace smmap
             const std::pair<double, double> z_limits_;
             const double goal_reach_radius_;
             const double step_size_;
-            const double obstacle_threshold_;
-            const sdf_tools::SignedDistanceField& environment_sdf_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
+
+            const sdf_tools::SignedDistanceField& environment_sdf_;
+            const Visualizer& vis_;
+            int32_t marker_id_;
 
         public:
             typedef std::pair<std::pair<Eigen::Vector3d, Eigen::Vector3d>, VirtualRubberBand> RRTConfig;
             typedef std::allocator<RRTConfig> Allocator;
 
 
-            #warning "Replace these magic numbers"
-            // Initialization problem to be fixed
             RRTHelper(const sdf_tools::SignedDistanceField& environment_sdf,
+                      const Visualizer& vis,
                       const double step_size = 1.0,
-                      const double obstacle_threshold = 0,
                       const double x_limits_lower = -10.0,
                       const double x_limits_upper = 10.0,
                       const double y_limits_lower = -10.0,
@@ -53,9 +44,10 @@ namespace smmap
                 , z_limits_(z_limits_lower,z_limits_upper)
                 , goal_reach_radius_(goal_reach_radius)
                 , step_size_(step_size)
-                , obstacle_threshold_(obstacle_threshold)
-                , environment_sdf_(environment_sdf)
                 , uniform_unit_distribution_(0.0, 1.0)
+                , environment_sdf_(environment_sdf)
+                , vis_(vis)
+                , marker_id_(1)
             {}
 
 
@@ -101,12 +93,10 @@ namespace smmap
                 const double y2 = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_distribution_(prng));
                 const double z2 = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_distribution_(prng));
 
-                rand_sample.first(0) = x1;
-                rand_sample.first(1) = y1;
-                rand_sample.first(2) = z1;
-                rand_sample.second(0) = x2;
-                rand_sample.second(1) = y2;
-                rand_sample.second(2) = z2;
+                rand_sample.first = Eigen::Vector3d(x1, y1, z1);
+                rand_sample.second = Eigen::Vector3d(x2, y2, z2);
+
+//                vis_.visualizePoints("sampled_configuration", {rand_sample.first, rand_sample.second}, Visualizer::Red(), 1);
 
                 return rand_sample;
             }
@@ -127,28 +117,34 @@ namespace smmap
                     const RRTConfig& nearest_neighbor,
                     const RRTConfig& random_target)
             {
+                vis_.visualizeCubes("forward_propogation_start_config", {nearest_neighbor.first.first, nearest_neighbor.first.second}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 1);
+                vis_.visualizePoints("random_target", {random_target.first.first, random_target.first.second}, Visualizer::Red(), 1);
+
                 std::vector<std::pair<RRTConfig, int64_t>> propagated_states;
                 int64_t parent_offset = -1;
 
                 const double total_distance = distance(nearest_neighbor, random_target);
                 const uint32_t max_total_steps = (uint32_t)ceil(total_distance / step_size_);
+                propagated_states.reserve(max_total_steps);
 
                 const bool rubber_band_verbose = false;
                 uint32_t step_index = 0;
-                bool completed = false;
-                while ((completed == false) && (step_index < max_total_steps))
+                while (step_index < max_total_steps)
                 {
                     // Using ternary operator here so that we can avoid making copies, and still take advantage of const correctness
-                    const RRTConfig& prev_node = parent_offset == -1 ? nearest_neighbor : propagated_states[parent_offset].first;
+                    const bool use_nearest_neighbour_as_prev = (parent_offset == -1);
+                    const RRTConfig& prev_node = (use_nearest_neighbour_as_prev ? nearest_neighbor : propagated_states[parent_offset].first);
 
                     const double ratio = std::min(1.0, (double)(step_index + 1) * step_size_ / total_distance);
                     const Eigen::Vector3d gripper_a_interpolated = EigenHelpers::Interpolate(nearest_neighbor.first.first, random_target.first.first, ratio);
                     const Eigen::Vector3d gripper_b_interpolated = EigenHelpers::Interpolate(nearest_neighbor.first.second, random_target.first.second, ratio);
 
-                    // TODO: collision check gripper positions
-                    if((environment_sdf_.Get3d(gripper_a_interpolated) < obstacle_threshold_ )
-                            || (environment_sdf_.Get3d(gripper_b_interpolated) < obstacle_threshold_))
-                    {   continue;   }
+                    // If the grippers enter collision, then return however far we were able to get
+                    if ((environment_sdf_.Get3d(gripper_a_interpolated) < 0.0)
+                            || (environment_sdf_.Get3d(gripper_b_interpolated) < 0.0))
+                    {
+                        break;
+                    }
 
                     VirtualRubberBand next_rubber_band(prev_node.second);
                     next_rubber_band.forwardSimulateVirtualRubberBand(
@@ -156,13 +152,18 @@ namespace smmap
                                 gripper_b_interpolated - prev_node.first.second,
                                 rubber_band_verbose);
 
-                    // TODO: check rubber band overstretch
-                    if(next_rubber_band.isOverstretched())
-                    {   continue;   }
+                    // If the rubber band becomes overstretched, then return however far we were able to get
+                    if (next_rubber_band.isOverstretched())
+                    {
+                        break;
+                    }
 
                     const RRTConfig next_node(std::make_pair(gripper_a_interpolated, gripper_b_interpolated), next_rubber_band);
+                    vis_.visualizeLineStrip("rrt_gripper_tree_gripper_a", {prev_node.first.first, next_node.first.first}, Visualizer::Red(), marker_id_);
+                    vis_.visualizeLineStrip("rrt_gripper_tree_gripper_b", {prev_node.first.second, next_node.first.second}, Visualizer::Blue(), marker_id_);
                     propagated_states.push_back(std::pair<RRTConfig, int64_t>(next_node, parent_offset));
 
+                    ++marker_id_;
                     ++parent_offset;
                     ++step_index;
                 }
@@ -214,42 +215,11 @@ namespace smmap
                             forward_propagation_fn,
                             time_limit);
 
-                std::cout << PrettyPrint::PrettyPrint(rrt_results.second, true, "\n") << std::endl;
+                std::cout << PrettyPrint::PrettyPrint(r`rt_results.second, true, "\n") << std::endl;
                 return rrt_results.first;
             }
-
-
-
-
-//            const RRTConfig start_;
-//            const RRTConfig goal_;
-
-//             const std::function<bool(void)>& termination_check_fn
-//             * termination_check_fn - returns if the planner should terminate (for example, if it has exceeded time/space limits)
-
-
-
-//            const auto distance_fn = [&] (
-//                    const simple_rrt_planner::SimpleRRTPlannerState<RRTHelper::RRTConfig, RRTHelper::Allocator>& rrt_state,
-//                    const RRTHelper::RRTConfig& rrt_config)
-//            {
-//                return rrt_helper.distance(rrt_state.GetValueImmutable(), rrt_config);
-//            };
-
-//            const auto nearest_neighbor_fn = [&] (
-//                    const std::vector<simple_rrt_planner::SimpleRRTPlannerState<RRTHelper::RRTConfig, RRTHelper::Allocator>>& nodes,
-//                    const RRTHelper::RRTConfig& config)
-//            {
-//                return rrt_helper.nearestNeighbour(nodes, config);
-//            };
-//            const auto results = simple_rrt_planner::SimpleHybridRRTPlanner::Plan<rrtConfig, std::allocator<rrtConfig>>(start, goal, nearest_neighbor_fn, goal_reached_fn, state_sampling_fn, forward_propagation_fn, goal_bias, time_limit, rng);
-
     };
 }
-
-
-
-
 
 
 #endif // ifndef RRT_HELPER_H
