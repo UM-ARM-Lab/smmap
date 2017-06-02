@@ -116,14 +116,20 @@ Visualizer::Visualizer(ros::NodeHandle& nh)
 }
 
 void Visualizer::deleteObjects(
-        const std::string& marker_name) const
+        const std::string& marker_name,
+        const int32_t start_id,
+        const int32_t end_id) const
 {
     visualization_msgs::Marker marker;
 
     marker.action = visualization_msgs::Marker::DELETE;
     marker.ns = marker_name;
 
-    visualization_marker_pub_.publish(marker);
+    for (int32_t id = start_id; id < end_id; ++id)
+    {
+        marker.id = id;
+        visualization_marker_pub_.publish(marker);
+    }
 }
 
 void Visualizer::visualizePoints(

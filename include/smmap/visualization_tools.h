@@ -25,7 +25,9 @@ namespace smmap
             Visualizer(ros::NodeHandle& nh);
 
             void deleteObjects(
-                    const std::string& marker_name) const;
+                    const std::string& marker_name,
+                    const int32_t start_id = 0,
+                    const int32_t end_id = 1024) const;
 
             void visualizePoints(
                     const std::string& marker_name,

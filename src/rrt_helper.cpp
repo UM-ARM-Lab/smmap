@@ -116,11 +116,7 @@ std::vector<std::pair<RRTHelper::RRTConfig, int64_t>> RRTHelper::forwardPropogat
 {
 //    vis_.visualizeCubes("forward_propogation_start_config", {nearest_neighbor.first.first, nearest_neighbor.first.second}, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 1);
 //    vis_.visualizePoints("random_target", {random_target.first.first, random_target.first.second}, Visualizer::Red(), 1);
-
-    for (int32_t id = 1; id < 50; id++)
-    {
-        nearest_neighbor.second.visualize("rubber_band_post_rrt_step", arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0, 0.0, 0.0, 0.0), arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0, 0.0, 0.0, 0.0), id, true);
-    }
+    vis_.deleteObjects("rubber_band_post_rrt_step");
 
     std::vector<std::pair<RRTConfig, int64_t>> propagated_states;
     int64_t parent_offset = -1;
@@ -171,8 +167,6 @@ std::vector<std::pair<RRTHelper::RRTConfig, int64_t>> RRTHelper::forwardPropogat
         ++parent_offset;
         ++step_index;
     }
-
-    vis_.deleteObjects("rubber_band_post_rrt_step");
 
     return propagated_states;
 }
@@ -250,9 +244,20 @@ static bool gripperPositionsAreApproximatelyEqual(
     return is_equal;
 }
 
-static bool gripperPositionsAreApproximatelyEqual(const RRTHelper::RRTConfig& a_node, const RRTHelper::RRTConfig& b_node)
+static bool gripperPositionsAreApproximatelyEqual(
+        const RRTHelper::RRTConfig& a_node,
+        const RRTHelper::RRTConfig& b_node)
 {
     return gripperPositionsAreApproximatelyEqual(a_node.first, b_node.first);
+}
+
+static bool bandEndpointsMatchGripperPositions(
+        const VirtualRubberBand& band,
+        const std::pair<Eigen::Vector3d, Eigen::Vector3d> grippers)
+{
+    const EigenHelpers::VectorVector3d& rubber_band_pos = band.getVectorRepresentation();
+    const auto rubber_band_endpoints = std::make_pair(rubber_band_pos.front(), rubber_band_pos.back());
+    return gripperPositionsAreApproximatelyEqual(grippers, rubber_band_endpoints);
 }
 
 static std::pair<bool, std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>> forwardSimulateGrippersPath(
@@ -265,11 +270,7 @@ static std::pair<bool, std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>> 
     assert(end_index <= path.size() - 1);
 
     // Verify that the endpoints of the rubber band match the start of the grippers path
-    {
-        const EigenHelpers::VectorVector3d starting_rubber_band_pos = rubber_band.getVectorRepresentation();
-        const auto rubber_band_endpoints = std::make_pair(starting_rubber_band_pos.front(), starting_rubber_band_pos.back());
-        assert(gripperPositionsAreApproximatelyEqual(path[start_index].first, rubber_band_endpoints));
-    }
+    assert(bandEndpointsMatchGripperPositions(rubber_band, path[start_index].first));
 
     // Collect the results for use by the rrtShortcutSmooth function
     std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator> resulting_path;
@@ -322,16 +323,21 @@ std::pair<std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>, std::map<std:
     visualize(current_path);
     while (num_iterations < max_smoothing_iterations_ && failed_iterations < max_failed_smoothing_iterations_ && current_path.size() > 2)
     {
+//        usleep(100000);
+        vis_.deleteObjects("rubber_band_checking_rest_of_path");
+        vis_.deleteObjects("rubber_band_post_rrt_step");
+//        usleep(100000);
+
         // Attempt a shortcut
         const int64_t base_index = (int64_t)std::uniform_int_distribution<size_t>(0, current_path.size() - 1)(generator_);
 
         // Compute the offset index
-        const int64_t min_delta = std::max(-base_index, -max_shortcut_index_distance_);
-        const int64_t max_delta = std::min((int64_t)current_path.size() - base_index - 1, max_shortcut_index_distance_);
+        // We want to sample the start and goal slightly more frequently, so allow "overshoots" of endpoints for the offset
+        const int64_t min_delta = std::max(-base_index - max_shortcut_index_distance_ / 10, -max_shortcut_index_distance_);
+        const int64_t max_delta = std::min((int64_t)current_path.size() - base_index - 1 + max_shortcut_index_distance_ / 10, max_shortcut_index_distance_);
         const int64_t offset_delta = std::uniform_int_distribution<int64_t>(min_delta, max_delta)(generator_);
-        const int64_t second_index = base_index + offset_delta;
-        assert(0 <= second_index);
-        assert(second_index < (int64_t)current_path.size());
+        // Clamp to the boundaries of the current path
+        const int64_t second_index = arc_helpers::ClampValue(base_index + offset_delta, (int64_t)0, (int64_t)current_path.size() - 1);
 
         // Get start & end indices
         const size_t start_index = (size_t)std::min(base_index, second_index);
@@ -346,21 +352,27 @@ std::pair<std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>, std::map<std:
 
         // Check if the edge is valid
         const RRTConfig& start_config = current_path[start_index];
+        const EigenHelpers::VectorVector3d& start_band = start_config.second.getVectorRepresentation();
         const RRTConfig& end_config = current_path[end_index];
+        const EigenHelpers::VectorVector3d& end_band = end_config.second.getVectorRepresentation();
 
         start_config.second.visualize("rubber_band_smoothing_start", Visualizer::Red(), rubber_band_overstretched_color_, 1, true);
-        vis_.visualizeCubes("rubber_band_smoothing_start", {start_config.second.getVectorRepresentation().front(), start_config.second.getVectorRepresentation().back()}, Eigen::Vector3d(0.02, 0.02, 0.02), Visualizer::Red(), 1000);
+        vis_.visualizeCubes("rubber_band_smoothing_start", {start_band.front(), start_band.back()}, Eigen::Vector3d(0.02, 0.02, 0.02), Visualizer::Red(), 1000);
         end_config.second.visualize("rubber_band_smoothing_end", Visualizer::Red(), rubber_band_overstretched_color_, 1, true);
-        vis_.visualizeCubes("rubber_band_smoothing_end", {end_config.second.getVectorRepresentation().front(), end_config.second.getVectorRepresentation().back()}, Eigen::Vector3d(0.02, 0.02, 0.02), Visualizer::Red(), 1000);
+        vis_.visualizeCubes("rubber_band_smoothing_end", {end_band.front(), end_band.back()}, Eigen::Vector3d(0.02, 0.02, 0.02), Visualizer::Red(), 1000);
 
         const std::vector<std::pair<RRTHelper::RRTConfig, int64_t>> smoothing_propogation_results = forwardPropogationFunction(start_config, end_config);
-        const bool edge_valid = gripperPositionsAreApproximatelyEqual(end_config, smoothing_propogation_results.back().first);
+        const bool edge_valid =
+                smoothing_propogation_results.size() > 0 &&
+                !smoothing_propogation_results.back().first.second.isOverstretched() &&
+                bandEndpointsMatchGripperPositions(smoothing_propogation_results.back().first.second, current_path[end_index].first);
         if (edge_valid)
         {
             // We still need to check that the rubber band can still reach the goal correctly from this state,
             // so we'll forward propogate along the rest of the trajectory to check feasibility
+            const VirtualRubberBand& final_rubber_band_after_smoothing = smoothing_propogation_results.back().first.second;
             const auto end_of_smoothing_to_goal_results = forwardSimulateGrippersPath(
-                        smoothing_propogation_results.back().first.second,
+                        final_rubber_band_after_smoothing,
                         current_path,
                         end_index,
                         current_path.size() - 1);
@@ -398,9 +410,6 @@ std::pair<std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>, std::map<std:
             ++failed_iterations;
         }
 
-        vis_.deleteObjects("rubber_band_checking_rest_of_path");
-        vis_.deleteObjects("rubber_band_post_rrt_step");
-
         ++num_iterations;
     }
 
@@ -426,6 +435,7 @@ void RRTHelper::visualize(const std::vector<RRTConfig, Allocator>& path)
     vis_.deleteObjects("rubber_band_rrt_solution");
     vis_.deleteObjects("gripper_a_rrt_solution");
     vis_.deleteObjects("gripper_b_rrt_solution");
+//    usleep(100000);
 
     for (size_t ind = 0; ind < path.size(); ++ind)
     {
@@ -436,15 +446,5 @@ void RRTHelper::visualize(const std::vector<RRTConfig, Allocator>& path)
         rubber_band.visualize("rubber_band_rrt_solution", Visualizer::Yellow(), rubber_band_overstretched_color_, (int32_t)ind + 1, true);
         vis_.visualizeCubes("gripper_a_rrt_solution", {gripper_positions.first}, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Blue(), (int32_t)ind + 1);
         vis_.visualizeCubes("gripper_b_rrt_solution", {gripper_positions.second}, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), (int32_t)ind + 1);
-    }
-
-    for (size_t ind = path.size(); ind < path.size() + 400; ++ind)
-    {
-        const RRTConfig& config = path.back();
-        const auto& gripper_positions = config.first;
-        const VirtualRubberBand& rubber_band = config.second;
-
-        rubber_band.visualize("rubber_band_rrt_solution", arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0, 0.0, 0.0, 0.0), rubber_band_overstretched_color_, (int32_t)ind + 1, true);
-        vis_.visualizeCubes("gripper_a_rrt_solution", {gripper_positions.first}, Eigen::Vector3d(0.005, 0.005, 0.005), arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0, 0.0, 0.0, 0.0), (int32_t)ind + 1);
     }
 }
