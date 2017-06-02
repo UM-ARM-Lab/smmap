@@ -87,7 +87,7 @@ namespace smmap
      * @param object_initial_node_distance The matrix of distances between nodes
      * @return The the distance between given node, and the closest node grasped by the gripper
      */
-    inline double getMinimumDistanceToGripper(
+    inline double GetMinimumDistanceToGripper(
             const std::vector<long>& gripper_indices,
             long node_index,
             const Eigen::MatrixXd& object_initial_node_distance)
@@ -103,7 +103,7 @@ namespace smmap
 
 
     // Return both min distance and grasped node index
-    inline std::pair<double, long> getMinimumDistanceIndexToGripper(
+    inline std::pair<double, long> GetMinimumDistanceIndexToGripper(
             const std::vector<long>& gripper_indices,
             long node_index,
             const Eigen::MatrixXd& object_initial_node_distance)

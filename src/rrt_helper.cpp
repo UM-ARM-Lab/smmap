@@ -1,7 +1,7 @@
 #include "smmap/rrt_helper.h"
 
 #include <arc_utilities/arc_helpers.hpp>
-#include <uncertainty_planning_core/simple_samplers.hpp>
+#include <arc_utilities/first_order_deformation.h>
 
 using namespace smmap;
 
@@ -171,7 +171,7 @@ std::vector<std::pair<RRTHelper::RRTConfig, int64_t>> RRTHelper::forwardPropogat
     return propagated_states;
 }
 
-std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator> RRTHelper::rrtPlan (
+std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator> RRTHelper::rrtPlan(
         const RRTConfig& start,
         const RRTConfig& goal,
         const std::chrono::duration<double>& time_limit)
@@ -182,7 +182,11 @@ std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator> RRTHelper::rrtPlan (
     {
         if (distance(node, goal) < goal_reach_radius_)
         {
-            return true;
+            // Only accept paths that are different from those on the blacklist
+            if (!isBandFirstOrderVisibileToBlacklist(node.second.getVectorRepresentation()))
+            {
+                return true;
+            }
         }
         return false;
     };
@@ -222,6 +226,57 @@ std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator> RRTHelper::rrtPlan (
     std::cout << PrettyPrint::PrettyPrint(smoothing_results.second, true, "\n") << std::endl;
 
     return smoothing_results.first;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+// Helper function for goal check
+///////////////////////////////////////////////////////////////////////////////////////
+
+void RRTHelper::addBandToBlacklist(const EigenHelpers::VectorVector3d& band)
+{
+    blacklisted_goal_rubber_bands_.push_back(band);
+}
+
+bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const
+{
+    for (size_t idx = 0; idx < blacklisted_goal_rubber_bands_.size(); idx++)
+    {
+        const EigenHelpers::VectorVector3d& blacklisted_path = blacklisted_goal_rubber_bands_[idx];
+
+        // Checks if the straight line between elements of the two paths is collision free
+        const auto straight_line_collision_check_fn = [&] (const ssize_t blacklisted_path_ind, const ssize_t test_band_ind)
+        {
+            assert(0 <= blacklisted_path_ind && blacklisted_path_ind < (ssize_t)blacklisted_path.size());
+            assert(0 <= test_band_ind && test_band_ind < (ssize_t)test_band.size());
+
+            const Eigen::Vector3d& first_node = blacklisted_path[blacklisted_path_ind];
+            const Eigen::Vector3d& second_node = test_band[test_band_ind];
+
+            const ssize_t num_steps = (ssize_t)std::ceil((second_node - first_node).norm() / environment_sdf_.GetResolution());
+
+            // We don't need to check the endpoints as they are already checked as part of the rubber band process
+            for (ssize_t ind = 1; ind < num_steps; ++ind)
+            {
+                const double ratio = (double)ind / (double)num_steps;
+                const Eigen::Vector3d interpolated_point = EigenHelpers::Interpolate(first_node, second_node, ratio);
+                if (environment_sdf_.Get3d(interpolated_point) < 0.0)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        };
+
+        // If we've found a first order deformation, then we are similar to a blacklisted item
+        const bool visualize = false;
+        if (arc_utilities::FirstOrderDeformation::CheckFirstOrderDeformation(blacklisted_path.size(), test_band.size(), straight_line_collision_check_fn, visualize))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -371,34 +426,38 @@ std::pair<std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>, std::map<std:
             // We still need to check that the rubber band can still reach the goal correctly from this state,
             // so we'll forward propogate along the rest of the trajectory to check feasibility
             const VirtualRubberBand& final_rubber_band_after_smoothing = smoothing_propogation_results.back().first.second;
-            const auto end_of_smoothing_to_goal_results = forwardSimulateGrippersPath(
+            const std::pair<bool, std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>> end_of_smoothing_to_goal_results
+                    = forwardSimulateGrippersPath(
                         final_rubber_band_after_smoothing,
                         current_path,
                         end_index,
                         current_path.size() - 1);
 
-            // If we were able to forward simulate without overstretch, then accept this shortcut
+            // If we were able to forward simulate without overstretch, then check if the resulting rubber band has been blacklisted
             if (end_of_smoothing_to_goal_results.first == false)
             {
-                // Allocate space for the total smoothed path
-                std::vector<RRTConfig, Allocator> smoothed_path;
-                smoothed_path.reserve(current_path.size() - (end_index - start_index) + smoothing_propogation_results.size());
-
-                // Insert the starting unchanged part of the path
-                smoothed_path.insert(smoothed_path.begin(), current_path.begin(), current_path.begin() + start_index + 1);
-
-                // Insert the smoothed portion
-                for (size_t idx = 0; idx < smoothing_propogation_results.size(); ++idx)
+                if (!isBandFirstOrderVisibileToBlacklist(end_of_smoothing_to_goal_results.second.back().second.getVectorRepresentation()))
                 {
-                    smoothed_path.push_back(smoothing_propogation_results[idx].first);
+                    // Allocate space for the total smoothed path
+                    std::vector<RRTConfig, Allocator> smoothed_path;
+                    smoothed_path.reserve(current_path.size() - (end_index - start_index) + smoothing_propogation_results.size());
+
+                    // Insert the starting unchanged part of the path
+                    smoothed_path.insert(smoothed_path.begin(), current_path.begin(), current_path.begin() + start_index + 1);
+
+                    // Insert the smoothed portion
+                    for (size_t idx = 0; idx < smoothing_propogation_results.size(); ++idx)
+                    {
+                        smoothed_path.push_back(smoothing_propogation_results[idx].first);
+                    }
+
+                    // Insert the changed end of the path with the new rubber band - gripper positions are identical
+                    smoothed_path.insert(smoothed_path.end(), end_of_smoothing_to_goal_results.second.begin() + 1, end_of_smoothing_to_goal_results.second.end());
+
+                    // Record the change and re-visualize
+                    current_path = smoothed_path;
+                    visualize(current_path);
                 }
-
-                // Insert the changed end of the path with the new rubber band - gripper positions are identical
-                smoothed_path.insert(smoothed_path.end(), end_of_smoothing_to_goal_results.second.begin() + 1, end_of_smoothing_to_goal_results.second.end());
-
-                // Record the change and re-visualize
-                current_path = smoothed_path;
-                visualize(current_path);
             }
             else
             {
@@ -430,7 +489,7 @@ std::pair<std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>, std::map<std:
 ///////////////////////////////////////////////////////////////////////////////////////
 
 
-void RRTHelper::visualize(const std::vector<RRTConfig, Allocator>& path)
+void RRTHelper::visualize(const std::vector<RRTConfig, Allocator>& path) const
 {
     vis_.deleteObjects("rubber_band_rrt_solution");
     vis_.deleteObjects("gripper_a_rrt_solution");

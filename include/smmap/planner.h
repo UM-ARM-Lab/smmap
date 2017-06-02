@@ -11,6 +11,7 @@
 #include "smmap/kalman_filter_multiarm_bandit.hpp"
 #include "smmap/ucb_multiarm_bandit.hpp"
 #include "smmap/virtual_rubber_band.h"
+#include "smmap/rrt_helper.h"
 
 namespace smmap
 {
@@ -105,6 +106,11 @@ namespace smmap
             bool executing_global_gripper_trajectory_;
             size_t global_plan_current_timestep_;
             AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
+            std::unique_ptr<RRTHelper> rrt_helper_;
+
+            AllGrippersPoseTrajectory convertRRTResultIntoGripperTrajectory(
+                    const AllGrippersSinglePose& starting_poses,
+                    const std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>& rrt_result) const;
 
             EigenHelpers::VectorVector3d findPathBetweenPositions(
                     const Eigen::Vector3d& start,

@@ -3,15 +3,16 @@
 #include <future>
 #include <assert.h>
 #include <numeric>
+#include <memory>
 #include <arc_utilities/pretty_print.hpp>
 #include <arc_utilities/log.hpp>
 #include <arc_utilities/first_order_deformation.h>
 #include <arc_utilities/simple_kmeans_clustering.hpp>
 #include <arc_utilities/simple_astar_planner.hpp>
 #include <arc_utilities/get_neighbours.hpp>
+#include <arc_utilities/shortcut_smoothing.hpp>
 
 #include "smmap/timing.hpp"
-#include "smmap/rrt_helper.h"
 
 using namespace smmap;
 using namespace Eigen;
@@ -52,10 +53,26 @@ Planner::Planner(
     , executing_global_gripper_trajectory_(false)
     , global_plan_current_timestep_(-1)
     , global_plan_gripper_trajectory_(0)
+    , rrt_helper_(nullptr)
 {
+    // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
     if (task_specification_->is_dijkstras_type_task_)
     {
         dijkstras_task_ = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
+
+        rrt_helper_ = std::unique_ptr<RRTHelper>(
+                    new RRTHelper(
+                        dijkstras_task_->environment_sdf_,
+                        vis_,
+                        generator_,
+                        dijkstras_task_->work_space_grid_.minStepDimension(),
+                        dijkstras_task_->work_space_grid_.getXMin(),
+                        dijkstras_task_->work_space_grid_.getXMax(),
+                        dijkstras_task_->work_space_grid_.getYMin(),
+                        dijkstras_task_->work_space_grid_.getYMax(),
+                        dijkstras_task_->work_space_grid_.getZMin(),
+                        dijkstras_task_->work_space_grid_.getZMax(),
+                        dijkstras_task_->work_space_grid_.minStepDimension()));
     }
 
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
@@ -118,8 +135,18 @@ WorldState Planner::sendNextCommand(
                     detectFutureConstraintViolations(current_world_state);
             ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
 
-            if (projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.back().isOverstretched())
+            size_t num_overstretched = 0;
+            for (size_t ind = 0; ind < projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.size(); ++ind)
             {
+                if (projected_deformable_point_paths_and_projected_virtual_rubber_bands.second[ind].isOverstretched())
+                {
+                    ++num_overstretched;
+                }
+            }
+
+            if (num_overstretched > num_lookahead_steps_ / 2)
+            {
+                rrt_helper_->addBandToBlacklist(virtual_rubber_band_between_grippers_->getVectorRepresentation());
                 planGlobalGripperTrajectory(
                             current_world_state,
                             projected_deformable_point_paths_and_projected_virtual_rubber_bands.first,
@@ -198,9 +225,9 @@ static std::pair<VectorVector3d, std::vector<double>> GetEndpoints(
 }
 
 
-static AllGrippersPoseTrajectory ConvertRRTResultIntoGripperTrajectory(
+AllGrippersPoseTrajectory Planner::convertRRTResultIntoGripperTrajectory(
         const AllGrippersSinglePose& starting_poses,
-        const std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>& rrt_result)
+        const std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>& rrt_result) const
 {
     assert(starting_poses.size() == 2);
 
@@ -212,10 +239,28 @@ static AllGrippersPoseTrajectory ConvertRRTResultIntoGripperTrajectory(
         AllGrippersSinglePose grippers_poses(starting_poses);
         grippers_poses[0].translation() = rrt_result[ind].first.first;
         grippers_poses[1].translation() = rrt_result[ind].first.second;
+
         traj.push_back(grippers_poses);
     }
 
-    return traj;
+    const auto distance_fn = [] (const AllGrippersSinglePose& a, const AllGrippersSinglePose& b)
+    {
+        const double gripper0_dist_sq = (a[0].translation() - b[0].translation()).squaredNorm();
+        const double gripper1_dist_sq = (a[1].translation() - b[1].translation()).squaredNorm();
+
+        return std::sqrt(gripper0_dist_sq + gripper1_dist_sq);
+    };
+
+    const auto interpolation_fn = [] (const AllGrippersSinglePose& a, const AllGrippersSinglePose& b, const double ratio)
+    {
+        AllGrippersSinglePose result = a;
+        result[0].translation() = EigenHelpers::Interpolate(a[0].translation(), b[0].translation(), ratio);
+        result[1].translation() = EigenHelpers::Interpolate(a[1].translation(), b[1].translation(), ratio);
+        return result;
+    };
+
+    const auto resampled_traj = shortcut_smoothing::ResamplePath<AllGrippersSinglePose>(traj, robot_.max_gripper_velocity_ * robot_.dt_, distance_fn, interpolation_fn);
+    return resampled_traj;
 }
 
 
@@ -403,65 +448,15 @@ void Planner::planGlobalGripperTrajectory(
                                          target_gripper_poses[1].translation()),
                              *virtual_rubber_band_between_grippers_);
 
-    ///////////////////// Start: To be moved into the RRTHelper class
-
-    const VectorVector3d& first_path = start_config.second.getVectorRepresentation();
-    const VectorVector3d& second_path = projected_virtual_rubber_bands.back().getVectorRepresentation();
-
-    // Checks if the straight line between elements of the two paths is collision free
-    const auto straight_line_collision_check_fn = [&] (const ssize_t first_path_ind, const ssize_t second_path_ind)
-    {
-        assert(0 <= first_path_ind && first_path_ind < (ssize_t)first_path.size());
-        assert(0 <= second_path_ind && second_path_ind < (ssize_t)second_path.size());
-
-        const Vector3d& first_node = first_path[first_path_ind];
-        const Vector3d& second_node = second_path[second_path_ind];
-
-        const ssize_t num_steps = (ssize_t)std::ceil((second_node - first_node).norm() / dijkstras_task_->environment_sdf_.GetResolution());
-
-        // We don't need to check the endpoints as they are already checked as part of the rubber band process
-        for (ssize_t ind = 1; ind < num_steps; ++ind)
-        {
-            const double ratio = (double)ind/(double)num_steps;
-            const Vector3d interpolated_point = Interpolate(first_node, second_node, ratio);
-            if (dijkstras_task_->environment_sdf_.Get3d(interpolated_point) < 0.0)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    };
-
-    stopwatch(RESET);
-    const bool first_order_visibility = arc_utilities::FirstOrderDeformation::CheckFirstOrderDeformation(first_path.size(), second_path.size(), straight_line_collision_check_fn, false);
-    ROS_INFO_STREAM_NAMED("planner", "First order visibility check result: " << first_order_visibility << " in " << stopwatch(READ) << " seconds");
-
-    ///////////////////// End: To be moved into the RRTHelper class
-
-    // Plan a path to the specified goal using an RRT
-    const double step_size = dijkstras_task_->work_space_grid_.minStepDimension();
-    const double x_limits_lower = dijkstras_task_->work_space_grid_.getXMin();
-    const double x_limits_upper = dijkstras_task_->work_space_grid_.getXMax();
-    const double y_limits_lower = dijkstras_task_->work_space_grid_.getYMin();
-    const double y_limits_upper = dijkstras_task_->work_space_grid_.getYMax();
-    const double z_limits_lower = dijkstras_task_->work_space_grid_.getZMin();
-    const double z_limits_upper = dijkstras_task_->work_space_grid_.getZMax();
-    const double goal_reach_radius = dijkstras_task_->work_space_grid_.minStepDimension();
-
-    // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
     #warning "Time limit for RRT magic number here; replace with ROS Param"
     const std::chrono::duration<double> time_limit(600);
-    RRTHelper rrt_helper(dijkstras_task_->environment_sdf_, vis_, generator_, step_size,
-                         x_limits_lower, x_limits_upper, y_limits_lower, y_limits_upper,
-                         z_limits_lower, z_limits_upper, goal_reach_radius);
-    const auto rrt_results = rrt_helper.rrtPlan(start_config, goal_config, time_limit);
+    const auto rrt_results = rrt_helper_->rrtPlan(start_config, goal_config, time_limit);
 
-    rrt_helper.visualize(rrt_results);
+    rrt_helper_->visualize(rrt_results);
 
     global_plan_current_timestep_ = 0;
     executing_global_gripper_trajectory_ = true;
-    global_plan_gripper_trajectory_ = ConvertRRTResultIntoGripperTrajectory(current_world_state.all_grippers_single_pose_, rrt_results);
+    global_plan_gripper_trajectory_ = convertRRTResultIntoGripperTrajectory(current_world_state.all_grippers_single_pose_, rrt_results);
 
 }
 

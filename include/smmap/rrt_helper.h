@@ -14,27 +14,6 @@ namespace smmap
 {
     class RRTHelper
     {
-        private:
-            const std::pair<double, double> x_limits_;
-            const std::pair<double, double> y_limits_;
-            const std::pair<double, double> z_limits_;
-            const double goal_reach_radius_;
-            const double step_size_;
-            const int64_t max_shortcut_index_distance_;
-            const uint32_t max_smoothing_iterations_;
-            const uint32_t max_failed_smoothing_iterations_;
-            std::uniform_real_distribution<double> uniform_unit_distribution_;
-
-            const sdf_tools::SignedDistanceField& environment_sdf_;
-            const Visualizer& vis_;
-            std::mt19937_64& generator_;
-
-            int32_t marker_id_;
-            const std_msgs::ColorRGBA rubber_band_safe_color_;
-            const std_msgs::ColorRGBA rubber_band_overstretched_color_;
-
-            std::pair<Eigen::Vector3d, Eigen::Vector3d> gripper_goal_positions_;
-
         public:
             typedef std::pair<std::pair<Eigen::Vector3d, Eigen::Vector3d>, VirtualRubberBand> RRTConfig;
             typedef std::allocator<RRTConfig> Allocator;
@@ -56,16 +35,20 @@ namespace smmap
                     const uint32_t max_smoothing_iterations = 200,
                     const uint32_t max_failed_smoothing_iterations = 500);
 
-            std::vector<RRTConfig, Allocator> rrtPlan (
+            std::vector<RRTConfig, Allocator> rrtPlan(
                     const RRTConfig& start,
                     const RRTConfig& goal,
                     const std::chrono::duration<double>& time_limit);
+
+            void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
+
+            bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const;
 
             ///////////////////////////////////////////////////////////////////////////////////////
             // Visualization and other debugging tools
             ///////////////////////////////////////////////////////////////////////////////////////
 
-            void visualize(const std::vector<RRTConfig, Allocator>& path);
+            void visualize(const std::vector<RRTConfig, Allocator>& path) const;
 
             ///////////////////////////////////////////////////////////////////////////////////////
             // Helper function for original rrt planning
@@ -102,6 +85,30 @@ namespace smmap
 
             std::pair<std::vector<RRTConfig, Allocator>, std::map<std::string, double>> rrtShortcutSmooth(
                     const std::vector<RRTConfig, Allocator>& path);
+
+
+        private:
+            const std::pair<double, double> x_limits_;
+            const std::pair<double, double> y_limits_;
+            const std::pair<double, double> z_limits_;
+            const double goal_reach_radius_;
+            const double step_size_;
+            const int64_t max_shortcut_index_distance_;
+            const uint32_t max_smoothing_iterations_;
+            const uint32_t max_failed_smoothing_iterations_;
+            std::uniform_real_distribution<double> uniform_unit_distribution_;
+
+            const sdf_tools::SignedDistanceField& environment_sdf_;
+            const Visualizer& vis_;
+            std::mt19937_64& generator_;
+
+            int32_t marker_id_;
+            const std_msgs::ColorRGBA rubber_band_safe_color_;
+            const std_msgs::ColorRGBA rubber_band_overstretched_color_;
+
+            std::pair<Eigen::Vector3d, Eigen::Vector3d> gripper_goal_positions_;
+
+            std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
 
     };
 }
