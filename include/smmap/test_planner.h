@@ -3,9 +3,10 @@
 
 //#include <arc_utilities/log.hpp>
 
-#include "smmap/task_function_pointer_types.h"
+//#include "smmap/task_function_pointer_types.h"
 #include "smmap/test_specification.h"
-#include "smmap/visualization_tools.h"
+
+//#include "smmap/visualization_tools.h"
 #include "smmap/robot_interface.hpp"
 #include "smmap/deformable_model.h"
 #include "smmap/kalman_filter_multiarm_bandit.hpp"

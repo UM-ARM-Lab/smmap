@@ -188,9 +188,9 @@ void modelTest::initializeModelSet(const WorldState& initial_world_state)
     // Mengyao's model here
     else if (GetUseConstraintModel(ph_))
     {
-        const double translation_dir_deformability=20.0;
-        const double translation_dis_deformability=3.0;
-        const double rotation_deformability=20;
+        const double translational_dir_deformability = GetConstaintTranslationalDir(nh_);
+        const double translational_dis_deformability = GetConstaintTranslationalDis(nh_);
+        const double rotational_deformability = GetConstaintRotational(nh_);
         // Douoble check this usage
         const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
 
@@ -198,9 +198,9 @@ void modelTest::initializeModelSet(const WorldState& initial_world_state)
                                << test_specification_->defaultDeformability());
 
         planner_.addModel(std::make_shared<ConstraintJacobianModel>(
-                              translation_dir_deformability,
-                              translation_dis_deformability,
-                              rotation_deformability,
+                              translational_dir_deformability,
+                              translational_dis_deformability,
+                              rotational_deformability,
                               environment_sdf,
                               optimization_enabled));
 
