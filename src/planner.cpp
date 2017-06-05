@@ -65,13 +65,13 @@ Planner::Planner(
                         dijkstras_task_->environment_sdf_,
                         vis_,
                         generator_,
-                        dijkstras_task_->work_space_grid_.minStepDimension(),
                         dijkstras_task_->work_space_grid_.getXMin(),
                         dijkstras_task_->work_space_grid_.getXMax(),
                         dijkstras_task_->work_space_grid_.getYMin(),
                         dijkstras_task_->work_space_grid_.getYMax(),
                         dijkstras_task_->work_space_grid_.getZMin(),
                         dijkstras_task_->work_space_grid_.getZMax(),
+                        dijkstras_task_->work_space_grid_.minStepDimension(),
                         dijkstras_task_->work_space_grid_.minStepDimension()));
     }
 
@@ -204,12 +204,13 @@ void Planner::visualizeDesiredMotion(
 // Global gripper planner functions
 ////////////////////////////////////////////////////////////////////////////////
 
+// Returns the endpoints of each internal vector, as well as the number of nodes in each path
 static std::pair<VectorVector3d, std::vector<double>> GetEndpoints(
         const std::vector<VectorVector3d>& projected_deformable_point_paths)
 {
     std::pair<VectorVector3d, std::vector<double>> results;
     VectorVector3d& endpoints = results.first;
-    std::vector<double>& weights = results.second;
+    std::vector<double>& distance = results.second;
 
     endpoints.reserve(projected_deformable_point_paths.size());
     for (size_t idx = 0; idx < projected_deformable_point_paths.size(); ++idx)
@@ -217,17 +218,16 @@ static std::pair<VectorVector3d, std::vector<double>> GetEndpoints(
         if (projected_deformable_point_paths[idx].size() > 1)
         {
             endpoints.push_back(projected_deformable_point_paths[idx].back());
-            weights.push_back((double)projected_deformable_point_paths[idx].size());
+            distance.push_back((double)projected_deformable_point_paths[idx].size());
         }
     }
 
     return results;
 }
 
-
 AllGrippersPoseTrajectory Planner::convertRRTResultIntoGripperTrajectory(
         const AllGrippersSinglePose& starting_poses,
-        const std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>& rrt_result) const
+        const std::vector<RRTConfig, RRTAllocator>& rrt_result) const
 {
     assert(starting_poses.size() == 2);
 
@@ -237,8 +237,8 @@ AllGrippersPoseTrajectory Planner::convertRRTResultIntoGripperTrajectory(
     for (size_t ind = 0; ind < rrt_result.size(); ++ind)
     {
         AllGrippersSinglePose grippers_poses(starting_poses);
-        grippers_poses[0].translation() = rrt_result[ind].first.first;
-        grippers_poses[1].translation() = rrt_result[ind].first.second;
+        grippers_poses[0].translation() = rrt_result[ind].getGrippers().first;
+        grippers_poses[1].translation() = rrt_result[ind].getGrippers().second;
 
         traj.push_back(grippers_poses);
     }
@@ -262,7 +262,6 @@ AllGrippersPoseTrajectory Planner::convertRRTResultIntoGripperTrajectory(
     const auto resampled_traj = shortcut_smoothing::ResamplePath<AllGrippersSinglePose>(traj, robot_.max_gripper_velocity_ * robot_.dt_, distance_fn, interpolation_fn);
     return resampled_traj;
 }
-
 
 VectorVector3d Planner::findPathBetweenPositions(
         const Vector3d& start,
@@ -435,22 +434,21 @@ void Planner::planGlobalGripperTrajectory(
         const std::vector<VectorVector3d>& projected_deformable_point_paths,
         const std::vector<VirtualRubberBand>& projected_virtual_rubber_bands)
 {
-    RRTHelper::RRTConfig start_config(
+    RRTConfig start_config(
                 std::pair<Vector3d, Vector3d>(
                             current_world_state.all_grippers_single_pose_[0].translation(),
                             current_world_state.all_grippers_single_pose_[1].translation()),
-                *virtual_rubber_band_between_grippers_);
+                *virtual_rubber_band_between_grippers_,
+                true);
 
     // Note that the rubber band part of the target is ignored at the present time
-    const AllGrippersSinglePose target_gripper_poses = getGripperTargets(current_world_state, projected_deformable_point_paths);
-    RRTHelper::RRTConfig goal_config(std::pair<Vector3d, Vector3d>(
-                                         target_gripper_poses[0].translation(),
-                                         target_gripper_poses[1].translation()),
-                             *virtual_rubber_band_between_grippers_);
+    const AllGrippersSinglePose target_grippers_pose = getGripperTargets(current_world_state, projected_deformable_point_paths);
+    const RRTGrippersRepresentation rrt_grippers_goal(
+        target_grippers_pose[0].translation(),
+        target_grippers_pose[1].translation());
 
-    #warning "Time limit for RRT magic number here; replace with ROS Param"
-    const std::chrono::duration<double> time_limit(600);
-    const auto rrt_results = rrt_helper_->rrtPlan(start_config, goal_config, time_limit);
+    const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
+    const auto rrt_results = rrt_helper_->rrtPlan(start_config, rrt_grippers_goal, time_limit);
 
     rrt_helper_->visualize(rrt_results);
 

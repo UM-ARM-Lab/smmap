@@ -110,7 +110,7 @@ namespace smmap
 
             AllGrippersPoseTrajectory convertRRTResultIntoGripperTrajectory(
                     const AllGrippersSinglePose& starting_poses,
-                    const std::vector<RRTHelper::RRTConfig, RRTHelper::Allocator>& rrt_result) const;
+                    const std::vector<RRTConfig, RRTAllocator>& rrt_result) const;
 
             EigenHelpers::VectorVector3d findPathBetweenPositions(
                     const Eigen::Vector3d& start,

@@ -12,58 +12,81 @@
 
 namespace smmap
 {
+    typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> RRTGrippersRepresentation;
+
+    class RRTConfig
+    {
+        public:
+            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+            RRTConfig(
+                    const RRTGrippersRepresentation& grippers_position,
+                    const VirtualRubberBand& band,
+                    const bool is_visible_to_blacklist);
+
+            const RRTGrippersRepresentation& getGrippers() const;
+            const VirtualRubberBand& getBand() const;
+            bool isVisibleToBlacklist() const;
+
+            // returned distance is the Euclidian distance of two grippers pos
+            double distance(const RRTConfig& other) const;
+            static double Distance(const RRTConfig& c1, const RRTConfig& c2);
+            static double Distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
+
+        private:
+
+            RRTGrippersRepresentation grippers_position_;
+            VirtualRubberBand band_;
+            bool is_visible_to_blacklist_;
+    };
+    typedef std::allocator<RRTConfig> RRTAllocator;
+    typedef simple_rrt_planner::SimpleRRTPlannerState<RRTConfig, RRTAllocator> ExternalRRTState;
+
     class RRTHelper
     {
         public:
-            typedef std::pair<std::pair<Eigen::Vector3d, Eigen::Vector3d>, VirtualRubberBand> RRTConfig;
-            typedef std::allocator<RRTConfig> Allocator;
-
-
             RRTHelper(
                     const sdf_tools::SignedDistanceField& environment_sdf,
                     const Visualizer& vis,
                     std::mt19937_64& generator,
-                    const double step_size = 1.0,
-                    const double x_limits_lower = -10.0,
-                    const double x_limits_upper = 10.0,
-                    const double y_limits_lower = -10.0,
-                    const double y_limits_upper = 10.0,
-                    const double z_limits_lower = -10.0,
-                    const double z_limits_upper = 10.0,
-                    const double goal_reach_radius = 1.0,
+                    const double x_limits_lower,
+                    const double x_limits_upper,
+                    const double y_limits_lower,
+                    const double y_limits_upper,
+                    const double z_limits_lower,
+                    const double z_limits_upper,
+                    const double step_size,
+                    const double goal_reach_radius,
+                    const double homotopy_distance_penalty = 1e6,
                     const int64_t max_shortcut_index_distance = 100,
                     const uint32_t max_smoothing_iterations = 200,
                     const uint32_t max_failed_smoothing_iterations = 500);
 
-            std::vector<RRTConfig, Allocator> rrtPlan(
+            std::vector<RRTConfig, RRTAllocator> rrtPlan(
                     const RRTConfig& start,
-                    const RRTConfig& goal,
+                    const RRTGrippersRepresentation& grippers_goal,
                     const std::chrono::duration<double>& time_limit);
 
             void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
 
             bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const;
+            bool isBandFirstOrderVisibileToBlacklist(const VirtualRubberBand& test_band) const;
 
             ///////////////////////////////////////////////////////////////////////////////////////
             // Visualization and other debugging tools
             ///////////////////////////////////////////////////////////////////////////////////////
 
-            void visualize(const std::vector<RRTConfig, Allocator>& path) const;
+            void visualize(const std::vector<RRTConfig, RRTAllocator>& path) const;
 
             ///////////////////////////////////////////////////////////////////////////////////////
             // Helper function for original rrt planning
             ///////////////////////////////////////////////////////////////////////////////////////
         private:
-            // returned distance is the Euclidian distance of two grippers pos
-            double distance(
-                    const RRTConfig& a_node,
-                    const RRTConfig& b_node) const;
-
             int64_t nearestNeighbour(
-                    const std::vector<simple_rrt_planner::SimpleRRTPlannerState<RRTConfig, Allocator>>& nodes,
+                    const std::vector<ExternalRRTState>& nodes,
                     const RRTConfig& config) const;
 
-            std::pair<Eigen::Vector3d, Eigen::Vector3d> posPairSampling();
+            RRTGrippersRepresentation posPairSampling();
 
             /* const std::function<std::vector<std::pair<T, int64_t>>(const T&, const T&)>& forward_propagation_fn,
              * forward_propagation_fn - given the nearest neighbor and a new target state, returns the states that would grow the tree towards the target
@@ -77,22 +100,30 @@ namespace smmap
              */
             std::vector<std::pair<RRTConfig, int64_t>> forwardPropogationFunction(
                     const RRTConfig& nearest_neighbor,
-                    const RRTConfig& random_target);
+                    const RRTConfig& random_target) const;
 
             ///////////////////////////////////////////////////////////////////////////////////////
             // Helper function for shortcut smoothing
             ///////////////////////////////////////////////////////////////////////////////////////
 
-            std::pair<std::vector<RRTConfig, Allocator>, std::map<std::string, double>> rrtShortcutSmooth(
-                    const std::vector<RRTConfig, Allocator>& path);
+            std::pair<bool, std::vector<RRTConfig, RRTAllocator>> forwardSimulateGrippersPath(
+                    VirtualRubberBand rubber_band,
+                    const std::vector<RRTConfig, RRTAllocator>& path,
+                    const size_t start_index,
+                    const size_t end_index) const;
+
+            std::pair<std::vector<RRTConfig, RRTAllocator>, std::map<std::string, double>> rrtShortcutSmooth(
+                    const std::vector<RRTConfig, RRTAllocator>& path) const;
 
 
         private:
             const std::pair<double, double> x_limits_;
             const std::pair<double, double> y_limits_;
             const std::pair<double, double> z_limits_;
-            const double goal_reach_radius_;
             const double step_size_;
+            const double goal_reach_radius_;
+            const double homotopy_distance_penalty_;
+
             const int64_t max_shortcut_index_distance_;
             const uint32_t max_smoothing_iterations_;
             const uint32_t max_failed_smoothing_iterations_;
@@ -102,11 +133,10 @@ namespace smmap
             const Visualizer& vis_;
             std::mt19937_64& generator_;
 
-            int32_t marker_id_;
             const std_msgs::ColorRGBA rubber_band_safe_color_;
             const std_msgs::ColorRGBA rubber_band_overstretched_color_;
 
-            std::pair<Eigen::Vector3d, Eigen::Vector3d> gripper_goal_positions_;
+            RRTGrippersRepresentation gripper_goal_positions_;
 
             std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
 

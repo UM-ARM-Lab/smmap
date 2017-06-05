@@ -9,7 +9,6 @@ set(CATKIN_PACKAGES
     sdf_tools
     deformable_manipulation_msgs
     deformable_manipulation_experiment_params
-    uncertainty_planning_core
 )
 
 ## Add our local cmake modules to the list that can be found
