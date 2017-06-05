@@ -318,9 +318,10 @@ Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node
     Matrix3d beta_rigidity=MatrixXd::Zero(3,3);
     Vector3d dot_product = node_to_gripper.cwiseProduct(node_v);
     double dot1, dot2, dot3;
-    if (node_to_gripper.size()>1 && node_v.size() >1 && node_to_gripper.norm()>0 && node_v.norm()>0)
+    if (node_to_gripper.size()>1 && node_v.size() >1 && node_to_gripper.norm()>0.0001 && node_v.norm()>0)
     {
         double dot_Value = dot_product(0)+dot_product(1)+dot_product(2);
+        dot_Value = dot_Value/(node_to_gripper.norm());
         dot_Value = dot_Value-std::fabs(dot_Value);
         dot1 = dot_Value;
         dot2 = dot_Value;
@@ -332,7 +333,7 @@ Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node
         */
     }
     else if (node_v.size()<1 || node_v.norm()<0.0001)
-    {   double dot_Value = -0.1;
+    {   double dot_Value = 0;
         dot1 = dot_Value; dot2 = dot_Value; dot3 =dot_Value; }
     else
     {
