@@ -44,41 +44,14 @@ namespace smmap
 
         private:
             ////////////////////////////////////////////////////////////////////
-            // Logging and visualization functionality
+            // Sending gripper commands
             ////////////////////////////////////////////////////////////////////
 
-            ros::NodeHandle nh_;
-            ros::NodeHandle ph_;
-            const LoggingFunctionType logging_fn_;
+            WorldState sendNextCommandUsingLocalController(
+                    const WorldState& current_world_state);
 
-            RobotInterface& robot_;
-            Visualizer& vis_;
-            std::shared_ptr<TaskSpecification> task_specification_;
-            std::shared_ptr<DijkstrasCoverageTask> dijkstras_task_;
-
-            ////////////////////////////////////////////////////////////////////
-            // Model list management
-            ////////////////////////////////////////////////////////////////////
-
-            const bool calculate_regret_;
-            ssize_t num_models_;
-            std::vector<DeformableModel::Ptr> model_list_;
-#ifdef UCB_BANDIT
-            UCB1Normal<std::mt19937_64> model_utility_bandit_;
-#endif
-#ifdef KFMANB_BANDIT
-            KalmanFilterMANB<std::mt19937_64> model_utility_bandit_;
-#endif
-#ifdef KFMANDB_BANDIT
-            KalmanFilterMANDB<std::mt19937_64> model_utility_bandit_;
-#endif
-            double reward_std_dev_scale_factor_;
-            const double process_noise_factor_;
-            const double observation_noise_factor_;
-            const double correlation_strength_factor_;
-            const unsigned long seed_;
-            std::mt19937_64 generator_;
-
+            WorldState sendNextCommandUsingGlobalGripperPlannerResults(
+                    const WorldState& current_world_state);
 
             ////////////////////////////////////////////////////////////////////
             // Constraint violation detection
@@ -125,17 +98,6 @@ namespace smmap
                     const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths,
                     const std::vector<VirtualRubberBand>& projected_virtual_rubber_bands);
 
-
-            ////////////////////////////////////////////////////////////////////
-            // Sending gripper commands
-            ////////////////////////////////////////////////////////////////////
-
-            WorldState sendNextCommandUsingLocalController(
-                    const WorldState& current_world_state);
-
-            WorldState sendNextCommandUsingGlobalGripperPlannerResults(
-                    const WorldState& current_world_state);
-
             ////////////////////////////////////////////////////////////////////
             // Model utility functions
             ////////////////////////////////////////////////////////////////////
@@ -151,6 +113,42 @@ namespace smmap
             Eigen::MatrixXd calculateProcessNoise(
                     const std::vector<std::pair<AllGrippersSinglePoseDelta,
                     ObjectPointSet>>& suggested_commands);
+
+            ////////////////////////////////////////////////////////////////////
+            // Logging and visualization functionality
+            ////////////////////////////////////////////////////////////////////
+
+            ros::NodeHandle nh_;
+            ros::NodeHandle ph_;
+            const LoggingFunctionType logging_fn_;
+
+            RobotInterface& robot_;
+            Visualizer& vis_;
+            std::shared_ptr<TaskSpecification> task_specification_;
+            std::shared_ptr<DijkstrasCoverageTask> dijkstras_task_;
+
+            ////////////////////////////////////////////////////////////////////
+            // Model list management
+            ////////////////////////////////////////////////////////////////////
+
+            const bool calculate_regret_;
+            ssize_t num_models_;
+            std::vector<DeformableModel::Ptr> model_list_;
+#ifdef UCB_BANDIT
+            UCB1Normal<std::mt19937_64> model_utility_bandit_;
+#endif
+#ifdef KFMANB_BANDIT
+            KalmanFilterMANB<std::mt19937_64> model_utility_bandit_;
+#endif
+#ifdef KFMANDB_BANDIT
+            KalmanFilterMANDB<std::mt19937_64> model_utility_bandit_;
+#endif
+            double reward_std_dev_scale_factor_;
+            const double process_noise_factor_;
+            const double observation_noise_factor_;
+            const double correlation_strength_factor_;
+            const unsigned long seed_;
+            std::mt19937_64 generator_;
     };
 }
 
