@@ -68,7 +68,7 @@ ConstraintJacobianModel::ConstraintJacobianModel(
     , trans_dir_type_(trans_dir_fn)
     , trans_dis_type_(trans_dis_fn)
     , environment_sdf_(environment_sdf)
-    , obstacle_threshold_(2.1)
+    , obstacle_threshold_(1.0)
 {
     // Set obstacle distance threshold, to be modified later
     // Should check with Dale, whether it counts as #grids
@@ -397,7 +397,7 @@ double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, con
  * @param desired_object_velocity
  * @return
  */
-// q_dot = pinv(J)*Mask*P_dot
+// q_dot = pinv(J)*pinv(Mask)*P_dot
 // Back up Mask
 
 Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask_impl(
@@ -421,6 +421,8 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask_impl(
         else
         {
             const Vector3d node_p_dot = object_p_dot.block<3,1>(node_ind,0);
+
+            // sur_n pointing out from obstacle
             std::vector<double> sur_n
                     = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
 

@@ -248,7 +248,15 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
             std::vector<double> sur_n
                     = environment_sdf_.GetGradient3d(current_world_state.object_configuration_.col(real_ind));
             Eigen::Vector3d surface_normal = Eigen::Vector3d::Map(sur_n.data(),sur_n.size());
-            surface_normal = surface_normal/surface_normal.norm();
+
+            if (surface_normal.norm()>0.000001)
+            {
+                surface_normal = surface_normal/surface_normal.norm();
+            }
+            else
+            {
+                surface_normal(0) = 0; surface_normal(1) = 0; surface_normal(2) = 0;
+            }
 
 
             if(model_point.dot(surface_normal)<0 & model_point.norm()>0.000001)

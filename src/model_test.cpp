@@ -188,9 +188,9 @@ void modelTest::initializeModelSet(const WorldState& initial_world_state)
     // Mengyao's model here
     else if (GetUseConstraintModel(ph_))
     {
-        const double translational_dir_deformability = GetConstaintTranslationalDir(nh_);
-        const double translational_dis_deformability = GetConstaintTranslationalDis(nh_);
-        const double rotational_deformability = GetConstaintRotational(nh_);
+        const double translational_dir_deformability = GetConstraintTranslationalDir(nh_);
+        const double translational_dis_deformability = GetConstraintTranslationalDis(nh_);
+        const double rotational_deformability = GetConstraintRotational(nh_);
         // Douoble check this usage
         const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
 
