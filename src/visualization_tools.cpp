@@ -1,5 +1,7 @@
 #include "smmap/visualization_tools.h"
 
+#include <thread>
+
 using namespace smmap;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -14,6 +16,7 @@ std_msgs::ColorRGBA Visualizer::black_;
 std_msgs::ColorRGBA Visualizer::magenta_;
 std_msgs::ColorRGBA Visualizer::yellow_;
 std_msgs::ColorRGBA Visualizer::cyan_;
+std_msgs::ColorRGBA Visualizer::white_;
 
 void Visualizer::InitializeStandardColors()
 {
@@ -51,6 +54,11 @@ void Visualizer::InitializeStandardColors()
     cyan_.g = 1.0f;
     cyan_.b = 1.0f;
     cyan_.a = 1.0f;
+
+    white_.r = 1.0f;
+    white_.g = 1.0f;
+    white_.b = 1.0f;
+    white_.a = 1.0f;
 
     standard_colors_initialized_ = true;
 }
@@ -97,11 +105,27 @@ std_msgs::ColorRGBA Visualizer::Cyan()
     return cyan_;
 }
 
+std_msgs::ColorRGBA Visualizer::White()
+{
+    assert(standard_colors_initialized_);
+    return white_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 ////////////////////////////////////////////////////////////////////////////////
 
 Visualizer::Visualizer(ros::NodeHandle& nh)
+    : Visualizer(
+          nh,
+          GetVisualizationMarkerTopic(nh),
+          GetVisualizationMarkerArrayTopic(nh))
+{}
+
+
+Visualizer::Visualizer(ros::NodeHandle& nh,
+           const std::string& marker_topic,
+           const std::string& marker_array_topic)
     : world_frame_name_(GetWorldFrameName())
     , gripper_apperture_(GetGripperApperture(nh))
 {
@@ -109,10 +133,10 @@ Visualizer::Visualizer(ros::NodeHandle& nh)
 
     // Publish visualization request markers
     visualization_marker_pub_ =
-            nh.advertise<visualization_msgs::Marker>(GetVisualizationMarkerTopic(nh), 3000);
+            nh.advertise<visualization_msgs::Marker>(marker_topic, 3000);
 
     visualization_marker_array_pub_ =
-            nh.advertise<visualization_msgs::MarkerArray>(GetVisualizationMarkerArrayTopic(nh), 3000);
+            nh.advertise<visualization_msgs::MarkerArray>(marker_array_topic, 3000);
 }
 
 void Visualizer::deleteObjects(
@@ -122,6 +146,8 @@ void Visualizer::deleteObjects(
 {
     visualization_msgs::Marker marker;
 
+    marker.header.frame_id = world_frame_name_;
+
     marker.action = visualization_msgs::Marker::DELETE;
     marker.ns = marker_name;
 
@@ -130,24 +156,27 @@ void Visualizer::deleteObjects(
         marker.id = id;
         visualization_marker_pub_.publish(marker);
     }
+
+    std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
 }
 
 void Visualizer::visualizePoints(
         const std::string& marker_name,
         const EigenHelpers::VectorVector3d& points,
         const std_msgs::ColorRGBA& color,
-        const int32_t id) const
+        const int32_t id, const double scale) const
 {
     std::vector<std_msgs::ColorRGBA> colors(points.size(), color);
 
-    visualizePoints(marker_name, points, colors, id);
+    visualizePoints(marker_name, points, colors, id, scale);
 }
 
 void Visualizer::visualizePoints(
         const std::string& marker_name,
         const EigenHelpers::VectorVector3d& points,
         const std::vector<std_msgs::ColorRGBA>& colors,
-        const int32_t id) const
+        const int32_t id,
+        const double scale) const
 {
     visualization_msgs::Marker marker;
 
@@ -156,8 +185,8 @@ void Visualizer::visualizePoints(
     marker.type = visualization_msgs::Marker::POINTS;
     marker.ns = marker_name;
     marker.id = id;
-    marker.scale.x = 0.005;
-    marker.scale.y = 0.005;
+    marker.scale.x = scale;
+    marker.scale.y = scale;
     marker.points = EigenHelpersConversions::VectorEigenVector3dToVectorGeometryPoint(points);
     marker.colors = colors;
 
@@ -452,39 +481,4 @@ void Visualizer::visualizeXYZTrajectory(
         const int32_t id) const
 {
     visualizeLineStrip(marker_name, point_sequence, color, id);
-}
-
-void Visualizer::deletePoints(
-        const std::string& marker_name,
-        const int32_t id) const
-{
-    assert(false && "There is something wrong with these functions as far as bullet is concerned");
-    visualization_msgs::Marker marker;
-
-    marker.header.frame_id = world_frame_name_;
-    marker.action = visualization_msgs::Marker::DELETE;
-
-    marker.type = visualization_msgs::Marker::POINTS;
-    marker.ns = marker_name;
-    marker.id = id;
-
-    visualization_marker_pub_.publish(marker);
-}
-
-
-void Visualizer::deleteXYZTrajectory(
-        const std::string& marker_name,
-        const int32_t id) const
-{
-    assert(false && "There is something wrong with these functions as far as bullet is concerned");
-    visualization_msgs::Marker marker;
-
-    marker.header.frame_id = world_frame_name_;
-    marker.action = visualization_msgs::Marker::DELETE;
-
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.ns = marker_name;
-    marker.id = id;
-
-    visualization_marker_pub_.publish(marker);
 }

@@ -20,9 +20,14 @@ namespace smmap
             static std_msgs::ColorRGBA Magenta();
             static std_msgs::ColorRGBA Yellow();
             static std_msgs::ColorRGBA Cyan();
+            static std_msgs::ColorRGBA White();
 
         public:
             Visualizer(ros::NodeHandle& nh);
+
+            Visualizer(ros::NodeHandle& nh,
+                       const std::string& marker_topic,
+                       const std::string& marker_array_topic);
 
             void deleteObjects(
                     const std::string& marker_name,
@@ -33,13 +38,15 @@ namespace smmap
                     const std::string& marker_name,
                     const EigenHelpers::VectorVector3d& points,
                     const std_msgs::ColorRGBA& color,
-                    const int32_t id = 1) const;
+                    const int32_t id = 1,
+                    const double scale = 0.005) const;
 
             void visualizePoints(
                     const std::string& marker_name,
                     const EigenHelpers::VectorVector3d& points,
                     const std::vector<std_msgs::ColorRGBA>& colors,
-                    const int32_t id = 1) const;
+                    const int32_t id = 1,
+                    const double scale = 0.005) const;
 
             void visualizeCubes(
                     const std::string& marker_name,
@@ -137,14 +144,6 @@ namespace smmap
                     const std_msgs::ColorRGBA& color,
                     const int32_t id = 1) const;
 
-            void deletePoints(
-                    const std::string& marker_name,
-                    const int32_t id = 1) const;
-
-            void deleteXYZTrajectory(
-                    const std::string& marker_name,
-                    const int32_t id = 1) const;
-
         private:
             const std::string world_frame_name_;
             const double gripper_apperture_;
@@ -159,6 +158,7 @@ namespace smmap
             static std_msgs::ColorRGBA magenta_;
             static std_msgs::ColorRGBA yellow_;
             static std_msgs::ColorRGBA cyan_;
+            static std_msgs::ColorRGBA white_;
     };
 }
 

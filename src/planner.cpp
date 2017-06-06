@@ -612,9 +612,9 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
         }
 
         // Move the virtual rubber band to follow the grippers, projecting out of collision as needed
-        virtual_rubber_band_between_grippers_copy.forwardSimulateVirtualRubberBand(
-                    world_state_copy.all_grippers_single_pose_[0].translation() - starting_grippers_single_pose[0].translation(),
-                    world_state_copy.all_grippers_single_pose_[1].translation() - starting_grippers_single_pose[1].translation(),
+        virtual_rubber_band_between_grippers_copy.forwardSimulateVirtualRubberBandToEndpointTargets(
+                    world_state_copy.all_grippers_single_pose_[0].translation(),
+                    world_state_copy.all_grippers_single_pose_[1].translation(),
                     verbose);
         projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.push_back(virtual_rubber_band_between_grippers_copy);
 
@@ -699,9 +699,9 @@ WorldState Planner::sendNextCommandUsingLocalController(
     if (virtual_rubber_band_between_grippers_ != nullptr)
     {
         const bool verbose = false;
-        virtual_rubber_band_between_grippers_->forwardSimulateVirtualRubberBand(
-                    world_feedback.all_grippers_single_pose_[0].translation() - current_world_state.all_grippers_single_pose_[0].translation(),
-                    world_feedback.all_grippers_single_pose_[1].translation() - current_world_state.all_grippers_single_pose_[1].translation(),
+        virtual_rubber_band_between_grippers_->forwardSimulateVirtualRubberBandToEndpointTargets(
+                    world_feedback.all_grippers_single_pose_[0].translation(),
+                    world_feedback.all_grippers_single_pose_[1].translation(),
                     verbose);
     }
 
@@ -725,9 +725,9 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
 
     const WorldState world_feedback = robot_.sendGrippersPoses(global_plan_gripper_trajectory_[global_plan_current_timestep_]);
     const bool verbose = false;
-    virtual_rubber_band_between_grippers_->forwardSimulateVirtualRubberBand(
-                world_feedback.all_grippers_single_pose_[0].translation() - current_world_state.all_grippers_single_pose_[0].translation(),
-                world_feedback.all_grippers_single_pose_[1].translation() - current_world_state.all_grippers_single_pose_[1].translation(),
+    virtual_rubber_band_between_grippers_->forwardSimulateVirtualRubberBandToEndpointTargets(
+                world_feedback.all_grippers_single_pose_[0].translation(),
+                world_feedback.all_grippers_single_pose_[1].translation(),
                 verbose);
 
     ++global_plan_current_timestep_;

@@ -1,5 +1,6 @@
 #include "smmap/rrt_helper.h"
 
+#include <thread>
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/first_order_deformation.h>
 
@@ -37,7 +38,7 @@ static bool bandEndpointsMatchGripperPositions(
         const RRTGrippersRepresentation grippers)
 {
     const EigenHelpers::VectorVector3d& rubber_band_pos = band.getVectorRepresentation();
-    const auto rubber_band_endpoints = std::make_pair(rubber_band_pos.front(), rubber_band_pos.back());
+    const RRTGrippersRepresentation rubber_band_endpoints(rubber_band_pos.front(), rubber_band_pos.back());
     return gripperPositionsAreApproximatelyEqual(grippers, rubber_band_endpoints);
 }
 
@@ -89,6 +90,45 @@ double RRTConfig::Distance(const RRTGrippersRepresentation& c1, const RRTGripper
     return std::sqrt((c1_first_gripper - c2_first_gripper).squaredNorm() + (c1_second_gripper - c2_second_gripper).squaredNorm());
 }
 
+bool RRTConfig::operator==(const RRTConfig& other) const
+{
+    if (!gripperPositionsAreApproximatelyEqual(grippers_position_, other.grippers_position_))
+    {
+        return false;
+    }
+
+    const auto& this_band_as_vector = band_.getVectorRepresentation();
+    const auto& other_band_as_vector = other.band_.getVectorRepresentation();
+    if (this_band_as_vector.size() != other_band_as_vector.size())
+    {
+        return false;
+    }
+
+    for (size_t idx = 0; idx < this_band_as_vector.size(); ++idx)
+    {
+        if (!this_band_as_vector[idx].isApprox(other_band_as_vector[idx]))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
+std::size_t std::hash<smmap::RRTConfig>::operator()(const smmap::RRTConfig& rrt_config) const
+{
+    std::size_t seed = 0;
+    std::hash_combine(seed, rrt_config.getGrippers());
+
+    const EigenHelpers::VectorVector3d& band_ = rrt_config.getBand().getVectorRepresentation();
+    for (size_t idx = 0; idx < band_.size(); ++idx)
+    {
+        std::hash_combine(seed, band_[idx]);
+    }
+    return seed;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////
 ///////////////           RRTHelper functions                      ////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -133,12 +173,12 @@ RRTHelper::RRTHelper(
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
-// Helper function for original rrt planning
+// Helper functions for extral RRT planning class
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 int64_t RRTHelper::nearestNeighbour(
         const std::vector<ExternalRRTState>& nodes,
-        const RRTConfig& config) const
+        const RRTConfig& config)
 {
     const std::function<double(const ExternalRRTState&, const RRTConfig&)> basic_distance_fn = [&] (
             const ExternalRRTState& rrt_state,
@@ -152,21 +192,35 @@ int64_t RRTHelper::nearestNeighbour(
             const ExternalRRTState& rrt_state,
             const RRTConfig& rrt_config)
     {
-        const double basic_distance = RRTConfig::Distance(rrt_state.GetValueImmutable(), rrt_config);
-        if (!rrt_state.GetValueImmutable().isVisibleToBlacklist())
+        const auto blacklist_itr = goal_expansion_nn_blacklist_.find(rrt_state.GetValueImmutable());
+        const bool goal_blacklisted = blacklist_itr != goal_expansion_nn_blacklist_.end();
+        if (goal_blacklisted)
         {
-            return basic_distance;
+            return std::numeric_limits<double>::infinity();
         }
         else
         {
-            return basic_distance + homotopy_distance_penalty_;
+            const double basic_distance = RRTConfig::Distance(rrt_state.GetValueImmutable(), rrt_config);
+            const double homotopy_penalty = rrt_state.GetValueImmutable().isVisibleToBlacklist() ? homotopy_distance_penalty_ : 0.0;
+            return basic_distance + homotopy_penalty;
         }
     };
 
-    #warning "Need to do sampled goal nearest neighbour version here"
+    // Determine which distance function to use
+    const bool goal_is_target_config = gripperPositionsAreApproximatelyEqual(grippers_goal_position_, config.getGrippers());
+    const auto distance_fn = goal_is_target_config ? goal_sampled_distance_fn : basic_distance_fn;
 
     const size_t K = 1;
-    return arc_helpers::GetKNearestNeighbors(nodes, config, basic_distance_fn, K)[0].first;
+    const auto nn_results = arc_helpers::GetKNearestNeighbors(nodes, config, distance_fn, K);
+    const int64_t nn_idx = nn_results[0].first;
+
+    // Blacklist this config from being selected again as the nearest neighbour to the goal
+    if (goal_is_target_config)
+    {
+        goal_expansion_nn_blacklist_.insert(nodes[nn_idx].GetValueImmutable());
+    }
+
+    return nn_idx;
 }
 
 // const std::function<T(void)>& sampling_fn,
@@ -177,7 +231,7 @@ inline RRTGrippersRepresentation RRTHelper::posPairSampling()
 
     if (sample_goal)
     {
-        rand_sample = gripper_goal_positions_;
+        rand_sample = grippers_goal_position_;
     }
     else
     {
@@ -213,8 +267,45 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
         const RRTConfig& nearest_neighbor,
         const RRTConfig& random_target) const
 {
+//    static int32_t marker_id = 1;
+
+    // Visualization
+    {
+        vis_.visualizeCubes(
+                    "forward_propogation_start_config",
+                    {nearest_neighbor.getGrippers().first},
+                    Eigen::Vector3d(0.01, 0.01, 0.01),
+                    Visualizer::Magenta(),
+                    1);
+        vis_.visualizeCubes(
+                    "forward_propogation_start_config",
+                    {nearest_neighbor.getGrippers().second},
+                    Eigen::Vector3d(0.01, 0.01, 0.01),
+                    Visualizer::Cyan(),
+                    5);
+
+        nearest_neighbor.getBand().visualize(
+                    "forward_propogation_start_config",
+                    Visualizer::Green(),
+                    Visualizer::Green(),
+                    10,
+                    true);
+
+        vis_.visualizeCubes(
+                    "random_target",
+                    {random_target.getGrippers().first},
+                    Eigen::Vector3d(0.01, 0.01, 0.01),
+                    Visualizer::Magenta(),
+                    1);
+        vis_.visualizeCubes(
+                    "random_target",
+                    {random_target.getGrippers().second},
+                    Eigen::Vector3d(0.01, 0.01, 0.01),
+                    Visualizer::Cyan(),
+                    5);
+    }
+
     vis_.deleteObjects("rubber_band_post_rrt_step");
-    usleep(10000);
 
     std::vector<std::pair<RRTConfig, int64_t>> propagated_states;
     int64_t parent_offset = -1;
@@ -224,7 +315,15 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
     propagated_states.reserve(max_total_steps);
 
     const RRTGrippersRepresentation& starting_grippers_position = nearest_neighbor.getGrippers();
-    const RRTGrippersRepresentation& target_grippers_position = nearest_neighbor.getGrippers();
+    const RRTGrippersRepresentation& target_grippers_position = random_target.getGrippers();
+
+//    if (gripperPositionsAreApproximatelyEqual(grippers_goal_position_, target_grippers_position))
+//    {
+//        std::cerr << "Propogating towards goal:\n";
+//        std::cerr << "Goal:   " << PrettyPrint::PrettyPrint(grippers_goal_position_, true, " ") << std::endl;
+//        std::cerr << "Target: " << PrettyPrint::PrettyPrint(target_grippers_position, true, " ") << std::endl;
+//        std::cerr << std::flush;
+//    }
 
     const bool rubber_band_verbose = false;
     uint32_t step_index = 0;
@@ -233,25 +332,40 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
         // Using ternary operator here so that we can avoid making copies, and still take advantage of const correctness
         const bool use_nearest_neighbour_as_prev = (parent_offset == -1);
         const RRTConfig& prev_node = (use_nearest_neighbour_as_prev ? nearest_neighbor : propagated_states[parent_offset].first);
-        const RRTGrippersRepresentation& prev_grippers_position = prev_node.getGrippers();
         const VirtualRubberBand& prev_rubber_band = prev_node.getBand();
 
         const double ratio = std::min(1.0, (double)(step_index + 1) * step_size_ / total_distance);
         const Eigen::Vector3d gripper_a_interpolated = EigenHelpers::Interpolate(starting_grippers_position.first, target_grippers_position.first, ratio);
         const Eigen::Vector3d gripper_b_interpolated = EigenHelpers::Interpolate(starting_grippers_position.second, target_grippers_position.second, ratio);
+        const RRTGrippersRepresentation next_grippers_position(gripper_a_interpolated, gripper_b_interpolated);
 
         // If the grippers enter collision, then return however far we were able to get
-        if ((environment_sdf_.Get3d(gripper_a_interpolated) < 0.0)
-                || (environment_sdf_.Get3d(gripper_b_interpolated) < 0.0))
+        if ((environment_sdf_.Get3d(gripper_a_interpolated) < 0.0) || (environment_sdf_.Get3d(gripper_b_interpolated) < 0.0))
         {
             break;
         }
 
         VirtualRubberBand next_rubber_band(prev_rubber_band);
-        next_rubber_band.forwardSimulateVirtualRubberBand(
-                    gripper_a_interpolated - prev_grippers_position.first,
-                    gripper_b_interpolated - prev_grippers_position.second,
+        next_rubber_band.forwardSimulateVirtualRubberBandToEndpointTargets(
+                    next_grippers_position.first,
+                    next_grippers_position.second,
                     rubber_band_verbose);
+
+        // If the rubber band was "pushed" out of collision at the endpoints during the trajectory,
+        // then allow the band to resettle on the grippers position
+        if (!bandEndpointsMatchGripperPositions(next_rubber_band, next_grippers_position))
+        {
+            next_rubber_band.forwardSimulateVirtualRubberBandToEndpointTargets(
+                        next_grippers_position.first,
+                        next_grippers_position.second,
+                        rubber_band_verbose);
+        }
+        // If we are still able to get to the next target position after retrying,
+        // then return however far we were able to get
+        if (!bandEndpointsMatchGripperPositions(next_rubber_band, next_grippers_position))
+        {
+            break;
+        }
 
         next_rubber_band.visualize("rubber_band_post_rrt_step", rubber_band_safe_color_, rubber_band_overstretched_color_, (int32_t)parent_offset + 2, true);
 
@@ -262,10 +376,24 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
         }
 
         const RRTConfig next_node(
-                    std::make_pair(gripper_a_interpolated, gripper_b_interpolated),
+                    next_grippers_position,
                     next_rubber_band,
                     isBandFirstOrderVisibileToBlacklist(next_rubber_band));
         propagated_states.push_back(std::pair<RRTConfig, int64_t>(next_node, parent_offset));
+
+//        if (next_node.isVisibleToBlacklist())
+//        {
+//            vis_.visualizeLineStrip("rrt_gripper_tree_gripper_a", {prev_grippers_position.first, gripper_a_interpolated}, Visualizer::Magenta(), marker_id);
+//            vis_.visualizeLineStrip("rrt_gripper_tree_gripper_b", {prev_grippers_position.second, gripper_b_interpolated}, Visualizer::Cyan(), marker_id);
+//            ++marker_id;
+//        }
+//        else
+//        {
+//            vis_.visualizeLineStrip("rrt_gripper_tree_gripper_a", {prev_grippers_position.first, gripper_a_interpolated}, Visualizer::Red(), marker_id);
+//            vis_.visualizeLineStrip("rrt_gripper_tree_gripper_b", {prev_grippers_position.second, gripper_b_interpolated}, Visualizer::Blue(), marker_id);
+//            ++marker_id;
+//        }
+//        std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
 
         ++parent_offset;
         ++step_index;
@@ -282,7 +410,9 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
         const RRTGrippersRepresentation& grippers_goal,
         const std::chrono::duration<double>& time_limit)
 {
-    gripper_goal_positions_ = grippers_goal;
+    visualizeBlacklist();
+
+    grippers_goal_position_ = grippers_goal;
 
     const std::function<bool(const RRTConfig&)> goal_reached_fn = [&] (const RRTConfig& node)
     {
@@ -348,6 +478,22 @@ void RRTHelper::addBandToBlacklist(const EigenHelpers::VectorVector3d& band)
 
 bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const
 {
+    static ros::NodeHandle nh;
+    static Visualizer vis(nh, "first_order_visibility_visualization_marker", "first_order_visibility_visualization_marker_vector");
+
+    EigenHelpers::VectorVector3d collision_points;
+    const bool visualize = false;
+    if (visualize)
+    {
+        vis.visualizePoints(
+                    "first_order_vis_collision",
+                    collision_points,
+                    Visualizer::Red(),
+                    1,
+                    1.0);
+        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+    }
+
     for (size_t idx = 0; idx < blacklisted_goal_rubber_bands_.size(); idx++)
     {
         const EigenHelpers::VectorVector3d& blacklisted_path = blacklisted_goal_rubber_bands_[idx];
@@ -363,6 +509,11 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVe
             const Eigen::Vector3d& first_node = blacklisted_path[blacklisted_path_ind];
             const Eigen::Vector3d& second_node = test_band[test_band_ind];
 
+            if (visualize)
+            {
+                vis_.visualizeLineStrip("first_order_vis_check", {first_node, second_node}, Visualizer::White(), 2);
+            }
+
             const ssize_t num_steps = (ssize_t)std::ceil((second_node - first_node).norm() / environment_sdf_.GetResolution());
 
             // We don't need to check the endpoints as they are already checked as part of the rubber band process
@@ -372,6 +523,17 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVe
                 const Eigen::Vector3d interpolated_point = EigenHelpers::Interpolate(first_node, second_node, ratio);
                 if (environment_sdf_.Get3d(interpolated_point) < 0.0)
                 {
+                    if (visualize)
+                    {
+                        collision_points.push_back(Eigen::Vector3d((double)blacklisted_path_ind, (double)test_band_ind, 0.0));
+                        vis.visualizePoints(
+                                    "first_order_vis_collision",
+                                    collision_points,
+                                    Visualizer::Red(),
+                                    1,
+                                    1.0);
+                        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+                    }
                     return false;
                 }
             }
@@ -380,7 +542,6 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVe
         };
 
         // If we've found a first order deformation, then we are similar to a blacklisted item
-        const bool visualize = false;
         if (arc_utilities::FirstOrderDeformation::CheckFirstOrderDeformation(
                 blacklisted_path.size(),
                 test_band.size(),
@@ -413,7 +574,19 @@ std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulate
     assert(end_index <= path.size() - 1);
 
     // Verify that the endpoints of the rubber band match the start of the grippers path
-    assert(bandEndpointsMatchGripperPositions(rubber_band, path[start_index].getGrippers()));
+    if (!bandEndpointsMatchGripperPositions(rubber_band, path[start_index].getGrippers()))
+    {
+        std::cout << "Inside forwardSimulateGrippersPath\n";
+        std::cout << "initial rubber band endpoints:\n"
+                  << PrettyPrint::PrettyPrint(rubber_band.getVectorRepresentation().front()) << "        "
+                  << PrettyPrint::PrettyPrint(rubber_band.getVectorRepresentation().back()) << std::endl;
+
+        std::cout << "path gripper positions:\n"
+                  << PrettyPrint::PrettyPrint(path[start_index].getGrippers().first) << "        "
+                  << PrettyPrint::PrettyPrint(path[start_index].getGrippers().second) << std::endl;
+
+        assert(bandEndpointsMatchGripperPositions(rubber_band, path[start_index].getGrippers()));
+    }
 
     // Collect the results for use by the rrtShortcutSmooth function
     std::vector<RRTConfig, RRTAllocator> resulting_path;
@@ -425,11 +598,10 @@ std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulate
     while (!band_is_overstretched && path_idx <= end_index)
     {
         // Forward simulate the band
-        const auto& starting_grippers_pos = path[path_idx - 1].getGrippers();
         const auto& ending_grippers_pos = path[path_idx].getGrippers();
-        rubber_band.forwardSimulateVirtualRubberBand(
-                    ending_grippers_pos.first - starting_grippers_pos.first,
-                    ending_grippers_pos.second - starting_grippers_pos.second,
+        rubber_band.forwardSimulateVirtualRubberBandToEndpointTargets(
+                    ending_grippers_pos.first,
+                    ending_grippers_pos.second,
                     rubber_band_verbose);
 
         rubber_band.visualize("rubber_band_checking_rest_of_path", Visualizer::Yellow(), Visualizer::Cyan(), (int32_t)path_idx, true);
@@ -468,10 +640,8 @@ std::pair<std::vector<RRTConfig, RRTAllocator>, std::map<std::string, double>> R
     {
         ++num_iterations;
 
-        usleep(10000);
         vis_.deleteObjects("rubber_band_checking_rest_of_path");
         vis_.deleteObjects("rubber_band_post_rrt_step");
-        usleep(10000);
 
         // Attempt a shortcut
         const int64_t base_index = (int64_t)std::uniform_int_distribution<size_t>(0, current_path.size() - 1)(generator_);
@@ -495,22 +665,22 @@ std::pair<std::vector<RRTConfig, RRTAllocator>, std::map<std::string, double>> R
         }
 
         // Check if the edge is valid
-        const RRTConfig& start_config = current_path[start_index];
-        const EigenHelpers::VectorVector3d& start_band = start_config.getBand().getVectorRepresentation();
-        const RRTConfig& end_config = current_path[end_index];
-        const EigenHelpers::VectorVector3d& end_band = end_config.getBand().getVectorRepresentation();
+        const RRTConfig& smoothing_start_config = current_path[start_index];
+        const EigenHelpers::VectorVector3d& start_band = smoothing_start_config.getBand().getVectorRepresentation();
+        const RRTConfig& smoothing_target_end_config = current_path[end_index];
+        const EigenHelpers::VectorVector3d& end_band = smoothing_target_end_config.getBand().getVectorRepresentation();
 
-        start_config.getBand().visualize("rubber_band_smoothing_start", Visualizer::Red(), rubber_band_overstretched_color_, 1, true);
+        smoothing_start_config.getBand().visualize("rubber_band_smoothing_start", Visualizer::Red(), rubber_band_overstretched_color_, 1, true);
         vis_.visualizeCubes("rubber_band_smoothing_start", {start_band.front(), start_band.back()}, Eigen::Vector3d(0.02, 0.02, 0.02), Visualizer::Red(), 1000);
-        end_config.getBand().visualize("rubber_band_smoothing_end", Visualizer::Red(), rubber_band_overstretched_color_, 1, true);
+        smoothing_target_end_config.getBand().visualize("rubber_band_smoothing_end", Visualizer::Red(), rubber_band_overstretched_color_, 1, true);
         vis_.visualizeCubes("rubber_band_smoothing_end", {end_band.front(), end_band.back()}, Eigen::Vector3d(0.02, 0.02, 0.02), Visualizer::Red(), 1000);
 
         // Forward simulate the rubber band along the straight line between gripper positions
-        const std::vector<std::pair<RRTConfig, int64_t>> smoothing_propogation_results = forwardPropogationFunction(start_config, end_config);
+        const std::vector<std::pair<RRTConfig, int64_t>> smoothing_propogation_results = forwardPropogationFunction(smoothing_start_config, smoothing_target_end_config);
 
         // Check if the rubber band gets overstretched while propogating the grippers on the new path
         if (smoothing_propogation_results.size() == 0 ||
-            smoothing_propogation_results.back().first.getBand().isOverstretched())
+            !gripperPositionsAreApproximatelyEqual(smoothing_propogation_results.back().first.getGrippers(), smoothing_target_end_config.getGrippers()))
         {
             ++failed_iterations;
             continue;
@@ -574,13 +744,11 @@ std::pair<std::vector<RRTConfig, RRTAllocator>, std::map<std::string, double>> R
 // Visualization and other debugging tools
 ///////////////////////////////////////////////////////////////////////////////////////
 
-
 void RRTHelper::visualize(const std::vector<RRTConfig, RRTAllocator>& path) const
 {
     vis_.deleteObjects("rubber_band_rrt_solution");
     vis_.deleteObjects("gripper_a_rrt_solution");
     vis_.deleteObjects("gripper_b_rrt_solution");
-    usleep(100000);
 
     for (size_t ind = 0; ind < path.size(); ++ind)
     {
@@ -589,7 +757,16 @@ void RRTHelper::visualize(const std::vector<RRTConfig, RRTAllocator>& path) cons
         const VirtualRubberBand& rubber_band = config.getBand();
 
         rubber_band.visualize("rubber_band_rrt_solution", Visualizer::Yellow(), rubber_band_overstretched_color_, (int32_t)ind + 1, true);
-        vis_.visualizeCubes("gripper_a_rrt_solution", {gripper_positions.first}, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Blue(), (int32_t)ind + 1);
-        vis_.visualizeCubes("gripper_b_rrt_solution", {gripper_positions.second}, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), (int32_t)ind + 1);
+        vis_.visualizeCubes("gripper_a_rrt_solution", {gripper_positions.first}, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), (int32_t)ind + 1);
+        vis_.visualizeCubes("gripper_b_rrt_solution", {gripper_positions.second}, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Blue(), (int32_t)ind + 1);
+        std::this_thread::sleep_for(std::chrono::duration<double>(1e-5));
+    }
+}
+
+void RRTHelper::visualizeBlacklist() const
+{
+    for (size_t idx = 0; idx < blacklisted_goal_rubber_bands_.size(); ++idx)
+    {
+        vis_.visualizeLineStrip("blacklisted_rubber_bands", blacklisted_goal_rubber_bands_[idx], Visualizer::Yellow(), (int32_t)idx + 1);
     }
 }

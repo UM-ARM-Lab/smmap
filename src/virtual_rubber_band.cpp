@@ -55,7 +55,25 @@ VirtualRubberBand::VirtualRubberBand(
     shortcutSmoothBand(false);
 }
 
+smmap::VirtualRubberBand& VirtualRubberBand::operator=(const smmap::VirtualRubberBand& other)
+{
+    assert(task_ == other.task_);
+    assert(&sdf_ == &(other.sdf_));
+    assert(&vis_ == &(other.vis_));
 
+    assert(max_integration_step_size_ == other.max_integration_step_size_);
+    assert(max_distance_between_rubber_band_points_ == other.max_distance_between_rubber_band_points_);
+    assert(num_smoothing_ittrs_ == other.num_smoothing_ittrs_);
+    assert(min_object_radius_ == other.min_object_radius_);
+    assert(max_total_band_distance_ == other.max_total_band_distance_);
+
+    band_ = other.band_;
+
+    return *this;
+}
+
+
+#warning "This function has no notion of \"error correction\"; it just blindly goes forward even if the endpoints are projected out of collision"
 const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRubberBand(
         const Eigen::Vector3d first_endpoint_translation,
         const Eigen::Vector3d second_endpoint_translation,
@@ -89,6 +107,17 @@ const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRub
     shortcutSmoothBand(verbose);
 
     return band_;
+}
+
+const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRubberBandToEndpointTargets(
+        const Eigen::Vector3d first_endpoint_target,
+        const Eigen::Vector3d second_endpoint_target,
+        bool verbose)
+{
+    return forwardSimulateVirtualRubberBand(
+                first_endpoint_target - band_.front(),
+                second_endpoint_target - band_.back(),
+                verbose);
 }
 
 const EigenHelpers::VectorVector3d& VirtualRubberBand::getVectorRepresentation() const

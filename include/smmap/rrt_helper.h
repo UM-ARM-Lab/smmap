@@ -12,6 +12,20 @@
 
 namespace smmap
 {
+    class RRTConfig;
+}
+
+namespace std
+{
+    template<>
+    struct hash<smmap::RRTConfig>
+    {
+        std::size_t operator()(const smmap::RRTConfig& rrt_config) const;
+    };
+}
+
+namespace smmap
+{
     typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> RRTGrippersRepresentation;
 
     class RRTConfig
@@ -32,6 +46,8 @@ namespace smmap
             double distance(const RRTConfig& other) const;
             static double Distance(const RRTConfig& c1, const RRTConfig& c2);
             static double Distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
+
+            bool operator==(const RRTConfig& other) const;
 
         private:
 
@@ -57,7 +73,7 @@ namespace smmap
                     const double z_limits_upper,
                     const double step_size,
                     const double goal_reach_radius,
-                    const double homotopy_distance_penalty = 1e6,
+                    const double homotopy_distance_penalty = 1e3,
                     const int64_t max_shortcut_index_distance = 100,
                     const uint32_t max_smoothing_iterations = 200,
                     const uint32_t max_failed_smoothing_iterations = 500);
@@ -78,13 +94,17 @@ namespace smmap
 
             void visualize(const std::vector<RRTConfig, RRTAllocator>& path) const;
 
+            void visualizeBlacklist() const;
+
             ///////////////////////////////////////////////////////////////////////////////////////
             // Helper function for original rrt planning
             ///////////////////////////////////////////////////////////////////////////////////////
         private:
+            std::unordered_set<RRTConfig> goal_expansion_nn_blacklist_;
+
             int64_t nearestNeighbour(
                     const std::vector<ExternalRRTState>& nodes,
-                    const RRTConfig& config) const;
+                    const RRTConfig& config);
 
             RRTGrippersRepresentation posPairSampling();
 
@@ -136,12 +156,11 @@ namespace smmap
             const std_msgs::ColorRGBA rubber_band_safe_color_;
             const std_msgs::ColorRGBA rubber_band_overstretched_color_;
 
-            RRTGrippersRepresentation gripper_goal_positions_;
+            RRTGrippersRepresentation grippers_goal_position_;
 
             std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
 
     };
 }
-
 
 #endif // ifndef RRT_HELPER_H
