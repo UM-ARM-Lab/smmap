@@ -197,6 +197,8 @@ void modelTest::initializeModelSet(const WorldState& initial_world_state)
         ROS_INFO_STREAM_NAMED("task", "Using Constraint Model default deformability value of "
                                << test_specification_->defaultDeformability());
 
+        ROS_INFO_STREAM_NAMED("task", "sdf voxel grid resolution is: " << environment_sdf.GetResolution());
+
         planner_.addModel(std::make_shared<ConstraintJacobianModel>(
                               translational_dir_deformability,
                               translational_dis_deformability,
