@@ -35,11 +35,9 @@ static bool gripperPositionsAreApproximatelyEqual(
 
 static bool bandEndpointsMatchGripperPositions(
         const VirtualRubberBand& band,
-        const RRTGrippersRepresentation grippers)
+        const RRTGrippersRepresentation& grippers)
 {
-    const EigenHelpers::VectorVector3d& rubber_band_pos = band.getVectorRepresentation();
-    const RRTGrippersRepresentation rubber_band_endpoints(rubber_band_pos.front(), rubber_band_pos.back());
-    return gripperPositionsAreApproximatelyEqual(grippers, rubber_band_endpoints);
+    return gripperPositionsAreApproximatelyEqual(grippers, band.getEndpoints());
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -252,7 +250,6 @@ inline RRTGrippersRepresentation RRTHelper::posPairSampling()
     return rand_sample;
 }
 
-
 /*
  * forward_propagation_fn - given the nearest neighbor and a new target state, returns the states that would grow the tree towards the target
  * SHOULD : collision checking, constraint violation checking
@@ -340,7 +337,8 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
         const RRTGrippersRepresentation next_grippers_position(gripper_a_interpolated, gripper_b_interpolated);
 
         // If the grippers enter collision, then return however far we were able to get
-        if ((environment_sdf_.Get3d(gripper_a_interpolated) < 0.0) || (environment_sdf_.Get3d(gripper_b_interpolated) < 0.0))
+        #warning "Gripper radius magic number here"
+        if ((environment_sdf_.Get3d(gripper_a_interpolated) < 0.023) || (environment_sdf_.Get3d(gripper_b_interpolated) < 0.023))
         {
             break;
         }
@@ -578,12 +576,10 @@ std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulate
     {
         std::cout << "Inside forwardSimulateGrippersPath\n";
         std::cout << "initial rubber band endpoints:\n"
-                  << PrettyPrint::PrettyPrint(rubber_band.getVectorRepresentation().front()) << "        "
-                  << PrettyPrint::PrettyPrint(rubber_band.getVectorRepresentation().back()) << std::endl;
+                  << PrettyPrint::PrettyPrint(rubber_band.getEndpoints()) << std::endl;
 
         std::cout << "path gripper positions:\n"
-                  << PrettyPrint::PrettyPrint(path[start_index].getGrippers().first) << "        "
-                  << PrettyPrint::PrettyPrint(path[start_index].getGrippers().second) << std::endl;
+                  << PrettyPrint::PrettyPrint(path[start_index].getGrippers()) << std::endl;
 
         assert(bandEndpointsMatchGripperPositions(rubber_band, path[start_index].getGrippers()));
     }
@@ -617,8 +613,7 @@ std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulate
     // Double check that if the band is not overstetched, then we've reached the endpoint of the path
     if (!band_is_overstretched)
     {
-        const EigenHelpers::VectorVector3d ending_rubber_band_pos = rubber_band.getVectorRepresentation();
-        const auto rubber_band_endpoints = std::make_pair(ending_rubber_band_pos.front(), ending_rubber_band_pos.back());
+        const RRTGrippersRepresentation rubber_band_endpoints = rubber_band.getEndpoints();
         assert(gripperPositionsAreApproximatelyEqual(path[end_index].getGrippers(), rubber_band_endpoints));
     }
 
@@ -666,14 +661,14 @@ std::pair<std::vector<RRTConfig, RRTAllocator>, std::map<std::string, double>> R
 
         // Check if the edge is valid
         const RRTConfig& smoothing_start_config = current_path[start_index];
-        const EigenHelpers::VectorVector3d& start_band = smoothing_start_config.getBand().getVectorRepresentation();
+        const RRTGrippersRepresentation start_band_endpoints = smoothing_start_config.getBand().getEndpoints();
         const RRTConfig& smoothing_target_end_config = current_path[end_index];
-        const EigenHelpers::VectorVector3d& end_band = smoothing_target_end_config.getBand().getVectorRepresentation();
+        const RRTGrippersRepresentation end_band_endpoints = smoothing_target_end_config.getBand().getEndpoints();
 
         smoothing_start_config.getBand().visualize("rubber_band_smoothing_start", Visualizer::Red(), rubber_band_overstretched_color_, 1, true);
-        vis_.visualizeCubes("rubber_band_smoothing_start", {start_band.front(), start_band.back()}, Eigen::Vector3d(0.02, 0.02, 0.02), Visualizer::Red(), 1000);
+        vis_.visualizeCubes("rubber_band_smoothing_start", {start_band_endpoints.first, start_band_endpoints.second}, Eigen::Vector3d(0.02, 0.02, 0.02), Visualizer::Red(), 1000);
         smoothing_target_end_config.getBand().visualize("rubber_band_smoothing_end", Visualizer::Red(), rubber_band_overstretched_color_, 1, true);
-        vis_.visualizeCubes("rubber_band_smoothing_end", {end_band.front(), end_band.back()}, Eigen::Vector3d(0.02, 0.02, 0.02), Visualizer::Red(), 1000);
+        vis_.visualizeCubes("rubber_band_smoothing_end", {end_band_endpoints.first, end_band_endpoints.second}, Eigen::Vector3d(0.02, 0.02, 0.02), Visualizer::Red(), 1000);
 
         // Forward simulate the rubber band along the straight line between gripper positions
         const std::vector<std::pair<RRTConfig, int64_t>> smoothing_propogation_results = forwardPropogationFunction(smoothing_start_config, smoothing_target_end_config);
@@ -760,6 +755,8 @@ void RRTHelper::visualize(const std::vector<RRTConfig, RRTAllocator>& path) cons
         vis_.visualizeCubes("gripper_a_rrt_solution", {gripper_positions.first}, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), (int32_t)ind + 1);
         vis_.visualizeCubes("gripper_b_rrt_solution", {gripper_positions.second}, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Blue(), (int32_t)ind + 1);
         std::this_thread::sleep_for(std::chrono::duration<double>(1e-5));
+
+//        std::cout << "Gripper A dist: " << environment_sdf_.Get3d(gripper_positions.first) << " Gripper B dist: " << environment_sdf_.Get3d(gripper_positions.second) << std::endl;
     }
 }
 

@@ -35,6 +35,10 @@ namespace smmap
 
             const EigenHelpers::VectorVector3d& getVectorRepresentation() const;
 
+            std::pair<Eigen::Vector3d, Eigen::Vector3d> getEndpoints() const;
+
+            double maxSafeLength() const;
+            double totalLength() const;
             bool isOverstretched() const;
 
             void visualize(

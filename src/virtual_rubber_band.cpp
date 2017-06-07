@@ -125,9 +125,24 @@ const EigenHelpers::VectorVector3d& VirtualRubberBand::getVectorRepresentation()
     return band_;
 }
 
+std::pair<Eigen::Vector3d, Eigen::Vector3d> VirtualRubberBand::getEndpoints() const
+{
+    return std::make_pair(band_.front(), band_.back());
+}
+
+double VirtualRubberBand::maxSafeLength() const
+{
+    return max_total_band_distance_;
+}
+
+double VirtualRubberBand::totalLength() const
+{
+    return EigenHelpers::CalculateTotalDistance(band_);
+}
+
 bool VirtualRubberBand::isOverstretched() const
 {
-    return EigenHelpers::CalculateTotalDistance(band_) > max_total_band_distance_;
+    return totalLength() > max_total_band_distance_;
 }
 
 void VirtualRubberBand::visualize(

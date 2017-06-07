@@ -57,9 +57,6 @@ namespace smmap
             // Constraint violation detection
             ////////////////////////////////////////////////////////////////////
 
-            const size_t num_lookahead_steps_;
-            std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_;
-
             void visualizeProjectedPaths(
                     const std::vector<EigenHelpers::VectorVector3d>& projected_paths,
                     const bool visualization_enabled = true);
@@ -72,14 +69,15 @@ namespace smmap
                     const WorldState& current_world_state,
                     const bool visualization_enabled = true);
 
-            ////////////////////////////////////////////////////////////////////
-            // Global gripper planner functions and data
-            ////////////////////////////////////////////////////////////////////
+            bool globalPlannerNeededDueToOverstretch(
+                    const std::vector<VirtualRubberBand>& projected_rubber_bands) const;
 
-            bool executing_global_gripper_trajectory_;
-            size_t global_plan_current_timestep_;
-            AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
-            std::unique_ptr<RRTHelper> rrt_helper_;
+            bool globalPlannerNeededDueToCollision(
+                    const WorldState& current_world_state) const;
+
+            ////////////////////////////////////////////////////////////////////
+            // Global gripper planner functions
+            ////////////////////////////////////////////////////////////////////
 
             AllGrippersPoseTrajectory convertRRTResultIntoGripperTrajectory(
                     const AllGrippersSinglePose& starting_poses,
@@ -115,11 +113,18 @@ namespace smmap
                     ObjectPointSet>>& suggested_commands);
 
             ////////////////////////////////////////////////////////////////////
-            // Logging and visualization functionality
+            // Multipurpose
             ////////////////////////////////////////////////////////////////////
 
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
+            const unsigned long seed_;
+            std::mt19937_64 generator_;
+
+            ////////////////////////////////////////////////////////////////////
+            // Logging and visualization functionality
+            ////////////////////////////////////////////////////////////////////
+
             const LoggingFunctionType logging_fn_;
 
             RobotInterface& robot_;
@@ -147,8 +152,18 @@ namespace smmap
             const double process_noise_factor_;
             const double observation_noise_factor_;
             const double correlation_strength_factor_;
-            const unsigned long seed_;
-            std::mt19937_64 generator_;
+
+            ////////////////////////////////////////////////////////////////////
+            // Constraint violation and global planner data
+            ////////////////////////////////////////////////////////////////////
+
+            const size_t max_lookahead_steps_;
+            std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_;
+
+            bool executing_global_gripper_trajectory_;
+            size_t global_plan_current_timestep_;
+            AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
+            std::unique_ptr<RRTHelper> rrt_helper_;
     };
 }
 
