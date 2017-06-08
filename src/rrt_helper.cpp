@@ -147,11 +147,11 @@ RRTHelper::RRTHelper(
         const double z_limits_upper,
         const double step_size,
         const double goal_reach_radius,
+        const double gripper_radius,
         const double homotopy_distance_penalty,
         const int64_t max_shortcut_index_distance,
         const uint32_t max_smoothing_iterations,
-        const uint32_t max_failed_smoothing_iterations,
-        const double gripper_radius)
+        const uint32_t max_failed_smoothing_iterations)
     : x_limits_(x_limits_lower,x_limits_upper)
     , y_limits_(y_limits_lower,y_limits_upper)
     , z_limits_(z_limits_lower,z_limits_upper)

@@ -72,7 +72,12 @@ Planner::Planner(
                         dijkstras_task_->work_space_grid_.getZMin(),
                         dijkstras_task_->work_space_grid_.getZMax(),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
-                        dijkstras_task_->work_space_grid_.minStepDimension()));
+                        dijkstras_task_->work_space_grid_.minStepDimension(),
+                        GetGripperRadius(),
+                        GetRRTHomotopyDistancePenalty(),
+                        GetRRTMaxShortcutIndexDistance(),
+                        GetRRTMaxSmoothingIterations(),
+                        GetRRTMaxFailedSmoothingIterations()));
     }
 
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
@@ -552,7 +557,7 @@ bool Planner::globalPlannerNeededDueToCollision(
                 task_specification_->collisionScalingFactor());
 
     std::cerr << "Max norm:       " << robot_.max_gripper_velocity_ * robot_.dt_ << std::endl;
-    std::cerr << "Allowable norm: " << robot_.max_gripper_velocity_ * robot_.dt_ * 0.15<< std::endl;
+    std::cerr << "Allowable norm: " << robot_.max_gripper_velocity_ * robot_.dt_ * 0.15 << std::endl;
     std::cerr << "Velocity norm:  " << MultipleGrippersVelocity6dNorm(robot_command.first) << std::endl;
 
     #warning "Gripper velocity threshold for global planning check magic number here"
@@ -715,10 +720,10 @@ AllGrippersSinglePose Planner::getGripperTargets(
 
     // TODO: check if this can leave the grippers too close to collision for the RRT to actually reach the target (due to size of grippers)
     // Project the cluster centers to be out of collision
-    cluster_centers[0] = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(cluster_centers[0], 0.023);
-    cluster_centers[1] = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(cluster_centers[1], 0.023);
-    assert(dijkstras_task_->environment_sdf_.Get3d(cluster_centers[0]) > 0.023);
-    assert(dijkstras_task_->environment_sdf_.Get3d(cluster_centers[1]) > 0.023);
+    cluster_centers[0] = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(cluster_centers[0], GetGripperRadius());
+    cluster_centers[1] = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(cluster_centers[1], GetGripperRadius());
+    assert(dijkstras_task_->environment_sdf_.Get3d(cluster_centers[0]) > GetGripperRadius());
+    assert(dijkstras_task_->environment_sdf_.Get3d(cluster_centers[1]) > GetGripperRadius());
     vis_.visualizeCubes("cluster_centers_post_project", cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Green(), 1);
 
 

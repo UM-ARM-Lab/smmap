@@ -61,8 +61,8 @@ namespace smmap
     class RRTHelper
     {
         public:
-            #warning "Magic numbers in RRTHelper constructor - gripper radius, etc"
-            RRTHelper(const sdf_tools::SignedDistanceField& environment_sdf,
+            RRTHelper(
+                    const sdf_tools::SignedDistanceField& environment_sdf,
                     const Visualizer& vis,
                     std::mt19937_64& generator,
                     const double x_limits_lower,
@@ -73,11 +73,11 @@ namespace smmap
                     const double z_limits_upper,
                     const double step_size,
                     const double goal_reach_radius,
-                    const double homotopy_distance_penalty = 1e3,
-                    const int64_t max_shortcut_index_distance = 100,
-                    const uint32_t max_smoothing_iterations = 200,
-                    const uint32_t max_failed_smoothing_iterations = 100,
-                    const double gripper_radius = 0.023);
+                    const double gripper_radius,
+                    const double homotopy_distance_penalty,
+                    const int64_t max_shortcut_index_distance,
+                    const uint32_t max_smoothing_iterations,
+                    const uint32_t max_failed_smoothing_iterations);
 
             std::vector<RRTConfig, RRTAllocator> rrtPlan(
                     const RRTConfig& start,

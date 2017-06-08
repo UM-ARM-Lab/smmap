@@ -1,6 +1,7 @@
 #include <arc_utilities/arc_exceptions.hpp>
 #include <arc_utilities/log.hpp>
 #include <deformable_manipulation_msgs/messages.h>
+#include <deformable_manipulation_experiment_params/ros_params.hpp>
 
 #include "smmap/task_specification.h"
 #include "smmap/task_specification_implementions.hpp"
@@ -108,6 +109,10 @@ TaskSpecification::TaskSpecification(ros::NodeHandle& nh, Visualizer vis, const 
     , vis_(vis)
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
     , num_nodes_(object_initial_node_distance_.cols())
+    , default_deformability_(GetDefaultDeformability(nh))
+    , collision_scaling_factor_(GetCollisionScalingFactor(nh))
+    , stretching_threshold_(GetStretchingThreshold(nh))
+    , max_time_(GetMaxTime(nh))
 {}
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -159,22 +164,22 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(ros::NodeHandle&
 
 double TaskSpecification::defaultDeformability() const
 {
-    return deformability_impl();
+    return default_deformability_;
 }
 
 double TaskSpecification::collisionScalingFactor() const
 {
-    return collisionScalingFactor_impl();
+    return collision_scaling_factor_;
 }
 
 double TaskSpecification::stretchingThreshold() const
 {
-    return stretchingThreshold_impl();
+    return stretching_threshold_;
 }
 
 double TaskSpecification::maxTime() const
 {
-    return maxTime_impl();
+    return max_time_;
 }
 
 void TaskSpecification::visualizeDeformableObject(

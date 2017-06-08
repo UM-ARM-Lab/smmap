@@ -4,9 +4,6 @@
 #include "smmap/task_specification.h"
 #include "smmap/point_reflector.hpp"
 
-#define CLOTH_STRETCH_THRESHOLD ((0.012 + 0.002) / 0.012)
-#define ROPE_STRETCH_THRESHOLD  ((0.025 + 0.005) / 0.025)
-
 namespace smmap
 {
     /**
@@ -21,26 +18,6 @@ namespace smmap
             {}
 
         private:
-            virtual double deformability_impl() const
-            {
-                return 10.0; // k
-            }
-
-            virtual double collisionScalingFactor_impl() const
-            {
-                return  200.0; // beta
-            }
-
-            virtual double stretchingThreshold_impl() const
-            {
-                return ROPE_STRETCH_THRESHOLD; // lambda
-            }
-
-            virtual double maxTime_impl() const
-            {
-                return 15.0;
-            }
-
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
                     const std::string& marker_name,
@@ -84,26 +61,6 @@ namespace smmap
             {}
 
         private:
-            virtual double deformability_impl() const
-            {
-                return 14.0; // k
-            }
-
-            virtual double collisionScalingFactor_impl() const
-            {
-                return  1000.0; // beta
-            }
-
-            virtual double stretchingThreshold_impl() const
-            {
-                return CLOTH_STRETCH_THRESHOLD; // lambda
-            }
-
-            virtual double maxTime_impl() const
-            {
-                return 12.0;
-            }
-
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
                     const std::string& marker_name,
@@ -144,34 +101,9 @@ namespace smmap
             ClothTableCoverage(ros::NodeHandle& nh)
                 : DirectCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_TABLE_COVERAGE)
                 , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
-//                , table_min_x_(GetTableSurfaceX(nh) - GetTableHalfExtentsX(nh))
-//                , table_max_x_(GetTableSurfaceX(nh) + GetTableHalfExtentsX(nh))
-//                , table_min_y_(GetTableSurfaceY(nh) - GetTableHalfExtentsY(nh))
-//                , table_max_y_(GetTableSurfaceY(nh) + GetTableHalfExtentsY(nh))
-//                , table_z_(GetTableSurfaceZ(nh))
             {}
 
         private:
-            virtual double deformability_impl() const
-            {
-                return 14.0; // k
-            }
-
-            virtual double collisionScalingFactor_impl() const
-            {
-                return  1000.0; // beta
-            }
-
-            virtual double stretchingThreshold_impl() const
-            {
-                return CLOTH_STRETCH_THRESHOLD; // lambda
-            }
-
-            virtual double maxTime_impl() const
-            {
-                return 2.0;
-            }
-
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
                     const std::string& marker_name,
@@ -201,13 +133,6 @@ namespace smmap
             }
 
             const Grid4Neighbours neighbours_;
-
-//        private:
-//            const double table_min_x_;
-//            const double table_max_x_;
-//            const double table_min_y_;
-//            const double table_max_y_;
-//            const double table_z_;
     };
 
     /**
@@ -224,26 +149,6 @@ namespace smmap
             {}
 
         private:
-            virtual double deformability_impl() const
-            {
-                return 0.7*20; // k
-            }
-
-            virtual double collisionScalingFactor_impl() const
-            {
-                return 1000.0; // beta
-            }
-
-            virtual double stretchingThreshold_impl() const
-            {
-                return CLOTH_STRETCH_THRESHOLD; // lambda
-            }
-
-            virtual double maxTime_impl() const
-            {
-                return 4.5;
-            }
-
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
                     const std::string& marker_name,
@@ -368,26 +273,6 @@ namespace smmap
             {}
 
         private:
-            virtual double deformability_impl() const
-            {
-                return 14.0; // k
-            }
-
-            virtual double collisionScalingFactor_impl() const
-            {
-                return  1000.0; // beta
-            }
-
-            virtual double stretchingThreshold_impl() const
-            {
-                return CLOTH_STRETCH_THRESHOLD; // lambda
-            }
-
-            virtual double maxTime_impl() const
-            {
-                return 20.0;
-            }
-
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
                     const std::string& marker_name,
@@ -431,26 +316,6 @@ namespace smmap
             {}
 
         private:
-            virtual double deformability_impl() const
-            {
-                return 14.0; // k
-            }
-
-            virtual double collisionScalingFactor_impl() const
-            {
-                return  1000.0; // beta
-            }
-
-            virtual double stretchingThreshold_impl() const
-            {
-                return CLOTH_STRETCH_THRESHOLD; // lambda
-            }
-
-            virtual double maxTime_impl() const
-            {
-                return 20.0;
-            }
-
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
                     const std::string& marker_name,
@@ -494,26 +359,6 @@ namespace smmap
             {}
 
         private:
-            virtual double deformability_impl() const
-            {
-                return 14.0; // k
-            }
-
-            virtual double collisionScalingFactor_impl() const
-            {
-                return  1000.0; // beta
-            }
-
-            virtual double stretchingThreshold_impl() const
-            {
-                return CLOTH_STRETCH_THRESHOLD; // lambda
-            }
-
-            virtual double maxTime_impl() const
-            {
-                return 20.0;
-            }
-
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
                     const std::string& marker_name,
@@ -557,26 +402,6 @@ namespace smmap
             {}
 
         private:
-            virtual double deformability_impl() const
-            {
-                return 14.0; // k
-            }
-
-            virtual double collisionScalingFactor_impl() const
-            {
-                return  1000.0; // beta
-            }
-
-            virtual double stretchingThreshold_impl() const
-            {
-                return CLOTH_STRETCH_THRESHOLD; // lambda
-            }
-
-            virtual double maxTime_impl() const
-            {
-                return 20.0;
-            }
-
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
                     const std::string& marker_name,
@@ -620,26 +445,6 @@ namespace smmap
             {}
 
         private:
-            virtual double deformability_impl() const
-            {
-                return 10.0; // k
-            }
-
-            virtual double collisionScalingFactor_impl() const
-            {
-                return  200.0; // beta
-            }
-
-            virtual double stretchingThreshold_impl() const
-            {
-                return ROPE_STRETCH_THRESHOLD; // lambda
-            }
-
-            virtual double maxTime_impl() const
-            {
-                return 20.0;
-            }
-
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
                     const std::string& marker_name,

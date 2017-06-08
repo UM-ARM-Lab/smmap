@@ -172,15 +172,16 @@ namespace smmap
             const Eigen::MatrixXd object_initial_node_distance_;
             const ssize_t num_nodes_;
 
+
+            const double default_deformability_;        // k
+            const double collision_scaling_factor_;     // beta (or k2)
+            const double stretching_threshold_;         // lambda
+            const double max_time_;                     // max simulation time when scripting things
+
         private:
             ////////////////////////////////////////////////////////////////////////////////
             // Virtual functions that each task specification must provide
             ////////////////////////////////////////////////////////////////////////////////
-
-            virtual double deformability_impl() const = 0;              // k
-            virtual double collisionScalingFactor_impl() const = 0;     // beta (or k2)
-            virtual double stretchingThreshold_impl() const = 0; // lambda
-            virtual double maxTime_impl() const = 0;                    // max simulation time when scripting things
 
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
