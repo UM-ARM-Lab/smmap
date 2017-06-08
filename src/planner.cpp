@@ -145,11 +145,22 @@ WorldState Planner::sendNextCommand(
 
             if (global_planner_needed_due_to_overstretch || global_planner_needed_due_to_collision)
             {
+                vis_.deleteObjects("desired_position", 1, 10);
+
+                ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "planner", "Invoking global planner due to overstretch");
+                ROS_WARN_COND_NAMED(global_planner_needed_due_to_collision, "planner", "Invoking global planner due to collision");
+
                 rrt_helper_->addBandToBlacklist(virtual_rubber_band_between_grippers_->getVectorRepresentation());
                 planGlobalGripperTrajectory(
                             current_world_state,
                             projected_deformable_point_paths,
                             projected_rubber_bands);
+
+                vis_.deleteObjects("gripper_rubber_band", 1, (int32_t)max_lookahead_steps_ + 10);
+                vis_.deleteObjects("forward_simulated_grippers", 1, (int32_t)max_lookahead_steps_ + 10);
+                vis_.deleteObjects("projected_point_path", 1, (int32_t)projected_deformable_point_paths.size() + 10);
+                vis_.deleteObjects("projected_point_path_lines", 1, (int32_t)projected_deformable_point_paths.size() + 10);
+
                 ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
                 return sendNextCommandUsingGlobalGripperPlannerResults(current_world_state);
             }
@@ -302,9 +313,9 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
     if (global_plan_current_timestep_ == global_plan_gripper_trajectory_.size())
     {
         executing_global_gripper_trajectory_ = false;
-        vis_.deleteObjects("rubber_band_rrt_solution");
-        vis_.deleteObjects("gripper_a_rrt_solution");
-        vis_.deleteObjects("gripper_b_rrt_solution");
+        vis_.deleteObjects("rubber_band_rrt_solution", 1, 200);
+        vis_.deleteObjects("gripper_a_rrt_solution", 1, 200);
+        vis_.deleteObjects("gripper_b_rrt_solution", 1, 200);
     }
 
     const std::vector<double> fake_rewards(model_list_.size(), NAN);
@@ -418,8 +429,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     const static std_msgs::ColorRGBA rubber_band_violation_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
     const bool verbose = false;
 
-    vis_.deleteObjects("gripper_rubber_band", 0, (int32_t)max_lookahead_steps_ + 10);
-    vis_.deleteObjects("forward_simulated_grippers", 0, (int32_t)max_lookahead_steps_ + 10);
+    vis_.deleteObjects("gripper_rubber_band", 1, (int32_t)max_lookahead_steps_ + 10);
+    vis_.deleteObjects("forward_simulated_grippers", 1, (int32_t)max_lookahead_steps_ + 10);
 
     //////////////////////////////////////////////////////////////////////////////////////////
     // Constraint violation Version 1 - Purely cloth overstretch
@@ -507,6 +518,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
 bool Planner::globalPlannerNeededDueToOverstretch(
         const std::vector<VirtualRubberBand>& projected_rubber_bands) const
 {
+    size_t num_violations = 0;
+
     for (size_t t = 0; t < projected_rubber_bands.size(); ++t)
     {
         const VirtualRubberBand& band = projected_rubber_bands[t];
@@ -514,13 +527,13 @@ bool Planner::globalPlannerNeededDueToOverstretch(
         const std::pair<Eigen::Vector3d, Eigen::Vector3d> endpoints = band.getEndpoints();
         const double distance_between_endpoints = (endpoints.first - endpoints.second).norm();
 
-        if (!EigenHelpers::CloseEnough(band_length, distance_between_endpoints, 1e-6))
+        if (band.isOverstretched() && !EigenHelpers::CloseEnough(band_length, distance_between_endpoints, 1e-6))
         {
-            return true;
+            ++num_violations;
         }
     }
 
-    return false;
+    return num_violations > (projected_rubber_bands.size() / 2);
 }
 
 bool Planner::globalPlannerNeededDueToCollision(
@@ -538,11 +551,12 @@ bool Planner::globalPlannerNeededDueToCollision(
                 robot_.max_gripper_velocity_,
                 task_specification_->collisionScalingFactor());
 
-    std::cerr << "Max norm:      " << robot_.max_gripper_velocity_ * robot_.dt_ * 1e-3 << std::endl;
-    std::cerr << "Velocity norm: " << MultipleGrippersVelocity6dNorm(robot_command.first) << std::endl;
+    std::cerr << "Max norm:       " << robot_.max_gripper_velocity_ * robot_.dt_ << std::endl;
+    std::cerr << "Allowable norm: " << robot_.max_gripper_velocity_ * robot_.dt_ * 0.15<< std::endl;
+    std::cerr << "Velocity norm:  " << MultipleGrippersVelocity6dNorm(robot_command.first) << std::endl;
 
     #warning "Gripper velocity threshold for global planning check magic number here"
-    if (MultipleGrippersVelocity6dNorm(robot_command.first) < robot_.max_gripper_velocity_ * robot_.dt_ * 0.3)
+    if (MultipleGrippersVelocity6dNorm(robot_command.first) < robot_.max_gripper_velocity_ * robot_.dt_ * 0.15)
     {
         return true;
     }
@@ -699,82 +713,86 @@ AllGrippersSinglePose Planner::getGripperTargets(
 
     vis_.visualizeCubes("cluster_centers_pre_project", cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Red(), 1);
 
+    // TODO: check if this can leave the grippers too close to collision for the RRT to actually reach the target (due to size of grippers)
     // Project the cluster centers to be out of collision
-    cluster_centers[0] = dijkstras_task_->environment_sdf_.ProjectOutOfCollision3d(cluster_centers[0], 1.0 / 10.0);
-    cluster_centers[1] = dijkstras_task_->environment_sdf_.ProjectOutOfCollision3d(cluster_centers[1], 1.0 / 10.0);
-    assert(dijkstras_task_->environment_sdf_.Get3d(cluster_centers[0]) > 0.0);
-    assert(dijkstras_task_->environment_sdf_.Get3d(cluster_centers[1]) > 0.0);
+    cluster_centers[0] = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(cluster_centers[0], 0.023);
+    cluster_centers[1] = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(cluster_centers[1], 0.023);
+    assert(dijkstras_task_->environment_sdf_.Get3d(cluster_centers[0]) > 0.023);
+    assert(dijkstras_task_->environment_sdf_.Get3d(cluster_centers[1]) > 0.023);
     vis_.visualizeCubes("cluster_centers_post_project", cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Green(), 1);
 
-    // Ensure that the shortest path between the grippers does not overstretch the deformable object
 
-    // Assign the gripper poses based on which one is nearest
+    // Assign the gripper poses based on which one is nearest to each cluster center
     AllGrippersSinglePose target_gripper_poses = current_world_state.all_grippers_single_pose_;
-
-    const double dist_sq_gripper0_to_cluster0 = (target_gripper_poses[0].translation() - cluster_centers[0]).squaredNorm();
-    const double dist_sq_gripper0_to_cluster1 = (target_gripper_poses[0].translation() - cluster_centers[1]).squaredNorm();
-    const double dist_sq_gripper1_to_cluster0 = (target_gripper_poses[1].translation() - cluster_centers[0]).squaredNorm();
-    const double dist_sq_gripper1_to_cluster1 = (target_gripper_poses[1].translation() - cluster_centers[1]).squaredNorm();
-
-    const bool gripper0_is_closest_to_cluster_0 = dist_sq_gripper0_to_cluster0 < dist_sq_gripper1_to_cluster0;
-    const bool gripper0_is_closest_to_cluster_1 = dist_sq_gripper0_to_cluster1 < dist_sq_gripper1_to_cluster1;
-
-    // If gripper0 is closest to both, set the target for gripper0 to be whichever one it is closer to
-    if (gripper0_is_closest_to_cluster_0 && gripper0_is_closest_to_cluster_1)
     {
-        if (dist_sq_gripper0_to_cluster0 < dist_sq_gripper0_to_cluster1)
+        const double dist_sq_gripper0_to_cluster0 = (target_gripper_poses[0].translation() - cluster_centers[0]).squaredNorm();
+        const double dist_sq_gripper0_to_cluster1 = (target_gripper_poses[0].translation() - cluster_centers[1]).squaredNorm();
+        const double dist_sq_gripper1_to_cluster0 = (target_gripper_poses[1].translation() - cluster_centers[0]).squaredNorm();
+        const double dist_sq_gripper1_to_cluster1 = (target_gripper_poses[1].translation() - cluster_centers[1]).squaredNorm();
+
+        const bool gripper0_is_closest_to_cluster_0 = dist_sq_gripper0_to_cluster0 < dist_sq_gripper1_to_cluster0;
+        const bool gripper0_is_closest_to_cluster_1 = dist_sq_gripper0_to_cluster1 < dist_sq_gripper1_to_cluster1;
+
+        // If gripper0 is closest to both, set the target for gripper0 to be whichever one it is closer to
+        if (gripper0_is_closest_to_cluster_0 && gripper0_is_closest_to_cluster_1)
         {
-            target_gripper_poses[0].translation() = cluster_centers[0];
-            target_gripper_poses[1].translation() = cluster_centers[1];
+            if (dist_sq_gripper0_to_cluster0 < dist_sq_gripper0_to_cluster1)
+            {
+                target_gripper_poses[0].translation() = cluster_centers[0];
+                target_gripper_poses[1].translation() = cluster_centers[1];
+            }
+            else
+            {
+                target_gripper_poses[0].translation() = cluster_centers[1];
+                target_gripper_poses[1].translation() = cluster_centers[0];
+            }
         }
+        // If gripper1 is closest to both, set the target for gripper1 to be whichever one it is closer to
+        else if (!gripper0_is_closest_to_cluster_0 && !gripper0_is_closest_to_cluster_1)
+        {
+            if (dist_sq_gripper1_to_cluster0 < dist_sq_gripper1_to_cluster1)
+            {
+                target_gripper_poses[0].translation() = cluster_centers[1];
+                target_gripper_poses[1].translation() = cluster_centers[0];
+            }
+            else
+            {
+                target_gripper_poses[0].translation() = cluster_centers[0];
+                target_gripper_poses[1].translation() = cluster_centers[1];
+            }
+        }
+        // Otherwise, each one is closer to just one cluster center, so match them accordingly
         else
         {
-            target_gripper_poses[0].translation() = cluster_centers[1];
-            target_gripper_poses[1].translation() = cluster_centers[0];
-        }
-    }
-    // If gripper1 is closest to both, set the target for gripper1 to be whichever one it is closer to
-    else if (!gripper0_is_closest_to_cluster_0 && !gripper0_is_closest_to_cluster_1)
-    {
-        if (dist_sq_gripper1_to_cluster0 < dist_sq_gripper1_to_cluster1)
-        {
-            target_gripper_poses[0].translation() = cluster_centers[1];
-            target_gripper_poses[1].translation() = cluster_centers[0];
-        }
-        else
-        {
-            target_gripper_poses[0].translation() = cluster_centers[0];
-            target_gripper_poses[1].translation() = cluster_centers[1];
-        }
-    }
-    // Otherwise, each one is closer to just one cluster center, so match them accordingly
-    else
-    {
-        if (gripper0_is_closest_to_cluster_0)
-        {
-            target_gripper_poses[0].translation() = cluster_centers[0];
-            target_gripper_poses[1].translation() = cluster_centers[1];
-        }
-        else
-        {
-            target_gripper_poses[0].translation() = cluster_centers[1];
-            target_gripper_poses[1].translation() = cluster_centers[0];
+            if (gripper0_is_closest_to_cluster_0)
+            {
+                target_gripper_poses[0].translation() = cluster_centers[0];
+                target_gripper_poses[1].translation() = cluster_centers[1];
+            }
+            else
+            {
+                target_gripper_poses[0].translation() = cluster_centers[1];
+                target_gripper_poses[1].translation() = cluster_centers[0];
+            }
         }
     }
 
+    // Ensure that the shortest path between the grippers does not overstretch the deformable object
     // Pull the grippers closer to each other if they are too far apart
-    const VectorVector3d path = findPathBetweenPositions(target_gripper_poses[0].translation(), target_gripper_poses[1].translation());
-    const std::vector<double> cummulative_distance = CalculateCumulativeDistances(path);
-    size_t starting_ind = 0, ending_ind = path.size() - 1;
-    while (cummulative_distance[ending_ind] - cummulative_distance[starting_ind] >= virtual_rubber_band_between_grippers_->max_total_band_distance_)
     {
-        ++starting_ind;
-        --ending_ind;
-        assert(starting_ind < ending_ind);
-    }
+        const VectorVector3d path = findPathBetweenPositions(target_gripper_poses[0].translation(), target_gripper_poses[1].translation());
+        const std::vector<double> cummulative_distance = CalculateCumulativeDistances(path);
+        size_t starting_ind = 0, ending_ind = path.size() - 1;
+        while (cummulative_distance[ending_ind] - cummulative_distance[starting_ind] >= virtual_rubber_band_between_grippers_->max_total_band_distance_)
+        {
+            ++starting_ind;
+            --ending_ind;
+            assert(starting_ind < ending_ind);
+        }
 
-    target_gripper_poses[0].translation() = path[starting_ind];
-    target_gripper_poses[1].translation() = path[ending_ind];
+        target_gripper_poses[0].translation() = path[starting_ind];
+        target_gripper_poses[1].translation() = path[ending_ind];
+    }
 
     return target_gripper_poses;
 }

@@ -80,7 +80,7 @@ namespace smmap
         public:
             ClothCylinderCoverage(ros::NodeHandle& nh)
                 : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_CYLINDER_COVERAGE)
-                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
+                , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
             {}
 
         private:
@@ -143,7 +143,7 @@ namespace smmap
         public:
             ClothTableCoverage(ros::NodeHandle& nh)
                 : DirectCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_TABLE_COVERAGE)
-                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
+                , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 //                , table_min_x_(GetTableSurfaceX(nh) - GetTableHalfExtentsX(nh))
 //                , table_max_x_(GetTableSurfaceX(nh) + GetTableHalfExtentsX(nh))
 //                , table_min_y_(GetTableSurfaceY(nh) - GetTableHalfExtentsY(nh))
@@ -218,7 +218,7 @@ namespace smmap
         public:
             ClothColabFolding(ros::NodeHandle& nh)
                 : TaskSpecification(nh, DeformableType::CLOTH, TaskType::CLOTH_COLAB_FOLDING)
-                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
+                , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
                 , point_reflector_(createPointReflector(nh))
                 , mirror_map_(createMirrorMap(nh, point_reflector_))
             {}
@@ -364,7 +364,7 @@ namespace smmap
         public:
             ClothWAFR(ros::NodeHandle& nh)
                 : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_WAFR)
-                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
+                , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
             {}
 
         private:
@@ -427,7 +427,7 @@ namespace smmap
         public:
             ClothSinglePole(ros::NodeHandle& nh)
                 : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_SINGLE_POLE)
-                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
+                , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
             {}
 
         private:
@@ -490,7 +490,7 @@ namespace smmap
         public:
             ClothWall(ros::NodeHandle& nh)
                 : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_WALL)
-                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
+                , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
             {}
 
         private:
@@ -553,7 +553,7 @@ namespace smmap
         public:
             ClothDoubleSlit(ros::NodeHandle& nh)
                 : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_DOUBLE_SLIT)
-                , neighbours_(num_nodes_, GetClothNumDivsX(nh))
+                , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
             {}
 
         private:

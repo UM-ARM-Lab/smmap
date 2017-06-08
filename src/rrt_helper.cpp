@@ -150,7 +150,8 @@ RRTHelper::RRTHelper(
         const double homotopy_distance_penalty,
         const int64_t max_shortcut_index_distance,
         const uint32_t max_smoothing_iterations,
-        const uint32_t max_failed_smoothing_iterations)
+        const uint32_t max_failed_smoothing_iterations,
+        const double gripper_radius)
     : x_limits_(x_limits_lower,x_limits_upper)
     , y_limits_(y_limits_lower,y_limits_upper)
     , z_limits_(z_limits_lower,z_limits_upper)
@@ -166,6 +167,7 @@ RRTHelper::RRTHelper(
     , generator_(generator)
     , rubber_band_safe_color_(Visualizer::Black())
     , rubber_band_overstretched_color_(Visualizer::Cyan())
+    , gripper_radius_(gripper_radius)
 {
     assert(max_shortcut_index_distance > 0);
 }
@@ -338,7 +340,7 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
 
         // If the grippers enter collision, then return however far we were able to get
         #warning "Gripper radius magic number here"
-        if ((environment_sdf_.Get3d(gripper_a_interpolated) < 0.023) || (environment_sdf_.Get3d(gripper_b_interpolated) < 0.023))
+        if ((environment_sdf_.Get3d(gripper_a_interpolated) < gripper_radius_) || (environment_sdf_.Get3d(gripper_b_interpolated) < gripper_radius_))
         {
             break;
         }
@@ -408,7 +410,15 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
         const RRTGrippersRepresentation& grippers_goal,
         const std::chrono::duration<double>& time_limit)
 {
-    visualizeBlacklist();
+//    visualizeBlacklist();
+
+    if ((environment_sdf_.Get3d(grippers_goal.first) < gripper_radius_) ||
+        (environment_sdf_.Get3d(grippers_goal.second) < gripper_radius_))
+    {
+        std::cout << "Unfeasible goal location: " << PrettyPrint::PrettyPrint(grippers_goal) << std::endl;
+        std::cout << "Distances: " << environment_sdf_.Get3d(grippers_goal.first) << " " << environment_sdf_.Get3d(grippers_goal.second) << std::endl;
+        assert(false);
+    }
 
     grippers_goal_position_ = grippers_goal;
 

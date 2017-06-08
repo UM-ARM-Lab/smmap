@@ -102,28 +102,28 @@ namespace smmap
                     const ObjectPointSet& current,
                     const ObjectPointSet& desired,
                     const std_msgs::ColorRGBA& color,
-                    const int32_t id = 1) const;
+                    const int32_t id = 2) const;
 
             void visualizeTranslation(
                     const std::string& marker_name,
                     const geometry_msgs::Point& start,
                     const geometry_msgs::Point& end,
                     const std_msgs::ColorRGBA& color,
-                    const int32_t id = 1) const;
+                    const int32_t id = 3) const;
 
             void visualizeTranslation(
                     const std::string& marker_name,
                     const Eigen::Vector3d& start,
                     const Eigen::Vector3d& end,
                     const std_msgs::ColorRGBA& color,
-                    const int32_t id = 1) const;
+                    const int32_t id = 3) const;
 
             void visualizeTranslation(
                     const std::string& marker_name,
                     const Eigen::Affine3d &start,
                     const Eigen::Affine3d &end,
                     const std_msgs::ColorRGBA& color,
-                    const int32_t id = 1) const;
+                    const int32_t id = 3) const;
 
             void visualizeLines(
                     const std::string& marker_name,
