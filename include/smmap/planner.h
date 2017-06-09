@@ -93,8 +93,7 @@ namespace smmap
 
             void planGlobalGripperTrajectory(
                     const WorldState& current_world_state,
-                    const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths,
-                    const std::vector<VirtualRubberBand>& projected_virtual_rubber_bands);
+                    const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths);
 
             ////////////////////////////////////////////////////////////////////
             // Model utility functions

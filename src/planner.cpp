@@ -158,8 +158,7 @@ WorldState Planner::sendNextCommand(
                 rrt_helper_->addBandToBlacklist(virtual_rubber_band_between_grippers_->getVectorRepresentation());
                 planGlobalGripperTrajectory(
                             current_world_state,
-                            projected_deformable_point_paths,
-                            projected_rubber_bands);
+                            projected_deformable_point_paths);
 
                 vis_.deleteObjects("gripper_rubber_band", 1, (int32_t)max_lookahead_steps_ + 10);
                 vis_.deleteObjects("forward_simulated_grippers", 1, (int32_t)max_lookahead_steps_ + 10);
@@ -441,15 +440,17 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     // Constraint violation Version 1 - Purely cloth overstretch
     //////////////////////////////////////////////////////////////////////////////////////////
     stopwatch(RESET);
-    const std::pair<std::vector<VectorVector3d>, std::vector<std::vector<ssize_t>>> projected_deformable_point_paths =
-            dijkstras_task_->findPathFromObjectToTarget(current_world_state.object_configuration_, dijkstras_task_->getErrorThreshold(), max_lookahead_steps_);
-    const size_t actual_lookahead_steps = sizeOfLargestVector(projected_deformable_point_paths.first) - 1;
+    const std::vector<std::vector<ssize_t>> correspondences =
+            dijkstras_task_->getCoverPointCorrespondences(current_world_state.object_configuration_);
+    const std::vector<VectorVector3d> projected_deformable_point_paths =
+            dijkstras_task_->findPathFromObjectToTarget(current_world_state.object_configuration_, correspondences, max_lookahead_steps_);
+    const size_t actual_lookahead_steps = sizeOfLargestVector(projected_deformable_point_paths) - 1;
     // sizeOfLargest(...) should be at least 2, so this assert should always be true
     assert(actual_lookahead_steps <= max_lookahead_steps_);
 
     ROS_INFO_STREAM_NAMED("planner", "Calculated projected cloth paths                 - Version 1 - in " << stopwatch(READ) << " seconds");
-    visualizeProjectedPaths(projected_deformable_point_paths.first, visualization_enabled);
-    projected_deformable_point_paths_and_projected_virtual_rubber_bands.first = projected_deformable_point_paths.first;
+    visualizeProjectedPaths(projected_deformable_point_paths, visualization_enabled);
+    projected_deformable_point_paths_and_projected_virtual_rubber_bands.first = projected_deformable_point_paths;
 
     //////////////////////////////////////////////////////////////////////////////////////////
     // Constraint violation Version 2a - Vector field forward "simulation" - rubber band
@@ -458,7 +459,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     assert(num_models_ == 1 && current_world_state.all_grippers_single_pose_.size() == 2);
     const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
     {
-        return dijkstras_task_->getErrorCorrectionVectorsAndWeights(world_state.object_configuration_, projected_deformable_point_paths.second);
+        return dijkstras_task_->getErrorCorrectionVectorsAndWeights(world_state.object_configuration_, correspondences);
     };
 
     // Create the initial rubber band if needed
@@ -495,9 +496,9 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
         world_state_copy.sim_time_ += robot_.dt_;
         for (ssize_t node_ind = 0; node_ind < world_state_copy.object_configuration_.cols(); ++node_ind)
         {
-            if (projected_deformable_point_paths.first[node_ind].size() > t + 1)
+            if (projected_deformable_point_paths[node_ind].size() > t + 1)
             {
-                world_state_copy.object_configuration_.col(node_ind) = projected_deformable_point_paths.first[node_ind][t + 1];
+                world_state_copy.object_configuration_.col(node_ind) = projected_deformable_point_paths[node_ind][t + 1];
             }
         }
 
@@ -804,8 +805,7 @@ AllGrippersSinglePose Planner::getGripperTargets(
 
 void Planner::planGlobalGripperTrajectory(
         const WorldState& current_world_state,
-        const std::vector<VectorVector3d>& projected_deformable_point_paths,
-        const std::vector<VirtualRubberBand>& projected_virtual_rubber_bands)
+        const std::vector<VectorVector3d>& projected_deformable_point_paths)
 {
     RRTConfig start_config(
                 std::pair<Vector3d, Vector3d>(

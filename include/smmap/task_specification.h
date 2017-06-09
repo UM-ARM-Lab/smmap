@@ -22,10 +22,10 @@ namespace smmap
     class TaskSpecification
     {
         public:
-            ////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Static helper functions - could be private given how they are
             // used but making public as they are static
-            ////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             static double CalculateErrorWithTheshold(
                     const ObjectPointSet& target_points,
@@ -40,28 +40,23 @@ namespace smmap
         public:
             typedef std::shared_ptr<TaskSpecification> Ptr;
 
-            ////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Constructor to initialize objects that all TaskSpecifications share
-            ////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             TaskSpecification(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type, const bool is_dijkstras_type_task = false);
             TaskSpecification(ros::NodeHandle& nh, Visualizer vis, const DeformableType deformable_type, const TaskType task_type, const bool is_dijkstras_type_task = false);
 
-            ////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Static builder function
-            ////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             static TaskSpecification::Ptr MakeTaskSpecification(
                     ros::NodeHandle& nh);
 
-            ////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Virtual function wrappers
-            ////////////////////////////////////////////////////////////////////
-
-            double defaultDeformability() const;        // k
-            double collisionScalingFactor() const;      // beta (or k2)
-            double stretchingThreshold() const;         // lambda
-            double maxTime() const;                     // max simulation time when scripting things
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             void visualizeDeformableObject(
                     Visualizer& vis,
@@ -87,10 +82,15 @@ namespace smmap
             ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta(
                     const WorldState& world_state) const;
 
-            ////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Helper functions
             // TODO: Should these be virtual? virtual final?
-            ////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+            double defaultDeformability() const;        // k
+            double collisionScalingFactor() const;      // beta (or k2)
+            double stretchingThreshold() const;         // lambda
+            double maxTime() const;                     // max simulation time when scripting things
 
             bool stretchingConstraintViolated(
                     const ssize_t first_node_ind,
@@ -157,15 +157,15 @@ namespace smmap
             const bool is_dijkstras_type_task_;
 
         protected:
-            ////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Prevent deletion of base pointer
-            ////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             ~TaskSpecification() {}
 
-            ////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Objects shared by all task specifications
-            ////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             ros::NodeHandle nh_;
             Visualizer vis_;
@@ -179,9 +179,9 @@ namespace smmap
             const double max_time_;                     // max simulation time when scripting things
 
         private:
-            ////////////////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Virtual functions that each task specification must provide
-            ////////////////////////////////////////////////////////////////////////////////
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             virtual void visualizeDeformableObject_impl(
                     Visualizer& vis,
@@ -207,18 +207,21 @@ namespace smmap
     class CoverageTask : public TaskSpecification
     {
         public:
-            CoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type, const bool is_dijkstras_type_task);
+            CoverageTask(
+                    ros::NodeHandle& nh,
+                    const DeformableType deformable_type,
+                    const TaskType task_type,
+                    const bool is_dijkstras_type_task);
 
             double getErrorThreshold() const;
 
         protected:
-            virtual double getErrorThreshold_impl() const = 0;
-
             /// Stores the points that we are trying to cover with the rope
             const ObjectPointSet cover_points_;
             const ssize_t num_cover_points_;
 
         private:
+            virtual double getErrorThreshold_impl() const = 0;
 
             virtual double calculateError_impl(
                     const ObjectPointSet& current_configuration) const final;
@@ -227,7 +230,10 @@ namespace smmap
     class DirectCoverageTask : public CoverageTask
     {
         public:
-            DirectCoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type);
+            DirectCoverageTask(
+                    ros::NodeHandle& nh,
+                    const DeformableType deformable_type,
+                    const TaskType task_type);
 
         private:
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
@@ -237,38 +243,122 @@ namespace smmap
     class DijkstrasCoverageTask : public CoverageTask
     {
         public:
-            DijkstrasCoverageTask(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type);
+            DijkstrasCoverageTask(
+                    ros::NodeHandle& nh,
+                    const DeformableType deformable_type,
+                    const TaskType task_type);
 
-            std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<std::vector<ssize_t>>> findPathFromObjectToTarget(const ObjectPointSet& object_configuration, const double minimum_threshold, const size_t max_ittr) const;
-            ObjectDeltaAndWeight getErrorCorrectionVectorsAndWeights(const ObjectPointSet& object_configuration, const std::vector<std::vector<ssize_t>>& cover_point_assignments) const;
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Virtual function wrappers
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        protected:
-            bool saveDijkstrasResults();
-            bool loadDijkstrasResults();
+            /**
+             * @brief getCoverPointCorrespondences
+             * @param object_configuration
+             * @return A vector of size num_nodes_, each entry of which is a vector of indices of cover points
+             */
+            std::vector<std::vector<ssize_t>> getCoverPointCorrespondences(
+                    const ObjectPointSet& object_configuration) const;
 
-            std::tuple<ssize_t, double, ssize_t> findNearestObjectPoint(const ObjectPointSet& object_configuration, const ssize_t cover_ind) const;
-            EigenHelpers::VectorVector3d followCoverPointAssignments(Eigen::Vector3d current_pos, const std::vector<ssize_t>& cover_point_assignments, const size_t maximum_itterations) const;
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Interface functions used externally
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_Dijkstras(const ObjectPointSet& object_configuration, const double minimum_threshold) const;
+            std::vector<EigenHelpers::VectorVector3d> findPathFromObjectToTarget(
+                    const ObjectPointSet& object_configuration,
+                    std::vector<std::vector<ssize_t>> correspondences,
+                    const size_t max_steps) const;
 
-            /// Free space graph that creates a vector field for the deformable object to follow
-            arc_dijkstras::Graph<Eigen::Vector3d> free_space_graph_;
+            ObjectDeltaAndWeight getErrorCorrectionVectorsAndWeights(
+                    const ObjectPointSet& object_configuration,
+                    const std::vector<std::vector<ssize_t>>& cover_point_correspondences) const;
 
-        public:
-            // Note that work_space_grid_ and the environment_sdf_ are using different resolutions due to the way the sdf
-            // is created in CustomScene
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Publically viewable variables
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+            // Note that work_space_grid_ and the environment_sdf_ are using different
+            // resolutions due to the way the SDF is created in CustomScene
             const XYZGrid work_space_grid_;
             const sdf_tools::SignedDistanceField environment_sdf_;
 
+        protected:
+            /// Free space graph that creates a vector field for the deformable object to follow
+            arc_dijkstras::Graph<Eigen::Vector3d> free_space_graph_;
+
         private:
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Virtual functions that others need to write
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+            virtual std::vector<std::vector<ssize_t>> getCoverPointCorrespondences_impl(
+                    const ObjectPointSet& object_configuration) const = 0;
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Private helpers
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+            bool saveDijkstrasResults();
+            bool loadDijkstrasResults();
+
+            EigenHelpers::VectorVector3d followCoverPointAssignments(
+                    Eigen::Vector3d current_pos,
+                    const std::vector<ssize_t>& cover_point_assignments,
+                    const size_t maximum_itterations) const;
+
+            ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_Dijkstras(
+                    const ObjectPointSet& object_configuration) const;
+
+        protected:
             /// Map between cover point indices and graph indices, with distances
             std::vector<int64_t> cover_ind_to_free_space_graph_ind_;
+
             /// Dijkstras results, indexed by goal index, then current node index - each entry is a (next_node, distance to goal) pair
             std::vector<std::pair<std::vector<int64_t>, std::vector<double>>> dijkstras_results_;
+    };
+
+
+    class DistanceBasedCorrespondencesTask : public DijkstrasCoverageTask
+    {
+        public:
+            DistanceBasedCorrespondencesTask(
+                    ros::NodeHandle& nh,
+                    const DeformableType deformable_type,
+                    const TaskType task_type);
 
         private:
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state) const final;
+
+            virtual std::vector<std::vector<ssize_t>> getCoverPointCorrespondences_impl(
+                    const ObjectPointSet& object_configuration) const final;
+
+            std::tuple<ssize_t, double, ssize_t> findNearestObjectPoint(
+                    const ObjectPointSet& object_configuration,
+                    const ssize_t cover_ind) const;
+    };
+
+    class FixedCorrespondencesTask : public DijkstrasCoverageTask
+    {
+        public:
+            FixedCorrespondencesTask(
+                    ros::NodeHandle& nh,
+                    const DeformableType deformable_type,
+                    const TaskType task_type);
+
+        protected:
+            std::vector<std::vector<ssize_t>> setCorrespondences();
+
+        private:
+            virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
+                    const WorldState& world_state) const final;
+
+            virtual std::vector<std::vector<ssize_t>> getCoverPointCorrespondences_impl(
+                    const ObjectPointSet& object_configuration) const final;
+
+            virtual std::vector<std::vector<ssize_t>> setCorrespondences_impl() const = 0;
+
+            const std::vector<std::vector<ssize_t>> correspondences_;
     };
 
 

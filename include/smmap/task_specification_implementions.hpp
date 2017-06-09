@@ -52,11 +52,11 @@ namespace smmap
     /**
      * @brief The ClothCylinderCoverage class
      */
-    class ClothCylinderCoverage : public DijkstrasCoverageTask
+    class ClothCylinderCoverage : public DistanceBasedCorrespondencesTask
     {
         public:
             ClothCylinderCoverage(ros::NodeHandle& nh)
-                : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_CYLINDER_COVERAGE)
+                : DistanceBasedCorrespondencesTask(nh, DeformableType::CLOTH, TaskType::CLOTH_CYLINDER_COVERAGE)
                 , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
             {}
 
@@ -264,11 +264,11 @@ namespace smmap
     /**
      * @brief The ClothWAFR class
      */
-    class ClothWAFR : public DijkstrasCoverageTask
+    class ClothWAFR : public DistanceBasedCorrespondencesTask
     {
         public:
             ClothWAFR(ros::NodeHandle& nh)
-                : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_WAFR)
+                : DistanceBasedCorrespondencesTask(nh, DeformableType::CLOTH, TaskType::CLOTH_WAFR)
                 , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
             {}
 
@@ -307,11 +307,11 @@ namespace smmap
     /**
      * @brief The ClothSinglePole class
      */
-    class ClothSinglePole : public DijkstrasCoverageTask
+    class ClothSinglePole : public DistanceBasedCorrespondencesTask
     {
         public:
             ClothSinglePole(ros::NodeHandle& nh)
-                : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_SINGLE_POLE)
+                : DistanceBasedCorrespondencesTask(nh, DeformableType::CLOTH, TaskType::CLOTH_SINGLE_POLE)
                 , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
             {}
 
@@ -350,11 +350,11 @@ namespace smmap
     /**
      * @brief The ClothWall class
      */
-    class ClothWall : public DijkstrasCoverageTask
+    class ClothWall : public DistanceBasedCorrespondencesTask
     {
         public:
             ClothWall(ros::NodeHandle& nh)
-                : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_WALL)
+                : DistanceBasedCorrespondencesTask(nh, DeformableType::CLOTH, TaskType::CLOTH_WALL)
                 , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
             {}
 
@@ -393,11 +393,11 @@ namespace smmap
     /**
      * @brief The ClothDoubleSlit class
      */
-    class ClothDoubleSlit : public DijkstrasCoverageTask
+    class ClothDoubleSlit : public DistanceBasedCorrespondencesTask
     {
         public:
             ClothDoubleSlit(ros::NodeHandle& nh)
-                : DijkstrasCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_DOUBLE_SLIT)
+                : DistanceBasedCorrespondencesTask(nh, DeformableType::CLOTH, TaskType::CLOTH_DOUBLE_SLIT)
                 , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
             {}
 
@@ -436,11 +436,11 @@ namespace smmap
     /**
      * @brief The RopeMaze class
      */
-    class RopeMaze : public DijkstrasCoverageTask
+    class RopeMaze : public FixedCorrespondencesTask
     {
         public:
             RopeMaze(ros::NodeHandle& nh)
-                : DijkstrasCoverageTask(nh, DeformableType::ROPE, TaskType::ROPE_MAZE)
+                : FixedCorrespondencesTask(nh, DeformableType::ROPE, TaskType::ROPE_MAZE)
                 , neighbours_(num_nodes_)
             {}
 
@@ -471,6 +471,18 @@ namespace smmap
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const
             {
                 return neighbours_.getNodeNeighbours(node);
+            }
+
+            virtual std::vector<std::vector<ssize_t>> setCorrespondences_impl() const final
+            {
+                std::vector<std::vector<ssize_t>> correspondences(num_nodes_);
+
+                for (ssize_t idx = 0; idx < num_nodes_; ++idx)
+                {
+                    correspondences[(size_t)idx] = {idx};
+                }
+
+                return correspondences;
             }
 
             const LineNeighbours neighbours_;
