@@ -142,15 +142,15 @@ WorldState Planner::sendNextCommand(
 
             ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
 
-            const bool global_planner_needed_due_to_overstretch =
-                    globalPlannerNeededDueToOverstretch(projected_rubber_bands);
-
             const bool global_planner_needed_due_to_collision =
                     globalPlannerNeededDueToCollision(current_world_state);
 
+            const bool global_planner_needed_due_to_overstretch =
+                    globalPlannerNeededDueToOverstretch(projected_rubber_bands);
+
             if (global_planner_needed_due_to_overstretch || global_planner_needed_due_to_collision)
             {
-                vis_.deleteObjects("desired_position", 1, 10);
+                vis_.deleteObjects("desired_position", 1, 100);
 
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "planner", "Invoking global planner due to overstretch");
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_collision, "planner", "Invoking global planner due to collision");
@@ -160,8 +160,8 @@ WorldState Planner::sendNextCommand(
                             current_world_state,
                             projected_deformable_point_paths);
 
-                vis_.deleteObjects("gripper_rubber_band", 1, (int32_t)max_lookahead_steps_ + 10);
-                vis_.deleteObjects("forward_simulated_grippers", 1, (int32_t)max_lookahead_steps_ + 10);
+                vis_.deleteObjects("projected_gripper_rubber_band", 1, (int32_t)max_lookahead_steps_ + 10);
+                vis_.deleteObjects("projected_grippers", 1, (int32_t)max_lookahead_steps_ + 10);
                 vis_.deleteObjects("projected_point_path", 1, (int32_t)projected_deformable_point_paths.size() + 10);
                 vis_.deleteObjects("projected_point_path_lines", 1, (int32_t)projected_deformable_point_paths.size() + 10);
 
@@ -184,7 +184,7 @@ WorldState Planner::sendNextCommand(
 void Planner::visualizeDesiredMotion(
         const WorldState& current_world_state,
         const ObjectDeltaAndWeight& desired_motion,
-        const bool visualization_enabled)
+        const bool visualization_enabled) const
 {
     if (visualization_enabled)
     {
@@ -302,8 +302,8 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
 {
     (void)current_world_state;
     assert(executing_global_gripper_trajectory_);
-    assert(global_plan_gripper_trajectory_.size() < 1000);
-    assert(global_plan_current_timestep_ < 1000);
+    assert(global_plan_gripper_trajectory_.size() < 5000);
+    assert(global_plan_current_timestep_ < 5000);
     assert(global_plan_current_timestep_ < global_plan_gripper_trajectory_.size());
 
     const WorldState world_feedback = robot_.sendGrippersPoses(global_plan_gripper_trajectory_[global_plan_current_timestep_]);
@@ -317,9 +317,10 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
     if (global_plan_current_timestep_ == global_plan_gripper_trajectory_.size())
     {
         executing_global_gripper_trajectory_ = false;
-        vis_.deleteObjects("rubber_band_rrt_solution", 1, 200);
-        vis_.deleteObjects("gripper_a_rrt_solution", 1, 200);
-        vis_.deleteObjects("gripper_b_rrt_solution", 1, 200);
+        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_A_NS, 1, 200);
+        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_B_NS, 1, 200);
+        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS, 1, 200);
+        vis_.deleteObjects(RRTHelper::RRT_SHORTCUT_REMAINDER_NS, 1, 200);
     }
 
     const std::vector<double> fake_rewards(model_list_.size(), NAN);
@@ -433,8 +434,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     const static std_msgs::ColorRGBA rubber_band_violation_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
     const bool verbose = false;
 
-    vis_.deleteObjects("gripper_rubber_band", 1, (int32_t)max_lookahead_steps_ + 10);
-    vis_.deleteObjects("forward_simulated_grippers", 1, (int32_t)max_lookahead_steps_ + 10);
+    vis_.deleteObjects("projected_gripper_rubber_band", 1, (int32_t)max_lookahead_steps_ + 10);
+    vis_.deleteObjects("projected_grippers", 1, (int32_t)max_lookahead_steps_ + 10);
 
     //////////////////////////////////////////////////////////////////////////////////////////
     // Constraint violation Version 1 - Purely cloth overstretch
@@ -444,6 +445,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
             dijkstras_task_->getCoverPointCorrespondences(current_world_state.object_configuration_);
     const std::vector<VectorVector3d> projected_deformable_point_paths =
             dijkstras_task_->findPathFromObjectToTarget(current_world_state.object_configuration_, correspondences, max_lookahead_steps_);
+
     const size_t actual_lookahead_steps = sizeOfLargestVector(projected_deformable_point_paths) - 1;
     // sizeOfLargest(...) should be at least 2, so this assert should always be true
     assert(actual_lookahead_steps <= max_lookahead_steps_);
@@ -470,7 +472,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
                     current_world_state.all_grippers_single_pose_[1].translation(),
                     dijkstras_task_, vis_);
     }
-    virtual_rubber_band_between_grippers_->visualize("gripper_rubber_band", rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
+    virtual_rubber_band_between_grippers_->visualize("projected_gripper_rubber_band", rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
 
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -490,6 +492,9 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
 
         // Move the grippers forward
         world_state_copy.all_grippers_single_pose_ = kinematics::applyTwist(world_state_copy.all_grippers_single_pose_, robot_command.first);
+        world_state_copy.all_grippers_single_pose_[0].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollision3d(world_state_copy.all_grippers_single_pose_[0].translation());
+        world_state_copy.all_grippers_single_pose_[1].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollision3d(world_state_copy.all_grippers_single_pose_[1].translation());
+
         auto collision_check_future = std::async(std::launch::async, &RobotInterface::checkGripperCollision, &robot_, world_state_copy.all_grippers_single_pose_);
 
         // Move the cloth forward - copy the projected state of the cloth into the world_state_copy
@@ -510,8 +515,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
         projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.push_back(virtual_rubber_band_between_grippers_copy);
 
         // Visualize
-        virtual_rubber_band_between_grippers_copy.visualize("gripper_rubber_band", rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
-        vis_.visualizeGrippers("forward_simulated_grippers", world_state_copy.all_grippers_single_pose_, gripper_color);
+        virtual_rubber_band_between_grippers_copy.visualize("projected_gripper_rubber_band", rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
+        vis_.visualizeGrippers("projected_grippers", world_state_copy.all_grippers_single_pose_, gripper_color);
 
         // Finish collecting the gripper collision data
         world_state_copy.gripper_collision_data_ = collision_check_future.get();
@@ -549,7 +554,10 @@ bool Planner::globalPlannerNeededDueToCollision(
     {
         return task_specification_->calculateDesiredDirection(world_state);
     };
+    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
     const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
+
+    visualizeDesiredMotion(current_world_state, task_desired_motion);
 
     const std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command =
             model_list_[0]->getSuggestedGrippersCommand(
@@ -675,7 +683,7 @@ VectorVector3d Planner::findPathBetweenPositions(
     };
 
     auto results = simple_astar_planner::SimpleAStarPlanner<Vector3d, aligned_allocator<Vector3d>>::Plan(start, neighbour_fn, distance_fn, heuristic_fn, goal_reached_fn);
-    assert(results.first.size() >= 2 && "AStar must have returned a valid path for any of the rest of this to work");
+    assert(results.first.size() >= 1 && "AStar must have returned a valid path for any of the rest of this to work");
 
     // Add the 2nd end of the configuration, using the rubber band smoothing process to remove it if it was extraneous
     results.first.push_back(goal);

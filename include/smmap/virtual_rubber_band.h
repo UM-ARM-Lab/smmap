@@ -23,11 +23,6 @@ namespace smmap
 
             smmap::VirtualRubberBand& operator=(const smmap::VirtualRubberBand& other);
 
-            const EigenHelpers::VectorVector3d& forwardSimulateVirtualRubberBand(
-                    const Eigen::Vector3d first_endpoint_translation,
-                    const Eigen::Vector3d second_endpoint_translation,
-                    bool verbose);
-
             const EigenHelpers::VectorVector3d& forwardSimulateVirtualRubberBandToEndpointTargets(
                     const Eigen::Vector3d first_endpoint_target,
                     const Eigen::Vector3d second_endpoint_target,

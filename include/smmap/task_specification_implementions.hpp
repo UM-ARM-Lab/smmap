@@ -442,7 +442,9 @@ namespace smmap
             RopeMaze(ros::NodeHandle& nh)
                 : FixedCorrespondencesTask(nh, DeformableType::ROPE, TaskType::ROPE_MAZE)
                 , neighbours_(num_nodes_)
-            {}
+            {
+                setCorrespondences();
+            }
 
         private:
             virtual void visualizeDeformableObject_impl(
@@ -473,16 +475,17 @@ namespace smmap
                 return neighbours_.getNodeNeighbours(node);
             }
 
-            virtual std::vector<std::vector<ssize_t>> setCorrespondences_impl() const final
+            virtual void setCorrespondences_impl() final
             {
-                std::vector<std::vector<ssize_t>> correspondences(num_nodes_);
+                assert(num_nodes_ == num_cover_points_);
+
+                correspondences_.clear();
+                correspondences_.reserve(num_nodes_);
 
                 for (ssize_t idx = 0; idx < num_nodes_; ++idx)
                 {
-                    correspondences[(size_t)idx] = {idx};
+                    correspondences_.push_back({idx});
                 }
-
-                return correspondences;
             }
 
             const LineNeighbours neighbours_;

@@ -61,6 +61,23 @@ namespace smmap
     class RRTHelper
     {
         public:
+            static const std::string RRT_BLACKLISTED_GOAL_BANDS_NS;
+
+            static const std::string RRT_TREE_GRIPPER_A_NS;
+            static const std::string RRT_TREE_GRIPPER_B_NS;
+
+            static const std::string RRT_SAMPLE_NS;
+            static const std::string RRT_FORWARD_PROP_START_NS;
+            static const std::string RRT_FORWARD_PROP_STEPS_NS;
+
+            static const std::string RRT_SOLUTION_GRIPPER_A_NS;
+            static const std::string RRT_SOLUTION_GRIPPER_B_NS;
+            static const std::string RRT_SOLUTION_RUBBER_BAND_NS;
+
+            static const std::string RRT_SHORTCUT_START_NS;
+            static const std::string RRT_SHORTCUT_END_NS;
+            static const std::string RRT_SHORTCUT_REMAINDER_NS;
+
             RRTHelper(
                     const sdf_tools::SignedDistanceField& environment_sdf,
                     const Visualizer& vis,
@@ -71,7 +88,7 @@ namespace smmap
                     const double y_limits_upper,
                     const double z_limits_lower,
                     const double z_limits_upper,
-                    const double step_size,
+                    const double max_step_size,
                     const double goal_reach_radius,
                     const double gripper_radius,
                     const double homotopy_distance_penalty,
@@ -141,7 +158,7 @@ namespace smmap
             const std::pair<double, double> x_limits_;
             const std::pair<double, double> y_limits_;
             const std::pair<double, double> z_limits_;
-            const double step_size_;
+            const double max_step_size_;
             const double goal_reach_radius_;
             const double homotopy_distance_penalty_;
 
@@ -154,8 +171,8 @@ namespace smmap
             const Visualizer& vis_;
             std::mt19937_64& generator_;
 
-            const std_msgs::ColorRGBA rubber_band_safe_color_;
-            const std_msgs::ColorRGBA rubber_band_overstretched_color_;
+            const std_msgs::ColorRGBA band_safe_color_;
+            const std_msgs::ColorRGBA band_overstretched_color_;
 
             RRTGrippersRepresentation grippers_goal_position_;
 

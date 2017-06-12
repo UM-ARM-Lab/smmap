@@ -237,7 +237,7 @@ void Visualizer::visualizeRope(
     marker.type = visualization_msgs::Marker::LINE_STRIP;
     marker.ns = marker_name;
     marker.id = id;
-    marker.scale.x = 0.15;
+    marker.scale.x = 0.005;
     marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint(rope);
     marker.colors = colors;
     visualization_marker_pub_.publish(marker);

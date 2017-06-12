@@ -723,7 +723,15 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             const Eigen::Vector3d& graph_aligned_current_pos = free_space_graph_.GetNodeImmutable(graph_aligned_current_ind).GetValueImmutable();
             const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(target_ind_in_work_space_graph).GetValueImmutable();
 
-            summed_dijkstras_deltas += (target_point - graph_aligned_current_pos) / 10.0;
+            #warning "Magic numbers - Step size for forward projection of dijkstras field following"
+            if (deformable_type_ == DeformableType::CLOTH)
+            {
+                summed_dijkstras_deltas += (target_point - graph_aligned_current_pos) / 10.0;
+            }
+            else
+            {
+                summed_dijkstras_deltas += (target_point - graph_aligned_current_pos);
+            }
         }
 
         // If the combined vector moves us at least some minimum distance, then accept the delta.
@@ -888,14 +896,12 @@ FixedCorrespondencesTask::FixedCorrespondencesTask(
         const DeformableType deformable_type,
         const TaskType task_type)
     : DijkstrasCoverageTask(nh, deformable_type, task_type)
-    , correspondences_(setCorrespondences())
-{
-    assert((ssize_t)correspondences_.size() == num_nodes_);
-}
+{}
 
-std::vector<std::vector<ssize_t>> FixedCorrespondencesTask::setCorrespondences()
+void FixedCorrespondencesTask::setCorrespondences()
 {
-    return setCorrespondences_impl();
+    setCorrespondences_impl();
+    assert((ssize_t)correspondences_.size() == num_nodes_);
 }
 
 ObjectDeltaAndWeight FixedCorrespondencesTask::calculateObjectErrorCorrectionDelta_impl(
@@ -905,7 +911,7 @@ ObjectDeltaAndWeight FixedCorrespondencesTask::calculateObjectErrorCorrectionDel
     const ObjectPointSet& object_configuration = world_state.object_configuration_;
     ObjectDeltaAndWeight desired_object_delta(num_nodes_ * 3);
 
-    #pragma omp parallel for
+//    #pragma omp parallel for
     for (ssize_t deform_idx = 0; deform_idx < num_nodes_; ++deform_idx)
     {
         const Eigen::Vector3d& deformable_point = object_configuration.col(deform_idx);
@@ -937,7 +943,7 @@ ObjectDeltaAndWeight FixedCorrespondencesTask::calculateObjectErrorCorrectionDel
                 }
             }
 
-            if (graph_dist < minimum_threshold)
+            if (graph_dist > minimum_threshold)
             {
                 const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(target_ind_in_free_space_graph).GetValueImmutable();
                 desired_object_delta.delta.segment<3>(deform_idx * 3) =
@@ -959,6 +965,22 @@ std::vector<std::vector<ssize_t>> FixedCorrespondencesTask::getCoverPointCorresp
         const ObjectPointSet& object_configuration) const
 {
     (void)object_configuration;
+    assert((ssize_t)correspondences_.size() == num_nodes_);
+
+//    EigenHelpers::VectorVector3d start_points;
+//    EigenHelpers::VectorVector3d end_points;
+//    for (ssize_t object_idx = 0; object_idx < num_nodes_; ++object_idx)
+//    {
+//        for (size_t correspondence_idx = 0; correspondence_idx < correspondences_[object_idx].size(); ++correspondence_idx)
+//        {
+//            const ssize_t cover_idx = correspondences_[object_idx][correspondence_idx];
+//            start_points.push_back(object_configuration.col(object_idx));
+//            end_points.push_back(cover_points_.col(cover_idx));
+//        }
+//    }
+
+//    vis_.visualizeLines("correspondences", start_points, end_points, Visualizer::Blue(), 1);
+
     return correspondences_;
 }
 

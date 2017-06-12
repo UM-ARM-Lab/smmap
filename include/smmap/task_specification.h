@@ -347,7 +347,8 @@ namespace smmap
                     const TaskType task_type);
 
         protected:
-            std::vector<std::vector<ssize_t>> setCorrespondences();
+            void setCorrespondences();
+            std::vector<std::vector<ssize_t>> correspondences_;
 
         private:
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
@@ -356,9 +357,7 @@ namespace smmap
             virtual std::vector<std::vector<ssize_t>> getCoverPointCorrespondences_impl(
                     const ObjectPointSet& object_configuration) const final;
 
-            virtual std::vector<std::vector<ssize_t>> setCorrespondences_impl() const = 0;
-
-            const std::vector<std::vector<ssize_t>> correspondences_;
+            virtual void setCorrespondences_impl() = 0;
     };
 
 

@@ -40,7 +40,7 @@ namespace smmap
             void visualizeDesiredMotion(
                     const WorldState& current_world_state,
                     const ObjectDeltaAndWeight& desired_motion,
-                    const bool visualization_enabled = true);
+                    const bool visualization_enabled = true) const;
 
         private:
             ////////////////////////////////////////////////////////////////////
