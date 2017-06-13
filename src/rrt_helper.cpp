@@ -43,13 +43,6 @@ static bool gripperPositionsAreApproximatelyEqual(
     return is_equal;
 }
 
-static bool gripperPositionsAreApproximatelyEqual(
-        const RRTConfig& c1,
-        const RRTConfig& c2)
-{
-    return gripperPositionsAreApproximatelyEqual(c1.getGrippers(), c2.getGrippers());
-}
-
 static bool bandEndpointsMatchGripperPositions(
         const VirtualRubberBand& band,
         const RRTGrippersRepresentation& grippers)
@@ -330,7 +323,7 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
     propagated_states.reserve(max_total_steps);
 
     // Continue advancing the grippers until the grippers collide or the band overstretches
-    const bool rubber_band_verbose = true;
+    const bool rubber_band_verbose = false;
     int64_t parent_offset = -1;
     uint32_t step_index = 0;
     while (step_index < max_total_steps)

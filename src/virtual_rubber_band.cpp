@@ -254,23 +254,22 @@ void VirtualRubberBand::resampleBand(const bool verbose)
         return sdf_.ProjectOutOfCollision3d(EigenHelpers::Interpolate(prev, curr, ratio));
     };
 
-    size_t num_band_elements;
-    do
+    // Continue to smooth with projected points until the result stabilizes
+    EigenHelpers::VectorVector3d smoothing_result = shortcut_smoothing::ResamplePath(band_, max_distance_between_rubber_band_points_, state_distance_fn, state_interpolation_fn);
+    while (smoothing_result != band_)
     {
-        num_band_elements = band_.size();
-        band_ = shortcut_smoothing::ResamplePath(band_, max_distance_between_rubber_band_points_, state_distance_fn, state_interpolation_fn);
+        band_ = smoothing_result;
+        smoothing_result = shortcut_smoothing::ResamplePath(band_, max_distance_between_rubber_band_points_, state_distance_fn, state_interpolation_fn);
     }
-    while (num_band_elements != band_.size());
-
 
     // Double check the results; this is here to catch cases where the projection may be creating points that are too far apart
     for (size_t idx = 0; idx < band_.size() - 1; ++idx)
     {
-        if ((band_[idx] - band_[idx + 1]).squaredNorm() > max_distance_between_rubber_band_points_ * max_distance_between_rubber_band_points_)
+        if ((band_[idx] - band_[idx + 1]).norm() > max_distance_between_rubber_band_points_)
         {
             visualize("badness", Visualizer::Red(), Visualizer::Red(), 1, true);
 
-            std::cout << "Post-resample distances:\n";
+            std::cout << "Problem at index " << idx << ": " << (band_[idx] - band_[idx + 1]).norm() - max_distance_between_rubber_band_points_ << " Post-resample distances:\n";
             for (size_t idx = 0; idx < band_.size() - 1; ++idx)
             {
                 std::cout << (band_[idx] - band_[idx + 1]).norm() << " ";

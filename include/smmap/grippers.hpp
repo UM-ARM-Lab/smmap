@@ -56,7 +56,7 @@ namespace smmap
     };
 
     template<typename T>
-    inline std::vector<long > VectorAnytypeToVectorLong(
+    inline std::vector<long> VectorAnytypeToVectorLong(
             const std::vector<T>& vector_anytype)
     {
         std::vector<long> vector_signed(vector_anytype.size());
@@ -198,6 +198,7 @@ namespace smmap
     // Conversion functions
     ////////////////////////////////////////////////////////////////////////////
 
+    # warning "Re-evaluate now this gripper pose delta math is done - remember Ruikun's example where the gripper went the wrong way"
     inline AllGrippersSinglePoseDelta CalculateGrippersPoseDelta(
             const AllGrippersSinglePose& prev,
             const AllGrippersSinglePose& next)
@@ -404,7 +405,6 @@ namespace smmap
         }
         return pose_deltas;
     }
-
 
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////

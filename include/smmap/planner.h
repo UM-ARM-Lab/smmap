@@ -158,6 +158,8 @@ namespace smmap
 
             const size_t max_lookahead_steps_;
             std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_;
+            const size_t max_grippers_pose_history_length_;
+            AllGrippersPoseTrajectory grippers_pose_history_;
 
             bool executing_global_gripper_trajectory_;
             size_t global_plan_current_timestep_;

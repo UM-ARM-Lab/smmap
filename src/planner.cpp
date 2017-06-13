@@ -50,6 +50,7 @@ Planner::Planner(
     , observation_noise_factor_(GetObservationNoiseFactor(ph_))
     , correlation_strength_factor_(GetCorrelationStrengthFactor(ph_))
     , max_lookahead_steps_(GetNumLookaheadSteps(ph_))
+    , max_grippers_pose_history_length_(GetMaxGrippersPoseHistoryLength(ph_))
     , executing_global_gripper_trajectory_(false)
     , global_plan_current_timestep_(-1)
     , global_plan_gripper_trajectory_(0)
@@ -287,6 +288,13 @@ WorldState Planner::sendNextCommandUsingLocalController(
                     world_feedback.all_grippers_single_pose_[0].translation(),
                     world_feedback.all_grippers_single_pose_[1].translation(),
                     verbose);
+
+        // Keep the last N grippers positions recorded to detect if the grippers are stuck
+        grippers_pose_history_.push_back(world_feedback.all_grippers_single_pose_);
+        if (grippers_pose_history_.size() > max_grippers_pose_history_length_)
+        {
+            grippers_pose_history_.erase(grippers_pose_history_.begin());
+        }
     }
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
@@ -316,7 +324,11 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
     ++global_plan_current_timestep_;
     if (global_plan_current_timestep_ == global_plan_gripper_trajectory_.size())
     {
+        std::cerr << "Global plan finished, resetting grippers pose history\n";
+
         executing_global_gripper_trajectory_ = false;
+        grippers_pose_history_.clear();
+
         vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_A_NS, 1, 200);
         vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_B_NS, 1, 200);
         vis_.deleteObjects(RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS, 1, 200);
@@ -550,30 +562,55 @@ bool Planner::globalPlannerNeededDueToOverstretch(
 bool Planner::globalPlannerNeededDueToCollision(
         const WorldState& current_world_state) const
 {
-    const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
+//    const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
+//    {
+//        return task_specification_->calculateDesiredDirection(world_state);
+//    };
+//    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
+//    const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
+
+//    visualizeDesiredMotion(current_world_state, task_desired_motion);
+
+//    const std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command =
+//            model_list_[0]->getSuggestedGrippersCommand(
+//                model_input_data,
+//                robot_.max_gripper_velocity_,
+//                task_specification_->collisionScalingFactor());
+
+//    std::cerr << "Max norm:       " << robot_.max_gripper_velocity_ * robot_.dt_ << std::endl;
+//    std::cerr << "Allowable norm: " << robot_.max_gripper_velocity_ * robot_.dt_ * 0.15 << std::endl;
+//    std::cerr << "Velocity norm:  " << MultipleGrippersVelocity6dNorm(robot_command.first) << std::endl;
+
+//    #warning "Gripper velocity threshold for global planning check magic number here"
+//    if (MultipleGrippersVelocity6dNorm(robot_command.first) < robot_.max_gripper_velocity_ * robot_.dt_ * 0.15)
+//    {
+//        return true;
+//    }
+
+    (void)current_world_state;
+
+    // If we have not yet collected enough data, then assume we are not stuck
+    if (grippers_pose_history_.size() < max_grippers_pose_history_length_)
     {
-        return task_specification_->calculateDesiredDirection(world_state);
-    };
-    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
-    const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
-
-    visualizeDesiredMotion(current_world_state, task_desired_motion);
-
-    const std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command =
-            model_list_[0]->getSuggestedGrippersCommand(
-                model_input_data,
-                robot_.max_gripper_velocity_,
-                task_specification_->collisionScalingFactor());
-
-    std::cerr << "Max norm:       " << robot_.max_gripper_velocity_ * robot_.dt_ << std::endl;
-    std::cerr << "Allowable norm: " << robot_.max_gripper_velocity_ * robot_.dt_ * 0.15 << std::endl;
-    std::cerr << "Velocity norm:  " << MultipleGrippersVelocity6dNorm(robot_command.first) << std::endl;
-
-    #warning "Gripper velocity threshold for global planning check magic number here"
-    if (MultipleGrippersVelocity6dNorm(robot_command.first) < robot_.max_gripper_velocity_ * robot_.dt_ * 0.15)
-    {
-        return true;
+        return false;
     }
+
+    assert(grippers_pose_history_.size() == max_grippers_pose_history_length_);
+
+    // Calculate distances from the first gripper config to the last
+    const AllGrippersSinglePose& start_config = grippers_pose_history_[0];
+    std::vector<double> distances(max_grippers_pose_history_length_ - 1);
+    for (size_t time_idx = 1; time_idx < max_grippers_pose_history_length_; ++time_idx)
+    {
+        const AllGrippersSinglePoseDelta grippers_delta = CalculateGrippersPoseDelta(start_config, grippers_pose_history_[time_idx]);
+        const double distance = MultipleGrippersVelocity6dNorm(grippers_delta);
+        distances[time_idx - 1] = distance;
+    }
+
+    // Determine if there is a general positive slope on the distances
+    // - we should be moving away from the start config if we are not stuck
+    std::cerr //<< "Gripper distances for collision stuck detection:\n"
+              << PrettyPrint::PrettyPrint(distances, true, " ") << std::endl;
 
     return false;
 }
