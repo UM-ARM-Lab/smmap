@@ -420,7 +420,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask_impl(
         // if is close to obstacle
         else
         {
-            const Vector3d node_p_dot = object_p_dot.block<3,1>(node_ind,0);
+            const Vector3d node_p_dot = object_p_dot.block<3,1>(node_ind*3,0);
 
             // sur_n pointing out from obstacle
             std::vector<double> sur_n
@@ -429,18 +429,22 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask_impl(
             if(sur_n.size()>1)
             {
                 Vector3d surface_normal= Vector3d::Map(sur_n.data(),sur_n.size());
-                surface_normal = surface_normal/surface_normal.norm();
+
+                double surface_vector_norm = std::sqrt(std::pow(surface_normal(0),2)+std::pow(surface_normal(1),2)+std::pow(surface_normal(2),2));
+
+                surface_normal = surface_normal/surface_vector_norm;
                 // if node is moving outward from obstacle, unmask.
-                if (node_p_dot.dot(surface_normal)<0)
+                double dot_result = 100*node_p_dot(0)*surface_normal(0)+100*node_p_dot(1)*surface_normal(1)+100*node_p_dot(2)*surface_normal(2);
+                if (dot_result<0.0)
                 {
-//                    v_mask.segment<3>(3*node_ind) = node_p_dot-node_p_dot.dot(surface_normal)*surface_normal;
-                    const Matrix<double, 1, 3> surface_normal_inv
-                            = EigenHelpers::Pinv(surface_normal, EigenHelpers::SuggestedRcond());
+//                    const Matrix<double, 1, 3> surface_normal_inv
+//                            = EigenHelpers::Pinv(surface_normal, EigenHelpers::SuggestedRcond());
+                    const Matrix<double, 1, 3> surface_normal_inv = surface_normal.adjoint();
                     M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
                 }
             }
             // Check with Dale, whether the vector is normalized.
-//            const Matrix<double, 1, 3> surface_normal_inv
+//            const Matrix<double, 1, 3> surface_normal_invs
 //                    = EigenHelpers::Pinv(surface_normal, EigenHelpers::SuggestedRcond());
 //            M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
         }
