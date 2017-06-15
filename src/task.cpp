@@ -37,7 +37,7 @@ void Task::execute()
     while (robot_.ok())
     {
         const WorldState current_world_state = world_feedback;
-        const double current_error = task_specification_->calculateError(current_world_state.object_configuration_);
+        const double current_error = task_specification_->calculateError(current_world_state);
         ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << current_error);
 
         world_feedback = planner_.sendNextCommand(current_world_state);
@@ -245,7 +245,7 @@ void Task::logData(
              current_world_state.sim_time_);
 
         LOG(loggers.at("error"),
-             task_specification_->calculateError(current_world_state.object_configuration_));
+             task_specification_->calculateError(current_world_state));
 
         LOG(loggers.at("utility_mean"),
              model_utility_mean.format(single_line));

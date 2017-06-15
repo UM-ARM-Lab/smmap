@@ -259,10 +259,10 @@ WorldState Planner::sendNextCommandUsingLocalController(
     if (calculate_regret_ && num_models_ > 1)
     {
         stopwatch(RESET);
-        const double prev_error = task_specification_->calculateError(current_world_state.object_configuration_);
+        const double prev_error = task_specification_->calculateError(current_world_state);
         const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
         {
-            individual_rewards[model_ind] = prev_error - task_specification_->calculateError(world_state.object_configuration_);
+            individual_rewards[model_ind] = prev_error - task_specification_->calculateError(world_state);
         };
 
         std::vector<AllGrippersSinglePose> poses_to_test(num_models_);
@@ -893,8 +893,8 @@ void Planner::updateModels(const WorldState& starting_world_state,
         const WorldState& world_feedback)
 {
     // First we update the bandit algorithm
-    const double starting_error = task_specification_->calculateError(starting_world_state.object_configuration_);
-    const double true_error_reduction = starting_error - task_specification_->calculateError(world_feedback.object_configuration_);
+    const double starting_error = task_specification_->calculateError(starting_world_state);
+    const double true_error_reduction = starting_error - task_specification_->calculateError(world_feedback);
     reward_std_dev_scale_factor_ = std::max(1e-10, 0.9 * reward_std_dev_scale_factor_ + 0.1 * std::abs(true_error_reduction));
     const double process_noise_scaling_factor = process_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);
     const double observation_noise_scaling_factor = observation_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);

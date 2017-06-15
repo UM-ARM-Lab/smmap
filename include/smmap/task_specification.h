@@ -71,7 +71,7 @@ namespace smmap
                     const std::vector<std_msgs::ColorRGBA>& colors) const;
 
             double calculateError(
-                    const ObjectPointSet& object_configuration) const;
+                    const WorldState& world_state) const;
 
             /**
              * @brief calculateObjectDesiredDelta
@@ -89,7 +89,7 @@ namespace smmap
 
             double defaultDeformability() const;        // k
             double collisionScalingFactor() const;      // beta (or k2)
-            double maxOverstretchFactor() const;         // lambda
+            double maxOverstretchFactor() const;        // lambda
             double maxTime() const;                     // max simulation time when scripting things
 
             bool stretchingConstraintViolated(
@@ -196,7 +196,7 @@ namespace smmap
                     const std::vector<std_msgs::ColorRGBA>& colors) const = 0;
 
             virtual double calculateError_impl(
-                    const ObjectPointSet& object_configuration) const = 0;
+                    const WorldState& world_state) const = 0;
 
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
                     const WorldState& world_state) const = 0;
@@ -224,7 +224,7 @@ namespace smmap
             virtual double getErrorThreshold_impl() const = 0;
 
             virtual double calculateError_impl(
-                    const ObjectPointSet& current_configuration) const final;
+                    const WorldState& world_state) const final;
     };
 
     class DirectCoverageTask : public CoverageTask

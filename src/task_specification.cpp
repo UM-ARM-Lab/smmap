@@ -4,9 +4,55 @@
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
 
 #include "smmap/task_specification.h"
-#include "smmap/task_specification_implementions.hpp"
+#include "smmap/task_specification_implementions.h"
 
 using namespace smmap;
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Static builder function
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
+        ros::NodeHandle& nh)
+{
+    const TaskType task_type = GetTaskType(nh);
+
+    switch (task_type)
+    {
+        case TaskType::ROPE_CYLINDER_COVERAGE:
+            return std::make_shared<RopeCylinderCoverage>(nh);
+
+        case TaskType::CLOTH_TABLE_COVERAGE:
+            return std::make_shared<ClothTableCoverage>(nh);
+
+        case TaskType::CLOTH_CYLINDER_COVERAGE:
+            return std::make_shared<ClothCylinderCoverage>(nh);
+
+        case TaskType::CLOTH_COLAB_FOLDING:
+            return std::make_shared<ClothColabFolding>(nh);
+
+        case TaskType::CLOTH_WAFR:
+            return std::make_shared<ClothWAFR>(nh);
+
+        case TaskType::CLOTH_SINGLE_POLE:
+            return std::make_shared<ClothSinglePole>(nh);
+
+        case TaskType::CLOTH_WALL:
+            return std::make_shared<ClothWall>(nh);
+
+        case TaskType::CLOTH_DOUBLE_SLIT:
+            return std::make_shared<ClothDoubleSlit>(nh);
+
+        case TaskType::ROPE_MAZE:
+            return std::make_shared<RopeMaze>(nh);
+
+        default:
+            throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
+            return nullptr;
+    }
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Static helper functions - could be private given how they are
@@ -130,50 +176,6 @@ TaskSpecification::TaskSpecification(
 {}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Static builder function
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
-        ros::NodeHandle& nh)
-{
-    const TaskType task_type = GetTaskType(nh);
-
-    switch (task_type)
-    {
-        case TaskType::ROPE_CYLINDER_COVERAGE:
-            return std::make_shared<RopeCylinderCoverage>(nh);
-
-        case TaskType::CLOTH_TABLE_COVERAGE:
-            return std::make_shared<ClothTableCoverage>(nh);
-
-        case TaskType::CLOTH_CYLINDER_COVERAGE:
-            return std::make_shared<ClothCylinderCoverage>(nh);
-
-        case TaskType::CLOTH_COLAB_FOLDING:
-            return std::make_shared<ClothColabFolding>(nh);
-
-        case TaskType::CLOTH_WAFR:
-            return std::make_shared<ClothWAFR>(nh);
-
-        case TaskType::CLOTH_SINGLE_POLE:
-            return std::make_shared<ClothSinglePole>(nh);
-
-        case TaskType::CLOTH_WALL:
-            return std::make_shared<ClothWall>(nh);
-
-        case TaskType::CLOTH_DOUBLE_SLIT:
-            return std::make_shared<ClothDoubleSlit>(nh);
-
-        case TaskType::ROPE_MAZE:
-            return std::make_shared<RopeMaze>(nh);
-
-        default:
-            throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
-            return nullptr;
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Virtual function wrappers
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -195,10 +197,9 @@ void TaskSpecification::visualizeDeformableObject(
     visualizeDeformableObject_impl(vis, marker_name, object_configuration, colors);
 }
 
-double TaskSpecification::calculateError(
-        const ObjectPointSet& object_configuration) const
+double TaskSpecification::calculateError(const WorldState& world_state) const
 {
-    return calculateError_impl(object_configuration);
+    return calculateError_impl(world_state);
 }
 
 ObjectDeltaAndWeight TaskSpecification::calculateObjectErrorCorrectionDelta(
@@ -481,10 +482,9 @@ double CoverageTask::getErrorThreshold() const
     return getErrorThreshold_impl();
 }
 
-double CoverageTask::calculateError_impl(
-        const ObjectPointSet& current_configuration) const
+double CoverageTask::calculateError_impl(const WorldState& world_state) const
 {
-    return CalculateErrorWithTheshold(cover_points_, current_configuration, getErrorThreshold());
+    return CalculateErrorWithTheshold(cover_points_, world_state.object_configuration_, getErrorThreshold());
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
