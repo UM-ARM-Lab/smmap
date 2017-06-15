@@ -125,7 +125,7 @@ TaskSpecification::TaskSpecification(
     , num_nodes_(object_initial_node_distance_.cols())
     , default_deformability_(GetDefaultDeformability(nh))
     , collision_scaling_factor_(GetCollisionScalingFactor(nh))
-    , stretching_threshold_(GetStretchingThreshold(nh))
+    , max_overstretch_factor_(GetStretchingThreshold(nh))
     , max_time_(GetMaxTime(nh))
 {}
 
@@ -223,9 +223,9 @@ double TaskSpecification::collisionScalingFactor() const
     return collision_scaling_factor_;
 }
 
-double TaskSpecification::stretchingThreshold() const
+double TaskSpecification::maxOverstretchFactor() const
 {
-    return stretching_threshold_;
+    return max_overstretch_factor_;
 }
 
 double TaskSpecification::maxTime() const
@@ -271,7 +271,7 @@ bool TaskSpecification::stretchingConstraintViolated(
         const Eigen::Vector3d& second_node) const
 {
     const double dist = (first_node - second_node).norm();
-    const double max_dist = object_initial_node_distance_(first_node_ind, second_node_ind) * stretchingThreshold();
+    const double max_dist = object_initial_node_distance_(first_node_ind, second_node_ind) * maxOverstretchFactor();
     return dist > max_dist;
 }
 
@@ -287,7 +287,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyC
         bool visualize) const
 {
     ObjectDeltaAndWeight stretching_correction(num_nodes_ * 3);
-    const double max_threshold_multiplier = stretchingThreshold();
+    const double max_overstretch_multiplier = maxOverstretchFactor();
     const Eigen::MatrixXd object_current_node_distance = CalculateDistanceMatrix(object_configuration);
 
     EigenHelpers::VectorVector3d vis_start_points;
@@ -297,7 +297,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyC
     {
         for (ssize_t second_node = first_node + 1; second_node < num_nodes_; ++second_node)
         {
-            const double max_dist = object_initial_node_distance_(first_node, second_node) * max_threshold_multiplier;
+            const double max_dist = object_initial_node_distance_(first_node, second_node) * max_overstretch_multiplier;
             const double dist = object_current_node_distance(first_node, second_node);
             if (max_dist < dist)
             {
@@ -331,7 +331,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaPairwi
         bool visualize) const
 {
     ObjectDeltaAndWeight stretching_correction(num_nodes_ * 3);
-    const double max_threshold_multiplier = stretchingThreshold();
+    const double max_threshold_multiplier = maxOverstretchFactor();
 
     EigenHelpers::VectorVector3d vis_start_points;
     EigenHelpers::VectorVector3d vis_end_points;

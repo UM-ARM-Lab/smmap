@@ -21,7 +21,7 @@ VirtualRubberBand::VirtualRubberBand(
     , max_distance_between_rubber_band_points_(task_->work_space_grid_.minStepDimension() / 2.0)
     , num_smoothing_ittrs_(200)
     , min_object_radius_(0.04)
-    , max_total_band_distance_((end_point - start_point).norm() * task_->stretchingThreshold())
+    , max_total_band_distance_((end_point - start_point).norm() * task_->maxOverstretchFactor())
 {
 //    max_gripper_distance_ = EigenHelpers::CalculateTotalDistance(virtual_rubber_band) + (double)(GetClothNumDivsY(nh_) - 1) * dijkstras_task->stretchingThreshold();
 //    ROS_INFO_STREAM_NAMED("planner", "  -----   Max gripper distance: " << max_gripper_distance_ << " Num rubber band nodes: " << virtual_rubber_band.size());
