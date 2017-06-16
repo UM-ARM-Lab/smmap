@@ -22,30 +22,7 @@ namespace smmap
     class TaskSpecification
     {
         public:
-            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            // Static helper functions - could be private given how they are
-            // used but making public as they are static
-            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-            static double CalculateErrorWithTheshold(
-                    const ObjectPointSet& target_points,
-                    const ObjectPointSet& deformable_object,
-                    const double minimum_threshold);
-
-            static ObjectDeltaAndWeight CalculateObjectErrorCorrectionDeltaWithThreshold(
-                    const ObjectPointSet& target_points,
-                    const ObjectPointSet& deformable_object,
-                    const double minimum_threshold);
-
-        public:
             typedef std::shared_ptr<TaskSpecification> Ptr;
-
-            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            // Constructor to initialize objects that all TaskSpecifications share
-            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-            TaskSpecification(ros::NodeHandle& nh, const DeformableType deformable_type, const TaskType task_type, const bool is_dijkstras_type_task = false);
-            TaskSpecification(ros::NodeHandle& nh, Visualizer vis, const DeformableType deformable_type, const TaskType task_type, const bool is_dijkstras_type_task = false);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Static builder function
@@ -53,6 +30,25 @@ namespace smmap
 
             static TaskSpecification::Ptr MakeTaskSpecification(
                     ros::NodeHandle& nh);
+
+        public:
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Constructor to initialize objects that all TaskSpecifications share
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+            TaskSpecification(
+                    ros::NodeHandle& nh,
+                    const DeformableType deformable_type,
+                    const TaskType task_type,
+                    const bool is_dijkstras_type_task = false);
+
+            TaskSpecification(
+                    ros::NodeHandle& nh,
+                    Visualizer vis,
+                    const DeformableType deformable_type,
+                    const TaskType task_type,
+                    const bool is_dijkstras_type_task = false);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Virtual function wrappers
@@ -71,7 +67,7 @@ namespace smmap
                     const std::vector<std_msgs::ColorRGBA>& colors) const;
 
             double calculateError(
-                    const WorldState& world_state) const;
+                    const WorldState& world_state);
 
             /**
              * @brief calculateObjectDesiredDelta
@@ -142,12 +138,19 @@ namespace smmap
             std::vector<ssize_t> getNodeNeighbours(const ssize_t node) const;
 
         private:
-            ObjectDeltaAndWeight first_step_desired_motion_;
-            ObjectDeltaAndWeight first_step_error_correction_;
-            ObjectDeltaAndWeight first_step_stretching_correction_;
+            // Data needed to avoid re-calculating the first desired step repeatedly
             std::atomic_bool first_step_calculated_;
             std::mutex first_step_mtx_;
             double sim_time_last_time_first_step_calced_;
+            ObjectDeltaAndWeight first_step_desired_motion_;
+            ObjectDeltaAndWeight first_step_error_correction_;
+            ObjectDeltaAndWeight first_step_stretching_correction_;
+
+            // Data needed to avoid re-calculating the current error repeatedly
+            std::atomic_bool current_error_calculated_;
+            std::mutex current_error_mtx_;
+            double sim_time_last_time_error_calced_;
+            double current_error_;
 
 
         public:
@@ -215,6 +218,15 @@ namespace smmap
 
             double getErrorThreshold() const;
 
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Publically viewable variables
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+            // Note that work_space_grid_ and the environment_sdf_ are using different
+            // resolutions due to the way the SDF is created in CustomScene
+            const XYZGrid work_space_grid_;
+            const sdf_tools::SignedDistanceField environment_sdf_;
+
         protected:
             /// Stores the points that we are trying to cover with the rope
             const ObjectPointSet cover_points_;
@@ -223,8 +235,6 @@ namespace smmap
         private:
             virtual double getErrorThreshold_impl() const = 0;
 
-            virtual double calculateError_impl(
-                    const WorldState& world_state) const final;
     };
 
     class DirectCoverageTask : public CoverageTask
@@ -237,6 +247,9 @@ namespace smmap
 
         private:
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
+                    const WorldState& world_state) const final;
+
+            virtual double calculateError_impl(
                     const WorldState& world_state) const final;
     };
 
@@ -272,21 +285,18 @@ namespace smmap
             ObjectDeltaAndWeight getErrorCorrectionVectorsAndWeights(
                     const ObjectPointSet& object_configuration,
                     const std::vector<std::vector<ssize_t>>& cover_point_correspondences) const;
-
-            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            // Publically viewable variables
-            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-            // Note that work_space_grid_ and the environment_sdf_ are using different
-            // resolutions due to the way the SDF is created in CustomScene
-            const XYZGrid work_space_grid_;
-            const sdf_tools::SignedDistanceField environment_sdf_;
-
         protected:
             /// Free space graph that creates a vector field for the deformable object to follow
             arc_dijkstras::Graph<Eigen::Vector3d> free_space_graph_;
 
         private:
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Virtual functions that we implement
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+            virtual double calculateError_impl(
+                    const WorldState& world_state) const final;
+
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Virtual functions that others need to write
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////

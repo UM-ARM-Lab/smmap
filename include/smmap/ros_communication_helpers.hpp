@@ -93,6 +93,26 @@ namespace smmap
         return cover_points;
     }
 
+    inline ObjectPointSet GetCoverPointNormals(ros::NodeHandle& nh)
+    {
+        ROS_INFO_NAMED("ros_comms_helpers" , "Getting cover point normal vectors");
+
+        // Get the initial configuration of the object
+        ros::ServiceClient cover_point_normal_vectors_client =
+            nh.serviceClient<deformable_manipulation_msgs::GetPointSet>(GetCoverPointNormalsTopic(nh));
+
+        cover_point_normal_vectors_client.waitForExistence();
+
+        deformable_manipulation_msgs::GetPointSet srv_data;
+        cover_point_normal_vectors_client.call(srv_data);
+        ObjectPointSet cover_point_normals =
+            EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(srv_data.response.points);
+
+        ROS_INFO_NAMED("ros_comms_helpers" , "Number of cover point normals: %zu", srv_data.response.points.size());
+
+        return cover_point_normals;
+    }
+
     // TODO: replace these out params with something else
     inline void GetFreeSpaceGraph(ros::NodeHandle& nh, arc_dijkstras::Graph<Eigen::Vector3d>& free_space_graph, std::vector<int64_t>& cover_ind_to_free_space_graph_ind)
     {

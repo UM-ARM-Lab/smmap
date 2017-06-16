@@ -37,9 +37,6 @@ void Task::execute()
     while (robot_.ok())
     {
         const WorldState current_world_state = world_feedback;
-        const double current_error = task_specification_->calculateError(current_world_state);
-        ROS_INFO_STREAM_NAMED("task", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << current_error);
-
         world_feedback = planner_.sendNextCommand(current_world_state);
 
         if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()))
@@ -258,9 +255,6 @@ void Task::logData(
 
         LOG(loggers.at("rewards_for_all_models"),
             PrettyPrint::PrettyPrint(rewards_for_all_models, false, " "));
-
-//        LOG(loggers.at("correlation_scale_factor"),
-//            correlation_strength_factor);
     }
 }
 

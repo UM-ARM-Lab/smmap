@@ -102,14 +102,12 @@ namespace smmap
             void updateModels(
                     const WorldState& starting_world_state,
                     const ObjectDeltaAndWeight& task_desired_motion,
-                    const std::vector<std::pair<AllGrippersSinglePoseDelta,
-                    ObjectPointSet>>& suggested_commands,
+                    const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands,
                     const ssize_t model_used,
                     const WorldState& world_feedback);
 
             Eigen::MatrixXd calculateProcessNoise(
-                    const std::vector<std::pair<AllGrippersSinglePoseDelta,
-                    ObjectPointSet>>& suggested_commands);
+                    const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands) const;
 
             ////////////////////////////////////////////////////////////////////
             // Multipurpose

@@ -8,6 +8,12 @@
 
 using namespace smmap;
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////// Task Specification /////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Static builder function
@@ -53,91 +59,6 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
     }
 }
 
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Static helper functions - could be private given how they are
-// used but making public as they are static - probably should be moved out of class
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-double TaskSpecification::CalculateErrorWithTheshold(
-        const ObjectPointSet& target_points,
-        const ObjectPointSet& deformable_object,
-        const double minimum_threshold)
-{
-    Eigen::VectorXd error(target_points.cols());
-
-    // for every cover point, find the nearest deformable object point
-    #pragma omp parallel for
-    for (ssize_t target_ind = 0; target_ind < target_points.cols(); ++target_ind)
-    {
-        const Eigen::Vector3d& target_point = target_points.col(target_ind);
-
-        // find the closest deformable object point
-        double min_dist_squared = std::numeric_limits<double>::infinity();
-        for (ssize_t deformable_ind = 0; deformable_ind < deformable_object.cols(); ++deformable_ind)
-        {
-            const Eigen::Vector3d& deformable_point = deformable_object.col(deformable_ind);
-            const double new_dist_squared = (target_point - deformable_point).squaredNorm();
-            min_dist_squared = std::min(new_dist_squared, min_dist_squared);
-        }
-
-        if (std::sqrt(min_dist_squared) >= minimum_threshold)
-        {
-            error(target_ind) = std::sqrt(min_dist_squared);
-        }
-        else
-        {
-            error(target_ind) = 0;
-        }
-    }
-
-    return error.sum();
-}
-
-ObjectDeltaAndWeight TaskSpecification::CalculateObjectErrorCorrectionDeltaWithThreshold(
-        const ObjectPointSet& target_points,
-        const ObjectPointSet& deformable_object,
-        const double minimum_threshold)
-{
-    const ssize_t num_nodes = deformable_object.cols();
-    ObjectDeltaAndWeight desired_object_delta(num_nodes * 3);
-
-    // for every target point, find the nearest deformable object point
-    for (ssize_t target_ind = 0; target_ind < target_points.cols(); ++target_ind)
-    {
-        const Eigen::Vector3d& target_point = target_points.col(target_ind);
-
-        // find the closest deformable object point
-        ssize_t min_ind = -1;
-        double min_dist_squared = std::numeric_limits<double>::infinity();
-        for (ssize_t deformable_ind = 0; deformable_ind < num_nodes; ++deformable_ind)
-        {
-            const Eigen::Vector3d& deformable_point = deformable_object.col(deformable_ind);
-            const double new_dist_squared = (target_point - deformable_point).squaredNorm();
-            if (new_dist_squared < min_dist_squared)
-            {
-                min_dist_squared = new_dist_squared;
-                min_ind = deformable_ind;
-            }
-        }
-
-        const double min_dist = std::sqrt(min_dist_squared);
-        if (min_dist > minimum_threshold)
-        {
-            desired_object_delta.delta.segment<3>(min_ind * 3) =
-                    desired_object_delta.delta.segment<3>(min_ind * 3)
-                    + (target_point - deformable_object.col(min_ind));
-
-            const double weight = std::max(desired_object_delta.weight(min_ind * 3), min_dist);
-            desired_object_delta.weight(min_ind * 3) = weight;
-            desired_object_delta.weight(min_ind * 3 + 1) = weight;
-            desired_object_delta.weight(min_ind * 3 + 2) = weight;
-        }
-    }
-
-    return desired_object_delta;
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constructor to initialize objects that all TaskSpecifications share
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -162,11 +83,22 @@ TaskSpecification::TaskSpecification(
         const TaskType task_type,
         const bool is_dijkstras_type_task)
     : first_step_calculated_(false)
+    , sim_time_last_time_first_step_calced_(std::numeric_limits<double>::quiet_NaN())
+    , first_step_desired_motion_(0)
+    , first_step_error_correction_(0)
+    , first_step_stretching_correction_(0)
+
+    , current_error_calculated_(false)
+    , sim_time_last_time_error_calced_(std::numeric_limits<double>::quiet_NaN())
+    , current_error_(std::numeric_limits<double>::quiet_NaN())
+
     , deformable_type_(deformable_type)
     , task_type_(task_type)
     , is_dijkstras_type_task_(is_dijkstras_type_task)
+
     , nh_(nh)
     , vis_(vis)
+
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
     , num_nodes_(object_initial_node_distance_.cols())
     , default_deformability_(GetDefaultDeformability(nh))
@@ -197,9 +129,35 @@ void TaskSpecification::visualizeDeformableObject(
     visualizeDeformableObject_impl(vis, marker_name, object_configuration, colors);
 }
 
-double TaskSpecification::calculateError(const WorldState& world_state) const
+double TaskSpecification::calculateError(const WorldState& world_state)
 {
-    return calculateError_impl(world_state);
+    if (sim_time_last_time_error_calced_ != world_state.sim_time_)
+    {
+        current_error_calculated_.store(false);
+    }
+
+    if (current_error_calculated_.load())
+    {
+        return current_error_;
+    }
+    else
+    {
+        std::lock_guard<std::mutex> lock(current_error_mtx_);
+        if (current_error_calculated_.load())
+        {
+            return current_error_;
+        }
+        else
+        {
+            stopwatch(RESET);
+            current_error_ = calculateError_impl(world_state);
+            ROS_INFO_STREAM_NAMED("task_specification", "Calculated error in                  " << stopwatch(READ) << " seconds");
+
+            sim_time_last_time_error_calced_ = world_state.sim_time_;
+            current_error_calculated_.store(true);
+            return current_error_;
+        }
+    }
 }
 
 ObjectDeltaAndWeight TaskSpecification::calculateObjectErrorCorrectionDelta(
@@ -208,11 +166,9 @@ ObjectDeltaAndWeight TaskSpecification::calculateObjectErrorCorrectionDelta(
     return calculateObjectErrorCorrectionDelta_impl(world_state);
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 double TaskSpecification::defaultDeformability() const
 {
@@ -462,9 +418,10 @@ std::vector<ssize_t> TaskSpecification::getNodeNeighbours(const ssize_t node) co
     return getNodeNeighbours_impl(node);
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Coverage Task
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////// Coverage Task //////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 CoverageTask::CoverageTask(
@@ -473,6 +430,10 @@ CoverageTask::CoverageTask(
         const TaskType task_type,
         const bool is_dijkstras_type_task = false)
     : TaskSpecification(nh, deformable_type, task_type, is_dijkstras_type_task)
+    , work_space_grid_(GetWorldXMin(nh), GetWorldXStep(nh), GetWorldXNumSteps(nh),
+                       GetWorldYMin(nh), GetWorldYStep(nh), GetWorldYNumSteps(nh),
+                       GetWorldZMin(nh), GetWorldZStep(nh), GetWorldZNumSteps(nh))
+    , environment_sdf_(GetEnvironmentSDF(nh))
     , cover_points_(GetCoverPoints(nh))
     , num_cover_points_(cover_points_.cols())
 {}
@@ -482,13 +443,10 @@ double CoverageTask::getErrorThreshold() const
     return getErrorThreshold_impl();
 }
 
-double CoverageTask::calculateError_impl(const WorldState& world_state) const
-{
-    return CalculateErrorWithTheshold(cover_points_, world_state.object_configuration_, getErrorThreshold());
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Direct Coverage Task
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////// Direct Coverage Task ///////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DirectCoverageTask::DirectCoverageTask(
@@ -498,15 +456,89 @@ DirectCoverageTask::DirectCoverageTask(
     : CoverageTask(nh, deformable_type, task_type)
 {}
 
+double DirectCoverageTask::calculateError_impl(const WorldState& world_state) const
+{
+    const ObjectPointSet& object_configuration = world_state.object_configuration_;
+    const double minimum_threshold = getErrorThreshold();
+
+    Eigen::VectorXd error(cover_points_.cols());
+
+    // for every cover point, find the nearest deformable object point
+    #pragma omp parallel for
+    for (ssize_t target_ind = 0; target_ind < cover_points_.cols(); ++target_ind)
+    {
+        const Eigen::Vector3d& target_point = cover_points_.col(target_ind);
+
+        // find the closest deformable object point
+        double min_dist_squared = std::numeric_limits<double>::infinity();
+        for (ssize_t deformable_ind = 0; deformable_ind < num_nodes_; ++deformable_ind)
+        {
+            const Eigen::Vector3d& deformable_point = object_configuration.col(deformable_ind);
+            const double new_dist_squared = (target_point - deformable_point).squaredNorm();
+            min_dist_squared = std::min(new_dist_squared, min_dist_squared);
+        }
+
+        if (std::sqrt(min_dist_squared) >= minimum_threshold)
+        {
+            error(target_ind) = std::sqrt(min_dist_squared);
+        }
+        else
+        {
+            error(target_ind) = 0;
+        }
+    }
+
+    return error.sum();
+}
+
 ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_impl(
         const WorldState& world_state) const
 {
-    return CalculateObjectErrorCorrectionDeltaWithThreshold(
-                cover_points_, world_state.object_configuration_, getErrorThreshold());
+    const ObjectPointSet& object_configuration = world_state.object_configuration_;
+    const double minimum_threshold = getErrorThreshold();
+
+    ObjectDeltaAndWeight desired_object_delta(num_nodes_ * 3);
+
+    // for every target point, find the nearest deformable object point
+    for (ssize_t target_ind = 0; target_ind < cover_points_.cols(); ++target_ind)
+    {
+        const Eigen::Vector3d& target_point = cover_points_.col(target_ind);
+
+        // find the closest deformable object point
+        ssize_t min_ind = -1;
+        double min_dist_squared = std::numeric_limits<double>::infinity();
+        for (ssize_t deformable_ind = 0; deformable_ind < num_nodes_; ++deformable_ind)
+        {
+            const Eigen::Vector3d& deformable_point = object_configuration.col(deformable_ind);
+            const double new_dist_squared = (target_point - deformable_point).squaredNorm();
+            if (new_dist_squared < min_dist_squared)
+            {
+                min_dist_squared = new_dist_squared;
+                min_ind = deformable_ind;
+            }
+        }
+
+        const double min_dist = std::sqrt(min_dist_squared);
+        if (min_dist > minimum_threshold)
+        {
+            desired_object_delta.delta.segment<3>(min_ind * 3) =
+                    desired_object_delta.delta.segment<3>(min_ind * 3)
+                    + (target_point - object_configuration.col(min_ind));
+
+            const double weight = std::max(desired_object_delta.weight(min_ind * 3), min_dist);
+            desired_object_delta.weight(min_ind * 3) = weight;
+            desired_object_delta.weight(min_ind * 3 + 1) = weight;
+            desired_object_delta.weight(min_ind * 3 + 2) = weight;
+        }
+    }
+
+    return desired_object_delta;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Dijkstras Coverage Task
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////// Dijkstra's Coverage Task ///////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DijkstrasCoverageTask::DijkstrasCoverageTask(
@@ -515,10 +547,6 @@ DijkstrasCoverageTask::DijkstrasCoverageTask(
         deformable_type,
         const TaskType task_type)
     : CoverageTask(nh, deformable_type, task_type, true)
-    , work_space_grid_(GetWorldXMin(nh), GetWorldXStep(nh), GetWorldXNumSteps(nh),
-                       GetWorldYMin(nh), GetWorldYStep(nh), GetWorldYNumSteps(nh),
-                       GetWorldZMin(nh), GetWorldZStep(nh), GetWorldZNumSteps(nh))
-    , environment_sdf_(GetEnvironmentSDF(nh))
 {
     GetFreeSpaceGraph(nh, free_space_graph_, cover_ind_to_free_space_graph_ind_);
     assert(cover_ind_to_free_space_graph_ind_.size() == (size_t)num_cover_points_);
@@ -541,6 +569,16 @@ DijkstrasCoverageTask::DijkstrasCoverageTask(
         saveDijkstrasResults();
         ROS_INFO_STREAM_NAMED("coverage_task", "Found solutions in " << stopwatch(READ) << " seconds");
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Virtual functions that we implement
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+double DijkstrasCoverageTask::calculateError_impl(
+        const WorldState& world_state) const
+{
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -698,7 +736,6 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
     }
 }
 
-
 EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
         Eigen::Vector3d current_pos,
         const std::vector<ssize_t>& cover_point_assignments,
@@ -761,7 +798,9 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Distance Based Correspondences Task
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////// Distance Based Correspondences Task ////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DistanceBasedCorrespondencesTask::DistanceBasedCorrespondencesTask(
@@ -888,7 +927,9 @@ std::tuple<ssize_t, double, ssize_t> DistanceBasedCorrespondencesTask::findNeare
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Known Correspondences Task
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////// Fixed Correspondences Task /////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 FixedCorrespondencesTask::FixedCorrespondencesTask(
@@ -985,7 +1026,9 @@ std::vector<std::vector<ssize_t>> FixedCorrespondencesTask::getCoverPointCorresp
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Rope and cloth neighbour functions
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////// Rope and Cloth neighbour functions /////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 LineNeighbours::LineNeighbours(const ssize_t num_nodes)
@@ -1011,8 +1054,6 @@ std::vector<ssize_t> LineNeighbours::getNodeNeighbours(const ssize_t node) const
 
     return neighbours;
 }
-
-
 
 Grid4Neighbours::Grid4Neighbours(const ssize_t num_nodes, const ssize_t stride)
     : num_nodes_(num_nodes)
