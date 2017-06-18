@@ -67,8 +67,6 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
 
-            virtual double getErrorThreshold_impl() const final;
-
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
 
             const LineNeighbours neighbours_;
@@ -94,8 +92,6 @@ namespace smmap
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
-            virtual double getErrorThreshold_impl() const final;
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
 
@@ -124,8 +120,6 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
 
-            virtual double getErrorThreshold_impl() const final;
-
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
 
             const Grid4Neighbours neighbours_;
@@ -151,8 +145,6 @@ namespace smmap
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
-            virtual double getErrorThreshold_impl() const final;
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
 
@@ -180,8 +172,6 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
 
-            virtual double getErrorThreshold_impl() const final;
-
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
 
             const Grid4Neighbours neighbours_;
@@ -208,8 +198,6 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
 
-            virtual double getErrorThreshold_impl() const final;
-
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
 
             const Grid4Neighbours neighbours_;
@@ -235,8 +223,6 @@ namespace smmap
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
-            virtual double getErrorThreshold_impl() const final;
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
 
@@ -265,11 +251,7 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
 
-            virtual double getErrorThreshold_impl() const final;
-
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
-
-            virtual void setCorrespondences_impl() final;
 
             const LineNeighbours neighbours_;
     };

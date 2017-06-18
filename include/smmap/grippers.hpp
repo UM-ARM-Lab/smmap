@@ -198,7 +198,8 @@ namespace smmap
     // Conversion functions
     ////////////////////////////////////////////////////////////////////////////
 
-    # warning "Re-evaluate now this gripper pose delta math is done - remember Ruikun's example where the gripper went the wrong way"
+    // TODO:
+    // # warning "Re-evaluate now this gripper pose delta math is done - remember Ruikun's example where the gripper went the wrong way"
     inline AllGrippersSinglePoseDelta CalculateGrippersPoseDelta(
             const AllGrippersSinglePose& prev,
             const AllGrippersSinglePose& next)

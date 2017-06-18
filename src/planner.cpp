@@ -144,13 +144,13 @@ WorldState Planner::sendNextCommand(
             const std::vector<VectorVector3d>& projected_deformable_point_paths = detection_results.first;
             const std::vector<VirtualRubberBand>& projected_rubber_bands = detection_results.second;
 
-            ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
+            const bool global_planner_needed_due_to_overstretch =
+                    globalPlannerNeededDueToOverstretch(projected_rubber_bands);
 
             const bool global_planner_needed_due_to_collision =
                     globalPlannerNeededDueToCollision(current_world_state);
 
-            const bool global_planner_needed_due_to_overstretch =
-                    globalPlannerNeededDueToOverstretch(projected_rubber_bands);
+            ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
 
             if (global_planner_needed_due_to_overstretch || global_planner_needed_due_to_collision)
             {
@@ -438,7 +438,7 @@ size_t sizeOfLargestVector(const std::vector<VectorVector3d>& vectors)
 }
 
 std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::detectFutureConstraintViolations(
-        const WorldState &current_world_state,
+        const WorldState& current_world_state,
         const bool visualization_enabled)
 {
     assert(task_specification_->is_dijkstras_type_task_ && current_world_state.all_grippers_single_pose_.size() == 2);
@@ -456,10 +456,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     // Constraint violation Version 1 - Purely cloth overstretch
     //////////////////////////////////////////////////////////////////////////////////////////
     stopwatch(RESET);
-    const std::vector<std::vector<ssize_t>> correspondences =
-            dijkstras_task_->getCoverPointCorrespondences(current_world_state.object_configuration_);
-    const std::vector<VectorVector3d> projected_deformable_point_paths =
-            dijkstras_task_->findPathFromObjectToTarget(current_world_state.object_configuration_, correspondences, max_lookahead_steps_);
+    const std::vector<VectorVector3d> projected_deformable_point_paths = dijkstras_task_->findPathFromObjectToTarget(current_world_state, max_lookahead_steps_);
 
     const size_t actual_lookahead_steps = sizeOfLargestVector(projected_deformable_point_paths) - 1;
     // sizeOfLargest(...) should be at least 2, so this assert should always be true
@@ -476,7 +473,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     assert(num_models_ == 1 && current_world_state.all_grippers_single_pose_.size() == 2);
     const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
     {
-        return dijkstras_task_->getErrorCorrectionVectorsAndWeights(world_state.object_configuration_, correspondences);
+        return dijkstras_task_->calculateObjectErrorCorrectionDelta(world_state);
     };
 
     // Create the initial rubber band if needed
@@ -565,31 +562,6 @@ bool Planner::globalPlannerNeededDueToOverstretch(
 bool Planner::globalPlannerNeededDueToCollision(
         const WorldState& current_world_state) const
 {
-//    const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
-//    {
-//        return task_specification_->calculateDesiredDirection(world_state);
-//    };
-//    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
-//    const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
-
-//    visualizeDesiredMotion(current_world_state, task_desired_motion);
-
-//    const std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command =
-//            model_list_[0]->getSuggestedGrippersCommand(
-//                model_input_data,
-//                robot_.max_gripper_velocity_,
-//                task_specification_->collisionScalingFactor());
-
-//    std::cerr << "Max norm:       " << robot_.max_gripper_velocity_ * robot_.dt_ << std::endl;
-//    std::cerr << "Allowable norm: " << robot_.max_gripper_velocity_ * robot_.dt_ * 0.15 << std::endl;
-//    std::cerr << "Velocity norm:  " << MultipleGrippersVelocity6dNorm(robot_command.first) << std::endl;
-
-//    #warning "Gripper velocity threshold for global planning check magic number here"
-//    if (MultipleGrippersVelocity6dNorm(robot_command.first) < robot_.max_gripper_velocity_ * robot_.dt_ * 0.15)
-//    {
-//        return true;
-//    }
-
     (void)current_world_state;
 
     // If we have not yet collected enough data, then assume we are not stuck

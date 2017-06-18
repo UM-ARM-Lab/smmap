@@ -76,7 +76,7 @@ namespace smmap
              *         return.second is the importance of that part of the movement
              */
             ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta(
-                    const WorldState& world_state) const;
+                    const WorldState& world_state);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Helper functions
@@ -141,7 +141,7 @@ namespace smmap
             // Data needed to avoid re-calculating the first desired step repeatedly
             std::atomic_bool first_step_calculated_;
             std::mutex first_step_mtx_;
-            double sim_time_last_time_first_step_calced_;
+            double first_step_last_simtime_calced_;
             ObjectDeltaAndWeight first_step_desired_motion_;
             ObjectDeltaAndWeight first_step_error_correction_;
             ObjectDeltaAndWeight first_step_stretching_correction_;
@@ -149,7 +149,7 @@ namespace smmap
             // Data needed to avoid re-calculating the current error repeatedly
             std::atomic_bool current_error_calculated_;
             std::mutex current_error_mtx_;
-            double sim_time_last_time_error_calced_;
+            double current_error_last_simtime_calced_;
             double current_error_;
 
 
@@ -199,10 +199,10 @@ namespace smmap
                     const std::vector<std_msgs::ColorRGBA>& colors) const = 0;
 
             virtual double calculateError_impl(
-                    const WorldState& world_state) const = 0;
+                    const WorldState& world_state) = 0;
 
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
-                    const WorldState& world_state) const = 0;
+                    const WorldState& world_state) = 0;
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const = 0;
     };
@@ -215,8 +215,6 @@ namespace smmap
                     const DeformableType deformable_type,
                     const TaskType task_type,
                     const bool is_dijkstras_type_task);
-
-            double getErrorThreshold() const;
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Publically viewable variables
@@ -232,10 +230,10 @@ namespace smmap
             const ObjectPointSet cover_points_;
             const ssize_t num_cover_points_;
 
-        private:
-            virtual double getErrorThreshold_impl() const = 0;
-
+            const double error_threshold_along_normal_;
+            const double error_threshold_distance_to_normal_;
     };
+
 
     class DirectCoverageTask : public CoverageTask
     {
@@ -256,6 +254,27 @@ namespace smmap
     class DijkstrasCoverageTask : public CoverageTask
     {
         public:
+            struct Correspondences
+            {
+                public:
+                    Correspondences(const ssize_t num_nodes)
+                        : correspondences_(num_nodes)
+                        , correspondences_next_step_(num_nodes)
+                        , correspondences_distances_(num_nodes)
+                        , correspondences_is_covered_(num_nodes)
+                    {
+                        assert(num_nodes > 0);
+                    }
+
+                    std::vector<ssize_t> uncovered_target_points_idxs_;     // Indices of the taget points that are uncovered
+                    std::vector<double> uncovered_target_points_distances_; // Distance to the deformable object for each uncovered target point
+
+                    std::vector<std::vector<ssize_t>> correspondences_;                     // Vector of size num_nodes_, each entry is a list indices into the cover_points_ data
+                    std::vector<EigenHelpers::VectorVector3d> correspondences_next_step_;   // Vector of size num_nodes_, each entry is a list of "next steps" if moving towards the corresponding target
+                    std::vector<std::vector<double>> correspondences_distances_;            // Vector of size num_nodes_, each entry is a list of distances to the corresponding cover_point as listed in correspondences_
+                    std::vector<std::vector<bool>> correspondences_is_covered_;             // Vector of size num_nodes_, each entry is a list which desecribes if the corresponding cover_point is already "covered"
+            };
+
             DijkstrasCoverageTask(
                     ros::NodeHandle& nh,
                     const DeformableType deformable_type,
@@ -265,26 +284,17 @@ namespace smmap
             // Virtual function wrappers
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            /**
-             * @brief getCoverPointCorrespondences
-             * @param object_configuration
-             * @return A vector of size num_nodes_, each entry of which is a vector of indices of cover points
-             */
-            std::vector<std::vector<ssize_t>> getCoverPointCorrespondences(
-                    const ObjectPointSet& object_configuration) const;
+            Correspondences getCoverPointCorrespondences(
+                    const WorldState& world_state);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Interface functions used externally
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             std::vector<EigenHelpers::VectorVector3d> findPathFromObjectToTarget(
-                    const ObjectPointSet& object_configuration,
-                    std::vector<std::vector<ssize_t>> correspondences,
-                    const size_t max_steps) const;
+                    const WorldState& world_state,
+                    const size_t max_steps);
 
-            ObjectDeltaAndWeight getErrorCorrectionVectorsAndWeights(
-                    const ObjectPointSet& object_configuration,
-                    const std::vector<std::vector<ssize_t>>& cover_point_correspondences) const;
         protected:
             /// Free space graph that creates a vector field for the deformable object to follow
             arc_dijkstras::Graph<Eigen::Vector3d> free_space_graph_;
@@ -295,14 +305,17 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             virtual double calculateError_impl(
-                    const WorldState& world_state) const final;
+                    const WorldState& world_state) final;
+
+            virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
+                    const WorldState& world_state) final;
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Virtual functions that others need to write
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            virtual std::vector<std::vector<ssize_t>> getCoverPointCorrespondences_impl(
-                    const ObjectPointSet& object_configuration) const = 0;
+            virtual Correspondences getCoverPointCorrespondences_impl(
+                    const WorldState& world_state) const = 0;
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Private helpers
@@ -316,15 +329,18 @@ namespace smmap
                     const std::vector<ssize_t>& cover_point_assignments,
                     const size_t maximum_itterations) const;
 
-            ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_Dijkstras(
-                    const ObjectPointSet& object_configuration) const;
-
         protected:
             /// Map between cover point indices and graph indices, with distances
             std::vector<int64_t> cover_ind_to_free_space_graph_ind_;
 
             /// Dijkstras results, indexed by goal index, then current node index - each entry is a (next_node, distance to goal) pair
             std::vector<std::pair<std::vector<int64_t>, std::vector<double>>> dijkstras_results_;
+
+            // Data needed to avoid re-calculating the correspondences repeatedly
+            std::atomic_bool current_correspondences_calculated_;
+            std::mutex current_correspondences_mtx_;
+            double current_correspondences_last_simtime_calced_;
+            Correspondences current_correspondences_;
     };
 
 
@@ -337,14 +353,11 @@ namespace smmap
                     const TaskType task_type);
 
         private:
-            virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
+            virtual Correspondences getCoverPointCorrespondences_impl(
                     const WorldState& world_state) const final;
 
-            virtual std::vector<std::vector<ssize_t>> getCoverPointCorrespondences_impl(
-                    const ObjectPointSet& object_configuration) const final;
-
             std::tuple<ssize_t, double, ssize_t> findNearestObjectPoint(
-                    const ObjectPointSet& object_configuration,
+                    const WorldState& world_state,
                     const ssize_t cover_ind) const;
     };
 
@@ -357,17 +370,11 @@ namespace smmap
                     const TaskType task_type);
 
         protected:
-            void setCorrespondences();
-            std::vector<std::vector<ssize_t>> correspondences_;
+            std::vector<std::vector<ssize_t>> correspondences_internal_fixed_;
 
         private:
-            virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
+            virtual Correspondences getCoverPointCorrespondences_impl(
                     const WorldState& world_state) const final;
-
-            virtual std::vector<std::vector<ssize_t>> getCoverPointCorrespondences_impl(
-                    const ObjectPointSet& object_configuration) const final;
-
-            virtual void setCorrespondences_impl() = 0;
     };
 
 

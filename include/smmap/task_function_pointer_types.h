@@ -14,7 +14,7 @@ namespace smmap
     GripperCollisionCheckFunctionType;
 
     typedef std::function<ObjectDeltaAndWeight(
-            const WorldState& world_current_state
+            const WorldState& world_state
             )>
     TaskDesiredObjectDeltaFunctionType;
 
@@ -25,7 +25,7 @@ namespace smmap
     TestGrippersPosesFeedbackCallbackFunctionType;
 
     typedef std::function<void(
-            const WorldState& current_world_state,
+            const WorldState& world_state,
             const Eigen::VectorXd& model_utility_mean,
             const Eigen::MatrixXd& model_utility_covariance,
             const ssize_t model_used,

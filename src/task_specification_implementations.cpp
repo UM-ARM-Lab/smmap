@@ -147,11 +147,6 @@ void RopeCylinderCoverage::visualizeDeformableObject_impl(
     vis.visualizeRope(marker_name, object_configuration, colors);
 }
 
-double RopeCylinderCoverage::getErrorThreshold_impl() const
-{
-    return 0.01;
-}
-
 std::vector<ssize_t> RopeCylinderCoverage::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
@@ -186,11 +181,6 @@ void ClothCylinderCoverage::visualizeDeformableObject_impl(
     vis.visualizeCloth(marker_name, object_configuration, colors);
 }
 
-double ClothCylinderCoverage::getErrorThreshold_impl() const
-{
-    return 0.002;
-}
-
 std::vector<ssize_t> ClothCylinderCoverage::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
@@ -221,11 +211,6 @@ void ClothTableCoverage::visualizeDeformableObject_impl(
         const std::vector<std_msgs::ColorRGBA>& colors) const
 {
     vis.visualizeCloth(marker_name, object_configuration, colors);
-}
-
-double ClothTableCoverage::getErrorThreshold_impl() const
-{
-    return 0.002;
 }
 
 std::vector<ssize_t> ClothTableCoverage::getNodeNeighbours_impl(const ssize_t node) const
@@ -260,11 +245,6 @@ void ClothWAFR::visualizeDeformableObject_impl(
     vis.visualizeCloth(marker_name, object_configuration, colors);
 }
 
-double ClothWAFR::getErrorThreshold_impl() const
-{
-    return 0.002;
-}
-
 std::vector<ssize_t> ClothWAFR::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
@@ -295,11 +275,6 @@ void ClothWall::visualizeDeformableObject_impl(
         const std::vector<std_msgs::ColorRGBA>& colors) const
 {
     vis.visualizeCloth(marker_name, object_configuration, colors);
-}
-
-double ClothWall::getErrorThreshold_impl() const
-{
-    return 0.002;
 }
 
 std::vector<ssize_t> ClothWall::getNodeNeighbours_impl(const ssize_t node) const
@@ -334,11 +309,6 @@ void ClothSinglePole::visualizeDeformableObject_impl(
     vis.visualizeCloth(marker_name, object_configuration, colors);
 }
 
-double ClothSinglePole::getErrorThreshold_impl() const
-{
-    return 0.002;
-}
-
 std::vector<ssize_t> ClothSinglePole::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
@@ -371,11 +341,6 @@ void ClothDoubleSlit::visualizeDeformableObject_impl(
     vis.visualizeCloth(marker_name, object_configuration, colors);
 }
 
-double ClothDoubleSlit::getErrorThreshold_impl() const
-{
-    return 0.002;
-}
-
 std::vector<ssize_t> ClothDoubleSlit::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
@@ -389,7 +354,15 @@ RopeMaze::RopeMaze(ros::NodeHandle& nh)
     : FixedCorrespondencesTask(nh, DeformableType::ROPE, TaskType::ROPE_MAZE)
     , neighbours_(num_nodes_)
 {
-    setCorrespondences();
+    assert(num_nodes_ == num_cover_points_);
+
+    correspondences_internal_fixed_.clear();
+    correspondences_internal_fixed_.reserve(num_nodes_);
+
+    for (ssize_t idx = 0; idx < num_nodes_; ++idx)
+    {
+        correspondences_internal_fixed_.push_back({idx});
+    }
 }
 
 void RopeMaze::visualizeDeformableObject_impl(
@@ -410,25 +383,7 @@ void RopeMaze::visualizeDeformableObject_impl(
     vis.visualizeRope(marker_name, object_configuration, colors);
 }
 
-double RopeMaze::getErrorThreshold_impl() const
-{
-    return 0.01;
-}
-
 std::vector<ssize_t> RopeMaze::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
-}
-
-void RopeMaze::setCorrespondences_impl()
-{
-    assert(num_nodes_ == num_cover_points_);
-
-    correspondences_.clear();
-    correspondences_.reserve(num_nodes_);
-
-    for (ssize_t idx = 0; idx < num_nodes_; ++idx)
-    {
-        correspondences_.push_back({idx});
-    }
 }
