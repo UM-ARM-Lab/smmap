@@ -3,47 +3,93 @@
 
 #include "smmap/deformable_model.h"
 #include "smmap/grippers.hpp"
+#include "smmap/robot_interface.hpp"
 
 #include "sdf_tools/sdf.hpp"
-#include "smmap/robot_interface.hpp"
 
 namespace smmap {
 
     class GripperMotionGenerator
     {
         public:
-            GripperMotionGenerator();
+            GripperMotionGenerator(ros::NodeHandle& nh,
+                                   const sdf_tools::SignedDistanceField& environment_sdf,
+                           //        RobotInterface& robot,
+                                   std::mt19937_64& generator,
+                                   GripperControllerType gripper_controller_type,
+                                   const double max_gripper_translation_step,
+                                   const double max_gripper_rotation_step,
+                                   const int64_t max_count);
 
-            GripperCollisionCheckFunctionType createGripperCollisionCheckFunction();
-
-            AllGrippersSinglePoseDelta samplingGripperMotion();
-
-            //////////////////////////////////////////////////////////////////
+            //////////////////////////////////////////////////////////////////////////////////////
             // Called from outside to find the optimal gripper command
-            //////////////////////////////////////////////////////////////////
-            AllGrippersSinglePoseDelta findOptimalGripperMotion();
+            //////////////////////////////////////////////////////////////////////////////////////
+            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> findOptimalGripperMotion(
+                    const DeformableModel::Ptr deformable_model,
+                    const DeformableModel::DeformableModelInputData &input_data,
+                    const double max_gripper_velocity,
+                    const double obstacle_avoidance_scale);
+
+            void SetGripperControllerType(GripperControllerType gripper_controller_type);
 
 
         private:
 
-            ros::NodeHandle nh_;
 
-            DeformableModel::Ptr deformable_model_;
-            sdf_tools::SignedDistanceField enviroment_sdf_;
-            GripperCollisionChecker gripper_colision_checker_;
 
-            AllGrippersSinglePoseDelta grippers_pose_delta_;
-            std::vector<GripperData> grippers_data_;
+            /////////////////////////////////////////////////////////////////////////////////////////
+            // Optimization function
+            /////////////////////////////////////////////////////////////////////////////////////////
 
-            const ssize_t num_samples_;
-            const double rotation_lower_bound_;
-            const double rotation_upper_bound_;
+            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByRandomSampling(
+                    const DeformableModel::Ptr deformable_model,
+                    const DeformableModel::DeformableModelInputData &input_data,
+                    const double max_gripper_velocity,
+                    const double obstacle_avoidance_scale);
+
+            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByUniformSampling(
+                    const DeformableModel::Ptr deformable_model,
+                    const DeformableModel::DeformableModelInputData &input_data,
+                    const double max_gripper_velocity,
+                    const double obstacle_avoidance_scale);
+
+
+
+            //////////////////////////////////////////////////////////////////////////////////
+            // Helper function
+            //////////////////////////////////////////////////////////////////////////////////
+
+            kinematics::Vector6d singelGripperPoseDeltaSampler();
+
+            double errorOfControlByPrediction(ObjectPointSet& predicted_object_p_dot,
+                                              Eigen::VectorXd& desired_object_p_dot);
+
+
+
+        private:
+
+//            ros::NodeHandle nh_;
+
+//            DeformableModel::Ptr deformable_model_;
+            GripperCollisionChecker gripper_collision_checker_;
+            const sdf_tools::SignedDistanceField enviroment_sdf_;
+//            RobotInterface& robot_;
+            std::mt19937_64& generator_;
+            std::uniform_real_distribution<double> uniform_unit_distribution_;
+//            AllGrippersSinglePoseDelta grippers_pose_delta_;
+//            std::vector<GripperData> grippers_data_;
+
+            GripperControllerType gripper_controller_type_;
+
             const double translation_lower_bound_;
             const double translation_upper_bound_;
+            const double rotation_lower_bound_;
+            const double rotation_upper_bound_;
+
+            const int64_t max_count_;
+
 
 //            Visualizer& vis_;
-
-
 //            const GripperMotionLoggingFunctionType logging_fn_;
 
 
