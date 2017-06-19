@@ -33,7 +33,7 @@ void ClothColabFolding::visualizeDeformableObject_impl(
 }
 
 double ClothColabFolding::calculateError_impl(
-        const WorldState& world_state) const
+        const WorldState& world_state)
 {
     const ObjectPointSet& current_configuration = world_state.object_configuration_;
 
@@ -48,7 +48,7 @@ double ClothColabFolding::calculateError_impl(
 }
 
 ObjectDeltaAndWeight ClothColabFolding::calculateObjectErrorCorrectionDelta_impl(
-        const WorldState& world_state) const
+        const WorldState& world_state)
 {
     ROS_INFO_NAMED("cloth_colab_folding" , "Finding 'best' cloth delta");
     const ObjectPointSet& object_configuration = world_state.object_configuration_;

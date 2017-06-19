@@ -243,8 +243,10 @@ void Visualizer::visualizeRope(
     visualization_marker_pub_.publish(marker);
 
     marker.type = visualization_msgs::Marker::SPHERE;
-    marker.id = 1;
+    marker.id = id + 1;
     marker.scale.x = 0.015;
+    marker.scale.y = 0.015;
+    marker.scale.z = 0.015;
     visualization_marker_pub_.publish(marker);
 }
 

@@ -80,7 +80,6 @@ namespace smmap
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Helper functions
-            // TODO: Should these be virtual? virtual final?
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             double defaultDeformability() const;        // k
@@ -245,10 +244,10 @@ namespace smmap
 
         private:
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
-                    const WorldState& world_state) const final;
+                    const WorldState& world_state) final;
 
             virtual double calculateError_impl(
-                    const WorldState& world_state) const final;
+                    const WorldState& world_state) final;
     };
 
     class DijkstrasCoverageTask : public CoverageTask
@@ -284,7 +283,7 @@ namespace smmap
             // Virtual function wrappers
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            Correspondences getCoverPointCorrespondences(
+            const Correspondences& getCoverPointCorrespondences(
                     const WorldState& world_state);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -294,6 +293,10 @@ namespace smmap
             std::vector<EigenHelpers::VectorVector3d> findPathFromObjectToTarget(
                     const WorldState& world_state,
                     const size_t max_steps);
+
+            ObjectDeltaAndWeight calculateErrorCorrectionDeltaFixedCorrespondences(
+                    const WorldState& world_state,
+                    const std::vector<std::vector<ssize_t>>& correspondences);
 
         protected:
             /// Free space graph that creates a vector field for the deformable object to follow
@@ -358,7 +361,7 @@ namespace smmap
 
             std::tuple<ssize_t, double, ssize_t> findNearestObjectPoint(
                     const WorldState& world_state,
-                    const ssize_t cover_ind) const;
+                    const ssize_t cover_idx) const;
     };
 
     class FixedCorrespondencesTask : public DijkstrasCoverageTask
