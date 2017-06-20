@@ -5,6 +5,10 @@ using namespace smmap;
 using namespace Eigen;
 using namespace EigenHelpers;
 
+#pragma message "Magic number - damping threshold and damping coefficient"
+#define LEAST_SQUARES_DAMPING_THRESHOLD (1e-4)
+#define LEAST_SQUARES_DAMPING_VALUE     (1e-3)
+
 ////////////////////////////////////////////////////////////////////////////////
 // Constructors and Destructor
 ////////////////////////////////////////////////////////////////////////////////
@@ -86,10 +90,9 @@ JacobianModel::getSuggestedGrippersCommand_impl(
     }
     else
     {
-        #pragma message "More magic numbers - damping threshold and damping coefficient"
         grippers_delta_achieve_goal =
             ClampGripperPoseDeltas(
-                WeightedLeastSquaresSolver(jacobian, desired_object_velocity.delta, desired_object_velocity.weight, 1e-4, 1e-3),
+                WeightedLeastSquaresSolver(jacobian, desired_object_velocity.delta, desired_object_velocity.weight, LEAST_SQUARES_DAMPING_THRESHOLD, LEAST_SQUARES_DAMPING_VALUE),
                 max_step_size);
     }
 

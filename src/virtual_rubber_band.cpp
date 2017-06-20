@@ -5,10 +5,10 @@
 
 using namespace smmap;
 
-//static std::default_random_engine VirtualRubberBand::generator_(std::chrono::system_clock::now().time_since_epoch().count());
+//std::default_random_engine VirtualRubberBand::generator_(std::chrono::system_clock::now().time_since_epoch().count());
 std::default_random_engine VirtualRubberBand::generator_;
 
-#warning "Magic numbers in virtual band constructor"
+#pragma message "Magic number - virtual rubber band constructor parameters"
 VirtualRubberBand::VirtualRubberBand(
         const Eigen::Vector3d& start_point,
         const Eigen::Vector3d& end_point,

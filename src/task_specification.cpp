@@ -10,6 +10,12 @@
 
 using namespace smmap;
 
+#pragma message "Magic number - Stretching weight multiplication factor here"
+#define STRETCHING_WEIGHT_MULTIPLICATION_FACTOR (2000.0)
+#pragma message "Magic number - Step size and min progress for forward projection of dijkstras field following"
+#define VECTOR_FIELD_FOLLOWING_NUM_STEPS        (10)
+#define VECTOR_FIELD_FOLLOWING_MIN_PROGRESS     (1e-6)
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////// Task Specification /////////////////////////////////////////////////////////
@@ -212,13 +218,13 @@ inline void addStrechingCorrectionVector(
     stretching_correction.delta.segment<3>(3 * second_node) -= correction_vector;
 
     // Set the weight to be the stretch distance of the worst offender
-    const double first_node_max_stretch = std::max(stretching_correction.weight(3 * first_node), 2000.0*node_distance_delta);
+    const double first_node_max_stretch = std::max(stretching_correction.weight(3 * first_node), STRETCHING_WEIGHT_MULTIPLICATION_FACTOR * node_distance_delta);
     stretching_correction.weight(3 * first_node)     = first_node_max_stretch;
     stretching_correction.weight(3 * first_node + 1) = first_node_max_stretch;
     stretching_correction.weight(3 * first_node + 2) = first_node_max_stretch;
 
     // Set the weight to be the stretch distance of the worst offender
-    const double second_node_max_stretch = std::max(stretching_correction.weight(3 * second_node), 2000.0*node_distance_delta);
+    const double second_node_max_stretch = std::max(stretching_correction.weight(3 * second_node), STRETCHING_WEIGHT_MULTIPLICATION_FACTOR * node_distance_delta);
     stretching_correction.weight(3 * second_node)     = second_node_max_stretch;
     stretching_correction.weight(3 * second_node + 1) = second_node_max_stretch;
     stretching_correction.weight(3 * second_node + 2) = second_node_max_stretch;
@@ -400,7 +406,8 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
             ROS_INFO_STREAM_NAMED("task_specification", "Found best error correction delta in " << stopwatch(READ) << " seconds");
 
             stopwatch(RESET);
-            first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, true);
+            const bool visualize_stretching_lines = false;
+            first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, visualize_stretching_lines);
             ROS_INFO_STREAM_NAMED("task_specification", "Found stretching correction delta in " << stopwatch(READ) << " seconds");
 
             stopwatch(RESET);
@@ -637,57 +644,6 @@ const DijkstrasCoverageTask::Correspondences& DijkstrasCoverageTask::getCoverPoi
 
             ROS_INFO_STREAM_NAMED("task_specification", "Calculated correspondences in        " << stopwatch(READ) << " seconds");
 
-            // Visualization
-            if (false)
-            {
-//                visualization_msgs::Marker marker;
-//                marker.header.frame_id = "mocap_world";
-//                marker.action = visualization_msgs::Marker::ADD;
-//                marker.type = visualization_msgs::Marker::ARROW;
-//                marker.scale.x = 0.005;
-//                marker.scale.y = 0.01;
-//                marker.scale.z = 0;
-
-//                for (ssize_t object_idx = 0; object_idx < num_nodes_; ++object_idx)
-//                {
-//                    const Eigen::Vector3d deformable_point = world_state.object_configuration_.col(object_idx);
-
-//                    for (size_t correspondence_idx = 0; correspondence_idx < current_correspondences_.correspondences_[object_idx].size(); ++correspondence_idx)
-//                    {
-//                        const ssize_t cover_idx             = current_correspondences_.correspondences_[object_idx][correspondence_idx];
-//                        const bool covered                  = current_correspondences_.correspondences_is_covered_[object_idx][correspondence_idx];
-//                        const Eigen::Vector3d& next_step    = current_correspondences_.correspondences_next_step_[object_idx][correspondence_idx];
-//                        const Eigen::Vector3d cover_point  = cover_points_.col(cover_idx);
-
-//                        marker.id = cover_idx + (int32_t)1;
-
-//                        marker.ns = "correspondences_next_step";
-//                        marker.points.clear();
-//                        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(deformable_point));
-//                        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(next_step));
-//                        marker.color = covered ? Visualizer::Black() : Visualizer::Cyan();
-//                        marker.scale.x = 0.002;
-//                        marker.scale.y = 0.005;
-//                        marker.scale.z = 0.01;
-//                        marker.header.stamp = ros::Time::now();
-//                        visualization_marker_pub_debugging_.publish(marker);
-
-//                        marker.ns = "correspondences";
-//                        marker.points.clear();
-//                        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(deformable_point));
-//                        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(cover_point));
-//                        marker.color = covered ? Visualizer::Black() : Visualizer::Blue();
-//                        marker.scale.x = 0.002;
-//                        marker.scale.y = 0.01;
-//                        marker.scale.z = 0.01;
-//                        marker.header.stamp = ros::Time::now();
-//                        visualization_marker_pub_debugging_.publish(marker);
-
-//                        std::this_thread::sleep_for(std::chrono::duration<double>(0.00001));
-//                    }
-//                }
-            }
-
             current_correspondences_last_simtime_calced_ = world_state.sim_time_;
             current_correspondences_calculated_.store(true);
             return current_correspondences_;
@@ -716,7 +672,11 @@ std::vector<EigenHelpers::VectorVector3d> DijkstrasCoverageTask::findPathFromObj
     // Next, for each deformable point, follow the (combined) Dijkstras field
     for (size_t deformable_ind = 0; (ssize_t)deformable_ind < num_nodes_; ++deformable_ind)
     {
-        dijkstras_paths[deformable_ind] = followCoverPointAssignments(object_configuration.col(deformable_ind), correspondences.correspondences_[deformable_ind], max_steps);
+        dijkstras_paths[deformable_ind] =
+                followCoverPointAssignments(
+                    object_configuration.col(deformable_ind),
+                    correspondences.correspondences_[deformable_ind],
+                    max_steps);
     }
 
     return dijkstras_paths;
@@ -809,6 +769,7 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_
 
         for (size_t correspondence_idx = 0; correspondence_idx < current_correspondences.size(); ++correspondence_idx)
         {
+            // If the current cover point is not covered (by this or another object point), then create a pull on the cloth/rope
             if (!current_correspondences_is_covered[correspondence_idx])
             {
                 const Eigen::Vector3d& target_point = current_correspondences_next_step[correspondence_idx];
@@ -839,9 +800,18 @@ bool DijkstrasCoverageTask::saveDijkstrasResults()
         free_space_graph_.SerializeSelf(buffer, &EigenHelpers::Serialize<Eigen::Vector3d>);
 
         // Next serialize the results themselves
-        const auto first_serializer = [] (const std::vector<int64_t>& vec_to_serialize, std::vector<uint8_t>& buffer) { return arc_helpers::SerializeVector<int64_t>(vec_to_serialize, buffer, &arc_helpers::SerializeFixedSizePOD<int64_t>); };
-        const auto second_serializer = [] (const std::vector<double>& vec_to_serialize, std::vector<uint8_t>& buffer) { return arc_helpers::SerializeVector<double>(vec_to_serialize, buffer, &arc_helpers::SerializeFixedSizePOD<double>); };
-        const auto pair_serializer = [&first_serializer, &second_serializer] (const std::pair<std::vector<int64_t>, std::vector<double>>& pair_to_serialize, std::vector<uint8_t>& buffer) { return arc_helpers::SerializePair<std::vector<int64_t>, std::vector<double>>(pair_to_serialize, buffer, first_serializer, second_serializer); };
+        const auto first_serializer = [] (const std::vector<int64_t>& vec_to_serialize, std::vector<uint8_t>& buffer)
+        {
+            return arc_helpers::SerializeVector<int64_t>(vec_to_serialize, buffer, &arc_helpers::SerializeFixedSizePOD<int64_t>);
+        };
+        const auto second_serializer = [] (const std::vector<double>& vec_to_serialize, std::vector<uint8_t>& buffer)
+        {
+            return arc_helpers::SerializeVector<double>(vec_to_serialize, buffer, &arc_helpers::SerializeFixedSizePOD<double>);
+        };
+        const auto pair_serializer = [&first_serializer, &second_serializer] (const std::pair<std::vector<int64_t>, std::vector<double>>& pair_to_serialize, std::vector<uint8_t>& buffer)
+        {
+            return arc_helpers::SerializePair<std::vector<int64_t>, std::vector<double>>(pair_to_serialize, buffer, first_serializer, second_serializer);
+        };
         arc_helpers::SerializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(dijkstras_results_, buffer, pair_serializer);
 
         // Compress and save to file
@@ -895,9 +865,18 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
         }
 
         // Next deserialze the Dijkstras results
-        const auto first_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current) { return arc_helpers::DeserializeVector<int64_t>(buffer, current, &arc_helpers::DeserializeFixedSizePOD<int64_t>); };
-        const auto second_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current) { return arc_helpers::DeserializeVector<double>(buffer, current, &arc_helpers::DeserializeFixedSizePOD<double>); };
-        const auto pair_deserializer = [&first_deserializer, &second_deserializer] (const std::vector<uint8_t>& buffer, const uint64_t current) { return arc_helpers::DeserializePair<std::vector<int64_t>, std::vector<double>>(buffer, current, first_deserializer, second_deserializer); };
+        const auto first_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            return arc_helpers::DeserializeVector<int64_t>(buffer, current, &arc_helpers::DeserializeFixedSizePOD<int64_t>);
+        };
+        const auto second_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            return arc_helpers::DeserializeVector<double>(buffer, current, &arc_helpers::DeserializeFixedSizePOD<double>);
+        };
+        const auto pair_deserializer = [&first_deserializer, &second_deserializer] (const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            return arc_helpers::DeserializePair<std::vector<int64_t>, std::vector<double>>(buffer, current, first_deserializer, second_deserializer);
+        };
 
         uint64_t current_position = serialzed_graph_size;
         const auto deserialized_result = arc_helpers::DeserializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(decompressed_dijkstras_results, current_position, pair_deserializer);
@@ -942,10 +921,9 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             const Eigen::Vector3d& graph_aligned_current_pos = free_space_graph_.GetNodeImmutable(graph_aligned_current_ind).GetValueImmutable();
             const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(target_ind_in_work_space_graph).GetValueImmutable();
 
-            #warning "Magic numbers - Step size for forward projection of dijkstras field following"
             if (deformable_type_ == DeformableType::CLOTH)
             {
-                summed_dijkstras_deltas += (target_point - graph_aligned_current_pos) / 10.0;
+                summed_dijkstras_deltas += (target_point - graph_aligned_current_pos) / (double)VECTOR_FIELD_FOLLOWING_NUM_STEPS;
             }
             else
             {
@@ -961,13 +939,13 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
 
             // Split the delta up into smaller steps to simulate "pulling" the cloth along with constant obstacle collision resolution
             Eigen::Vector3d net_delta = Eigen::Vector3d::Zero();
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < VECTOR_FIELD_FOLLOWING_NUM_STEPS; ++i)
             {
-                net_delta += combined_delta / 10.0;
+                net_delta += combined_delta / (double)VECTOR_FIELD_FOLLOWING_NUM_STEPS;
                 net_delta = environment_sdf_.ProjectOutOfCollision3d(current_pos + net_delta) - current_pos;
             }
 
-            progress = net_delta.squaredNorm() > 1e-6;
+            progress = net_delta.squaredNorm() > VECTOR_FIELD_FOLLOWING_MIN_PROGRESS;
             if (progress)
             {
                 current_pos += net_delta;
@@ -1036,24 +1014,6 @@ std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::fin
         const WorldState& world_state,
         const ssize_t cover_idx) const
 {
-//    const ssize_t interesting_cover_idx = 127;
-//    const double interesting_time = 3.96;
-
-//    visualization_msgs::Marker marker;
-//    marker.header.frame_id = "mocap_world";
-//    marker.type = visualization_msgs::Marker::POINTS;
-//    marker.action = visualization_msgs::Marker::ADD;
-//    marker.ns = "correspondence_distance_check";
-//    marker.id = 1;
-//    marker.scale.x = 0.01;
-//    marker.scale.y = 0.01;
-
-//    marker.points.reserve(50);
-//    marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(cover_points_.col(interesting_cover_idx)));
-
-//    marker.colors.reserve(50);
-//    marker.colors.push_back(Visualizer::Cyan());
-
     const Eigen::Vector3d& cover_point = cover_points_.col(cover_idx);
     const auto& dijkstras_individual_result         = dijkstras_results_[(size_t)cover_idx];
 
@@ -1066,16 +1026,6 @@ std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::fin
     {
         const Eigen::Vector3d& deformable_point = world_state.object_configuration_.col((size_t)deformable_idx);
         const double straight_line_distance = (cover_point - deformable_point).norm();
-
-//        if (world_state.sim_time_ > interesting_time &&
-//            cover_idx == interesting_cover_idx &&
-//            deformable_idx >= 1380 &&
-//            (deformable_idx % 30) < 4)
-//        {
-//            std::cout << "Deform idx: " << deformable_idx
-//                      << "    Straight line distance: " << straight_line_distance;
-//            std::cout << std::flush;
-//        }
 
         // First calculate the distance as defined by Dijkstras - code duplicated in FixedCorrespondencesTask::calculateObjectErrorCorrectionDelta_impl
         double graph_dist;
@@ -1097,22 +1047,6 @@ std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::fin
             }
         }
 
-//        if (world_state.sim_time_ > interesting_time &&
-//            cover_idx == interesting_cover_idx &&
-//            deformable_idx >= 1380 &&
-//            (deformable_idx % 30) < 4)
-//        {
-//            marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(deformable_point));
-//            marker.colors.push_back(Visualizer::Green());
-//            marker.colors.back().g = std::min(1.0f, (float)graph_dist * 4.0f);
-
-//            marker.header.stamp = ros::Time::now();
-//            visualization_marker_pub_temp_.publish(marker);
-
-//            std::cout << "    Final Distance:   " << graph_dist << std::endl;
-//            std::cout << std::flush;
-//        }
-
         // Next, if we've found something closer than our record, update our record of the closest point on the deformable object
         if (graph_dist < min_dist)
         {
@@ -1123,29 +1057,7 @@ std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::fin
 
         // Last, record if this point counts as covering the target (multiple deformable points may cover a single target point)
         covered |= pointIsCovered(cover_idx, deformable_point);
-
-//        if (pointIsCovered(cover_idx, deformable_point))
-//        {
-//            const Eigen::Vector3d cover_point_normal = cover_point_normals_.col(cover_idx);
-//            const auto distances_to_line = EigenHelpers::DistanceToLine(cover_point, cover_point_normal, deformable_point);
-
-//            std::cout << "Cover point:               " << cover_point.transpose() << std::endl;
-//            std::cout << "Normal vector:             " << cover_point_normal.transpose() << std::endl;
-//            std::cout << "Deformable point:          " << deformable_point.transpose() << std::endl;
-//            std::cout << "Distance to normal:        " << distances_to_line.first << std::endl;
-//            std::cout << "Displacement along normal: " << distances_to_line.second << std::endl;
-//            std::cout << "Straight line dist:        " << straight_line_distance << std::endl;
-//            std::cout << std::endl << std::flush;
-//        }
     }
-
-//    if (cover_idx == interesting_cover_idx)
-//    {
-//        marker.header.stamp = ros::Time::now();
-//        visualization_marker_pub_temp_.publish(marker);
-//        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
-//        ros::spinOnce();
-//    }
 
     return std::make_tuple(closest_deformable_idx, min_dist, best_target_idx_in_free_space_graph, covered);
 }
