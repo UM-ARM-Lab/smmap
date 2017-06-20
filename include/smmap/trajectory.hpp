@@ -166,7 +166,7 @@ namespace smmap
     // TODO: This is in the wrong spot
     inline Eigen::VectorXd CalculateDistanceToSet(const ObjectPointSet& obj, const Eigen::Vector3d& point)
     {
-        return CalculateSquaredDistanceToSet(obj, point). cwiseSqrt();
+        return CalculateSquaredDistanceToSet(obj, point).cwiseSqrt();
     }
 
     // TODO: use this for the coverage task error functions?

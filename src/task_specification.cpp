@@ -1,3 +1,4 @@
+#include <thread>
 #include <numeric>
 #include <arc_utilities/arc_exceptions.hpp>
 #include <arc_utilities/log.hpp>
@@ -106,6 +107,8 @@ TaskSpecification::TaskSpecification(
     , collision_scaling_factor_(GetCollisionScalingFactor(nh))
     , max_overstretch_factor_(GetStretchingThreshold(nh))
     , max_time_(GetMaxTime(nh))
+
+    , visualization_marker_pub_debugging_(nh_.advertise<visualization_msgs::Marker>("/debugging", 1000))
 {}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -435,10 +438,21 @@ CoverageTask::CoverageTask(
                        GetWorldZMin(nh), GetWorldZStep(nh), GetWorldZNumSteps(nh))
     , environment_sdf_(GetEnvironmentSDF(nh))
     , cover_points_(GetCoverPoints(nh))
+    , cover_point_normals_(GetCoverPointNormals(nh))
     , num_cover_points_(cover_points_.cols())
     , error_threshold_along_normal_(GetErrorThresholdAlongNormal(nh))
     , error_threshold_distance_to_normal_(GetErrorThresholdDistanceToNormal(nh))
 {}
+
+bool CoverageTask::pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d& test_point) const
+{
+    const auto cover_point          = cover_points_.col(cover_idx);
+    const auto cover_point_normal   = cover_point_normals_.col(cover_idx);
+
+    const std::pair<double, double> distances = EigenHelpers::DistanceToLine(cover_point, cover_point_normal, test_point);
+
+    return (distances.first < error_threshold_distance_to_normal_) && (std::abs(distances.second) < error_threshold_along_normal_);
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -599,7 +613,6 @@ const DijkstrasCoverageTask::Correspondences& DijkstrasCoverageTask::getCoverPoi
         else
         {
             stopwatch(RESET);
-
             current_correspondences_ = getCoverPointCorrespondences_impl(world_state);
 
             assert(current_correspondences_.uncovered_target_points_idxs_.size() == current_correspondences_.uncovered_target_points_distances_.size());
@@ -624,22 +637,56 @@ const DijkstrasCoverageTask::Correspondences& DijkstrasCoverageTask::getCoverPoi
 
             ROS_INFO_STREAM_NAMED("task_specification", "Calculated correspondences in        " << stopwatch(READ) << " seconds");
 
-            EigenHelpers::VectorVector3d start_points;
-            EigenHelpers::VectorVector3d correspondences_end_points;
-            EigenHelpers::VectorVector3d next_step_end_points;
-            for (ssize_t object_idx = 0; object_idx < num_nodes_; ++object_idx)
+            // Visualization
+            if (false)
             {
-                for (size_t correspondence_idx = 0; correspondence_idx < current_correspondences_.correspondences_[object_idx].size(); ++correspondence_idx)
-                {
-                    const ssize_t cover_idx = current_correspondences_.correspondences_[object_idx][correspondence_idx];
-                    start_points.push_back(world_state.object_configuration_.col(object_idx));
-                    correspondences_end_points.push_back(cover_points_.col(cover_idx));
-                    next_step_end_points.push_back(current_correspondences_.correspondences_next_step_[object_idx][correspondence_idx]);
-                }
-            }
+//                visualization_msgs::Marker marker;
+//                marker.header.frame_id = "mocap_world";
+//                marker.action = visualization_msgs::Marker::ADD;
+//                marker.type = visualization_msgs::Marker::ARROW;
+//                marker.scale.x = 0.005;
+//                marker.scale.y = 0.01;
+//                marker.scale.z = 0;
 
-//            vis_.visualizeLines("correspondences", start_points, correspondences_end_points, Visualizer::Blue(), 1);
-            vis_.visualizeLines("correspondences_next_step", start_points, next_step_end_points, Visualizer::Cyan(), 1);
+//                for (ssize_t object_idx = 0; object_idx < num_nodes_; ++object_idx)
+//                {
+//                    const Eigen::Vector3d deformable_point = world_state.object_configuration_.col(object_idx);
+
+//                    for (size_t correspondence_idx = 0; correspondence_idx < current_correspondences_.correspondences_[object_idx].size(); ++correspondence_idx)
+//                    {
+//                        const ssize_t cover_idx             = current_correspondences_.correspondences_[object_idx][correspondence_idx];
+//                        const bool covered                  = current_correspondences_.correspondences_is_covered_[object_idx][correspondence_idx];
+//                        const Eigen::Vector3d& next_step    = current_correspondences_.correspondences_next_step_[object_idx][correspondence_idx];
+//                        const Eigen::Vector3d cover_point  = cover_points_.col(cover_idx);
+
+//                        marker.id = cover_idx + (int32_t)1;
+
+//                        marker.ns = "correspondences_next_step";
+//                        marker.points.clear();
+//                        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(deformable_point));
+//                        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(next_step));
+//                        marker.color = covered ? Visualizer::Black() : Visualizer::Cyan();
+//                        marker.scale.x = 0.002;
+//                        marker.scale.y = 0.005;
+//                        marker.scale.z = 0.01;
+//                        marker.header.stamp = ros::Time::now();
+//                        visualization_marker_pub_debugging_.publish(marker);
+
+//                        marker.ns = "correspondences";
+//                        marker.points.clear();
+//                        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(deformable_point));
+//                        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(cover_point));
+//                        marker.color = covered ? Visualizer::Black() : Visualizer::Blue();
+//                        marker.scale.x = 0.002;
+//                        marker.scale.y = 0.01;
+//                        marker.scale.z = 0.01;
+//                        marker.header.stamp = ros::Time::now();
+//                        visualization_marker_pub_debugging_.publish(marker);
+
+//                        std::this_thread::sleep_for(std::chrono::duration<double>(0.00001));
+//                    }
+//                }
+            }
 
             current_correspondences_last_simtime_calced_ = world_state.sim_time_;
             current_correspondences_calculated_.store(true);
@@ -755,19 +802,19 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_
     {
         // Extract the correct part of each data structure
         const Eigen::Vector3d& deformable_point = object_configuration.col(deform_idx);
-        const std::vector<ssize_t>& current_correspondences             = correspondences.correspondences_[deform_idx];
-        const std::vector<bool>& current_correspondences_is_covered     = correspondences.correspondences_is_covered_[deform_idx];
-        const std::vector<double>& correspondences_distances            = correspondences.correspondences_distances_[deform_idx];
-        const EigenHelpers::VectorVector3d& correspondences_next_step   = correspondences.correspondences_next_step_[deform_idx];
+        const std::vector<ssize_t>& current_correspondences                     = correspondences.correspondences_[deform_idx];
+        const std::vector<bool>& current_correspondences_is_covered             = correspondences.correspondences_is_covered_[deform_idx];
+        const std::vector<double>& current_correspondences_distances            = correspondences.correspondences_distances_[deform_idx];
+        const EigenHelpers::VectorVector3d& current_correspondences_next_step   = correspondences.correspondences_next_step_[deform_idx];
 
         for (size_t correspondence_idx = 0; correspondence_idx < current_correspondences.size(); ++correspondence_idx)
         {
             if (!current_correspondences_is_covered[correspondence_idx])
             {
-                const Eigen::Vector3d& target_point = correspondences_next_step[correspondence_idx];
+                const Eigen::Vector3d& target_point = current_correspondences_next_step[correspondence_idx];
                 desired_object_delta.delta.segment<3>(deform_idx * 3) += (target_point - deformable_point);
 
-                const double weight = std::max(desired_object_delta.weight(deform_idx * 3), correspondences_distances[deform_idx]);
+                const double weight = std::max(desired_object_delta.weight(deform_idx * 3), current_correspondences_distances[correspondence_idx]);
                 desired_object_delta.weight(deform_idx * 3) = weight;
                 desired_object_delta.weight(deform_idx * 3 + 1) = weight;
                 desired_object_delta.weight(deform_idx * 3 + 2) = weight;
@@ -864,7 +911,6 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
         ROS_INFO_STREAM_NAMED("coverage_task", "Read solutions in " << stopwatch(READ) << " seconds");
         return true;
     }
-
     catch (...)
     {
         ROS_ERROR_NAMED("coverage_task", "Loading Dijkstras results from file failed");
@@ -958,7 +1004,8 @@ DijkstrasCoverageTask::Correspondences DistanceBasedCorrespondencesTask::getCove
         ssize_t closest_deformable_idx;
         double min_dist_to_deformable_object;
         ssize_t best_target_idx_in_free_space_graph;
-        std::tie(closest_deformable_idx, min_dist_to_deformable_object, best_target_idx_in_free_space_graph) =
+        bool covered;
+        std::tie(closest_deformable_idx, min_dist_to_deformable_object, best_target_idx_in_free_space_graph, covered) =
                 findNearestObjectPoint(world_state, cover_idx);
 
         // Record the results in the data structure
@@ -968,9 +1015,12 @@ DijkstrasCoverageTask::Correspondences DistanceBasedCorrespondencesTask::getCove
         correspondences.correspondences_distances_[closest_deformable_idx].push_back(min_dist_to_deformable_object);
 
         // Record the "coveredness" of this correspondence
-        correspondences.correspondences_is_covered_[closest_deformable_idx].push_back(false);
-        correspondences.uncovered_target_points_idxs_.push_back(cover_idx);
-        correspondences.uncovered_target_points_distances_.push_back(min_dist_to_deformable_object);
+        correspondences.correspondences_is_covered_[closest_deformable_idx].push_back(covered);
+        if (!covered)
+        {
+            correspondences.uncovered_target_points_idxs_.push_back(cover_idx);
+            correspondences.uncovered_target_points_distances_.push_back(min_dist_to_deformable_object);
+        }
     }
 
     return correspondences;
@@ -982,21 +1032,50 @@ DijkstrasCoverageTask::Correspondences DistanceBasedCorrespondencesTask::getCove
  * @param cover_ind
  * @return The index in object_configuration of the closest point as defined by Dijkstras, and the matching distance, and the index of the target position in the free space graph
  */
-std::tuple<ssize_t, double, ssize_t> DistanceBasedCorrespondencesTask::findNearestObjectPoint(
+std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::findNearestObjectPoint(
         const WorldState& world_state,
         const ssize_t cover_idx) const
 {
+//    const ssize_t interesting_cover_idx = 127;
+//    const double interesting_time = 3.96;
+
+//    visualization_msgs::Marker marker;
+//    marker.header.frame_id = "mocap_world";
+//    marker.type = visualization_msgs::Marker::POINTS;
+//    marker.action = visualization_msgs::Marker::ADD;
+//    marker.ns = "correspondence_distance_check";
+//    marker.id = 1;
+//    marker.scale.x = 0.01;
+//    marker.scale.y = 0.01;
+
+//    marker.points.reserve(50);
+//    marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(cover_points_.col(interesting_cover_idx)));
+
+//    marker.colors.reserve(50);
+//    marker.colors.push_back(Visualizer::Cyan());
+
     const Eigen::Vector3d& cover_point = cover_points_.col(cover_idx);
     const auto& dijkstras_individual_result         = dijkstras_results_[(size_t)cover_idx];
 
     ssize_t closest_deformable_idx = -1;
     double min_dist = std::numeric_limits<double>::infinity();
     ssize_t best_target_idx_in_free_space_graph = -1;
+    bool covered = false;
 
     for (ssize_t deformable_idx = 0; deformable_idx < num_nodes_; ++deformable_idx)
     {
         const Eigen::Vector3d& deformable_point = world_state.object_configuration_.col((size_t)deformable_idx);
         const double straight_line_distance = (cover_point - deformable_point).norm();
+
+//        if (world_state.sim_time_ > interesting_time &&
+//            cover_idx == interesting_cover_idx &&
+//            deformable_idx >= 1380 &&
+//            (deformable_idx % 30) < 4)
+//        {
+//            std::cout << "Deform idx: " << deformable_idx
+//                      << "    Straight line distance: " << straight_line_distance;
+//            std::cout << std::flush;
+//        }
 
         // First calculate the distance as defined by Dijkstras - code duplicated in FixedCorrespondencesTask::calculateObjectErrorCorrectionDelta_impl
         double graph_dist;
@@ -1006,7 +1085,7 @@ std::tuple<ssize_t, double, ssize_t> DistanceBasedCorrespondencesTask::findNeare
             if (straight_line_distance <= work_space_grid_.minStepDimension() * std::sqrt(2.0))
             {
                 target_idx_in_free_space_graph = cover_ind_to_free_space_graph_ind_[(size_t)cover_idx];
-                graph_dist = std::sqrt(straight_line_distance);
+                graph_dist = straight_line_distance;
             }
             // Otherwise use the Dijkstra's result
             else
@@ -1018,6 +1097,22 @@ std::tuple<ssize_t, double, ssize_t> DistanceBasedCorrespondencesTask::findNeare
             }
         }
 
+//        if (world_state.sim_time_ > interesting_time &&
+//            cover_idx == interesting_cover_idx &&
+//            deformable_idx >= 1380 &&
+//            (deformable_idx % 30) < 4)
+//        {
+//            marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(deformable_point));
+//            marker.colors.push_back(Visualizer::Green());
+//            marker.colors.back().g = std::min(1.0f, (float)graph_dist * 4.0f);
+
+//            marker.header.stamp = ros::Time::now();
+//            visualization_marker_pub_temp_.publish(marker);
+
+//            std::cout << "    Final Distance:   " << graph_dist << std::endl;
+//            std::cout << std::flush;
+//        }
+
         // Next, if we've found something closer than our record, update our record of the closest point on the deformable object
         if (graph_dist < min_dist)
         {
@@ -1025,9 +1120,34 @@ std::tuple<ssize_t, double, ssize_t> DistanceBasedCorrespondencesTask::findNeare
             closest_deformable_idx = deformable_idx;
             best_target_idx_in_free_space_graph = target_idx_in_free_space_graph;
         }
+
+        // Last, record if this point counts as covering the target (multiple deformable points may cover a single target point)
+        covered |= pointIsCovered(cover_idx, deformable_point);
+
+//        if (pointIsCovered(cover_idx, deformable_point))
+//        {
+//            const Eigen::Vector3d cover_point_normal = cover_point_normals_.col(cover_idx);
+//            const auto distances_to_line = EigenHelpers::DistanceToLine(cover_point, cover_point_normal, deformable_point);
+
+//            std::cout << "Cover point:               " << cover_point.transpose() << std::endl;
+//            std::cout << "Normal vector:             " << cover_point_normal.transpose() << std::endl;
+//            std::cout << "Deformable point:          " << deformable_point.transpose() << std::endl;
+//            std::cout << "Distance to normal:        " << distances_to_line.first << std::endl;
+//            std::cout << "Displacement along normal: " << distances_to_line.second << std::endl;
+//            std::cout << "Straight line dist:        " << straight_line_distance << std::endl;
+//            std::cout << std::endl << std::flush;
+//        }
     }
 
-    return std::make_tuple(closest_deformable_idx, min_dist, best_target_idx_in_free_space_graph);
+//    if (cover_idx == interesting_cover_idx)
+//    {
+//        marker.header.stamp = ros::Time::now();
+//        visualization_marker_pub_temp_.publish(marker);
+//        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+//        ros::spinOnce();
+//    }
+
+    return std::make_tuple(closest_deformable_idx, min_dist, best_target_idx_in_free_space_graph, covered);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1091,10 +1211,13 @@ DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCo
             const double final_distance = current_correspondences_distances.back();
 
             // Record the "coveredness" of this correspondence
-            #warning "Fixed correspondeces task not using any distance threshold for error or error correction"
-            current_correspondences_is_covered.push_back(false);
-            correspondences_external.uncovered_target_points_idxs_.push_back(cover_idx);
-            correspondences_external.uncovered_target_points_distances_.push_back(final_distance);
+            const bool covered = pointIsCovered(cover_idx, deformable_point);
+            current_correspondences_is_covered.push_back(covered);
+            if (!covered)
+            {
+                correspondences_external.uncovered_target_points_idxs_.push_back(cover_idx);
+                correspondences_external.uncovered_target_points_distances_.push_back(final_distance);
+            }
         }
     }
 

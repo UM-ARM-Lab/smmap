@@ -38,7 +38,7 @@ double ClothColabFolding::calculateError_impl(
     const ObjectPointSet& current_configuration = world_state.object_configuration_;
 
     double error = 0;
-    for (std::map<long, long>::const_iterator ittr = mirror_map_.begin(); ittr != mirror_map_.end(); ittr++)
+    for (std::map<long, long>::const_iterator ittr = mirror_map_.begin(); ittr != mirror_map_.end(); ++ittr)
     {
         error += (current_configuration.col(ittr->second) -
                    point_reflector_.reflect(current_configuration.col(ittr->first))).norm();
@@ -57,7 +57,7 @@ ObjectDeltaAndWeight ClothColabFolding::calculateObjectErrorCorrectionDelta_impl
 
     long robot_cloth_points_ind = 0;
     for (std::map<long, long>::const_iterator ittr = mirror_map_.begin();
-          ittr != mirror_map_.end(); ittr++, robot_cloth_points_ind++)
+          ittr != mirror_map_.end(); ++ittr, ++robot_cloth_points_ind)
     {
         desired_cloth_delta.delta.segment<3>(ittr->second * 3) =
                 point_reflector_.reflect(object_configuration.block<3, 1>(0, ittr->first))

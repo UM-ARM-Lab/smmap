@@ -120,7 +120,7 @@ VectorXd smmap::minSquaredNorm(const MatrixXd& A, const VectorXd& b, const doubl
             exit(-1);
         }
     }
-    catch(GRBException e)
+    catch(GRBException& e)
     {
         std::cout << "Error code = " << e.getErrorCode() << std::endl;
         std::cout << e.getMessage() << std::endl;
@@ -184,7 +184,7 @@ VectorXd smmap::minSquaredNorm(const MatrixXd& A, const VectorXd& b, const doubl
             exit(-1);
         }
     }
-    catch(GRBException e)
+    catch(GRBException& e)
     {
         std::cout << "Error code = " << e.getErrorCode() << std::endl;
         std::cout << e.getMessage() << std::endl;
@@ -260,7 +260,7 @@ Eigen::VectorXd smmap::minSquaredNormSE3VelocityConstraints(const Eigen::MatrixX
             exit(-1);
         }
     }
-    catch(GRBException e)
+    catch(GRBException& e)
     {
         std::cout << "Error code = " << e.getErrorCode() << std::endl;
         std::cout << e.getMessage() << std::endl;

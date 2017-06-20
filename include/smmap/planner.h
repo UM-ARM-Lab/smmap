@@ -83,17 +83,11 @@ namespace smmap
                     const AllGrippersSinglePose& starting_poses,
                     const std::vector<RRTConfig, RRTAllocator>& rrt_result) const;
 
-            EigenHelpers::VectorVector3d findPathBetweenPositions(
-                    const Eigen::Vector3d& start,
-                    const Eigen::Vector3d& goal) const;
-
             AllGrippersSinglePose getGripperTargets(
-                    const WorldState& current_world_state,
-                    const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths) const;
+                    const WorldState& world_state);
 
             void planGlobalGripperTrajectory(
-                    const WorldState& current_world_state,
-                    const std::vector<EigenHelpers::VectorVector3d>& projected_deformable_point_paths);
+                    const WorldState& world_state);
 
             ////////////////////////////////////////////////////////////////////
             // Model utility functions

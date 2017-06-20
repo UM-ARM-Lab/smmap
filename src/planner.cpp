@@ -126,21 +126,21 @@ void Planner::createBandits()
  * @return
  */
 WorldState Planner::sendNextCommand(
-        const WorldState& current_world_state)
+        const WorldState& world_state)
 {
     ROS_INFO_NAMED("planner", "---------------------------- Start of Loop -----------------------------------------");
-    const double current_error = task_specification_->calculateError(current_world_state);
-    ROS_INFO_STREAM_NAMED("planner", "Planner/Task sim time " << current_world_state.sim_time_ << "\t Error: " << current_error);
+    const double current_error = task_specification_->calculateError(world_state);
+    ROS_INFO_STREAM_NAMED("planner", "Planner/Task sim time " << world_state.sim_time_ << "\t Error: " << current_error);
 
-    if (task_specification_->is_dijkstras_type_task_ && current_world_state.all_grippers_single_pose_.size() == 2)
+    if (task_specification_->is_dijkstras_type_task_ && world_state.all_grippers_single_pose_.size() == 2)
     {
         if (executing_global_gripper_trajectory_)
         {
-            return sendNextCommandUsingGlobalGripperPlannerResults(current_world_state);
+            return sendNextCommandUsingGlobalGripperPlannerResults(world_state);
         }
         else
         {
-            const auto detection_results = detectFutureConstraintViolations(current_world_state);
+            const auto detection_results = detectFutureConstraintViolations(world_state);
             const std::vector<VectorVector3d>& projected_deformable_point_paths = detection_results.first;
             const std::vector<VirtualRubberBand>& projected_rubber_bands = detection_results.second;
 
@@ -148,7 +148,7 @@ WorldState Planner::sendNextCommand(
                     globalPlannerNeededDueToOverstretch(projected_rubber_bands);
 
             const bool global_planner_needed_due_to_collision =
-                    globalPlannerNeededDueToCollision(current_world_state);
+                    globalPlannerNeededDueToCollision(world_state);
 
             ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
 
@@ -159,29 +159,27 @@ WorldState Planner::sendNextCommand(
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "planner", "Invoking global planner due to overstretch");
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_collision, "planner", "Invoking global planner due to collision");
 
-                rrt_helper_->addBandToBlacklist(virtual_rubber_band_between_grippers_->getVectorRepresentation());
-                planGlobalGripperTrajectory(
-                            current_world_state,
-                            projected_deformable_point_paths);
-
                 vis_.deleteObjects("projected_gripper_rubber_band", 1, (int32_t)max_lookahead_steps_ + 10);
-                vis_.deleteObjects("projected_grippers", 1, (int32_t)max_lookahead_steps_ + 10);
-                vis_.deleteObjects("projected_point_path", 1, (int32_t)projected_deformable_point_paths.size() + 10);
-                vis_.deleteObjects("projected_point_path_lines", 1, (int32_t)projected_deformable_point_paths.size() + 10);
+                vis_.deleteObjects("projected_grippers",            1, (int32_t)max_lookahead_steps_ + 10);
+                vis_.deleteObjects("projected_point_path",          1, (int32_t)projected_deformable_point_paths.size() + 10);
+                vis_.deleteObjects("projected_point_path_lines",    1, (int32_t)projected_deformable_point_paths.size() + 10);
+
+                rrt_helper_->addBandToBlacklist(virtual_rubber_band_between_grippers_->getVectorRepresentation());
+                planGlobalGripperTrajectory(world_state);
 
                 ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
-                return sendNextCommandUsingGlobalGripperPlannerResults(current_world_state);
+                return sendNextCommandUsingGlobalGripperPlannerResults(world_state);
             }
             else
             {
-                return sendNextCommandUsingLocalController(current_world_state);
+                return sendNextCommandUsingLocalController(world_state);
             }
         }
     }
     else
     {
         ROS_WARN_NAMED("planner", "Unable to do future constraint violation detection");
-        return sendNextCommandUsingLocalController(current_world_state);
+        return sendNextCommandUsingLocalController(world_state);
     }
 }
 
@@ -551,7 +549,7 @@ bool Planner::globalPlannerNeededDueToOverstretch(
         const std::pair<Eigen::Vector3d, Eigen::Vector3d> endpoints = band.getEndpoints();
         const double distance_between_endpoints = (endpoints.first - endpoints.second).norm();
 
-        if (band.isOverstretched() && !EigenHelpers::CloseEnough(band_length, distance_between_endpoints, 1e-6))
+        if (band.isOverstretched() && !CloseEnough(band_length, distance_between_endpoints, 1e-6))
         {
             ++num_violations;
         }
@@ -595,27 +593,6 @@ bool Planner::globalPlannerNeededDueToCollision(
 // Global gripper planner functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Returns the endpoints of each internal vector, as well as the number of nodes in each path
-static std::pair<VectorVector3d, std::vector<double>> GetEndpoints(
-        const std::vector<VectorVector3d>& projected_deformable_point_paths)
-{
-    std::pair<VectorVector3d, std::vector<double>> results;
-    VectorVector3d& endpoints = results.first;
-    std::vector<double>& distance = results.second;
-
-    endpoints.reserve(projected_deformable_point_paths.size());
-    for (size_t idx = 0; idx < projected_deformable_point_paths.size(); ++idx)
-    {
-        if (projected_deformable_point_paths[idx].size() > 1)
-        {
-            endpoints.push_back(projected_deformable_point_paths[idx].back());
-            distance.push_back((double)projected_deformable_point_paths[idx].size());
-        }
-    }
-
-    return results;
-}
-
 AllGrippersPoseTrajectory Planner::convertRRTResultIntoGripperTrajectory(
         const AllGrippersSinglePose& starting_poses,
         const std::vector<RRTConfig, RRTAllocator>& rrt_result) const
@@ -645,8 +622,8 @@ AllGrippersPoseTrajectory Planner::convertRRTResultIntoGripperTrajectory(
     const auto interpolation_fn = [] (const AllGrippersSinglePose& a, const AllGrippersSinglePose& b, const double ratio)
     {
         AllGrippersSinglePose result = a;
-        result[0].translation() = EigenHelpers::Interpolate(a[0].translation(), b[0].translation(), ratio);
-        result[1].translation() = EigenHelpers::Interpolate(a[1].translation(), b[1].translation(), ratio);
+        result[0].translation() = Interpolate(a[0].translation(), b[0].translation(), ratio);
+        result[1].translation() = Interpolate(a[1].translation(), b[1].translation(), ratio);
         return result;
     };
 
@@ -654,88 +631,40 @@ AllGrippersPoseTrajectory Planner::convertRRTResultIntoGripperTrajectory(
     return resampled_traj;
 }
 
-VectorVector3d Planner::findPathBetweenPositions(
-        const Vector3d& start,
-        const Vector3d& goal) const
+AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
 {
-    const auto safe_config_fn = [&] (const Vector3d& config)
+    const auto correspondences = dijkstras_task_->getCoverPointCorrespondences(world_state);
+    const auto& cover_point_indices_= correspondences.uncovered_target_points_idxs_;
+
+    VectorVector3d cluster_targets;
+    cluster_targets.reserve(cover_point_indices_.size());
+    for (size_t idx = 0; idx < cover_point_indices_.size(); ++idx)
     {
-        return dijkstras_task_->environment_sdf_.Get3d(config) > 0.0;
-    };
-    assert(safe_config_fn(start) && safe_config_fn(goal));
-    const auto round_to_grid_fn = [&] (const Vector3d& config)
-    {
-        return dijkstras_task_->work_space_grid_.roundToGrid(config);
-    };
+        const ssize_t cover_idx = cover_point_indices_[idx];
+        cluster_targets.push_back(dijkstras_task_->cover_points_.col(cover_idx));
+    }
 
-    const auto neighbour_fn = [&] (const Vector3d& config)
-    {
-        return arc_utilities::GetNeighbours::ThreeDimensional8Connected<Vector3d, double, aligned_allocator<Vector3d>>(
-                            config,
-                            dijkstras_task_->work_space_grid_.getXMin(), dijkstras_task_->work_space_grid_.getXMax(),
-                            dijkstras_task_->work_space_grid_.getYMin(), dijkstras_task_->work_space_grid_.getYMax(),
-                            dijkstras_task_->work_space_grid_.getZMin(), dijkstras_task_->work_space_grid_.getZMax(),
-                            dijkstras_task_->work_space_grid_.minStepDimension(),
-                            round_to_grid_fn,
-                            safe_config_fn);
-    };
-    const auto distance_fn = [] (const Vector3d& c1, const Vector3d& c2)
-    {
-        return (c1 - c2).norm();
-    };
-    const auto heuristic_fn = [&] (const Vector3d& config)
-    {
-        return (config - goal).norm();
-    };
-    const auto goal_reached_fn = [&] (const Vector3d& config)
-    {
-        // Note that we can use "withing a 8-connected grid cell" as a goal check because we
-        // are explicitly adding the goal to the end of the path, and we just need to find a
-        // path to a node that is adjacent to the goal, as we know the goal is in free space
-        return (config - goal).norm() <= dijkstras_task_->work_space_grid_.minStepDimension() * 1.5;
-    };
+    vis_.visualizePoints("points_to_be_clustered", cluster_targets, Visualizer::Blue(), 1);
 
-    auto results = simple_astar_planner::SimpleAStarPlanner<Vector3d, aligned_allocator<Vector3d>>::Plan(start, neighbour_fn, distance_fn, heuristic_fn, goal_reached_fn);
-    assert(results.first.size() >= 1 && "AStar must have returned a valid path for any of the rest of this to work");
-
-    // Add the 2nd end of the configuration, using the rubber band smoothing process to remove it if it was extraneous
-    results.first.push_back(goal);
-    VirtualRubberBand goal_config_possible_band(results.first, virtual_rubber_band_between_grippers_->max_total_band_distance_, dijkstras_task_, vis_);
-
-    vis_.visualizeLineStrip("path_between_gripper_target_positions", goal_config_possible_band.getVectorRepresentation(), Visualizer::Green(), 1);
-    ROS_INFO_STREAM_NAMED("planner", "AStar path between configs statistics:\n" << PrettyPrint::PrettyPrint(results.second, true, "\n"));
-    return goal_config_possible_band.getVectorRepresentation();
-}
-
-AllGrippersSinglePose Planner::getGripperTargets(
-        const WorldState& current_world_state,
-        const std::vector<VectorVector3d>& projected_deformable_point_paths) const
-{
-    const std::pair<VectorVector3d, std::vector<double>> endpoints_and_weights = GetEndpoints(projected_deformable_point_paths);
-    const VectorVector3d target_points = endpoints_and_weights.first;
-    const std::vector<double> target_point_weights = endpoints_and_weights.second;
-
-    vis_.visualizePoints("points_to_be_clustered", target_points, Visualizer::Blue(), 1);
-
-    const Matrix3Xd target_points_as_matrix = VectorEigenVector3dToEigenMatrix3Xd(target_points);
-    const MatrixXd distance_matrix = CalculateSquaredDistanceMatrix(target_points_as_matrix);
+    const Matrix3Xd cluster_targets_as_matrix = VectorEigenVector3dToEigenMatrix3Xd(cluster_targets);
+    const MatrixXd distance_matrix = CalculateSquaredDistanceMatrix(cluster_targets_as_matrix);
 
     // Get the 2 most disparate points to initialize the clustering
     ssize_t row, col;
     distance_matrix.maxCoeff(&row, &col);
     assert(row != col);
-    const VectorVector3d starting_cluster_centers = {target_points[row], target_points[col]};
+    const VectorVector3d starting_cluster_centers = {cluster_targets[row], cluster_targets[col]};
 
     // Cluster the target points using K-means, then extract the cluster centers
     const std::function<double(const Vector3d&, const Vector3d&)> distance_fn = [] (const Vector3d& v1, const Vector3d& v2)
     {
         return (v1 - v2).norm();
     };
-    const std::function<Vector3d(const VectorVector3d&, const std::vector<double>&)> average_fn = [] (const VectorVector3d& data, const std::vector<double> weights)
+    const std::function<Vector3d(const VectorVector3d&)> average_fn = [] (const VectorVector3d& data)
     {
-        return AverageEigenVector3d(data, weights);
+        return AverageEigenVector3d(data);
     };
-    const auto cluster_results = simple_kmeans_clustering::SimpleKMeansClustering::ClusterWeighted(target_points, target_point_weights, distance_fn, average_fn, starting_cluster_centers);
+    const auto cluster_results = simple_kmeans_clustering::SimpleKMeansClustering::Cluster(cluster_targets, distance_fn, average_fn, starting_cluster_centers);
     VectorVector3d cluster_centers = cluster_results.second;
 
     vis_.visualizeCubes("cluster_centers_pre_project", cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Red(), 1);
@@ -750,7 +679,7 @@ AllGrippersSinglePose Planner::getGripperTargets(
 
 
     // Assign the gripper poses based on which one is nearest to each cluster center
-    AllGrippersSinglePose target_gripper_poses = current_world_state.all_grippers_single_pose_;
+    AllGrippersSinglePose target_gripper_poses = world_state.all_grippers_single_pose_;
     {
         const double dist_sq_gripper0_to_cluster0 = (target_gripper_poses[0].translation() - cluster_centers[0]).squaredNorm();
         const double dist_sq_gripper0_to_cluster1 = (target_gripper_poses[0].translation() - cluster_centers[1]).squaredNorm();
@@ -804,52 +733,117 @@ AllGrippersSinglePose Planner::getGripperTargets(
         }
     }
 
-    // Ensure that the shortest path between the grippers does not overstretch the deformable object
-    // Pull the grippers closer to each other if they are too far apart
-    {
-        const VectorVector3d path = findPathBetweenPositions(target_gripper_poses[0].translation(), target_gripper_poses[1].translation());
-        const std::vector<double> cummulative_distance = CalculateCumulativeDistances(path);
-        size_t starting_ind = 0, ending_ind = path.size() - 1;
-        while (cummulative_distance[ending_ind] - cummulative_distance[starting_ind] >= virtual_rubber_band_between_grippers_->max_total_band_distance_)
-        {
-            ++starting_ind;
-            --ending_ind;
-            assert(starting_ind < ending_ind);
-        }
-
-        target_gripper_poses[0].translation() = path[starting_ind];
-        target_gripper_poses[1].translation() = path[ending_ind];
-    }
-
     return target_gripper_poses;
 }
 
-void Planner::planGlobalGripperTrajectory(
-        const WorldState& current_world_state,
-        const std::vector<VectorVector3d>& projected_deformable_point_paths)
+void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
 {
-    RRTConfig start_config(
-                std::pair<Vector3d, Vector3d>(
-                            current_world_state.all_grippers_single_pose_[0].translation(),
-                            current_world_state.all_grippers_single_pose_[1].translation()),
-                *virtual_rubber_band_between_grippers_,
-                true);
+    // Deserialization
+//    {
+//        try
+//        {
+//            ROS_INFO_NAMED("rrt_planner_results", "Checking if RRT solution already exists");
+//            const std::string rrt_file_path = GetDijkstrasStorageLocation(nh_) + ".rrt";
+//            stopwatch(RESET);
+//            std::ifstream prev_rrt_result(rrt_file_path, std::ios::binary | std::ios::in | std::ios::ate);
+//            if (!prev_rrt_result.is_open())
+//            {
+//                throw_arc_exception(std::runtime_error, "Couldn't open file");
+//            }
 
-    // Note that the rubber band part of the target is ignored at the present time
-    const AllGrippersSinglePose target_grippers_pose = getGripperTargets(current_world_state, projected_deformable_point_paths);
-    const RRTGrippersRepresentation rrt_grippers_goal(
-        target_grippers_pose[0].translation(),
-        target_grippers_pose[1].translation());
+//            ROS_INFO_NAMED("rrt_planner_results", "Reading contents of file");
+//            std::streamsize size = prev_rrt_result.tellg();
+//            prev_rrt_result.seekg(0, std::ios::beg);
+//            std::vector<uint8_t> file_buffer((size_t)size);
+//            if (!(prev_rrt_result.read(reinterpret_cast<char*>(file_buffer.data()), size)))
+//            {
+//                throw_arc_exception(std::runtime_error, "Unable to read entire contents of file");
+//            }
+//            const std::vector<uint8_t> decompressed_rrt_results = ZlibHelpers::DecompressBytes(file_buffer);
 
-    const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
-    const auto rrt_results = rrt_helper_->rrtPlan(start_config, rrt_grippers_goal, time_limit);
+//            const auto deserialized_results = DeserializeAllGrippersPoseTrajectory(decompressed_rrt_results, 0);
+//            const auto deserialized_bytes_read = deserialized_results.second;
+//            assert(deserialized_bytes_read == decompressed_rrt_results.size());
 
-    rrt_helper_->visualize(rrt_results);
+//            global_plan_current_timestep_ = 0;
+//            executing_global_gripper_trajectory_ = true;
+//            global_plan_gripper_trajectory_ = deserialized_results.first;
 
-    global_plan_current_timestep_ = 0;
-    executing_global_gripper_trajectory_ = true;
-    global_plan_gripper_trajectory_ = convertRRTResultIntoGripperTrajectory(current_world_state.all_grippers_single_pose_, rrt_results);
+//            ROS_INFO_STREAM_NAMED("rrt_planner_results", "Read RRT solutions in " << stopwatch(READ) << " seconds");
+//            return;
+//        }
+//        catch (...)
+//        {
+//            ROS_ERROR_NAMED("rrt_planner_results", "Loading RRT results from file failed");
+//        }
+//    }
 
+    // Planning
+    {
+        RRTConfig start_config(
+                    std::pair<Vector3d, Vector3d>(
+                                world_state.all_grippers_single_pose_[0].translation(),
+                                world_state.all_grippers_single_pose_[1].translation()),
+                    *virtual_rubber_band_between_grippers_,
+                    true);
+
+        // Note that the rubber band part of the target is ignored at the present time
+        const AllGrippersSinglePose target_grippers_pose = getGripperTargets(world_state);
+        const RRTGrippersRepresentation rrt_grippers_goal(
+            target_grippers_pose[0].translation(),
+            target_grippers_pose[1].translation());
+
+        const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
+        const auto rrt_results = rrt_helper_->rrtPlan(start_config, rrt_grippers_goal, time_limit);
+
+        rrt_helper_->visualize(rrt_results);
+
+        global_plan_current_timestep_ = 0;
+        executing_global_gripper_trajectory_ = true;
+        global_plan_gripper_trajectory_ = convertRRTResultIntoGripperTrajectory(world_state.all_grippers_single_pose_, rrt_results);
+    }
+
+    // Serialization
+    {
+        try
+        {
+            // First serialize
+            std::vector<uint8_t> buffer;
+            const uint64_t bytes_used = SerializeAllGrippersPoseTrajectory(global_plan_gripper_trajectory_, buffer);
+            const auto deserialized_results = DeserializeAllGrippersPoseTrajectory(buffer, 0);
+            const auto& deserialized_traj = deserialized_results.first;
+            const auto deserialized_bytes_read = deserialized_results.second;
+
+            // Verify no mistakes made in serialization
+            assert(deserialized_bytes_read == bytes_used);
+            assert(global_plan_gripper_trajectory_.size() == deserialized_traj.size());
+            for (size_t time_idx = 0; time_idx < deserialized_traj.size(); ++time_idx)
+            {
+                const auto& planned_poses = global_plan_gripper_trajectory_[time_idx];
+                const auto& deserialized_poses = deserialized_traj[time_idx];
+
+                assert(planned_poses.size() == deserialized_poses.size());
+                for (size_t gripper_idx = 0; gripper_idx < deserialized_poses.size(); ++gripper_idx)
+                {
+                    assert(planned_poses[gripper_idx].matrix() == deserialized_poses[gripper_idx].matrix());
+                }
+            }
+
+            // Compress and save to file
+            ROS_INFO_NAMED("rrt_planner_results", "Compressing for storage");
+            const std::vector<uint8_t> compressed_serialized_data = ZlibHelpers::CompressBytes(buffer);
+            ROS_INFO_NAMED("rrt_planner_results", "Saving RRT results to file");
+            const std::string rrt_file_path = GetDijkstrasStorageLocation(nh_) + ".rrt";
+            std::ofstream output_file(rrt_file_path, std::ios::out | std::ios::binary);
+            uint64_t serialized_size = compressed_serialized_data.size();
+            output_file.write(reinterpret_cast<const char*>(compressed_serialized_data.data()), (std::streamsize)serialized_size);
+            output_file.close();
+        }
+        catch (...)
+        {
+            ROS_ERROR_NAMED("coverage_task", "Saving RRT results to file failed");
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -151,7 +151,6 @@ namespace smmap
             double current_error_last_simtime_calced_;
             double current_error_;
 
-
         public:
             // Records of task and deformable type if various visualizers or whatever need them
             const DeformableType deformable_type_;
@@ -179,6 +178,10 @@ namespace smmap
             const double collision_scaling_factor_;     // beta (or k2)
             const double max_overstretch_factor_;       // lambda
             const double max_time_;                     // max simulation time when scripting things
+
+
+            ros::Publisher visualization_marker_pub_debugging_;
+
 
         private:
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -224,9 +227,11 @@ namespace smmap
             const XYZGrid work_space_grid_;
             const sdf_tools::SignedDistanceField environment_sdf_;
 
-        protected:
+            bool pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d& test_point) const;
+
             /// Stores the points that we are trying to cover with the rope
             const ObjectPointSet cover_points_;
+            const ObjectPointSet cover_point_normals_;
             const ssize_t num_cover_points_;
 
             const double error_threshold_along_normal_;
@@ -359,7 +364,7 @@ namespace smmap
             virtual Correspondences getCoverPointCorrespondences_impl(
                     const WorldState& world_state) const final;
 
-            std::tuple<ssize_t, double, ssize_t> findNearestObjectPoint(
+            std::tuple<ssize_t, double, ssize_t, bool> findNearestObjectPoint(
                     const WorldState& world_state,
                     const ssize_t cover_idx) const;
     };
