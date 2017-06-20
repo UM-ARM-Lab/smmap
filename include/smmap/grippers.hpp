@@ -8,6 +8,7 @@
 
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
+#include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/pretty_print.hpp>
 #include <kinematics_toolbox/kinematics.h>
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
@@ -624,6 +625,77 @@ namespace smmap
                         obstacle_avoidance_scale);
         }
         return result;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////                Serializing and Deserializing                       ////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+
+    inline uint64_t SerializeAllGrippersSinglePose(const AllGrippersSinglePose& poses, std::vector<uint8_t>& buffer)
+    {
+        const std::function<uint64_t(const Eigen::Affine3d&, std::vector<uint8_t>&)> item_serializer = [] (const Eigen::Affine3d& pose, std::vector<uint8_t>& buffer)
+        {
+            const uint64_t start_buffer_size = buffer.size();
+
+            const uint64_t datalength = 16 * sizeof(double);
+            const double* data = pose.data();
+            const uint8_t* raw_data = (const uint8_t*)(data);
+
+            // Fixed-size serialization via memcpy
+            std::vector<uint8_t> temp_buffer(datalength, 0x00);
+            memcpy(&temp_buffer[0], raw_data, datalength);
+
+            // Move to buffer
+            buffer.insert(buffer.end(), temp_buffer.begin(), temp_buffer.end());
+
+            // Figure out how many bytes were written
+            const uint64_t end_buffer_size = buffer.size();
+            const uint64_t bytes_written = end_buffer_size - start_buffer_size;
+
+            // Make sure that the amount we copied is the same as the amount we were asked for
+            assert(bytes_written == datalength);
+            return bytes_written;
+        };
+        return arc_helpers::SerializeVector(poses, buffer, item_serializer);
+    }
+
+    inline std::pair<AllGrippersSinglePose, uint64_t> DeserializeAllGrippersSinglePose(const std::vector<uint8_t>& buffer, const uint64_t current)
+    {
+        const std::function<std::pair<Eigen::Affine3d, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> item_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            // Make sure there is enough data left
+            const uint64_t datalength = 16 * sizeof(double);
+            assert(current <= buffer.size());
+            assert((current + datalength) <= buffer.size());
+
+            // Memcopy the data into the eigen matrix
+            Eigen::Affine3d result;
+            memcpy(result.data(), &buffer[current], datalength);
+
+            // Return the result and the total amount of buffer "consumed"
+            return std::make_pair(result, datalength);
+        };
+        return arc_helpers::DeserializeVector<Eigen::Affine3d, Eigen::aligned_allocator<Eigen::Affine3d>>(buffer, current, item_deserializer);
+    }
+
+    inline uint64_t SerializeAllGrippersPoseTrajectory(const AllGrippersPoseTrajectory& traj, std::vector<uint8_t>& buffer)
+    {
+        const std::function<uint64_t(const AllGrippersSinglePose&, std::vector<uint8_t>&)> item_serializer = [] (const AllGrippersSinglePose& grippers_pose, std::vector<uint8_t>& buffer)
+        {
+            return SerializeAllGrippersSinglePose(grippers_pose, buffer);
+        };
+        return arc_helpers::SerializeVector(traj, buffer, item_serializer);
+    }
+
+    inline std::pair<AllGrippersPoseTrajectory, uint64_t> DeserializeAllGrippersPoseTrajectory(const std::vector<uint8_t>& buffer, const uint64_t current)
+    {
+        const std::function<std::pair<AllGrippersSinglePose, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> item_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            return DeserializeAllGrippersSinglePose(buffer, current);
+        };
+        return arc_helpers::DeserializeVector(buffer, current, item_deserializer);
     }
 }
 
