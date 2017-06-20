@@ -19,7 +19,8 @@ namespace smmap {
                                    GripperControllerType gripper_controller_type,
                                    const double max_gripper_translation_step,
                                    const double max_gripper_rotation_step,
-                                   const int64_t max_count);
+                                   const int64_t max_count,
+                                   const double distance_to_obstacle_threshold);
 
             //////////////////////////////////////////////////////////////////////////////////////
             // Called from outside to find the optimal gripper command
@@ -61,8 +62,12 @@ namespace smmap {
 
             kinematics::Vector6d singelGripperPoseDeltaSampler();
 
-            double errorOfControlByPrediction(ObjectPointSet& predicted_object_p_dot,
-                                              Eigen::VectorXd& desired_object_p_dot);
+            double errorOfControlByPrediction(const ObjectPointSet predicted_object_p_dot,
+                                              const Eigen::VectorXd &desired_object_p_dot);
+
+            std::pair<bool, std::vector<CollisionData>> gripperCollisionCheckResult(
+                    const AllGrippersSinglePose& current_gripper_pose,
+                    const AllGrippersSinglePoseDelta &test_gripper_motion);
 
 
 
@@ -85,6 +90,8 @@ namespace smmap {
             const double translation_upper_bound_;
             const double rotation_lower_bound_;
             const double rotation_upper_bound_;
+
+            const double distance_to_obstacle_threshold_;
 
             const int64_t max_count_;
 

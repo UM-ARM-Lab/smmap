@@ -128,6 +128,9 @@ Planner::Planner(
     , global_plan_gripper_trajectory_(0)
     , rrt_helper_(nullptr)
     , logging_enabled_(GetLoggingEnabled(nh_))
+    , seed_(GetPlannerSeed(ph_))
+    , generator_(seed_)
+//    , gripper_motion_generator_(nullptr)
 {
     // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
     if (task_specification_->is_dijkstras_type_task_)
@@ -175,6 +178,18 @@ Planner::Planner(
                             "error_delta_history",
                             Log::Log(log_folder + "error_delta_history.txt", false)));
     }
+/*
+    gripper_motion_generator_ = std::unique_ptr<GripperMotionGenerator>(
+                new GripperMotionGenerator(
+                    nh_,
+                    GetEnvironmentSDF(nh_),
+                    generator_,
+                    GetGripperControllerType(nh_),
+                    robot_.max_gripper_velocity_ * robot_.dt_,
+                    robot_.max_gripper_velocity_ * robot_.dt_,
+                    GetMaxSamplingCounts(nh_),
+                    GetDistanceToObstacleThreshold(nh_)));
+*/
 }
 
 void Planner::addModel(DeformableModel::Ptr model)
@@ -339,11 +354,23 @@ WorldState Planner::sendNextCommandUsingLocalController(
     {
         if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
         {
+            // grippers motion generated from pseudo-invese
+
             suggested_robot_commands[model_ind] =
                 model_list_[model_ind]->getSuggestedGrippersCommand(
                         model_input_data,
                         robot_.max_gripper_velocity_,
                         task_specification_->collisionScalingFactor());
+
+
+            /*
+            suggested_robot_commands[model_ind] =
+                    gripper_motion_generator_->findOptimalGripperMotion(
+                        model_list_[model_ind],
+                        model_input_data,
+                        robot_.max_gripper_velocity_,
+                        task_specification_->collisionScalingFactor());
+            */
         }
     }
 

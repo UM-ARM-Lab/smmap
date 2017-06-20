@@ -13,7 +13,8 @@ GripperMotionGenerator::GripperMotionGenerator(ros::NodeHandle &nh,
         GripperControllerType gripper_controller_type,
         const double max_gripper_translation_step,
         const double max_gripper_rotation_step,
-        const int64_t max_count)
+        const int64_t max_count,
+        const double distance_to_obstacle_threshold)
     : gripper_collision_checker_(nh)
     , enviroment_sdf_(environment_sdf)
 //    , robot_(robot)
@@ -24,6 +25,7 @@ GripperMotionGenerator::GripperMotionGenerator(ros::NodeHandle &nh,
     , translation_upper_bound_(max_gripper_translation_step)
     , rotation_lower_bound_(-max_gripper_rotation_step)
     , rotation_upper_bound_(max_gripper_rotation_step)
+    , distance_to_obstacle_threshold_(distance_to_obstacle_threshold)
     , max_count_(max_count)
 {
 
@@ -83,10 +85,13 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
         const double max_gripper_velocity,
         const double obstacle_avoidance_scale)
 {
+//    const double max_step_size = max_gripper_velocity * input_data.dt_;
+
     const Eigen::VectorXd& desired_object_p_dot =
             input_data.task_desired_object_delta_fn_(input_data.world_initial_state_).delta;
 
-    const int num_gripper = input_data.world_initial_state_.all_grippers_single_pose_.size();
+    const ssize_t num_grippers = input_data.world_initial_state_.all_grippers_single_pose_.size();
+    const ssize_t num_nodes = input_data.world_initial_state_.object_configuration_.cols();
 
     double min_error = -2.0;
     AllGrippersSinglePoseDelta optimal_gripper_command;
@@ -94,24 +99,47 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
     for (int64_t ind_count = 0; ind_count < max_count_; ind_count++)
     {
         AllGrippersSinglePoseDelta grippers_motion_sample;
-        for (int ind_gripper = 0; ind_gripper < num_gripper; ind_gripper++)
+        for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
         {
             // Eigen::Affine3d single_gripper_motion_sample = EigenHelpers::ExpTwist(singleGripperPoseDeltaSampler(), 1.0);
             grippers_motion_sample.push_back(singelGripperPoseDeltaSampler());
         }
 
-        ObjectPointSet predicted_object_p_dot = deformable_model->getProjectedObjectDelta(
-                    input_data,
-                    grippers_motion_sample,
-                    input_data.world_initial_state_.object_configuration_);
+        // Constraint violation checking here
+        bool constraint_violation = gripperCollisionCheckResult(input_data.world_initial_state_.all_grippers_single_pose_,
+                                                                grippers_motion_sample).first;
 
+        // If no constraint violation
+        if (!constraint_violation)
+        {
+            // get predicted object motion
+            ObjectPointSet predicted_object_p_dot = deformable_model->getProjectedObjectDelta(
+                        input_data,
+                        grippers_motion_sample,
+                        input_data.world_initial_state_.object_configuration_);
 
+            double sample_error = errorOfControlByPrediction(predicted_object_p_dot, desired_object_p_dot);
+
+            // Compare if the sample grippers motion is better than the best to now
+            if (min_error < 0 || sample_error < min_error)
+            {
+                min_error = sample_error;
+                optimal_gripper_command.clear();
+
+                for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
+                {
+                    optimal_gripper_command.push_back(grippers_motion_sample.at(ind_gripper));
+                }
+            }
+        }
 
     }
 
+    std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> suggested_grippers_command(
+                optimal_gripper_command,
+                ObjectPointSet::Zero(3, num_nodes));
 
-
-
+    return suggested_grippers_command;
 }
 
 
@@ -156,8 +184,8 @@ kinematics::Vector6d GripperMotionGenerator::singelGripperPoseDeltaSampler()
 }
 
 double GripperMotionGenerator::errorOfControlByPrediction(
-        ObjectPointSet& predicted_object_p_dot,
-        Eigen::VectorXd& desired_object_p_dot)
+        const ObjectPointSet predicted_object_p_dot,
+        const Eigen::VectorXd& desired_object_p_dot)
 {
     ssize_t num_nodes = predicted_object_p_dot.cols();
     double sum_of_error = 0;
@@ -174,6 +202,35 @@ double GripperMotionGenerator::errorOfControlByPrediction(
     return sum_of_error;
 }
 
+std::pair<bool, std::vector<CollisionData>> GripperMotionGenerator::gripperCollisionCheckResult(
+        const AllGrippersSinglePose& current_gripper_pose,
+        const AllGrippersSinglePoseDelta& test_gripper_motion)
+{
+    AllGrippersSinglePose gripper_test_pose;
+    for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
+    {
+        gripper_test_pose.at(gripper_ind) =
+                current_gripper_pose.at(gripper_ind) *
+                kinematics::expTwistAffine3d(test_gripper_motion.at(gripper_ind), 1.0);
+    }
 
+    std::vector<CollisionData> collision_data = gripper_collision_checker_.gripperCollisionCheck(gripper_test_pose);
+
+    bool collision_violation = false;
+    std::pair<bool, std::vector<CollisionData>> collision_result(collision_violation, collision_data);
+
+
+    for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
+    {
+        if (collision_data.at(gripper_ind).distance_to_obstacle_ < distance_to_obstacle_threshold_)
+        {
+            collision_violation = true;
+            collision_result.first = false;
+            return collision_result;
+        }
+    }
+
+    return collision_result;
+}
 
 
