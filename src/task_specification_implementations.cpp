@@ -119,6 +119,12 @@ std::map<long, long> ClothColabFolding::createMirrorMap(ros::NodeHandle& nh, con
     return mirror_map;
 }
 
+bool ClothColabFolding::taskDone_impl(
+        const WorldState& world_state)
+{
+    return false;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Rope cylinder coverage
@@ -150,6 +156,12 @@ void RopeCylinderCoverage::visualizeDeformableObject_impl(
 std::vector<ssize_t> RopeCylinderCoverage::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
+}
+
+bool RopeCylinderCoverage::taskDone_impl(
+        const WorldState& world_state)
+{
+    return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -186,6 +198,12 @@ std::vector<ssize_t> ClothCylinderCoverage::getNodeNeighbours_impl(const ssize_t
     return neighbours_.getNodeNeighbours(node);
 }
 
+bool ClothCylinderCoverage::taskDone_impl(
+        const WorldState& world_state)
+{
+    return false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cloth table coverage
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -216,6 +234,12 @@ void ClothTableCoverage::visualizeDeformableObject_impl(
 std::vector<ssize_t> ClothTableCoverage::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
+}
+
+bool ClothTableCoverage::taskDone_impl(
+        const WorldState& world_state)
+{
+    return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -250,6 +274,12 @@ std::vector<ssize_t> ClothWAFR::getNodeNeighbours_impl(const ssize_t node) const
     return neighbours_.getNodeNeighbours(node);
 }
 
+bool ClothWAFR::taskDone_impl(
+        const WorldState& world_state)
+{
+    return false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cloth wall
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -280,6 +310,12 @@ void ClothWall::visualizeDeformableObject_impl(
 std::vector<ssize_t> ClothWall::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
+}
+
+bool ClothWall::taskDone_impl(
+        const WorldState& world_state)
+{
+    return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -314,6 +350,12 @@ std::vector<ssize_t> ClothSinglePole::getNodeNeighbours_impl(const ssize_t node)
     return neighbours_.getNodeNeighbours(node);
 }
 
+bool ClothSinglePole::taskDone_impl(
+        const WorldState& world_state)
+{
+    return calculateError(world_state) < 0.1;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cloth double slit
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -344,6 +386,12 @@ void ClothDoubleSlit::visualizeDeformableObject_impl(
 std::vector<ssize_t> ClothDoubleSlit::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
+}
+
+bool ClothDoubleSlit::taskDone_impl(
+        const WorldState& world_state)
+{
+    return calculateError(world_state) < 0.1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -386,4 +434,10 @@ void RopeMaze::visualizeDeformableObject_impl(
 std::vector<ssize_t> RopeMaze::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
+}
+
+bool RopeMaze::taskDone_impl(
+        const WorldState& world_state)
+{
+    return false;
 }

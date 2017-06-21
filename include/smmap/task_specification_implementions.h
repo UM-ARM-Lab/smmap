@@ -35,6 +35,9 @@ namespace smmap
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
 
+            virtual bool taskDone_impl(
+                    const WorldState& world_state) final;
+
             const Grid4Neighbours neighbours_;
 
         private:
@@ -69,6 +72,9 @@ namespace smmap
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
 
+            virtual bool taskDone_impl(
+                    const WorldState& world_state) final;
+
             const LineNeighbours neighbours_;
     };
 
@@ -94,6 +100,9 @@ namespace smmap
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
+
+            virtual bool taskDone_impl(
+                    const WorldState& world_state) final;
 
             const Grid4Neighbours neighbours_;
     };
@@ -122,6 +131,9 @@ namespace smmap
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
 
+            virtual bool taskDone_impl(
+                    const WorldState& world_state) final;
+
             const Grid4Neighbours neighbours_;
     };
 
@@ -147,6 +159,9 @@ namespace smmap
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
+
+            virtual bool taskDone_impl(
+                    const WorldState& world_state) final;
 
             const Grid4Neighbours neighbours_;
     };
@@ -174,6 +189,9 @@ namespace smmap
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
 
+            virtual bool taskDone_impl(
+                    const WorldState& world_state) final;
+
             const Grid4Neighbours neighbours_;
     };
 
@@ -199,6 +217,9 @@ namespace smmap
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
+
+            virtual bool taskDone_impl(
+                    const WorldState& world_state) final;
 
             const Grid4Neighbours neighbours_;
     };
@@ -226,6 +247,9 @@ namespace smmap
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
 
+            virtual bool taskDone_impl(
+                    const WorldState& world_state) final;
+
             const Grid4Neighbours neighbours_;
     };
 
@@ -252,6 +276,9 @@ namespace smmap
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
+
+            virtual bool taskDone_impl(
+                    const WorldState& world_state) final;
 
             const LineNeighbours neighbours_;
     };

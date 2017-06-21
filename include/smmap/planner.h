@@ -1,7 +1,7 @@
 #ifndef SMMAP_PLANNER_H
 #define SMMAP_PLANNER_H
 
-//#include <arc_utilities/log.hpp>
+#include <arc_utilities/log.hpp>
 
 #include "smmap/task_function_pointer_types.h"
 #include "smmap/task_specification.h"
@@ -70,10 +70,10 @@ namespace smmap
                     const bool visualization_enabled = true);
 
             bool globalPlannerNeededDueToOverstretch(
-                    const std::vector<VirtualRubberBand>& projected_rubber_bands) const;
+                    const std::vector<VirtualRubberBand>& projected_rubber_bands);
 
-            bool globalPlannerNeededDueToCollision(
-                    const WorldState& current_world_state) const;
+            bool globalPlannerNeededDueToLackOfProgress(
+                    const WorldState& current_world_state);
 
             ////////////////////////////////////////////////////////////////////
             // Global gripper planner functions
@@ -152,11 +152,18 @@ namespace smmap
             std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_;
             const size_t max_grippers_pose_history_length_;
             AllGrippersPoseTrajectory grippers_pose_history_;
+            std::vector<double> error_history_;
 
             bool executing_global_gripper_trajectory_;
             size_t global_plan_current_timestep_;
             AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
             std::unique_ptr<RRTHelper> rrt_helper_;
+
+            ////////////////////////////////////////////////////////////////////
+            // Debugging tools
+            ////////////////////////////////////////////////////////////////////
+
+            std::map<std::string, Log::Log> loggers_;
     };
 }
 

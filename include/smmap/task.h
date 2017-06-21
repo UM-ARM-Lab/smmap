@@ -47,7 +47,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             bool logging_enabled_;
-            std::map<std::string, Log::Log> loggers;
+            std::map<std::string, Log::Log> loggers_;
             void logData(
                     const WorldState& current_world_state,
                     const Eigen::VectorXd& model_utility_mean,

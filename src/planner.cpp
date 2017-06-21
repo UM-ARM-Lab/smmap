@@ -19,6 +19,8 @@ using namespace Eigen;
 using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
 
+#define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constructor and model list builder
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -45,7 +47,7 @@ Planner::Planner(
     , task_specification_(task_specification)
     , dijkstras_task_(nullptr)
     , calculate_regret_(GetCalculateRegret(ph_))
-    , reward_std_dev_scale_factor_(1.0)
+    , reward_std_dev_scale_factor_(REWARD_STANDARD_DEV_SCALING_FACTOR_START)
     , process_noise_factor_(GetProcessNoiseFactor(ph_))
     , observation_noise_factor_(GetObservationNoiseFactor(ph_))
     , correlation_strength_factor_(GetCorrelationStrengthFactor(ph_))
@@ -76,9 +78,9 @@ Planner::Planner(
                         dijkstras_task_->work_space_grid_.minStepDimension(),
                         GetGripperRadius(),
                         GetRRTHomotopyDistancePenalty(),
-                        GetRRTMaxShortcutIndexDistance(),
-                        GetRRTMaxSmoothingIterations(),
-                        GetRRTMaxFailedSmoothingIterations()));
+                        GetRRTMaxShortcutIndexDistance(ph_),
+                        GetRRTMaxSmoothingIterations(ph_),
+                        GetRRTMaxFailedSmoothingIterations(ph_)));
     }
 
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
@@ -88,6 +90,14 @@ Planner::Planner(
         const std::string log_folder = GetLogFolder(nh_);
         Log::Log seed_log(log_folder + "seed.txt", false);
         LOG_STREAM(seed_log, std::hex << seed_);
+
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "19_step_grippers_distance_delta",
+                            Log::Log(log_folder + "19_step_grippers_distance_delta.txt", false)));
+
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "19_step_error_delta",
+                            Log::Log(log_folder + "19_step_error_delta.txt", false)));
     }
 }
 
@@ -147,17 +157,17 @@ WorldState Planner::sendNextCommand(
             const bool global_planner_needed_due_to_overstretch =
                     globalPlannerNeededDueToOverstretch(projected_rubber_bands);
 
-            const bool global_planner_needed_due_to_collision =
-                    globalPlannerNeededDueToCollision(world_state);
+            const bool global_planner_needed_due_to_lack_of_progress =
+                    globalPlannerNeededDueToLackOfProgress(world_state);
 
             ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
 
-            if (global_planner_needed_due_to_overstretch || global_planner_needed_due_to_collision)
+            if (global_planner_needed_due_to_overstretch || global_planner_needed_due_to_lack_of_progress)
             {
                 vis_.deleteObjects("desired_position", 1, 100);
 
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "planner", "Invoking global planner due to overstretch");
-                ROS_WARN_COND_NAMED(global_planner_needed_due_to_collision, "planner", "Invoking global planner due to collision");
+                ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "planner", "Invoking global planner due to collision");
 
                 vis_.deleteObjects("projected_gripper_rubber_band", 1, (int32_t)max_lookahead_steps_ + 10);
                 vis_.deleteObjects("projected_grippers",            1, (int32_t)max_lookahead_steps_ + 10);
@@ -221,14 +231,14 @@ void Planner::visualizeDesiredMotion(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 WorldState Planner::sendNextCommandUsingLocalController(
-        const WorldState& current_world_state)
+        const WorldState& world_state)
 {
     const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
     {
         return task_specification_->calculateDesiredDirection(world_state);
     };
-    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(current_world_state);
-    const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, current_world_state, robot_.dt_);
+    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(world_state);
+    const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, world_state, robot_.dt_);
 
 //    visualizeDesiredMotion(current_world_state, task_desired_motion);
 
@@ -260,7 +270,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     if (calculate_regret_ && num_models_ > 1)
     {
         stopwatch(RESET);
-        const double prev_error = task_specification_->calculateError(current_world_state);
+        const double prev_error = task_specification_->calculateError(world_state);
         const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
         {
             individual_rewards[model_ind] = prev_error - task_specification_->calculateError(world_state);
@@ -269,7 +279,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
         std::vector<AllGrippersSinglePose> poses_to_test(num_models_);
         for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
         {
-            poses_to_test[model_ind] = kinematics::applyTwist(current_world_state.all_grippers_single_pose_, suggested_robot_commands[model_ind].first);
+            poses_to_test[model_ind] = kinematics::applyTwist(world_state.all_grippers_single_pose_, suggested_robot_commands[model_ind].first);
         }
         robot_.testGrippersPoses(poses_to_test, test_feedback_fn);
 
@@ -280,7 +290,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     // Execute the command
     const AllGrippersSinglePoseDelta& selected_command = suggested_robot_commands[(size_t)model_to_use].first;
     ROS_INFO_STREAM_NAMED("planner", "Sending command to robot, action norm:  " << MultipleGrippersVelocity6dNorm(selected_command));
-    const WorldState world_feedback = robot_.sendGrippersPoses(kinematics::applyTwist(current_world_state.all_grippers_single_pose_, selected_command));
+    const WorldState world_feedback = robot_.sendGrippersPoses(kinematics::applyTwist(world_state.all_grippers_single_pose_, selected_command));
 
     if (virtual_rubber_band_between_grippers_ != nullptr)
     {
@@ -292,14 +302,17 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
         // Keep the last N grippers positions recorded to detect if the grippers are stuck
         grippers_pose_history_.push_back(world_feedback.all_grippers_single_pose_);
+        error_history_.push_back(dijkstras_task_->calculateError(world_state));
+        assert(grippers_pose_history_.size() == error_history_.size());
         if (grippers_pose_history_.size() > max_grippers_pose_history_length_)
         {
             grippers_pose_history_.erase(grippers_pose_history_.begin());
+            error_history_.erase(error_history_.begin());
         }
     }
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
-    updateModels(current_world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
+    updateModels(world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
 
     logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use, individual_rewards);
 
@@ -311,8 +324,8 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
 {
     (void)current_world_state;
     assert(executing_global_gripper_trajectory_);
-    assert(global_plan_gripper_trajectory_.size() < 5000);
-    assert(global_plan_current_timestep_ < 5000);
+//    assert(global_plan_gripper_trajectory_.size() < 5000);
+//    assert(global_plan_current_timestep_ < 5000);
     assert(global_plan_current_timestep_ < global_plan_gripper_trajectory_.size());
 
     const WorldState world_feedback = robot_.sendGrippersPoses(global_plan_gripper_trajectory_[global_plan_current_timestep_]);
@@ -326,9 +339,11 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
     if (global_plan_current_timestep_ == global_plan_gripper_trajectory_.size())
     {
         std::cerr << "Global plan finished, resetting grippers pose history\n";
+        std::cerr << "Global plan finished, resetting error history\n";
 
         executing_global_gripper_trajectory_ = false;
         grippers_pose_history_.clear();
+        error_history_.clear();
 
         vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_A_NS, 1, 200);
         vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_B_NS, 1, 200);
@@ -538,7 +553,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
 }
 
 bool Planner::globalPlannerNeededDueToOverstretch(
-        const std::vector<VirtualRubberBand>& projected_rubber_bands) const
+        const std::vector<VirtualRubberBand>& projected_rubber_bands)
 {
     size_t num_violations = 0;
 
@@ -558,9 +573,11 @@ bool Planner::globalPlannerNeededDueToOverstretch(
     return num_violations > (projected_rubber_bands.size() / 2);
 }
 
-bool Planner::globalPlannerNeededDueToCollision(
-        const WorldState& current_world_state) const
+bool Planner::globalPlannerNeededDueToLackOfProgress(
+        const WorldState& current_world_state)
 {
+    static double error_delta_threshold_for_progress = GetErrorDeltaThresholdForProgress(ph_);
+    static double grippers_distance_delta_threshold_for_progress = GetGrippersDistanceDeltaThresholdForProgress(ph_);
     (void)current_world_state;
 
     // If we have not yet collected enough data, then assume we are not stuck
@@ -573,18 +590,34 @@ bool Planner::globalPlannerNeededDueToCollision(
 
     // Calculate distances from the first gripper config to the last
     const AllGrippersSinglePose& start_config = grippers_pose_history_[0];
-    std::vector<double> distances(max_grippers_pose_history_length_ - 1);
+    const double start_error = error_history_[0];
+    std::vector<double> grippers_distance_deltas(max_grippers_pose_history_length_ - 1);
+    std::vector<double> error_deltas(max_grippers_pose_history_length_ - 1);
     for (size_t time_idx = 1; time_idx < max_grippers_pose_history_length_; ++time_idx)
     {
         const AllGrippersSinglePoseDelta grippers_delta = CalculateGrippersPoseDelta(start_config, grippers_pose_history_[time_idx]);
         const double distance = MultipleGrippersVelocity6dNorm(grippers_delta);
-        distances[time_idx - 1] = distance;
+        grippers_distance_deltas[time_idx - 1] = distance;
+        error_deltas[time_idx - 1] = error_history_[time_idx] - start_error;
     }
 
     // Determine if there is a general positive slope on the distances
     // - we should be moving away from the start config if we are not stuck
-    std::cerr //<< "Gripper distances for collision stuck detection:\n"
-              << PrettyPrint::PrettyPrint(distances, true, " ") << std::endl;
+    LOG(loggers_.at("19_step_grippers_distance_delta"), PrettyPrint::PrettyPrint(grippers_distance_deltas, false, ", "));
+
+    LOG(loggers_.at("19_step_error_delta"), PrettyPrint::PrettyPrint(error_deltas, false, ", "));
+
+    // If error has not decreased sufficiently, then we may not be making progress
+    const double error_improvemnt = start_error - error_history_.back();
+    if (error_improvemnt < error_delta_threshold_for_progress)
+    {
+        // If error has not decreased sufficiently, and the grippers have not moved much, then we are not making progress
+        const double grippers_distance_delta = grippers_distance_deltas.back();
+        if (grippers_distance_delta < grippers_distance_delta_threshold_for_progress)
+        {
+            return true;
+        }
+    }
 
     return false;
 }
@@ -592,44 +625,6 @@ bool Planner::globalPlannerNeededDueToCollision(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Global gripper planner functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-AllGrippersPoseTrajectory Planner::convertRRTResultIntoGripperTrajectory(
-        const AllGrippersSinglePose& starting_poses,
-        const std::vector<RRTConfig, RRTAllocator>& rrt_result) const
-{
-    assert(starting_poses.size() == 2);
-
-    AllGrippersPoseTrajectory traj;
-    traj.reserve(rrt_result.size());
-
-    for (size_t ind = 0; ind < rrt_result.size(); ++ind)
-    {
-        AllGrippersSinglePose grippers_poses(starting_poses);
-        grippers_poses[0].translation() = rrt_result[ind].getGrippers().first;
-        grippers_poses[1].translation() = rrt_result[ind].getGrippers().second;
-
-        traj.push_back(grippers_poses);
-    }
-
-    const auto distance_fn = [] (const AllGrippersSinglePose& a, const AllGrippersSinglePose& b)
-    {
-        const double gripper0_dist_sq = (a[0].translation() - b[0].translation()).squaredNorm();
-        const double gripper1_dist_sq = (a[1].translation() - b[1].translation()).squaredNorm();
-
-        return std::sqrt(gripper0_dist_sq + gripper1_dist_sq);
-    };
-
-    const auto interpolation_fn = [] (const AllGrippersSinglePose& a, const AllGrippersSinglePose& b, const double ratio)
-    {
-        AllGrippersSinglePose result = a;
-        result[0].translation() = Interpolate(a[0].translation(), b[0].translation(), ratio);
-        result[1].translation() = Interpolate(a[1].translation(), b[1].translation(), ratio);
-        return result;
-    };
-
-    const auto resampled_traj = shortcut_smoothing::ResamplePath<AllGrippersSinglePose>(traj, robot_.max_gripper_velocity_ * robot_.dt_, distance_fn, interpolation_fn);
-    return resampled_traj;
-}
 
 AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
 {
@@ -738,45 +733,48 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
 
 void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
 {
+    static int num_times_invoked = 0;
+    num_times_invoked++;
+
     // Deserialization
-//    {
-//        try
-//        {
-//            ROS_INFO_NAMED("rrt_planner_results", "Checking if RRT solution already exists");
-//            const std::string rrt_file_path = GetDijkstrasStorageLocation(nh_) + ".rrt";
-//            stopwatch(RESET);
-//            std::ifstream prev_rrt_result(rrt_file_path, std::ios::binary | std::ios::in | std::ios::ate);
-//            if (!prev_rrt_result.is_open())
-//            {
-//                throw_arc_exception(std::runtime_error, "Couldn't open file");
-//            }
+    {
+        try
+        {
+            ROS_INFO_NAMED("rrt_planner_results", "Checking if RRT solution already exists");
+            const std::string rrt_file_path = GetDijkstrasStorageLocation(nh_) + ".rrt." + PrettyPrint::PrettyPrint(num_times_invoked);
+            stopwatch(RESET);
+            std::ifstream prev_rrt_result(rrt_file_path, std::ios::binary | std::ios::in | std::ios::ate);
+            if (!prev_rrt_result.is_open())
+            {
+                throw_arc_exception(std::runtime_error, "Couldn't open file");
+            }
 
-//            ROS_INFO_NAMED("rrt_planner_results", "Reading contents of file");
-//            std::streamsize size = prev_rrt_result.tellg();
-//            prev_rrt_result.seekg(0, std::ios::beg);
-//            std::vector<uint8_t> file_buffer((size_t)size);
-//            if (!(prev_rrt_result.read(reinterpret_cast<char*>(file_buffer.data()), size)))
-//            {
-//                throw_arc_exception(std::runtime_error, "Unable to read entire contents of file");
-//            }
-//            const std::vector<uint8_t> decompressed_rrt_results = ZlibHelpers::DecompressBytes(file_buffer);
+            ROS_INFO_NAMED("rrt_planner_results", "Reading contents of file");
+            std::streamsize size = prev_rrt_result.tellg();
+            prev_rrt_result.seekg(0, std::ios::beg);
+            std::vector<uint8_t> file_buffer((size_t)size);
+            if (!(prev_rrt_result.read(reinterpret_cast<char*>(file_buffer.data()), size)))
+            {
+                throw_arc_exception(std::runtime_error, "Unable to read entire contents of file");
+            }
+            const std::vector<uint8_t> decompressed_rrt_results = ZlibHelpers::DecompressBytes(file_buffer);
 
-//            const auto deserialized_results = DeserializeAllGrippersPoseTrajectory(decompressed_rrt_results, 0);
-//            const auto deserialized_bytes_read = deserialized_results.second;
-//            assert(deserialized_bytes_read == decompressed_rrt_results.size());
+            const auto deserialized_results = DeserializeAllGrippersPoseTrajectory(decompressed_rrt_results, 0);
+            const auto deserialized_bytes_read = deserialized_results.second;
+            assert(deserialized_bytes_read == decompressed_rrt_results.size());
 
-//            global_plan_current_timestep_ = 0;
-//            executing_global_gripper_trajectory_ = true;
-//            global_plan_gripper_trajectory_ = deserialized_results.first;
+            global_plan_current_timestep_ = 0;
+            executing_global_gripper_trajectory_ = true;
+            global_plan_gripper_trajectory_ = deserialized_results.first;
 
-//            ROS_INFO_STREAM_NAMED("rrt_planner_results", "Read RRT solutions in " << stopwatch(READ) << " seconds");
-//            return;
-//        }
-//        catch (...)
-//        {
-//            ROS_ERROR_NAMED("rrt_planner_results", "Loading RRT results from file failed");
-//        }
-//    }
+            ROS_INFO_STREAM_NAMED("rrt_planner_results", "Read RRT solutions in " << stopwatch(READ) << " seconds");
+            return;
+        }
+        catch (...)
+        {
+            ROS_ERROR_NAMED("rrt_planner_results", "Loading RRT results from file failed");
+        }
+    }
 
     // Planning
     {
@@ -833,7 +831,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
             ROS_INFO_NAMED("rrt_planner_results", "Compressing for storage");
             const std::vector<uint8_t> compressed_serialized_data = ZlibHelpers::CompressBytes(buffer);
             ROS_INFO_NAMED("rrt_planner_results", "Saving RRT results to file");
-            const std::string rrt_file_path = GetDijkstrasStorageLocation(nh_) + ".rrt";
+            const std::string rrt_file_path = GetDijkstrasStorageLocation(nh_) + ".rrt." + PrettyPrint::PrettyPrint(num_times_invoked);
             std::ofstream output_file(rrt_file_path, std::ios::out | std::ios::binary);
             uint64_t serialized_size = compressed_serialized_data.size();
             output_file.write(reinterpret_cast<const char*>(compressed_serialized_data.data()), (std::streamsize)serialized_size);
@@ -844,6 +842,44 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
             ROS_ERROR_NAMED("coverage_task", "Saving RRT results to file failed");
         }
     }
+}
+
+AllGrippersPoseTrajectory Planner::convertRRTResultIntoGripperTrajectory(
+        const AllGrippersSinglePose& starting_poses,
+        const std::vector<RRTConfig, RRTAllocator>& rrt_result) const
+{
+    assert(starting_poses.size() == 2);
+
+    AllGrippersPoseTrajectory traj;
+    traj.reserve(rrt_result.size());
+
+    for (size_t ind = 0; ind < rrt_result.size(); ++ind)
+    {
+        AllGrippersSinglePose grippers_poses(starting_poses);
+        grippers_poses[0].translation() = rrt_result[ind].getGrippers().first;
+        grippers_poses[1].translation() = rrt_result[ind].getGrippers().second;
+
+        traj.push_back(grippers_poses);
+    }
+
+    const auto distance_fn = [] (const AllGrippersSinglePose& a, const AllGrippersSinglePose& b)
+    {
+        const double gripper0_dist_sq = (a[0].translation() - b[0].translation()).squaredNorm();
+        const double gripper1_dist_sq = (a[1].translation() - b[1].translation()).squaredNorm();
+
+        return std::sqrt(gripper0_dist_sq + gripper1_dist_sq);
+    };
+
+    const auto interpolation_fn = [] (const AllGrippersSinglePose& a, const AllGrippersSinglePose& b, const double ratio)
+    {
+        AllGrippersSinglePose result = a;
+        result[0].translation() = Interpolate(a[0].translation(), b[0].translation(), ratio);
+        result[1].translation() = Interpolate(a[1].translation(), b[1].translation(), ratio);
+        return result;
+    };
+
+    const auto resampled_traj = shortcut_smoothing::ResamplePath<AllGrippersSinglePose>(traj, robot_.max_gripper_velocity_ * robot_.dt_, distance_fn, interpolation_fn);
+    return resampled_traj;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

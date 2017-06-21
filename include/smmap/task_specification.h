@@ -78,6 +78,9 @@ namespace smmap
             ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta(
                     const WorldState& world_state);
 
+            bool taskDone(
+                    const WorldState& world_state);
+
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Helper functions
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -207,6 +210,9 @@ namespace smmap
                     const WorldState& world_state) = 0;
 
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const = 0;
+
+            virtual bool taskDone_impl(
+                    const WorldState& world_state) = 0;
     };
 
     class CoverageTask : public TaskSpecification

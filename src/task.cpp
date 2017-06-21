@@ -36,10 +36,11 @@ void Task::execute()
 
     while (robot_.ok())
     {
-        const WorldState current_world_state = world_feedback;
-        world_feedback = planner_.sendNextCommand(current_world_state);
+        const WorldState world_state = world_feedback;
+        world_feedback = planner_.sendNextCommand(world_state);
 
-        if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()))
+        if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()
+                     || task_specification_->taskDone(world_feedback)))
         {
             robot_.shutdown();
         }
@@ -190,27 +191,27 @@ void Task::initializeLogging()
 
         ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
 
-        loggers.insert(std::make_pair<std::string, Log::Log>(
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
                             "time",
                             Log::Log(log_folder + "time.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log>(
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
                             "error",
                             Log::Log(log_folder + "error.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log>(
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
                             "utility_mean",
                             Log::Log(log_folder + "utility_mean.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log>(
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
                             "utility_covariance",
                             Log::Log(log_folder + "utility_covariance.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log>(
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
                             "model_chosen",
                             Log::Log(log_folder + "model_chosen.txt", false)));
 
-        loggers.insert(std::make_pair<std::string, Log::Log>(
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
                             "rewards_for_all_models",
                             Log::Log(log_folder + "rewards_for_all_models.txt", false)));
 
@@ -238,22 +239,22 @@ void Task::logData(
                     Eigen::DontAlignCols,
                     " ", " ", "", "");
 
-        LOG(loggers.at("time"),
+        LOG(loggers_.at("time"),
              current_world_state.sim_time_);
 
-        LOG(loggers.at("error"),
+        LOG(loggers_.at("error"),
              task_specification_->calculateError(current_world_state));
 
-        LOG(loggers.at("utility_mean"),
+        LOG(loggers_.at("utility_mean"),
              model_utility_mean.format(single_line));
 
-        LOG(loggers.at("utility_covariance"),
+        LOG(loggers_.at("utility_covariance"),
              model_utility_covariance.format(single_line));
 
-        LOG(loggers.at("model_chosen"),
+        LOG(loggers_.at("model_chosen"),
              model_used);
 
-        LOG(loggers.at("rewards_for_all_models"),
+        LOG(loggers_.at("rewards_for_all_models"),
             PrettyPrint::PrettyPrint(rewards_for_all_models, false, " "));
     }
 }
