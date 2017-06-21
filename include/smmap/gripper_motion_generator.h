@@ -25,6 +25,7 @@ namespace smmap {
             //////////////////////////////////////////////////////////////////////////////////////
             // Called from outside to find the optimal gripper command
             //////////////////////////////////////////////////////////////////////////////////////
+
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> findOptimalGripperMotion(
                     const DeformableModel::Ptr deformable_model,
                     const DeformableModel::DeformableModelInputData &input_data,
@@ -45,8 +46,7 @@ namespace smmap {
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByRandomSampling(
                     const DeformableModel::Ptr deformable_model,
                     const DeformableModel::DeformableModelInputData &input_data,
-                    const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale);
+                    const double max_gripper_velocity);
 
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByUniformSampling(
                     const DeformableModel::Ptr deformable_model,
@@ -62,8 +62,9 @@ namespace smmap {
 
             kinematics::Vector6d singelGripperPoseDeltaSampler();
 
-            double errorOfControlByPrediction(const ObjectPointSet predicted_object_p_dot,
-                                              const Eigen::VectorXd &desired_object_p_dot);
+            double errorOfControlByPrediction(
+                    const ObjectPointSet& predicted_object_p_dot,
+                    const Eigen::VectorXd &desired_object_p_dot) const;
 
             std::pair<bool, std::vector<CollisionData>> gripperCollisionCheckResult(
                     const AllGrippersSinglePose& current_gripper_pose,

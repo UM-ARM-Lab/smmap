@@ -162,7 +162,6 @@ void Task::initializeModelSet(const WorldState& initial_world_state)
                               optimization_enabled));
 
     }
-    // Mengyao's model here
     else if (GetUseConstraintModel(ph_))
     {
         const double translation_dir_deformability = 20.0;
@@ -171,19 +170,12 @@ void Task::initializeModelSet(const WorldState& initial_world_state)
         // Douoble check this usage
         const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
 
-
         planner_.addModel(std::make_shared<ConstraintJacobianModel>(
                               translation_dir_deformability,
                               translation_dis_deformability,
                               rotation_deformability,
                               environment_sdf));
-
-        // ADD a diminishing model at the same time
-        planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-                              task_specification_->defaultDeformability(),
-                              optimization_enabled));
     }
-    // Mengyao's model above
     else
     {
         ROS_INFO_STREAM_NAMED("task", "Using default deformability value of "

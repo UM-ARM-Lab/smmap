@@ -51,13 +51,13 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::fi
         const double obstacle_avoidance_scale)
 {
     switch (gripper_controller_type_){
-        case GripperControllerType::RANDOM_SAMPLE:
+        case GripperControllerType::RANDOM_SAMPLING:
             return solvedByRandomSampling(deformable_model,
                                       input_data,
                                       max_gripper_velocity,
                                       obstacle_avoidance_scale);
             break;
-        case GripperControllerType::UNIFORM_SAMPLE:
+        case GripperControllerType::UNIFORM_SAMPLING:
             return solvedByUniformSampling(deformable_model,
                                       input_data,
                                       max_gripper_velocity,
@@ -82,18 +82,17 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::fi
 std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::solvedByRandomSampling(
         const DeformableModel::Ptr deformable_model,
         const DeformableModel::DeformableModelInputData &input_data,
-        const double max_gripper_velocity,
-        const double obstacle_avoidance_scale)
+        const double max_gripper_velocity)
 {
 //    const double max_step_size = max_gripper_velocity * input_data.dt_;
 
     const Eigen::VectorXd& desired_object_p_dot =
-            input_data.task_desired_object_delta_fn_(input_data.world_initial_state_).delta;
+            input_data.task_desired_object_delta_fn_(input_data.world_current_state_).delta;
 
-    const ssize_t num_grippers = input_data.world_initial_state_.all_grippers_single_pose_.size();
-    const ssize_t num_nodes = input_data.world_initial_state_.object_configuration_.cols();
+    const ssize_t num_grippers = input_data.world_current_state_.all_grippers_single_pose_.size();
+    const ssize_t num_nodes = input_data.world_current_state_.object_configuration_.cols();
 
-    double min_error = -2.0;
+    double min_error = std::numeric_limits<double>::infinity();
     AllGrippersSinglePoseDelta optimal_gripper_command;
 
     for (int64_t ind_count = 0; ind_count < max_count_; ind_count++)
@@ -106,22 +105,21 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
         }
 
         // Constraint violation checking here
-        bool constraint_violation = gripperCollisionCheckResult(input_data.world_initial_state_.all_grippers_single_pose_,
+        const bool constraint_violation = gripperCollisionCheckResult(input_data.world_current_state_.all_grippers_single_pose_,
                                                                 grippers_motion_sample).first;
 
         // If no constraint violation
         if (!constraint_violation)
         {
             // get predicted object motion
-            ObjectPointSet predicted_object_p_dot = deformable_model->getProjectedObjectDelta(
+            const ObjectPointSet predicted_object_p_dot = deformable_model->getObjectDelta(
                         input_data,
-                        grippers_motion_sample,
-                        input_data.world_initial_state_.object_configuration_);
+                        grippers_motion_sample);
 
-            double sample_error = errorOfControlByPrediction(predicted_object_p_dot, desired_object_p_dot);
+            const double sample_error = errorOfControlByPrediction(predicted_object_p_dot, desired_object_p_dot);
 
             // Compare if the sample grippers motion is better than the best to now
-            if (min_error < 0 || sample_error < min_error)
+            if (sample_error < min_error)
             {
                 min_error = sample_error;
                 optimal_gripper_command.clear();
@@ -132,7 +130,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
                 }
             }
         }
-
     }
 
     std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> suggested_grippers_command(
@@ -172,9 +169,21 @@ kinematics::Vector6d GripperMotionGenerator::singelGripperPoseDeltaSampler()
 
     kinematics::Vector6d random_sample;
 
-    random_sample(0) = x1;
-    random_sample(1) = y1;
-    random_sample(2) = z1;
+    // Q: how to set the fix step? only to translational motion?
+    double raw_norm = std::sqrt(std::pow(x1,2) + std::pow(y1,2) + std::pow(z1,2));
+
+    if (raw_norm > 0.000001)
+    {
+        random_sample(0) = x1/raw_norm * translation_upper_bound_;
+        random_sample(1) = y1/raw_norm * translation_upper_bound_;
+        random_sample(2) = z1/raw_norm * translation_upper_bound_;
+    }
+    else
+    {
+        random_sample(0) = x1;
+        random_sample(1) = y1;
+        random_sample(2) = z1;
+    }
 
     random_sample(3) = x2;
     random_sample(4) = y2;
@@ -184,8 +193,8 @@ kinematics::Vector6d GripperMotionGenerator::singelGripperPoseDeltaSampler()
 }
 
 double GripperMotionGenerator::errorOfControlByPrediction(
-        const ObjectPointSet predicted_object_p_dot,
-        const Eigen::VectorXd& desired_object_p_dot)
+        const ObjectPointSet& predicted_object_p_dot,
+        const Eigen::VectorXd& desired_object_p_dot) const
 {
     ssize_t num_nodes = predicted_object_p_dot.cols();
     double sum_of_error = 0;
@@ -209,9 +218,7 @@ std::pair<bool, std::vector<CollisionData>> GripperMotionGenerator::gripperColli
     AllGrippersSinglePose gripper_test_pose;
     for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
     {
-        gripper_test_pose.at(gripper_ind) =
-                current_gripper_pose.at(gripper_ind) *
-                kinematics::expTwistAffine3d(test_gripper_motion.at(gripper_ind), 1.0);
+        gripper_test_pose.push_back(current_gripper_pose.at(gripper_ind) * kinematics::expTwistAffine3d(test_gripper_motion.at(gripper_ind), 1.0));
     }
 
     std::vector<CollisionData> collision_data = gripper_collision_checker_.gripperCollisionCheck(gripper_test_pose);

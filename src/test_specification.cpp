@@ -89,8 +89,8 @@ TestSpecification::Ptr TestSpecification::MakeTestSpecification(ros::NodeHandle&
     // TODO: DEFINE MORE SUB CLASS FOR SPECIFIC TEST CASE DESING
     switch (task_type)
     {
-        case TaskType::ROPE_CYLINDER_COVERAGE:
-            return std::make_shared<RopeCylinderCoverageModelTest>(nh, ph);
+//        case TaskType::ROPE_CYLINDER_COVERAGE:
+//            return std::make_shared<RopeCylinderCoverageModelTest>(nh, ph);
 
         case TaskType::ROPE_DRAG_ALONG_TABLE:
             return std::make_shared<RopeTableDragModelTest>(nh, ph);

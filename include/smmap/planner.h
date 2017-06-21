@@ -13,9 +13,6 @@
 #include "smmap/virtual_rubber_band.h"
 #include "smmap/rrt_helper.h"
 
-#include "smmap/gripper_motion_generator.h"
-
-
 namespace smmap
 {
     class Planner
@@ -161,15 +158,6 @@ namespace smmap
             size_t global_plan_current_timestep_;
             AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
             std::unique_ptr<RRTHelper> rrt_helper_;
-
-//            GripperMotionGenerator gripper_motion_generator_;
-//            std::unique_ptr<GripperMotionGenerator> gripper_motion_generator_;
-
-            void updateModels(const WorldState& starting_world_state,
-                    const ObjectDeltaAndWeight& task_desired_motion,
-                    const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands,
-                    const ssize_t model_used,
-                    const WorldState& world_feedback);
 
             ////////////////////////////////////////////////////////////////////
             // Debugging tools

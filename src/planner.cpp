@@ -128,9 +128,6 @@ Planner::Planner(
     , global_plan_gripper_trajectory_(0)
     , rrt_helper_(nullptr)
     , logging_enabled_(GetLoggingEnabled(nh_))
-    , seed_(GetPlannerSeed(ph_))
-    , generator_(seed_)
-//    , gripper_motion_generator_(nullptr)
 {
     // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
     if (task_specification_->is_dijkstras_type_task_)
@@ -178,18 +175,6 @@ Planner::Planner(
                             "error_delta_history",
                             Log::Log(log_folder + "error_delta_history.txt", false)));
     }
-/*
-    gripper_motion_generator_ = std::unique_ptr<GripperMotionGenerator>(
-                new GripperMotionGenerator(
-                    nh_,
-                    GetEnvironmentSDF(nh_),
-                    generator_,
-                    GetGripperControllerType(nh_),
-                    robot_.max_gripper_velocity_ * robot_.dt_,
-                    robot_.max_gripper_velocity_ * robot_.dt_,
-                    GetMaxSamplingCounts(nh_),
-                    GetDistanceToObstacleThreshold(nh_)));
-*/
 }
 
 void Planner::addModel(DeformableModel::Ptr model)
@@ -355,22 +340,11 @@ WorldState Planner::sendNextCommandUsingLocalController(
         if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
         {
             // grippers motion generated from pseudo-invese
-
             suggested_robot_commands[model_ind] =
                 model_list_[model_ind]->getSuggestedGrippersCommand(
                         model_input_data,
                         robot_.max_gripper_velocity_,
                         task_specification_->collisionScalingFactor());
-
-
-            /*
-            suggested_robot_commands[model_ind] =
-                    gripper_motion_generator_->findOptimalGripperMotion(
-                        model_list_[model_ind],
-                        model_input_data,
-                        robot_.max_gripper_velocity_,
-                        task_specification_->collisionScalingFactor());
-            */
         }
     }
 
@@ -436,15 +410,14 @@ WorldState Planner::sendNextCommandUsingLocalController(
 //    Eigen::MatrixXd p_before_projection = model_list_[(size_t)model_to_use]->getVectorObjectDelta(model_input_data, selected_command);
 //    Eigen::MatrixXd p_after_projection = model_list_[(size_t)model_to_use]->computeObjectVelocityMask(current_world_state.object_configuration_, p_before_projection);
 
-    const ObjectPointSet& object_delta = suggested_robot_commands[(size_t)model_to_use].second;
+    const ObjectPointSet& predicted_object_delta = suggested_robot_commands[(size_t)model_to_use].second;
 
     vis_.visualizeObjectDelta(
                 "Model back_generated position",
                 world_state.object_configuration_,
-                world_state.object_configuration_ + 300.0 * object_delta,
+                world_state.object_configuration_ + 300.0 * predicted_object_delta,
                 Visualizer::Blue());
 //                Visualizer::Black());
-
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
     updateModels(world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
