@@ -54,14 +54,12 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::fi
         case GripperControllerType::RANDOM_SAMPLING:
             return solvedByRandomSampling(deformable_model,
                                       input_data,
-                                      max_gripper_velocity,
-                                      obstacle_avoidance_scale);
+                                      max_gripper_velocity);
             break;
         case GripperControllerType::UNIFORM_SAMPLING:
             return solvedByUniformSampling(deformable_model,
                                       input_data,
-                                      max_gripper_velocity,
-                                      obstacle_avoidance_scale);
+                                      max_gripper_velocity);
             break;
         // Default: return non-optimized result, simple pseudo inverse
         default:
@@ -84,7 +82,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
         const DeformableModel::DeformableModelInputData &input_data,
         const double max_gripper_velocity)
 {
-//    const double max_step_size = max_gripper_velocity * input_data.dt_;
+    const double max_step_size = max_gripper_velocity * input_data.dt_;
 
     const Eigen::VectorXd& desired_object_p_dot =
             input_data.task_desired_object_delta_fn_(input_data.world_current_state_).delta;
@@ -104,6 +102,41 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
             grippers_motion_sample.push_back(singelGripperPoseDeltaSampler());
         }
 
+
+        const std::vector<CollisionAvoidanceResult> grippers_collision_avoidance_result =
+                ComputeGripperObjectAvoidance(
+                    input_data.world_current_state_.gripper_collision_data_,
+                    input_data.world_current_state_.all_grippers_single_pose_,
+                    max_step_size);
+
+        AllGrippersSinglePoseDelta grippers_motion_collision_avoidance =
+                CombineDesiredAndObjectAvoidance(
+                    grippers_motion_sample,
+                    grippers_collision_avoidance_result,
+                    obstacle_avoidance_scale);
+
+        // get predicted object motion
+        ObjectPointSet predicted_object_p_dot = deformable_model->getObjectDelta(
+                    input_data,
+                    grippers_motion_collision_avoidance);
+
+        double sample_error = errorOfControlByPrediction(predicted_object_p_dot, desired_object_p_dot);
+
+        // Compare if the sample grippers motion is better than the best to now
+        if (min_error < 0 || sample_error < min_error)
+        {
+            min_error = sample_error;
+            optimal_gripper_command.clear();
+
+            for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
+            {
+                optimal_gripper_command.push_back(grippers_motion_collision_avoidance.at(ind_gripper));
+            }
+        }
+
+
+
+        /* // Method 1: use constraint_violation checker for gripper collosion
         // Constraint violation checking here
         const bool constraint_violation = gripperCollisionCheckResult(input_data.world_current_state_.all_grippers_single_pose_,
                                                                 grippers_motion_sample).first;
@@ -130,6 +163,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
                 }
             }
         }
+        */
     }
 
     std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> suggested_grippers_command(
@@ -143,8 +177,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
 std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::solvedByUniformSampling(
         const DeformableModel::Ptr deformable_model,
         const DeformableModel::DeformableModelInputData &input_data,
-        const double max_gripper_velocity,
-        const double obstacle_avoidance_scale)
+        const double max_gripper_velocity)
 {
 
 }

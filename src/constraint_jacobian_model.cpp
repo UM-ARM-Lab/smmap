@@ -74,7 +74,6 @@ ConstraintJacobianModel::ConstraintJacobianModel(
     {
         throw_arc_exception(std::runtime_error, "You must call SetInitialObjectConfiguration before constructing a ConstraintJacobianModel");
     }
-
     if (translation_dir_deformability < 0)
     {
         throw_arc_exception(std::invalid_argument, "translation_deformability must be >= 0");

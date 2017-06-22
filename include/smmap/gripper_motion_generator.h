@@ -51,8 +51,7 @@ namespace smmap {
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByUniformSampling(
                     const DeformableModel::Ptr deformable_model,
                     const DeformableModel::DeformableModelInputData &input_data,
-                    const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale);
+                    const double max_gripper_velocity);
 
 
 
