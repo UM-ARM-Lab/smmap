@@ -28,38 +28,39 @@ using namespace smmap;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
-        ros::NodeHandle& nh)
+        ros::NodeHandle& nh,
+        ros::NodeHandle& ph)
 {
     const TaskType task_type = GetTaskType(nh);
 
     switch (task_type)
     {
         case TaskType::ROPE_CYLINDER_COVERAGE:
-            return std::make_shared<RopeCylinderCoverage>(nh);
+            return std::make_shared<RopeCylinderCoverage>(nh, ph);
 
         case TaskType::CLOTH_TABLE_COVERAGE:
-            return std::make_shared<ClothTableCoverage>(nh);
+            return std::make_shared<ClothTableCoverage>(nh, ph);
 
         case TaskType::CLOTH_CYLINDER_COVERAGE:
-            return std::make_shared<ClothCylinderCoverage>(nh);
+            return std::make_shared<ClothCylinderCoverage>(nh, ph);
 
         case TaskType::CLOTH_COLAB_FOLDING:
-            return std::make_shared<ClothColabFolding>(nh);
+            return std::make_shared<ClothColabFolding>(nh, ph);
 
         case TaskType::CLOTH_WAFR:
-            return std::make_shared<ClothWAFR>(nh);
+            return std::make_shared<ClothWAFR>(nh, ph);
 
         case TaskType::CLOTH_SINGLE_POLE:
-            return std::make_shared<ClothSinglePole>(nh);
+            return std::make_shared<ClothSinglePole>(nh, ph);
 
         case TaskType::CLOTH_WALL:
-            return std::make_shared<ClothWall>(nh);
+            return std::make_shared<ClothWall>(nh, ph);
 
         case TaskType::CLOTH_DOUBLE_SLIT:
-            return std::make_shared<ClothDoubleSlit>(nh);
+            return std::make_shared<ClothDoubleSlit>(nh, ph);
 
         case TaskType::ROPE_MAZE:
-            return std::make_shared<RopeMaze>(nh);
+            return std::make_shared<RopeMaze>(nh, ph);
 
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
@@ -73,11 +74,13 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
 
 TaskSpecification::TaskSpecification(
         ros::NodeHandle& nh,
+        ros::NodeHandle& ph,
         const DeformableType deformable_type,
         const TaskType task_type,
         const bool is_dijkstras_type_task)
     : TaskSpecification(
           nh,
+          ph,
           Visualizer(nh),
           deformable_type,
           task_type,
@@ -86,35 +89,36 @@ TaskSpecification::TaskSpecification(
 
 TaskSpecification::TaskSpecification(
         ros::NodeHandle& nh,
+        ros::NodeHandle& ph,
         Visualizer vis,
         const DeformableType deformable_type,
         const TaskType task_type,
         const bool is_dijkstras_type_task)
     : first_step_calculated_(false)
-    , first_step_last_simtime_calced_(std::numeric_limits<double>::quiet_NaN())
+    , first_step_last_simtime_calced_(NAN)
     , first_step_desired_motion_(0)
     , first_step_error_correction_(0)
     , first_step_stretching_correction_(0)
 
     , current_error_calculated_(false)
-    , current_error_last_simtime_calced_(std::numeric_limits<double>::quiet_NaN())
-    , current_error_(std::numeric_limits<double>::quiet_NaN())
+    , current_error_last_simtime_calced_(NAN)
+    , current_error_(NAN)
 
     , deformable_type_(deformable_type)
     , task_type_(task_type)
     , is_dijkstras_type_task_(is_dijkstras_type_task)
 
     , nh_(nh)
+    , ph_(ph)
     , vis_(vis)
 
-    , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
+    , grippers_data_(GetGrippersData(nh_))
+    , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
     , num_nodes_(object_initial_node_distance_.cols())
-    , default_deformability_(GetDefaultDeformability(nh))
-    , collision_scaling_factor_(GetCollisionScalingFactor(nh))
-    , max_overstretch_factor_(GetStretchingThreshold(nh))
-    , max_time_(GetMaxTime(nh))
-
-    , visualization_marker_pub_debugging_(nh_.advertise<visualization_msgs::Marker>("/debugging", 1000))
+    , default_deformability_(GetDefaultDeformability(nh_))
+    , collision_scaling_factor_(GetCollisionScalingFactor(nh_))
+    , max_overstretch_factor_(GetStretchingThreshold(nh_))
+    , max_time_(GetMaxTime(nh_))
 {}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -159,9 +163,9 @@ double TaskSpecification::calculateError(const WorldState& world_state)
         }
         else
         {
-            stopwatch(RESET);
+            GlobalStopwatch(RESET);
             current_error_ = calculateError_impl(world_state);
-            ROS_INFO_STREAM_NAMED("task_specification", "Calculated error in                  " << stopwatch(READ) << " seconds");
+            ROS_INFO_STREAM_NAMED("task_specification", "Calculated error in                  " << GlobalStopwatch(READ) << " seconds");
 
             current_error_last_simtime_calced_ = world_state.sim_time_;
             current_error_calculated_.store(true);
@@ -407,19 +411,19 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
         }
         else
         {
-            stopwatch(RESET);
+            GlobalStopwatch(RESET);
             first_step_error_correction_ = calculateObjectErrorCorrectionDelta(world_state);
-            ROS_INFO_STREAM_NAMED("task_specification", "Found best error correction delta in " << stopwatch(READ) << " seconds");
+            ROS_INFO_STREAM_NAMED("task_specification", "Found best error correction delta in " << GlobalStopwatch(READ) << " seconds");
 
-            stopwatch(RESET);
+            GlobalStopwatch(RESET);
             const bool visualize_stretching_lines = false;
             first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, visualize_stretching_lines);
-            ROS_INFO_STREAM_NAMED("task_specification", "Found stretching correction delta in " << stopwatch(READ) << " seconds");
+            ROS_INFO_STREAM_NAMED("task_specification", "Found stretching correction delta in " << GlobalStopwatch(READ) << " seconds");
 
-            stopwatch(RESET);
+            GlobalStopwatch(RESET);
             first_step_desired_motion_ = combineErrorCorrectionAndStretchingCorrection(
                         first_step_error_correction_, first_step_stretching_correction_);
-            ROS_INFO_STREAM_NAMED("task_specification", "Combined deltas in                   " << stopwatch(READ) << " seconds");
+            ROS_INFO_STREAM_NAMED("task_specification", "Combined deltas in                   " << GlobalStopwatch(READ) << " seconds");
 
             first_step_last_simtime_calced_ = world_state.sim_time_;
             first_step_calculated_.store(true);
@@ -434,6 +438,12 @@ std::vector<ssize_t> TaskSpecification::getNodeNeighbours(const ssize_t node) co
     return getNodeNeighbours_impl(node);
 }
 
+const std::vector<long>& TaskSpecification::getGripperAttachedNodesIndices(const size_t gripper_idx) const
+{
+    assert(gripper_idx < grippers_data_.size());
+    return grippers_data_[gripper_idx].node_indices_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////// Coverage Task //////////////////////////////////////////////////////////////
@@ -442,10 +452,11 @@ std::vector<ssize_t> TaskSpecification::getNodeNeighbours(const ssize_t node) co
 
 CoverageTask::CoverageTask(
         ros::NodeHandle& nh,
+        ros::NodeHandle& ph,
         const DeformableType deformable_type,
         const TaskType task_type,
         const bool is_dijkstras_type_task = false)
-    : TaskSpecification(nh, deformable_type, task_type, is_dijkstras_type_task)
+    : TaskSpecification(nh, ph, deformable_type, task_type, is_dijkstras_type_task)
     , work_space_grid_(GetWorldXMin(nh), GetWorldXStep(nh), GetWorldXNumSteps(nh),
                        GetWorldYMin(nh), GetWorldYStep(nh), GetWorldYNumSteps(nh),
                        GetWorldZMin(nh), GetWorldZStep(nh), GetWorldZNumSteps(nh))
@@ -453,8 +464,9 @@ CoverageTask::CoverageTask(
     , cover_points_(GetCoverPoints(nh))
     , cover_point_normals_(GetCoverPointNormals(nh))
     , num_cover_points_(cover_points_.cols())
-    , error_threshold_along_normal_(GetErrorThresholdAlongNormal(nh))
-    , error_threshold_distance_to_normal_(GetErrorThresholdDistanceToNormal(nh))
+    , error_threshold_along_normal_(GetErrorThresholdAlongNormal(ph))
+    , error_threshold_distance_to_normal_(GetErrorThresholdDistanceToNormal(ph))
+    , error_threshold_task_done_(GetErrorThresholdTaskDone(ph))
 {}
 
 bool CoverageTask::pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d& test_point) const
@@ -475,9 +487,10 @@ bool CoverageTask::pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d
 
 DirectCoverageTask::DirectCoverageTask(
         ros::NodeHandle& nh,
+        ros::NodeHandle& ph,
         const DeformableType deformable_type,
         const TaskType task_type)
-    : CoverageTask(nh, deformable_type, task_type)
+    : CoverageTask(nh, ph, deformable_type, task_type)
 {}
 
 double DirectCoverageTask::calculateError_impl(const WorldState& world_state)
@@ -569,10 +582,11 @@ ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_imp
 
 DijkstrasCoverageTask::DijkstrasCoverageTask(
         ros::NodeHandle& nh,
+        ros::NodeHandle& ph,
         const DeformableType
         deformable_type,
         const TaskType task_type)
-    : CoverageTask(nh, deformable_type, task_type, true)
+    : CoverageTask(nh, ph, deformable_type, task_type, true)
     , current_correspondences_calculated_(false)
     , current_correspondences_last_simtime_calced_(std::numeric_limits<double>::quiet_NaN())
     , current_correspondences_(num_nodes_)
@@ -584,7 +598,7 @@ DijkstrasCoverageTask::DijkstrasCoverageTask(
     if (need_to_run_dijkstras)
     {
         ROS_INFO_STREAM_NAMED("coverage_task", "Generating " << num_cover_points_ << " Dijkstra's solutions");
-        stopwatch(RESET);
+        GlobalStopwatch(RESET);
         dijkstras_results_.resize((size_t)num_cover_points_);
         #pragma omp parallel for schedule(guided)
         for (size_t cover_ind = 0; cover_ind < (size_t)num_cover_points_; ++cover_ind)
@@ -596,7 +610,7 @@ DijkstrasCoverageTask::DijkstrasCoverageTask(
         ROS_INFO_NAMED("coverage_task", "Writing solutions to file");
 
         saveDijkstrasResults();
-        ROS_INFO_STREAM_NAMED("coverage_task", "Found solutions in " << stopwatch(READ) << " seconds");
+        ROS_INFO_STREAM_NAMED("coverage_task", "Found solutions in " << GlobalStopwatch(READ) << " seconds");
     }
 }
 
@@ -625,7 +639,7 @@ const DijkstrasCoverageTask::Correspondences& DijkstrasCoverageTask::getCoverPoi
         }
         else
         {
-            stopwatch(RESET);
+            GlobalStopwatch(RESET);
             current_correspondences_ = getCoverPointCorrespondences_impl(world_state);
 
             assert(current_correspondences_.uncovered_target_points_idxs_.size() == current_correspondences_.uncovered_target_points_distances_.size());
@@ -648,7 +662,7 @@ const DijkstrasCoverageTask::Correspondences& DijkstrasCoverageTask::getCoverPoi
             }
             assert((ssize_t)total_correspondences == num_cover_points_);
 
-            ROS_INFO_STREAM_NAMED("task_specification", "Calculated correspondences in        " << stopwatch(READ) << " seconds");
+            ROS_INFO_STREAM_NAMED("task_specification", "Calculated correspondences in        " << GlobalStopwatch(READ) << " seconds");
 
             current_correspondences_last_simtime_calced_ = world_state.sim_time_;
             current_correspondences_calculated_.store(true);
@@ -742,6 +756,34 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateErrorCorrectionDeltaFixedCo
     }
 
     return desired_object_delta;
+}
+
+std::vector<double> DijkstrasCoverageTask::averageDijkstrasDistanceBetweenGrippersAndClusters(
+        const Eigen::Affine3d& gripper_pose,
+        const std::vector<ssize_t>& cover_indices,
+        const std::vector<uint32_t>& cluster_labels,
+        const uint32_t num_clusters) const
+{
+    assert(cover_indices.size() == cluster_labels.size());
+    std::vector<std::vector<double>> distances(num_clusters);
+    const ssize_t gripper_idx_in_free_space_graph = work_space_grid_.worldPosToGridIndexClamped(gripper_pose.translation());
+
+    // Itterate through all of the cluster labels, looking up the dijkstras distance to the gripper for each
+    for (size_t label_idx = 0; label_idx < cluster_labels.size(); ++label_idx)
+    {
+        const uint32_t cluster_idx = cluster_labels[label_idx];
+        const ssize_t cover_idx = cover_indices[label_idx];
+
+        const double dijkstras_distance = dijkstras_results_[cover_idx].second[(size_t)gripper_idx_in_free_space_graph];
+        distances[cluster_idx].push_back(dijkstras_distance);
+    }
+
+    std::vector<double> average_distances(num_clusters, 0.0);
+    for (uint32_t cluster_idx = 0; cluster_idx < num_clusters; ++cluster_idx)
+    {
+        average_distances[cluster_idx] = EigenHelpers::AverageStdVectorDouble(distances[cluster_idx]);
+    }
+    return average_distances;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -844,7 +886,7 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
     {
         ROS_INFO_NAMED("coverage_task", "Checking if Dijkstra's solution already exists");
         const std::string dijkstras_file_path = GetDijkstrasStorageLocation(nh_);
-        stopwatch(RESET);
+        GlobalStopwatch(RESET);
         std::ifstream prev_dijkstras_result(dijkstras_file_path, std::ios::binary | std::ios::in | std::ios::ate);
         if (!prev_dijkstras_result.is_open())
         {
@@ -893,7 +935,7 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
             throw_arc_exception(std::runtime_error, "Invalid data size found");
         }
 
-        ROS_INFO_STREAM_NAMED("coverage_task", "Read solutions in " << stopwatch(READ) << " seconds");
+        ROS_INFO_STREAM_NAMED("coverage_task", "Read solutions in " << GlobalStopwatch(READ) << " seconds");
         return true;
     }
     catch (...)
@@ -971,9 +1013,10 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
 
 DistanceBasedCorrespondencesTask::DistanceBasedCorrespondencesTask(
         ros::NodeHandle& nh,
+        ros::NodeHandle& ph,
         const DeformableType deformable_type,
         const TaskType task_type)
-    : DijkstrasCoverageTask(nh, deformable_type, task_type)
+    : DijkstrasCoverageTask(nh, ph, deformable_type, task_type)
 {}
 
 DijkstrasCoverageTask::Correspondences DistanceBasedCorrespondencesTask::getCoverPointCorrespondences_impl(
@@ -1076,9 +1119,10 @@ std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::fin
 
 FixedCorrespondencesTask::FixedCorrespondencesTask(
         ros::NodeHandle& nh,
+        ros::NodeHandle& ph,
         const DeformableType deformable_type,
         const TaskType task_type)
-    : DijkstrasCoverageTask(nh, deformable_type, task_type)
+    : DijkstrasCoverageTask(nh, ph, deformable_type, task_type)
 {}
 
 DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCorrespondences_impl(

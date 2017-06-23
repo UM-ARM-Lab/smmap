@@ -33,15 +33,15 @@ namespace smmap
     struct GripperData
     {
         GripperData(const std::string& name, const std::vector<long>& node_indices)
-            : name(name)
-            , node_indices(node_indices)
+            : name_(name)
+            , node_indices_(node_indices)
         {}
 
         /// The name associated with this gripper
-        std::string name;
+        std::string name_;
 
         /// Vector of the indices of the nodes that are grasped by the gripper
-        std::vector<long> node_indices;
+        std::vector<long> node_indices_;
 
         /**
          * @brief operator <<
@@ -51,7 +51,7 @@ namespace smmap
          */
         friend std::ostream& operator<< (std::ostream& out, const GripperData& data)
         {
-            out << data.name << " Node Indices: " << PrettyPrint::PrettyPrint(data.node_indices);
+            out << data.name_ << " Node Indices: " << PrettyPrint::PrettyPrint(data.node_indices_);
             return out;
         }
     };
@@ -75,7 +75,7 @@ namespace smmap
 
         for (size_t gripper_ind = 0; gripper_ind < grippers_data.size(); gripper_ind++)
         {
-            names[gripper_ind] = grippers_data[gripper_ind].name;
+            names[gripper_ind] = grippers_data[gripper_ind].name_;
         }
 
         return names;
@@ -419,16 +419,16 @@ namespace smmap
     {
         public:
             CollisionData(const Eigen::Vector3d& nearest_point_to_obstacle,
-                           const Eigen::Vector3d& obstacle_surface_normal,
-                           const double distance_to_obstacle)
+                          const Eigen::Vector3d& obstacle_surface_normal,
+                          const double distance_to_obstacle)
                 : nearest_point_to_obstacle_(nearest_point_to_obstacle)
                 , obstacle_surface_normal_(obstacle_surface_normal)
                 , distance_to_obstacle_(distance_to_obstacle)
             {}
 
             CollisionData(Eigen::Vector3d&& nearest_point_to_obstacle,
-                           Eigen::Vector3d&& obstacle_surface_normal,
-                           const double distance_to_obstacle)
+                          Eigen::Vector3d&& obstacle_surface_normal,
+                          const double distance_to_obstacle)
                 : nearest_point_to_obstacle_(nearest_point_to_obstacle)
                 , obstacle_surface_normal_(obstacle_surface_normal)
                 , distance_to_obstacle_(distance_to_obstacle)

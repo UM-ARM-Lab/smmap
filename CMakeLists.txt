@@ -57,7 +57,7 @@ include_directories(include
     ${GUROBI_INCLUDE_DIRS}
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O3 -g -Wall -Wextra -Wpedantic -Wconversion")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -flto -O3 -g -Wall -Wextra -Wpedantic -Wconversion")
 
 unset(USE_OPEN_MP CACHE)
 option(USE_OPEN_MP "Set to ON if we want to use OpenMP" ON)
@@ -115,7 +115,7 @@ target_link_libraries(${PROJECT_NAME}_test_node_UCB ${catkin_LIBRARIES} ${GUROBI
 #add_executable(${PROJECT_NAME}_test_node_UCB nodes/${PROJECT_NAME}_test_node.cpp)
 #add_dependencies(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
 #target_link_libraries(${PROJECT_NAME}_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_LIBRARIES})
-set_target_properties(${PROJECT_NAME}_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
+set_target_properties(${PROJECT_NAME}_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT -DENABLE_PARALLEL_K_NEAREST_NEIGHBORS")
 
 ## Synthethic trials
 #add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp src/cvxopt_solvers.cpp src/gurobi_solvers.cpp)

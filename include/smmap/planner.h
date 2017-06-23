@@ -164,6 +164,19 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             std::map<std::string, Log::Log> loggers_;
+
+            const static std::string DESIRED_DELTA_NS;
+            const static std::string PROJECTED_GRIPPER_NS;
+            const static std::string PROJECTED_BAND_NS;
+            const static std::string PROJECTED_POINT_PATH_NS;
+            const static std::string PROJECTED_POINT_PATH_LINES_NS;
+
+            const static std::string CONSTRAINT_VIOLATION_VERSION1_NS;
+
+            const static std::string CLUSTERING_TARGETS_NS;
+            const static std::string CLUSTERING_RESULTS_PRE_PROJECT_NS;
+            const static std::string CLUSTERING_RESULTS_POST_PROJECT_NS;
+            const static std::string CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS;
     };
 }
 

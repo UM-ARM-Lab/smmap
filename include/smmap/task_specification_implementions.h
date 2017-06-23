@@ -12,7 +12,7 @@ namespace smmap
     class ClothColabFolding : public TaskSpecification
     {
         public:
-            ClothColabFolding(ros::NodeHandle& nh);
+            ClothColabFolding(ros::NodeHandle& nh, ros::NodeHandle& ph);
 
         private:
             virtual void visualizeDeformableObject_impl(
@@ -55,7 +55,7 @@ namespace smmap
     class RopeCylinderCoverage : public DirectCoverageTask
     {
         public:
-            RopeCylinderCoverage(ros::NodeHandle& nh);
+            RopeCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph);
 
         private:
             virtual void visualizeDeformableObject_impl(
@@ -84,7 +84,7 @@ namespace smmap
     class ClothTableCoverage : public DirectCoverageTask
     {
         public:
-            ClothTableCoverage(ros::NodeHandle& nh);
+            ClothTableCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph);
 
         private:
             void visualizeDeformableObject_impl(
@@ -114,7 +114,7 @@ namespace smmap
     class ClothCylinderCoverage : public DistanceBasedCorrespondencesTask
     {
         public:
-            ClothCylinderCoverage(ros::NodeHandle& nh);
+            ClothCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph);
 
         private:
             virtual void visualizeDeformableObject_impl(
@@ -143,7 +143,7 @@ namespace smmap
     class ClothWAFR : public DistanceBasedCorrespondencesTask
     {
         public:
-            ClothWAFR(ros::NodeHandle& nh);
+            ClothWAFR(ros::NodeHandle& nh, ros::NodeHandle& ph);
 
         private:
             virtual void visualizeDeformableObject_impl(
@@ -172,7 +172,7 @@ namespace smmap
     class ClothWall : public DistanceBasedCorrespondencesTask
     {
         public:
-            ClothWall(ros::NodeHandle& nh);
+            ClothWall(ros::NodeHandle& nh, ros::NodeHandle& ph);
 
         private:
             virtual void visualizeDeformableObject_impl(
@@ -201,7 +201,7 @@ namespace smmap
     class ClothSinglePole : public DistanceBasedCorrespondencesTask
     {
         public:
-            ClothSinglePole(ros::NodeHandle& nh);
+            ClothSinglePole(ros::NodeHandle& nh, ros::NodeHandle& ph);
 
         private:
             virtual void visualizeDeformableObject_impl(
@@ -230,7 +230,7 @@ namespace smmap
     class ClothDoubleSlit : public DistanceBasedCorrespondencesTask
     {
         public:
-            ClothDoubleSlit(ros::NodeHandle& nh);
+            ClothDoubleSlit(ros::NodeHandle& nh, ros::NodeHandle& ph);
 
         private:
             virtual void visualizeDeformableObject_impl(
@@ -260,7 +260,7 @@ namespace smmap
     class RopeMaze : public FixedCorrespondencesTask
     {
         public:
-            RopeMaze(ros::NodeHandle& nh);
+            RopeMaze(ros::NodeHandle& nh, ros::NodeHandle& ph);
 
         private:
             virtual void visualizeDeformableObject_impl(

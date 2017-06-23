@@ -29,7 +29,8 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             static TaskSpecification::Ptr MakeTaskSpecification(
-                    ros::NodeHandle& nh);
+                    ros::NodeHandle& nh,
+                    ros::NodeHandle& ph);
 
         public:
 
@@ -39,12 +40,14 @@ namespace smmap
 
             TaskSpecification(
                     ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
                     const DeformableType deformable_type,
                     const TaskType task_type,
                     const bool is_dijkstras_type_task = false);
 
             TaskSpecification(
                     ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
                     Visualizer vis,
                     const DeformableType deformable_type,
                     const TaskType task_type,
@@ -139,6 +142,8 @@ namespace smmap
 
             std::vector<ssize_t> getNodeNeighbours(const ssize_t node) const;
 
+            const std::vector<long>& getGripperAttachedNodesIndices(const size_t gripper_idx) const;
+
         private:
             // Data needed to avoid re-calculating the first desired step repeatedly
             std::atomic_bool first_step_calculated_;
@@ -172,7 +177,10 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             ros::NodeHandle nh_;
+            ros::NodeHandle ph_;
             Visualizer vis_;
+
+            const std::vector<GripperData> grippers_data_;
             const Eigen::MatrixXd object_initial_node_distance_;
             const ssize_t num_nodes_;
 
@@ -181,10 +189,6 @@ namespace smmap
             const double collision_scaling_factor_;     // beta (or k2)
             const double max_overstretch_factor_;       // lambda
             const double max_time_;                     // max simulation time when scripting things
-
-
-            ros::Publisher visualization_marker_pub_debugging_;
-
 
         private:
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -220,6 +224,7 @@ namespace smmap
         public:
             CoverageTask(
                     ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
                     const DeformableType deformable_type,
                     const TaskType task_type,
                     const bool is_dijkstras_type_task);
@@ -242,6 +247,7 @@ namespace smmap
 
             const double error_threshold_along_normal_;
             const double error_threshold_distance_to_normal_;
+            const double error_threshold_task_done_;
     };
 
 
@@ -250,6 +256,7 @@ namespace smmap
         public:
             DirectCoverageTask(
                     ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
                     const DeformableType deformable_type,
                     const TaskType task_type);
 
@@ -287,6 +294,7 @@ namespace smmap
 
             DijkstrasCoverageTask(
                     ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
                     const DeformableType deformable_type,
                     const TaskType task_type);
 
@@ -308,6 +316,12 @@ namespace smmap
             ObjectDeltaAndWeight calculateErrorCorrectionDeltaFixedCorrespondences(
                     const WorldState& world_state,
                     const std::vector<std::vector<ssize_t>>& correspondences);
+
+            std::vector<double> averageDijkstrasDistanceBetweenGrippersAndClusters(
+                    const Eigen::Affine3d& gripper_pose,
+                    const std::vector<ssize_t>& cover_indices,
+                    const std::vector<uint32_t>& cluster_labels,
+                    const uint32_t num_clusters) const;
 
         protected:
             /// Free space graph that creates a vector field for the deformable object to follow
@@ -363,6 +377,7 @@ namespace smmap
         public:
             DistanceBasedCorrespondencesTask(
                     ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
                     const DeformableType deformable_type,
                     const TaskType task_type);
 
@@ -380,6 +395,7 @@ namespace smmap
         public:
             FixedCorrespondencesTask(
                     ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
                     const DeformableType deformable_type,
                     const TaskType task_type);
 

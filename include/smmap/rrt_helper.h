@@ -90,7 +90,7 @@ namespace smmap
                     const double z_limits_upper,
                     const double max_step_size,
                     const double goal_reach_radius,
-                    const double gripper_radius,
+                    const double gripper_min_distance_to_obstacles,
                     const double homotopy_distance_penalty,
                     const int64_t max_shortcut_index_distance,
                     const uint32_t max_smoothing_iterations,
@@ -138,7 +138,7 @@ namespace smmap
              */
             std::vector<std::pair<RRTConfig, int64_t>> forwardPropogationFunction(
                     const RRTConfig& nearest_neighbor,
-                    const RRTConfig& random_target) const;
+                    const RRTConfig& random_target);
 
             ///////////////////////////////////////////////////////////////////////////////////////
             // Helper function for shortcut smoothing
@@ -148,10 +148,10 @@ namespace smmap
                     VirtualRubberBand rubber_band,
                     const std::vector<RRTConfig, RRTAllocator>& path,
                     const size_t start_index,
-                    const size_t end_index) const;
+                    const size_t end_index);
 
-            std::pair<std::vector<RRTConfig, RRTAllocator>, std::map<std::string, double>> rrtShortcutSmooth(
-                    const std::vector<RRTConfig, RRTAllocator>& path) const;
+            std::vector<RRTConfig, RRTAllocator> rrtShortcutSmooth(
+                    std::vector<RRTConfig, RRTAllocator> path);
 
 
         private:
@@ -175,10 +175,16 @@ namespace smmap
             const std_msgs::ColorRGBA band_overstretched_color_;
 
             RRTGrippersRepresentation grippers_goal_position_;
-
             std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
 
-            const double gripper_radius_;
+            const double gripper_min_distance_to_obstacles_;
+
+            // Planning and Smoothing statistics
+            std::map<std::string, double> statistics_;
+            double total_nearest_neighbour_time_;
+            double total_everything_included_forward_propogation_time_;
+            double total_band_forward_propogation_time_;
+            double total_first_order_vis_propogation_time_;
     };
 }
 

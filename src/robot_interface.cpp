@@ -66,11 +66,10 @@ const AllGrippersSinglePose RobotInterface::getGrippersPose()
         gripper_pose_client.waitForExistence();
 
         deformable_manipulation_msgs::GetGripperPose pose_srv_data;
-        pose_srv_data.request.name = grippers_data_[gripper_ind].name;
+        pose_srv_data.request.name = grippers_data_[gripper_ind].name_;
         if (!gripper_pose_client.call(pose_srv_data))
         {
-            ROS_FATAL_STREAM_NAMED("task", "Unabled to retrieve gripper pose: "
-                                    << grippers_data_[gripper_ind].name);
+            ROS_FATAL_STREAM_NAMED("task", "Unabled to retrieve gripper pose: " << grippers_data_[gripper_ind].name_);
         }
 
         grippers_pose[gripper_ind] =
@@ -85,13 +84,15 @@ WorldState RobotInterface::sendGrippersPoses(const AllGrippersSinglePose& grippe
     return sendGrippersPoses_impl(toRosGrippersPoses(grippers_poses));
 }
 
-bool RobotInterface::testGrippersPoses(const std::vector<AllGrippersSinglePose>& grippers_poses,
-                       const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback)
+bool RobotInterface::testGrippersPoses(
+        const std::vector<AllGrippersSinglePose>& grippers_poses,
+        const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback)
 {
     return testGrippersPoses_impl(toRosTestPosesGoal(grippers_poses), feedback_callback);
 }
 
-std::vector<CollisionData> RobotInterface::checkGripperCollision(const AllGrippersSinglePose& grippers_poses)
+std::vector<CollisionData> RobotInterface::checkGripperCollision(
+        const AllGrippersSinglePose& grippers_poses)
 {
     return gripper_collision_checker_.gripperCollisionCheck(grippers_poses);
 }
@@ -113,11 +114,10 @@ deformable_manipulation_msgs::ExecuteGripperMovementRequest RobotInterface::noOp
     for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
     {
         deformable_manipulation_msgs::GetGripperPose pose_srv_data;
-        pose_srv_data.request.name = grippers_data_[gripper_ind].name;
+        pose_srv_data.request.name = grippers_data_[gripper_ind].name_;
         if (!gripper_pose_client.call(pose_srv_data))
         {
-            ROS_FATAL_STREAM_NAMED("task", "Unabled to retrieve gripper pose: "
-                                    << grippers_data_[gripper_ind].name);
+            ROS_FATAL_STREAM_NAMED("task", "Unabled to retrieve gripper pose: " << grippers_data_[gripper_ind].name_);
         }
 
         movement_request.gripper_poses[gripper_ind] = pose_srv_data.response.pose;
@@ -144,8 +144,7 @@ deformable_manipulation_msgs::TestGrippersPosesGoal RobotInterface::toRosTestPos
     for (size_t pose_ind = 0; pose_ind < grippers_poses.size(); pose_ind++)
     {
         goal.poses_to_test[pose_ind].pose =
-                EigenHelpersConversions::VectorAffine3dToVectorGeometryPose(
-                    grippers_poses[pose_ind]);
+                EigenHelpersConversions::VectorAffine3dToVectorGeometryPose(grippers_poses[pose_ind]);
     }
 
     return goal;

@@ -139,7 +139,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
 
             const std::pair<double, long> nearest_node_on_gripper =
                     GetMinimumDistanceIndexToGripper(
-                        grippers_data_[(size_t)gripper_ind].node_indices,
+                        grippers_data_[(size_t)gripper_ind].node_indices_,
                         node_ind, object_initial_node_distance_);
 
             // Calculate the cross product between the grippers x, y, and z axes

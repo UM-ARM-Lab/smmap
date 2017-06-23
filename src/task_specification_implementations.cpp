@@ -7,8 +7,8 @@ using namespace smmap;
 // Colab folding
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothColabFolding::ClothColabFolding(ros::NodeHandle& nh)
-    : TaskSpecification(nh, DeformableType::CLOTH, TaskType::CLOTH_COLAB_FOLDING)
+ClothColabFolding::ClothColabFolding(ros::NodeHandle& nh, ros::NodeHandle& ph)
+    : TaskSpecification(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_COLAB_FOLDING)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
     , point_reflector_(createPointReflector(nh))
     , mirror_map_(createMirrorMap(nh, point_reflector_))
@@ -122,6 +122,7 @@ std::map<long, long> ClothColabFolding::createMirrorMap(ros::NodeHandle& nh, con
 bool ClothColabFolding::taskDone_impl(
         const WorldState& world_state)
 {
+    (void)world_state;
     return false;
 }
 
@@ -130,8 +131,8 @@ bool ClothColabFolding::taskDone_impl(
 // Rope cylinder coverage
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-RopeCylinderCoverage::RopeCylinderCoverage(ros::NodeHandle& nh)
-    : DirectCoverageTask(nh, DeformableType::ROPE, TaskType::ROPE_CYLINDER_COVERAGE)
+RopeCylinderCoverage::RopeCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph)
+    : DirectCoverageTask(nh, ph, DeformableType::ROPE, TaskType::ROPE_CYLINDER_COVERAGE)
     , neighbours_(num_nodes_)
 {}
 
@@ -161,15 +162,15 @@ std::vector<ssize_t> RopeCylinderCoverage::getNodeNeighbours_impl(const ssize_t 
 bool RopeCylinderCoverage::taskDone_impl(
         const WorldState& world_state)
 {
-    return false;
+    return calculateError(world_state) < error_threshold_task_done_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cloth cylinder coverage - unused
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothCylinderCoverage::ClothCylinderCoverage(ros::NodeHandle& nh)
-    : DistanceBasedCorrespondencesTask(nh, DeformableType::CLOTH, TaskType::CLOTH_CYLINDER_COVERAGE)
+ClothCylinderCoverage::ClothCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph)
+    : DistanceBasedCorrespondencesTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_CYLINDER_COVERAGE)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {
     assert(false && "This task has not been looked at in over a year");
@@ -201,15 +202,15 @@ std::vector<ssize_t> ClothCylinderCoverage::getNodeNeighbours_impl(const ssize_t
 bool ClothCylinderCoverage::taskDone_impl(
         const WorldState& world_state)
 {
-    return false;
+    return calculateError(world_state) < error_threshold_task_done_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cloth table coverage
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothTableCoverage::ClothTableCoverage(ros::NodeHandle& nh)
-    : DirectCoverageTask(nh, DeformableType::CLOTH, TaskType::CLOTH_TABLE_COVERAGE)
+ClothTableCoverage::ClothTableCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph)
+    : DirectCoverageTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_TABLE_COVERAGE)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {}
 
@@ -239,15 +240,15 @@ std::vector<ssize_t> ClothTableCoverage::getNodeNeighbours_impl(const ssize_t no
 bool ClothTableCoverage::taskDone_impl(
         const WorldState& world_state)
 {
-    return false;
+    return calculateError(world_state) < error_threshold_task_done_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cloth WAFR coverage
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothWAFR::ClothWAFR(ros::NodeHandle& nh)
-    : DistanceBasedCorrespondencesTask(nh, DeformableType::CLOTH, TaskType::CLOTH_WAFR)
+ClothWAFR::ClothWAFR(ros::NodeHandle& nh, ros::NodeHandle& ph)
+    : DistanceBasedCorrespondencesTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_WAFR)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {}
 
@@ -277,6 +278,8 @@ std::vector<ssize_t> ClothWAFR::getNodeNeighbours_impl(const ssize_t node) const
 bool ClothWAFR::taskDone_impl(
         const WorldState& world_state)
 {
+    assert(false && "This task needs to some revisions before it is used.");
+    (void)world_state;
     return false;
 }
 
@@ -284,8 +287,8 @@ bool ClothWAFR::taskDone_impl(
 // Cloth wall
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothWall::ClothWall(ros::NodeHandle& nh)
-    : DistanceBasedCorrespondencesTask(nh, DeformableType::CLOTH, TaskType::CLOTH_WALL)
+ClothWall::ClothWall(ros::NodeHandle& nh, ros::NodeHandle& ph)
+    : DistanceBasedCorrespondencesTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_WALL)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {}
 
@@ -315,6 +318,8 @@ std::vector<ssize_t> ClothWall::getNodeNeighbours_impl(const ssize_t node) const
 bool ClothWall::taskDone_impl(
         const WorldState& world_state)
 {
+    assert(false && "This task needs to some revisions before it is used.");
+    (void)world_state;
     return false;
 }
 
@@ -322,8 +327,8 @@ bool ClothWall::taskDone_impl(
 // Cloth Single Pole
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothSinglePole::ClothSinglePole(ros::NodeHandle& nh)
-    : DistanceBasedCorrespondencesTask(nh, DeformableType::CLOTH, TaskType::CLOTH_SINGLE_POLE)
+ClothSinglePole::ClothSinglePole(ros::NodeHandle& nh, ros::NodeHandle& ph)
+    : DistanceBasedCorrespondencesTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_SINGLE_POLE)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {}
 
@@ -353,15 +358,15 @@ std::vector<ssize_t> ClothSinglePole::getNodeNeighbours_impl(const ssize_t node)
 bool ClothSinglePole::taskDone_impl(
         const WorldState& world_state)
 {
-    return calculateError(world_state) < 0.1;
+    return calculateError(world_state) < error_threshold_task_done_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cloth double slit
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothDoubleSlit::ClothDoubleSlit(ros::NodeHandle& nh)
-    : DistanceBasedCorrespondencesTask(nh, DeformableType::CLOTH, TaskType::CLOTH_DOUBLE_SLIT)
+ClothDoubleSlit::ClothDoubleSlit(ros::NodeHandle& nh, ros::NodeHandle& ph)
+    : DistanceBasedCorrespondencesTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_DOUBLE_SLIT)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {}
 
@@ -391,15 +396,15 @@ std::vector<ssize_t> ClothDoubleSlit::getNodeNeighbours_impl(const ssize_t node)
 bool ClothDoubleSlit::taskDone_impl(
         const WorldState& world_state)
 {
-    return calculateError(world_state) < 0.1;
+    return calculateError(world_state) < error_threshold_task_done_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Rope maze
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-RopeMaze::RopeMaze(ros::NodeHandle& nh)
-    : FixedCorrespondencesTask(nh, DeformableType::ROPE, TaskType::ROPE_MAZE)
+RopeMaze::RopeMaze(ros::NodeHandle& nh, ros::NodeHandle& ph)
+    : FixedCorrespondencesTask(nh, ph, DeformableType::ROPE, TaskType::ROPE_MAZE)
     , neighbours_(num_nodes_)
 {
     assert(num_nodes_ == num_cover_points_);
@@ -439,5 +444,5 @@ std::vector<ssize_t> RopeMaze::getNodeNeighbours_impl(const ssize_t node) const
 bool RopeMaze::taskDone_impl(
         const WorldState& world_state)
 {
-    return false;
+    return calculateError(world_state) < error_threshold_task_done_;
 }

@@ -13,13 +13,15 @@ namespace smmap
                     const Eigen::Vector3d& start_point,
                     const Eigen::Vector3d& end_point,
                     const std::shared_ptr<DijkstrasCoverageTask>& task,
-                    const Visualizer& vis);
+                    const Visualizer& vis,
+                    std::mt19937_64& generator);
 
             VirtualRubberBand(
                     EigenHelpers::VectorVector3d starting_points,
                     const double max_total_band_distance,
                     const std::shared_ptr<DijkstrasCoverageTask>& task,
-                    const Visualizer& vis);
+                    const Visualizer& vis,
+                    std::mt19937_64& generator);
 
             smmap::VirtualRubberBand& operator=(const smmap::VirtualRubberBand& other);
 
@@ -52,6 +54,11 @@ namespace smmap
             const Visualizer& vis_;
 
         public:
+            static const std::string BAND_POST_FORWARD_STEP_NS;
+            static const std::string BAND_POST_SUBDIVIDE_STEP_NS;
+            static const std::string BAND_POST_SHORTCUT_SMOOTHING_NS;
+            static const std::string BAND_BADNESS_NS;
+
             const double max_integration_step_size_;
             const double max_distance_between_rubber_band_points_;
             const int num_smoothing_ittrs_;
@@ -61,8 +68,7 @@ namespace smmap
         private:
             EigenHelpers::VectorVector3d band_;
 
-//            static std::default_random_engine generator_(std::chrono::system_clock::now().time_since_epoch().count());
-            static std::default_random_engine generator_;
+            std::mt19937_64& generator_;
     };
 }
 

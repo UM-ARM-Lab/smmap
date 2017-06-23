@@ -106,7 +106,7 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToDeformableObjectJacob
         {
             const double dist_to_gripper =
                     GetMinimumDistanceToGripper(
-                        grippers_data_[(size_t)gripper_ind].node_indices,
+                        grippers_data_[(size_t)gripper_ind].node_indices_,
                         node_ind, object_initial_node_distance_);
 
             const Matrix3d& J_trans = gripper_rot;

@@ -7,18 +7,29 @@ namespace smmap
 {
     enum StopwatchControl {RESET, READ};
 
-    inline double stopwatch(const StopwatchControl control = READ)
+    class Stopwatch
     {
-        static std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
+        public:
+            Stopwatch()
+                : start_time_(std::chrono::high_resolution_clock::now())
+            {}
 
-        const std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
-        if (control == RESET)
-        {
-            start_time = end_time;
-        }
+            double operator() (const StopwatchControl control = READ)
+            {
+                const auto end_time = std::chrono::high_resolution_clock::now();
+                if (control == RESET)
+                {
+                    start_time_ = end_time;
+                }
 
-        return std::chrono::duration<double>(end_time - start_time).count();
-    }
+                return std::chrono::duration<double>(end_time - start_time_).count();
+            }
+
+        private:
+            std::chrono::high_resolution_clock::time_point start_time_;
+    };
+
+    double GlobalStopwatch(const StopwatchControl control = READ);
 }
 
 #endif // TIMING_HPP

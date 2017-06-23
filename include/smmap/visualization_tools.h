@@ -23,11 +23,13 @@ namespace smmap
             static std_msgs::ColorRGBA White();
 
         public:
-            Visualizer(ros::NodeHandle& nh);
+            Visualizer(
+                    ros::NodeHandle& nh);
 
-            Visualizer(ros::NodeHandle& nh,
-                       const std::string& marker_topic,
-                       const std::string& marker_array_topic);
+            Visualizer(
+                    ros::NodeHandle& nh,
+                    const std::string& marker_topic,
+                    const std::string& marker_array_topic);
 
             void deleteObjects(
                     const std::string& marker_name,
@@ -125,12 +127,12 @@ namespace smmap
                     const std_msgs::ColorRGBA& color,
                     const int32_t id = 3) const;
 
-            void visualizeLines(
-                    const std::string& marker_name,
+            void visualizeLines(const std::string& marker_name,
                     const EigenHelpers::VectorVector3d& start,
                     const EigenHelpers::VectorVector3d& end,
                     const std_msgs::ColorRGBA& color,
-                    const int32_t id = 1) const;
+                    const int32_t id = 1,
+                    const double scale = 0.001) const;
 
             void visualizeLineStrip(
                     const std::string& marker_name,
@@ -145,10 +147,13 @@ namespace smmap
                     const int32_t id = 1) const;
 
         private:
+            const bool disable_all_visualizations_;
+            mutable ros::Publisher visualization_marker_pub_;
+            mutable ros::Publisher visualization_marker_vector_pub_;
+
+            // Data needed to properly create visualizations and markers
             const std::string world_frame_name_;
             const double gripper_apperture_;
-            mutable ros::Publisher visualization_marker_pub_;
-            mutable ros::Publisher visualization_marker_array_pub_;
 
             static bool standard_colors_initialized_;
             static std_msgs::ColorRGBA red_;

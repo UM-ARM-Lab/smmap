@@ -115,28 +115,30 @@ std_msgs::ColorRGBA Visualizer::White()
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-Visualizer::Visualizer(ros::NodeHandle& nh)
+Visualizer::Visualizer(
+        ros::NodeHandle& nh)
     : Visualizer(
           nh,
           GetVisualizationMarkerTopic(nh),
           GetVisualizationMarkerArrayTopic(nh))
 {}
 
-
-Visualizer::Visualizer(ros::NodeHandle& nh,
+Visualizer::Visualizer(
+        ros::NodeHandle& nh,
            const std::string& marker_topic,
            const std::string& marker_array_topic)
-    : world_frame_name_(GetWorldFrameName())
+    : disable_all_visualizations_(GetDisableAllVisualizations(nh))
+    , world_frame_name_(GetWorldFrameName())
     , gripper_apperture_(GetGripperApperture(nh))
 {
     InitializeStandardColors();
 
-    // Publish visualization request markers
-    visualization_marker_pub_ =
-            nh.advertise<visualization_msgs::Marker>(marker_topic, 3000);
-
-    visualization_marker_array_pub_ =
-            nh.advertise<visualization_msgs::MarkerArray>(marker_array_topic, 3000);
+    if (!disable_all_visualizations_)
+    {
+        // Publish visualization request markers
+        visualization_marker_pub_       = nh.advertise<visualization_msgs::Marker>(marker_topic, 3000);
+        visualization_marker_vector_pub_ = nh.advertise<visualization_msgs::MarkerArray>(marker_array_topic, 3000);
+    }
 }
 
 void Visualizer::deleteObjects(
@@ -144,20 +146,29 @@ void Visualizer::deleteObjects(
         const int32_t start_id,
         const int32_t end_id) const
 {
-    visualization_msgs::Marker marker;
-
-    marker.header.frame_id = world_frame_name_;
-
-    marker.action = visualization_msgs::Marker::DELETE;
-    marker.ns = marker_name;
-
-    for (int32_t id = start_id; id < end_id; ++id)
+    if (!disable_all_visualizations_)
     {
-        marker.id = id;
-        visualization_marker_pub_.publish(marker);
-    }
+        visualization_msgs::Marker marker;
 
-    std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+        marker.header.frame_id = world_frame_name_;
+
+        marker.action = visualization_msgs::Marker::DELETE;
+        marker.ns = marker_name;
+
+        for (int32_t id = start_id; id < end_id; ++id)
+        {
+            marker.id = id;
+            marker.header.stamp = ros::Time::now();
+            visualization_marker_pub_.publish(marker);
+
+            if (id % 100 == 0)
+            {
+                std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));
+            }
+        }
+
+        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+    }
 }
 
 void Visualizer::visualizePoints(
@@ -166,9 +177,12 @@ void Visualizer::visualizePoints(
         const std_msgs::ColorRGBA& color,
         const int32_t id, const double scale) const
 {
-    std::vector<std_msgs::ColorRGBA> colors(points.size(), color);
+    if (!disable_all_visualizations_)
+    {
+        std::vector<std_msgs::ColorRGBA> colors(points.size(), color);
 
-    visualizePoints(marker_name, points, colors, id, scale);
+        visualizePoints(marker_name, points, colors, id, scale);
+    }
 }
 
 void Visualizer::visualizePoints(
@@ -178,19 +192,23 @@ void Visualizer::visualizePoints(
         const int32_t id,
         const double scale) const
 {
-    visualization_msgs::Marker marker;
+    if (!disable_all_visualizations_)
+    {
+        visualization_msgs::Marker marker;
 
-    marker.header.frame_id = world_frame_name_;
+        marker.header.frame_id = world_frame_name_;
 
-    marker.type = visualization_msgs::Marker::POINTS;
-    marker.ns = marker_name;
-    marker.id = id;
-    marker.scale.x = scale;
-    marker.scale.y = scale;
-    marker.points = EigenHelpersConversions::VectorEigenVector3dToVectorGeometryPoint(points);
-    marker.colors = colors;
+        marker.type = visualization_msgs::Marker::POINTS;
+        marker.ns = marker_name;
+        marker.id = id;
+        marker.scale.x = scale;
+        marker.scale.y = scale;
+        marker.points = EigenHelpersConversions::VectorEigenVector3dToVectorGeometryPoint(points);
+        marker.colors = colors;
 
-    visualization_marker_pub_.publish(marker);
+        marker.header.stamp = ros::Time::now();
+        visualization_marker_pub_.publish(marker);
+    }
 }
 
 void Visualizer::visualizeCubes(
@@ -200,18 +218,22 @@ void Visualizer::visualizeCubes(
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
-    visualization_msgs::Marker marker;
+    if (!disable_all_visualizations_)
+    {
+        visualization_msgs::Marker marker;
 
-    marker.header.frame_id = world_frame_name_;
+        marker.header.frame_id = world_frame_name_;
 
-    marker.type = visualization_msgs::Marker::CUBE_LIST;
-    marker.ns = marker_name;
-    marker.id = id;
-    marker.scale = EigenHelpersConversions::EigenVector3dToGeometryVector3(scale);
-    marker.points = EigenHelpersConversions::VectorEigenVector3dToVectorGeometryPoint(points);
-    marker.color = color;
+        marker.type = visualization_msgs::Marker::CUBE_LIST;
+        marker.ns = marker_name;
+        marker.id = id;
+        marker.scale = EigenHelpersConversions::EigenVector3dToGeometryVector3(scale);
+        marker.points = EigenHelpersConversions::VectorEigenVector3dToVectorGeometryPoint(points);
+        marker.color = color;
 
-    visualization_marker_pub_.publish(marker);
+        marker.header.stamp = ros::Time::now();
+        visualization_marker_pub_.publish(marker);
+    }
 }
 
 void Visualizer::visualizeRope(
@@ -220,8 +242,11 @@ void Visualizer::visualizeRope(
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
-    const std::vector<std_msgs::ColorRGBA> colors((size_t)rope.cols(), color);
-    visualizeRope(marker_name, rope, colors, id);
+    if (!disable_all_visualizations_)
+    {
+        const std::vector<std_msgs::ColorRGBA> colors((size_t)rope.cols(), color);
+        visualizeRope(marker_name, rope, colors, id);
+    }
 }
 
 void Visualizer::visualizeRope(
@@ -230,24 +255,29 @@ void Visualizer::visualizeRope(
         const std::vector<std_msgs::ColorRGBA>& colors,
         const int32_t id) const
 {
-    visualization_msgs::Marker marker;
+    if (!disable_all_visualizations_)
+    {
+        visualization_msgs::Marker marker;
 
-    marker.header.frame_id = world_frame_name_;
+        marker.header.frame_id = world_frame_name_;
 
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.ns = marker_name;
-    marker.id = id;
-    marker.scale.x = 0.005;
-    marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint(rope);
-    marker.colors = colors;
-    visualization_marker_pub_.publish(marker);
+        marker.type = visualization_msgs::Marker::LINE_STRIP;
+        marker.ns = marker_name;
+        marker.id = id;
+        marker.scale.x = 0.005;
+        marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint(rope);
+        marker.colors = colors;
+        marker.header.stamp = ros::Time::now();
+        visualization_marker_pub_.publish(marker);
 
-    marker.type = visualization_msgs::Marker::SPHERE;
-    marker.id = id + 1;
-    marker.scale.x = 0.015;
-    marker.scale.y = 0.015;
-    marker.scale.z = 0.015;
-    visualization_marker_pub_.publish(marker);
+        marker.type = visualization_msgs::Marker::SPHERE;
+        marker.id = id + 1;
+        marker.scale.x = 0.015;
+        marker.scale.y = 0.015;
+        marker.scale.z = 0.015;
+        marker.header.stamp = ros::Time::now();
+        visualization_marker_pub_.publish(marker);
+    }
 }
 
 
@@ -257,8 +287,11 @@ void Visualizer::visualizeCloth(
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
-    const std::vector<std_msgs::ColorRGBA> colors((size_t)cloth.cols(), color);
-    visualizeCloth(marker_name, cloth, colors, id);
+    if (!disable_all_visualizations_)
+    {
+        const std::vector<std_msgs::ColorRGBA> colors((size_t)cloth.cols(), color);
+        visualizeCloth(marker_name, cloth, colors, id);
+    }
 }
 
 void Visualizer::visualizeCloth(
@@ -267,19 +300,23 @@ void Visualizer::visualizeCloth(
         const std::vector<std_msgs::ColorRGBA>& colors,
         const int32_t id) const
 {
-    visualization_msgs::Marker marker;
+    if (!disable_all_visualizations_)
+    {
+        visualization_msgs::Marker marker;
 
-    marker.header.frame_id = world_frame_name_;
+        marker.header.frame_id = world_frame_name_;
 
-    marker.type = visualization_msgs::Marker::POINTS;
-    marker.ns = marker_name;
-    marker.id = id;
-    marker.scale.x = 0.005;
-    marker.scale.y = 0.005;
-    marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint(cloth);
-    marker.colors = colors;
+        marker.type = visualization_msgs::Marker::POINTS;
+        marker.ns = marker_name;
+        marker.id = id;
+        marker.scale.x = 0.005;
+        marker.scale.y = 0.005;
+        marker.points = EigenHelpersConversions::EigenMatrix3XdToVectorGeometryPoint(cloth);
+        marker.colors = colors;
 
-    visualization_marker_pub_.publish(marker);
+        marker.header.stamp = ros::Time::now();
+        visualization_marker_pub_.publish(marker);
+    }
 }
 
 visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
@@ -313,6 +350,8 @@ visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
     markers[1].pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(eigen_pose * Eigen::Translation3d(0.0, 0.0, -gripper_apperture_));
     markers[1].color = color;
 
+    markers[0].header.stamp = ros::Time::now();
+    markers[1].header.stamp = markers[0].header.stamp;
     return markers;
 }
 
@@ -322,9 +361,13 @@ void Visualizer::visualizeGripper(
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
-    visualization_msgs::MarkerArray marker;
-    marker.markers = createGripperMarker(marker_name, eigen_pose, color, id);
-    visualization_marker_array_pub_.publish(marker);
+    if (!disable_all_visualizations_)
+    {
+        visualization_msgs::MarkerArray marker;
+        marker.markers = createGripperMarker(marker_name, eigen_pose, color, id);
+        visualization_marker_pub_.publish(marker.markers[0]);
+        visualization_marker_pub_.publish(marker.markers[1]);
+    }
 }
 
 void Visualizer::visualizeGrippers(
@@ -333,18 +376,14 @@ void Visualizer::visualizeGrippers(
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
-    visualization_msgs::MarkerArray marker;
-    marker.markers.reserve(2 * eigen_poses.size());
-
-    for (size_t gripper_ind = 0; gripper_ind < eigen_poses.size(); ++gripper_ind)
+    if (!disable_all_visualizations_)
     {
-        const auto m = createGripperMarker(marker_name, eigen_poses[gripper_ind], color, id + (int32_t)(2*gripper_ind));
-        marker.markers.insert(marker.markers.end(), m.begin(), m.end());
+        for (size_t gripper_ind = 0; gripper_ind < eigen_poses.size(); ++gripper_ind)
+        {
+            visualizeGripper(marker_name, eigen_poses[gripper_ind], color, id + (int32_t)(2*gripper_ind + 1));
+        }
     }
-
-    visualization_marker_array_pub_.publish(marker);
 }
-
 
 void Visualizer::visualizeObjectDelta(
         const std::string& marker_name,
@@ -353,25 +392,29 @@ void Visualizer::visualizeObjectDelta(
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
-    visualization_msgs::Marker marker;
-
-    marker.header.frame_id = world_frame_name_;
-
-    marker.type = visualization_msgs::Marker::LINE_LIST;
-    marker.ns = marker_name;
-    marker.id = id;
-    marker.scale.x = 0.001;
-    marker.points.reserve((size_t)current.cols() * 2);
-    marker.colors.reserve((size_t)current.cols() * 2);
-    for (ssize_t col = 0; col < current.cols(); col++)
+    if (!disable_all_visualizations_)
     {
-        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(current.col(col)));
-        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(desired.col(col)));
-        marker.colors.push_back(color);
-        marker.colors.push_back(color);
-    }
+        visualization_msgs::Marker marker;
 
-    visualization_marker_pub_.publish(marker);
+        marker.header.frame_id = world_frame_name_;
+
+        marker.type = visualization_msgs::Marker::LINE_LIST;
+        marker.ns = marker_name;
+        marker.id = id;
+        marker.scale.x = 0.001;
+        marker.points.reserve((size_t)current.cols() * 2);
+        marker.colors.reserve((size_t)current.cols() * 2);
+        for (ssize_t col = 0; col < current.cols(); col++)
+        {
+            marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(current.col(col)));
+            marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(desired.col(col)));
+            marker.colors.push_back(color);
+            marker.colors.push_back(color);
+        }
+
+        marker.header.stamp = ros::Time::now();
+        visualization_marker_pub_.publish(marker);
+    }
 }
 
 void Visualizer::visualizeTranslation(
@@ -381,20 +424,24 @@ void Visualizer::visualizeTranslation(
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
-    visualization_msgs::Marker marker;
+    if (!disable_all_visualizations_)
+    {
+        visualization_msgs::Marker marker;
 
-    marker.header.frame_id = world_frame_name_;
+        marker.header.frame_id = world_frame_name_;
 
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.ns = marker_name;
-    marker.id = id;
-    marker.scale.x = 0.01;
-    marker.points.push_back(start);
-    marker.points.push_back(end);
-    marker.colors.push_back(color);
-    marker.colors.push_back(color);
+        marker.type = visualization_msgs::Marker::LINE_STRIP;
+        marker.ns = marker_name;
+        marker.id = id;
+        marker.scale.x = 0.01;
+        marker.points.push_back(start);
+        marker.points.push_back(end);
+        marker.colors.push_back(color);
+        marker.colors.push_back(color);
 
-    visualization_marker_pub_.publish(marker);
+        marker.header.stamp = ros::Time::now();
+        visualization_marker_pub_.publish(marker);
+    }
 }
 
 void Visualizer::visualizeTranslation(
@@ -404,26 +451,33 @@ void Visualizer::visualizeTranslation(
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
-    visualizeTranslation(
-                marker_name,
-                EigenHelpersConversions::EigenVector3dToGeometryPoint(start),
-                EigenHelpersConversions::EigenVector3dToGeometryPoint(end),
-                color,
-                id);
+    if (!disable_all_visualizations_)
+    {
+        visualizeTranslation(
+                    marker_name,
+                    EigenHelpersConversions::EigenVector3dToGeometryPoint(start),
+                    EigenHelpersConversions::EigenVector3dToGeometryPoint(end),
+                    color,
+                    id);
+    }
 }
 
-void Visualizer::visualizeTranslation(const std::string& marker_name,
+void Visualizer::visualizeTranslation(
+        const std::string& marker_name,
         const Eigen::Affine3d &start,
         const Eigen::Affine3d &end,
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
-    Visualizer::visualizeTranslation(
-                marker_name,
-                start.translation(),
-                end.translation(),
-                color,
-                id);
+    if (!disable_all_visualizations_)
+    {
+        Visualizer::visualizeTranslation(
+                    marker_name,
+                    start.translation(),
+                    end.translation(),
+                    color,
+                    id);
+    }
 }
 
 void Visualizer::visualizeLines(
@@ -431,28 +485,33 @@ void Visualizer::visualizeLines(
         const EigenHelpers::VectorVector3d& start,
         const EigenHelpers::VectorVector3d& end,
         const std_msgs::ColorRGBA& color,
-        const int32_t id) const
+        const int32_t id,
+        const double scale) const
 {
-    assert(start.size() == end.size());
-
-    visualization_msgs::Marker marker;
-
-    marker.header.frame_id = world_frame_name_;
-
-    marker.type = visualization_msgs::Marker::LINE_LIST;
-    marker.ns = marker_name;
-    marker.id = id;
-    marker.scale.x = 0.001;
-
-    for (size_t ind = 0; ind < start.size(); ind++)
+    if (!disable_all_visualizations_)
     {
-        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(start[ind]));
-        marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(end[ind]));
-        marker.colors.push_back(color);
-        marker.colors.push_back(color);
-    }
+        assert(start.size() == end.size());
 
-    visualization_marker_pub_.publish(marker);
+        visualization_msgs::Marker marker;
+
+        marker.header.frame_id = world_frame_name_;
+
+        marker.type = visualization_msgs::Marker::LINE_LIST;
+        marker.ns = marker_name;
+        marker.id = id;
+        marker.scale.x = scale;
+
+        for (size_t ind = 0; ind < start.size(); ind++)
+        {
+            marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(start[ind]));
+            marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(end[ind]));
+            marker.colors.push_back(color);
+            marker.colors.push_back(color);
+        }
+
+        marker.header.stamp = ros::Time::now();
+        visualization_marker_pub_.publish(marker);
+    }
 }
 
 void Visualizer::visualizeLineStrip(
@@ -461,19 +520,23 @@ void Visualizer::visualizeLineStrip(
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
-    visualization_msgs::Marker marker;
+    if (!disable_all_visualizations_)
+    {
+        visualization_msgs::Marker marker;
 
-    marker.header.frame_id = world_frame_name_;
+        marker.header.frame_id = world_frame_name_;
 
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.ns = marker_name;
-    marker.id = id;
-    marker.scale.x = 0.001;
+        marker.type = visualization_msgs::Marker::LINE_STRIP;
+        marker.ns = marker_name;
+        marker.id = id;
+        marker.scale.x = 0.001;
 
-    marker.points = EigenHelpersConversions::VectorEigenVector3dToVectorGeometryPoint(point_sequence);
-    marker.colors = std::vector<std_msgs::ColorRGBA>(marker.points.size(), color);
+        marker.points = EigenHelpersConversions::VectorEigenVector3dToVectorGeometryPoint(point_sequence);
+        marker.colors = std::vector<std_msgs::ColorRGBA>(marker.points.size(), color);
 
-    visualization_marker_pub_.publish(marker);
+        marker.header.stamp = ros::Time::now();
+        visualization_marker_pub_.publish(marker);
+    }
 }
 
 void Visualizer::visualizeXYZTrajectory(
@@ -482,5 +545,8 @@ void Visualizer::visualizeXYZTrajectory(
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
-    visualizeLineStrip(marker_name, point_sequence, color, id);
+    if (!disable_all_visualizations_)
+    {
+        visualizeLineStrip(marker_name, point_sequence, color, id);
+    }
 }

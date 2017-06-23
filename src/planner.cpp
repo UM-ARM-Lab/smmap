@@ -19,7 +19,22 @@ using namespace Eigen;
 using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
 
+#pragma message "Magic number - reward scaling factor starting value"
 #define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
+
+const std::string Planner::DESIRED_DELTA_NS                         = "desired delta";
+
+const std::string Planner::PROJECTED_GRIPPER_NS                     = "projected_grippers";
+const std::string Planner::PROJECTED_BAND_NS                        = "projected_band";
+const std::string Planner::PROJECTED_POINT_PATH_NS                  = "projected_point_paths";
+const std::string Planner::PROJECTED_POINT_PATH_LINES_NS            = "projected_point_path_lines";
+
+const std::string Planner::CONSTRAINT_VIOLATION_VERSION1_NS         = "constraint_violation_version1";
+
+const std::string Planner::CLUSTERING_TARGETS_NS                    = "clustering_targets";
+const std::string Planner::CLUSTERING_RESULTS_PRE_PROJECT_NS        = "clustering_pre_project";
+const std::string Planner::CLUSTERING_RESULTS_POST_PROJECT_NS       = "clustering_post_project";
+const std::string Planner::CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS   = "clustering_assigned_centers";
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constructor and model list builder
@@ -76,7 +91,7 @@ Planner::Planner(
                         dijkstras_task_->work_space_grid_.getZMax(),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
-                        GetGripperRadius(),
+                        GetRRTMinGripperDistanceToObstacles(ph_),
                         GetRRTHomotopyDistancePenalty(),
                         GetRRTMaxShortcutIndexDistance(ph_),
                         GetRRTMaxSmoothingIterations(ph_),
@@ -164,15 +179,15 @@ WorldState Planner::sendNextCommand(
 
             if (global_planner_needed_due_to_overstretch || global_planner_needed_due_to_lack_of_progress)
             {
-                vis_.deleteObjects("desired_position", 1, 100);
+                vis_.deleteObjects(DESIRED_DELTA_NS, 1, 100);
 
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "planner", "Invoking global planner due to overstretch");
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "planner", "Invoking global planner due to collision");
 
-                vis_.deleteObjects("projected_gripper_rubber_band", 1, (int32_t)max_lookahead_steps_ + 10);
-                vis_.deleteObjects("projected_grippers",            1, (int32_t)max_lookahead_steps_ + 10);
-                vis_.deleteObjects("projected_point_path",          1, (int32_t)projected_deformable_point_paths.size() + 10);
-                vis_.deleteObjects("projected_point_path_lines",    1, (int32_t)projected_deformable_point_paths.size() + 10);
+                vis_.deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)max_lookahead_steps_ + 10);
+                vis_.deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
+                vis_.deleteObjects(PROJECTED_POINT_PATH_NS,         1, (int32_t)projected_deformable_point_paths.size() + 10);
+                vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS,   1, (int32_t)projected_deformable_point_paths.size() + 10);
 
                 rrt_helper_->addBandToBlacklist(virtual_rubber_band_between_grippers_->getVectorRepresentation());
                 planGlobalGripperTrajectory(world_state);
@@ -211,14 +226,14 @@ void Planner::visualizeDesiredMotion(
         }
         task_specification_->visualizeDeformableObject(
                 vis_,
-                "desired_position",
+                DESIRED_DELTA_NS,
                 AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
                 colors);
 
         if (task_specification_->deformable_type_ == DeformableType::CLOTH)
         {
             vis_.visualizeObjectDelta(
-                        "desired_position",
+                        DESIRED_DELTA_NS,
                         current_world_state.object_configuration_,
                         AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
                         Visualizer::Green());
@@ -248,7 +263,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
 
     // Querry each model for it's best gripper delta
-    stopwatch(RESET);
+    GlobalStopwatch(RESET);
     std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>> suggested_robot_commands(num_models_);
     #pragma omp parallel for
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
@@ -263,13 +278,13 @@ WorldState Planner::sendNextCommandUsingLocalController(
         }
     }
     // Measure the time it took to pick a model
-    ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in  " << stopwatch(READ) << " seconds");
+    ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in  " << GlobalStopwatch(READ) << " seconds");
 
     // Calculate regret if we need to
     std::vector<double> individual_rewards(num_models_, std::numeric_limits<double>::infinity());
     if (calculate_regret_ && num_models_ > 1)
     {
-        stopwatch(RESET);
+        GlobalStopwatch(RESET);
         const double prev_error = task_specification_->calculateError(world_state);
         const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
         {
@@ -283,7 +298,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
         }
         robot_.testGrippersPoses(poses_to_test, test_feedback_fn);
 
-        ROS_INFO_STREAM_NAMED("planner", "Collected data to calculate regret in " << stopwatch(READ) << " seconds");
+        ROS_INFO_STREAM_NAMED("planner", "Collected data to calculate regret in " << GlobalStopwatch(READ) << " seconds");
     }
 
 
@@ -345,10 +360,9 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
         grippers_pose_history_.clear();
         error_history_.clear();
 
-        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_A_NS, 1, 200);
-        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_B_NS, 1, 200);
-        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS, 1, 200);
-        vis_.deleteObjects(RRTHelper::RRT_SHORTCUT_REMAINDER_NS, 1, 200);
+        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_A_NS,   1, 2);
+        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_B_NS,   1, 2);
+        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS, 1, 2);
     }
 
     const std::vector<double> fake_rewards(model_list_.size(), NAN);
@@ -371,14 +385,14 @@ void Planner::visualizeProjectedPaths(
         {
             if (projected_paths[node_ind].size() > 1)
             {
-                vis_.visualizePoints("projected_point_path", projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind + 1);
-                vis_.visualizeXYZTrajectory("projected_point_path_lines", projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind + 1);
+                vis_.visualizePoints(PROJECTED_POINT_PATH_NS, projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind + 1);
+                vis_.visualizeXYZTrajectory(PROJECTED_POINT_PATH_LINES_NS, projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind + 1);
             }
             else
             {
                 const VectorVector3d empty_path;
-                vis_.visualizePoints("projected_point_path", empty_path,Visualizer::Magenta(), (int32_t)node_ind + 1);
-                vis_.visualizeXYZTrajectory("projected_point_path_lines", empty_path, Visualizer::Magenta(), (int32_t)node_ind + 1);
+                vis_.visualizePoints(PROJECTED_POINT_PATH_NS, empty_path,Visualizer::Magenta(), (int32_t)node_ind + 1);
+                vis_.visualizeXYZTrajectory(PROJECTED_POINT_PATH_LINES_NS, empty_path, Visualizer::Magenta(), (int32_t)node_ind + 1);
             }
         }
     }
@@ -432,7 +446,7 @@ bool Planner::checkForClothStretchingViolations(
 
     if (visualization_enabled)
     {
-        vis_.visualizeLines("constraint_violation_detection_lines_version_1", vis_start_points, vis_end_points, Visualizer::Blue());
+        vis_.visualizeLines(CONSTRAINT_VIOLATION_VERSION1_NS, vis_start_points, vis_end_points, Visualizer::Blue());
     }
 
     return violations_exist;
@@ -459,23 +473,23 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
 
     const static std_msgs::ColorRGBA gripper_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
     const static std_msgs::ColorRGBA rubber_band_safe_color = Visualizer::Black();
-    const static std_msgs::ColorRGBA rubber_band_violation_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
+    const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
     const bool verbose = false;
 
-    vis_.deleteObjects("projected_gripper_rubber_band", 1, (int32_t)max_lookahead_steps_ + 10);
-    vis_.deleteObjects("projected_grippers", 1, (int32_t)max_lookahead_steps_ + 10);
+    vis_.deleteObjects(PROJECTED_POINT_PATH_NS, 1, (int32_t)max_lookahead_steps_ + 10);
+    vis_.deleteObjects(PROJECTED_GRIPPER_NS,    1, (int32_t)max_lookahead_steps_ + 10);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Constraint violation Version 1 - Purely cloth overstretch
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    stopwatch(RESET);
+    GlobalStopwatch(RESET);
     const std::vector<VectorVector3d> projected_deformable_point_paths = dijkstras_task_->findPathFromObjectToTarget(current_world_state, max_lookahead_steps_);
 
     const size_t actual_lookahead_steps = sizeOfLargestVector(projected_deformable_point_paths) - 1;
     // sizeOfLargest(...) should be at least 2, so this assert should always be true
     assert(actual_lookahead_steps <= max_lookahead_steps_);
 
-    ROS_INFO_STREAM_NAMED("planner", "Calculated projected cloth paths                 - Version 1 - in " << stopwatch(READ) << " seconds");
+    ROS_INFO_STREAM_NAMED("planner", "Calculated projected cloth paths                 - Version 1 - in " << GlobalStopwatch(READ) << " seconds");
     visualizeProjectedPaths(projected_deformable_point_paths, visualization_enabled);
     projected_deformable_point_paths_and_projected_virtual_rubber_bands.first = projected_deformable_point_paths;
 
@@ -496,9 +510,9 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
         virtual_rubber_band_between_grippers_ = std::make_shared<VirtualRubberBand>(
                     current_world_state.all_grippers_single_pose_[0].translation(),
                     current_world_state.all_grippers_single_pose_[1].translation(),
-                    dijkstras_task_, vis_);
+                    dijkstras_task_, vis_, generator_);
     }
-    virtual_rubber_band_between_grippers_->visualize("projected_gripper_rubber_band", rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
+    virtual_rubber_band_between_grippers_->visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -541,13 +555,13 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
         projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.push_back(virtual_rubber_band_between_grippers_copy);
 
         // Visualize
-        virtual_rubber_band_between_grippers_copy.visualize("projected_gripper_rubber_band", rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
-        vis_.visualizeGrippers("projected_grippers", world_state_copy.all_grippers_single_pose_, gripper_color);
+        virtual_rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
+        vis_.visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color);
 
         // Finish collecting the gripper collision data
         world_state_copy.gripper_collision_data_ = collision_check_future.get();
     }
-    ROS_INFO_STREAM_NAMED("planner", "Calculated future constraint violation detection - Version 2a - in " << stopwatch(READ) << " seconds");
+    ROS_INFO_STREAM_NAMED("planner", "Calculated future constraint violation detection - Version 2a - in " << GlobalStopwatch(READ) << " seconds");
 
     return projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 }
@@ -626,8 +640,46 @@ bool Planner::globalPlannerNeededDueToLackOfProgress(
 // Global gripper planner functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+std::vector<uint32_t> NumberOfPointsInEachCluster(const std::vector<uint32_t>& cluster_labels, const uint32_t num_clusters, const std::vector<long>& grapsed_points, const DijkstrasCoverageTask::Correspondences& correspondences)
+{
+    std::vector<uint32_t> counts(num_clusters, 0);
+    const auto& uncovered_target_point_idxs = correspondences.uncovered_target_points_idxs_;
+
+    for (size_t grasped_point_idx = 0; grasped_point_idx < grapsed_points.size(); ++grasped_point_idx)
+    {
+        const long deform_idx = grapsed_points[grasped_point_idx];
+
+        const std::vector<ssize_t>& correspondences_for_current_deform_idx            = correspondences.correspondences_[deform_idx];
+        const std::vector<bool>&    correspondences_is_covered_for_current_deform_idx = correspondences.correspondences_is_covered_[deform_idx];
+
+        for (size_t correspondence_idx = 0; correspondence_idx < correspondences_for_current_deform_idx.size(); ++correspondence_idx)
+        {
+            const ssize_t cover_idx = correspondences_for_current_deform_idx[correspondence_idx];
+            const bool is_covered   = correspondences_is_covered_for_current_deform_idx[correspondence_idx];
+
+            // If the current correspondece is not covered, lookup its position in cluster_labels
+            if (!is_covered)
+            {
+                const auto found_itr = std::find(uncovered_target_point_idxs.begin(), uncovered_target_point_idxs.end(), cover_idx);
+                assert(found_itr != uncovered_target_point_idxs.end()); // The point is not covered, so it should exist in the vector
+                const ssize_t found_idx = std::distance(uncovered_target_point_idxs.begin(), found_itr);
+                assert(found_idx >= 0);
+                assert(found_idx < (ssize_t)cluster_labels.size());
+                const uint32_t cluster_label = cluster_labels[found_idx];
+                counts[cluster_label]++;
+            }
+        }
+    }
+
+    return counts;
+}
+
 AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
 {
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////// Determine the cluster centers /////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     const auto correspondences = dijkstras_task_->getCoverPointCorrespondences(world_state);
     const auto& cover_point_indices_= correspondences.uncovered_target_points_idxs_;
 
@@ -639,7 +691,7 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
         cluster_targets.push_back(dijkstras_task_->cover_points_.col(cover_idx));
     }
 
-    vis_.visualizePoints("points_to_be_clustered", cluster_targets, Visualizer::Blue(), 1);
+    vis_.visualizePoints(CLUSTERING_TARGETS_NS, cluster_targets, Visualizer::Blue(), 1);
 
     const Matrix3Xd cluster_targets_as_matrix = VectorEigenVector3dToEigenMatrix3Xd(cluster_targets);
     const MatrixXd distance_matrix = CalculateSquaredDistanceMatrix(cluster_targets_as_matrix);
@@ -660,18 +712,235 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
         return AverageEigenVector3d(data);
     };
     const auto cluster_results = simple_kmeans_clustering::SimpleKMeansClustering::Cluster(cluster_targets, distance_fn, average_fn, starting_cluster_centers);
-    VectorVector3d cluster_centers = cluster_results.second;
+    const std::vector<uint32_t>& cluster_labels = cluster_results.first;
+    const VectorVector3d cluster_centers = cluster_results.second;
+    const uint32_t num_clusters = (uint32_t)cluster_centers.size();
+    assert(num_clusters == 2);
 
-    vis_.visualizeCubes("cluster_centers_pre_project", cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Red(), 1);
+    vis_.visualizeCubes(CLUSTERING_RESULTS_PRE_PROJECT_NS, cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Red(), 1);
 
-    // TODO: check if this can leave the grippers too close to collision for the RRT to actually reach the target (due to size of grippers)
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////// Determine which gripper gets assigned which cluster center ////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Get the orientations for each gripper based on their starting orientation
+    AllGrippersSinglePose target_gripper_poses = world_state.all_grippers_single_pose_;
+
+    const auto& gripper0_grapsed_points = dijkstras_task_->getGripperAttachedNodesIndices(0);
+    const auto& gripper1_grapsed_points = dijkstras_task_->getGripperAttachedNodesIndices(1);
+
+    const auto gripper0_cluster_counts = NumberOfPointsInEachCluster(cluster_labels, num_clusters, gripper0_grapsed_points, correspondences);
+    const auto gripper1_cluster_counts = NumberOfPointsInEachCluster(cluster_labels, num_clusters, gripper1_grapsed_points, correspondences);
+
+    // Set some values so that the logic used in the if-else chain makes sense to read
+    const bool gripper0_no_match_to_cluster0    = gripper0_cluster_counts[0] == 0;
+    const bool gripper0_no_match_to_cluster1    = gripper0_cluster_counts[1] == 0;
+    const bool gripper0_no_match_to_any_cluster = gripper0_no_match_to_cluster0 && gripper0_no_match_to_cluster1;
+    const bool gripper0_best_match_to_cluster0  = gripper0_cluster_counts[0] > gripper1_cluster_counts[0]; // Note that this requires at least 1 correspondence for gripper0 to cluster0
+    const bool gripper0_best_match_to_cluster1  = gripper0_cluster_counts[1] > gripper1_cluster_counts[1]; // Note that this requires at least 1 correspondence for gripper0 to cluster1
+
+    const bool gripper1_no_match_to_cluster0    = gripper1_cluster_counts[0] == 0;
+    const bool gripper1_no_match_to_cluster1    = gripper1_cluster_counts[1] == 0;
+    const bool gripper1_no_match_to_any_cluster = gripper1_no_match_to_cluster0 && gripper1_no_match_to_cluster1;
+    const bool gripper1_best_match_to_cluster0  = gripper1_cluster_counts[0] > gripper0_cluster_counts[0]; // Note that this requires at least 1 correspondence for gripper1 to cluster0
+    const bool gripper1_best_match_to_cluster1  = gripper1_cluster_counts[1] > gripper0_cluster_counts[1]; // Note that this requires at least 1 correspondence for gripper1 to cluster1
+
+    const bool equal_match_to_cluster0 = (!gripper0_no_match_to_cluster0) && (!gripper1_no_match_to_cluster0) && (gripper0_cluster_counts[0] == gripper1_cluster_counts[0]);
+    const bool equal_match_to_cluster1 = (!gripper0_no_match_to_cluster1) && (!gripper1_no_match_to_cluster1) && (gripper0_cluster_counts[1] == gripper1_cluster_counts[1]);
+
+    const bool gripper0_best_match_to_both = gripper0_best_match_to_cluster0 && gripper0_best_match_to_cluster1;
+    const bool gripper1_best_match_to_both = gripper1_best_match_to_cluster0 && gripper1_best_match_to_cluster1;
+
+
+    // If each gripper has a unique best pull direction, use it
+    if (gripper0_best_match_to_cluster0 && gripper1_best_match_to_cluster1)
+    {
+        target_gripper_poses[0].translation() = cluster_centers[0];
+        target_gripper_poses[1].translation() = cluster_centers[1];
+    }
+    else if (gripper0_best_match_to_cluster1 && gripper1_best_match_to_cluster0)
+    {
+        target_gripper_poses[0].translation() = cluster_centers[1];
+        target_gripper_poses[1].translation() = cluster_centers[0];
+    }
+    // If a single gripper has the best pull to both, then that gripper dominates the choice
+    else if (gripper0_best_match_to_both)
+    {
+        if (gripper0_cluster_counts[0] > gripper0_cluster_counts[1])
+        {
+            target_gripper_poses[0].translation() = cluster_centers[0];
+            target_gripper_poses[1].translation() = cluster_centers[1];
+        }
+        else if (gripper0_cluster_counts[0] < gripper0_cluster_counts[1])
+        {
+            target_gripper_poses[0].translation() = cluster_centers[1];
+            target_gripper_poses[1].translation() = cluster_centers[0];
+        }
+        // If gripper0 has no unique best target, then allow gripper1 to make the choice
+        else
+        {
+            if (gripper1_cluster_counts[0] > gripper1_cluster_counts[1])
+            {
+                target_gripper_poses[0].translation() = cluster_centers[1];
+                target_gripper_poses[1].translation() = cluster_centers[0];
+            }
+            else if (gripper1_cluster_counts[0] < gripper1_cluster_counts[1])
+            {
+                target_gripper_poses[0].translation() = cluster_centers[0];
+                target_gripper_poses[1].translation() = cluster_centers[1];
+            }
+            // If everything is all tied up, decide what to do later
+            else
+            {
+                assert(false && "Setting gripper targets needs more logic");
+            }
+        }
+    }
+    else if (gripper1_best_match_to_both)
+    {
+        if (gripper1_cluster_counts[0] > gripper1_cluster_counts[1])
+        {
+            target_gripper_poses[0].translation() = cluster_centers[1];
+            target_gripper_poses[1].translation() = cluster_centers[0];
+        }
+        else if (gripper1_cluster_counts[0] < gripper1_cluster_counts[1])
+        {
+            target_gripper_poses[0].translation() = cluster_centers[0];
+            target_gripper_poses[1].translation() = cluster_centers[1];
+        }
+        // If gripper1 has no unique best target, then allow gripper0 to make the choice
+        else
+        {
+            if (gripper0_cluster_counts[0] > gripper0_cluster_counts[1])
+            {
+                target_gripper_poses[0].translation() = cluster_centers[0];
+                target_gripper_poses[1].translation() = cluster_centers[1];
+            }
+            else if (gripper0_cluster_counts[0] < gripper0_cluster_counts[1])
+            {
+                target_gripper_poses[0].translation() = cluster_centers[1];
+                target_gripper_poses[1].translation() = cluster_centers[0];
+            }
+            // If everything is all tied up, decide what to do later
+            else
+            {
+                assert(false && "Setting gripper targets needs more logic");
+            }
+        }
+    }
+    // If there is only a pull on a single gripper, then that gripper dominates the choice
+    else if (!gripper0_no_match_to_any_cluster &&  gripper1_no_match_to_any_cluster)
+    {
+        // Double check the logic that got us here; lets me simplify the resulting logic
+        // Gripper1 has no pulls on it, and gripper0 has pulls from only 1 cluster, otherwise
+        // one of the other caes would have triggered before this one
+        assert(!gripper0_best_match_to_both);
+        if (gripper0_best_match_to_cluster0)
+        {
+            assert(gripper0_no_match_to_cluster1);
+            target_gripper_poses[0].translation() = cluster_centers[0];
+            target_gripper_poses[1].translation() = cluster_centers[1];
+        }
+        else if (gripper0_best_match_to_cluster1)
+        {
+            assert(gripper0_no_match_to_cluster0);
+            target_gripper_poses[0].translation() = cluster_centers[1];
+            target_gripper_poses[1].translation() = cluster_centers[0];
+        }
+        else
+        {
+            assert(false && "Logic error in set gripper targets");
+        }
+
+    }
+    else if ( gripper0_no_match_to_any_cluster && !gripper1_no_match_to_any_cluster)
+    {
+        // Double check the logic that got us here; lets me simplify the resulting logic
+        // Gripper0 has no pulls on it, and gripper1 has pulls from only 1 cluster, otherwise
+        // one of the other caes would have triggered before this one
+        assert(!gripper1_best_match_to_both);
+        if (gripper1_best_match_to_cluster0)
+        {
+            assert(gripper1_no_match_to_cluster1);
+            target_gripper_poses[0].translation() = cluster_centers[1];
+            target_gripper_poses[1].translation() = cluster_centers[0];
+        }
+        else if (gripper1_best_match_to_cluster1)
+        {
+            assert(gripper1_no_match_to_cluster0);
+            target_gripper_poses[0].translation() = cluster_centers[0];
+            target_gripper_poses[1].translation() = cluster_centers[1];
+        }
+        else
+        {
+            assert(false && "Logic error in set gripper targets");
+        }
+    }
+    // If neither gripper has a pull on it, or both grippers have equal pull, then use some other metric
+    else if ((gripper0_no_match_to_any_cluster  && gripper1_no_match_to_any_cluster) ||
+             (equal_match_to_cluster0           && equal_match_to_cluster1))
+    {
+        const std::vector<double> gripper0_distances_to_clusters =
+                dijkstras_task_->averageDijkstrasDistanceBetweenGrippersAndClusters(world_state.all_grippers_single_pose_[0], correspondences.uncovered_target_points_idxs_, cluster_labels, num_clusters);
+        const std::vector<double> gripper1_distances_to_clusters =
+                dijkstras_task_->averageDijkstrasDistanceBetweenGrippersAndClusters(world_state.all_grippers_single_pose_[1], correspondences.uncovered_target_points_idxs_, cluster_labels, num_clusters);
+
+        const bool gripper0_is_closest_to_cluster0 = gripper0_distances_to_clusters[0] <= gripper1_distances_to_clusters[0];
+        const bool gripper0_is_closest_to_cluster1 = gripper0_distances_to_clusters[1] <= gripper1_distances_to_clusters[1];
+
+        // If there is a unique best match, then use it
+        if (gripper0_is_closest_to_cluster0 && !gripper0_is_closest_to_cluster1)
+        {
+            target_gripper_poses[0].translation() = cluster_centers[0];
+            target_gripper_poses[1].translation() = cluster_centers[1];
+        }
+        else if (!gripper0_is_closest_to_cluster0 && gripper0_is_closest_to_cluster1)
+        {
+            target_gripper_poses[0].translation() = cluster_centers[1];
+            target_gripper_poses[1].translation() = cluster_centers[0];
+        }
+        // Otherwise, pick the combination that minimizes the total distance
+        else
+        {
+            const double dist_version0 = gripper0_distances_to_clusters[0] + gripper1_distances_to_clusters[1];
+            const double dist_version1 = gripper0_distances_to_clusters[1] + gripper1_distances_to_clusters[0];
+
+            if (dist_version0 <= dist_version1)
+            {
+                target_gripper_poses[0].translation() = cluster_centers[0];
+                target_gripper_poses[1].translation() = cluster_centers[1];
+            }
+            else
+            {
+                target_gripper_poses[0].translation() = cluster_centers[1];
+                target_gripper_poses[1].translation() = cluster_centers[0];
+            }
+        }
+    }
+    else
+    {
+        assert(false && "Unhandled edge case in get gripper targets");
+    }
+
+    vis_.visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[0].translation(), target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
+    vis_.visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[1].translation(), target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
+
+    // Project the targets out of collision
+    const double min_dist_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_);
+    target_gripper_poses[0].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(target_gripper_poses[0].translation(), min_dist_to_obstacles);
+    target_gripper_poses[1].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(target_gripper_poses[1].translation(), min_dist_to_obstacles);
+
+    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
+    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
+
+#if 0
     // Project the cluster centers to be out of collision
-    cluster_centers[0] = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(cluster_centers[0], GetGripperRadius());
-    cluster_centers[1] = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(cluster_centers[1], GetGripperRadius());
-    assert(dijkstras_task_->environment_sdf_.Get3d(cluster_centers[0]) > GetGripperRadius());
-    assert(dijkstras_task_->environment_sdf_.Get3d(cluster_centers[1]) > GetGripperRadius());
-    vis_.visualizeCubes("cluster_centers_post_project", cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Green(), 1);
-
+    const double min_dist_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_);
+    cluster_centers[0] = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(cluster_centers[0], min_dist_to_obstacles);
+    cluster_centers[1] = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(cluster_centers[1], min_dist_to_obstacles);
+    assert(dijkstras_task_->environment_sdf_.EstimateDistance3d(cluster_centers[0]) > min_dist_to_obstacles);
+    assert(dijkstras_task_->environment_sdf_.EstimateDistance3d(cluster_centers[1]) > min_dist_to_obstacles);
+    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Green(), 1);
 
     // Assign the gripper poses based on which one is nearest to each cluster center
     AllGrippersSinglePose target_gripper_poses = world_state.all_grippers_single_pose_;
@@ -684,38 +953,22 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
         const bool gripper0_is_closest_to_cluster_0 = dist_sq_gripper0_to_cluster0 < dist_sq_gripper1_to_cluster0;
         const bool gripper0_is_closest_to_cluster_1 = dist_sq_gripper0_to_cluster1 < dist_sq_gripper1_to_cluster1;
 
-        // If gripper0 is closest to both, set the target for gripper0 to be whichever one it is closer to
-        if (gripper0_is_closest_to_cluster_0 && gripper0_is_closest_to_cluster_1)
+        // If the gripper0 is not closest to both, then there is a easy best match
+        if (gripper0_is_closest_to_cluster_0 && !gripper0_is_closest_to_cluster_1)
         {
-            if (dist_sq_gripper0_to_cluster0 < dist_sq_gripper0_to_cluster1)
-            {
-                target_gripper_poses[0].translation() = cluster_centers[0];
-                target_gripper_poses[1].translation() = cluster_centers[1];
-            }
-            else
-            {
-                target_gripper_poses[0].translation() = cluster_centers[1];
-                target_gripper_poses[1].translation() = cluster_centers[0];
-            }
+            target_gripper_poses[0].translation() = cluster_centers[0];
+            target_gripper_poses[1].translation() = cluster_centers[1];
         }
-        // If gripper1 is closest to both, set the target for gripper1 to be whichever one it is closer to
-        else if (!gripper0_is_closest_to_cluster_0 && !gripper0_is_closest_to_cluster_1)
+        else if (!gripper0_is_closest_to_cluster_0 && gripper0_is_closest_to_cluster_1)
         {
-            if (dist_sq_gripper1_to_cluster0 < dist_sq_gripper1_to_cluster1)
-            {
-                target_gripper_poses[0].translation() = cluster_centers[1];
-                target_gripper_poses[1].translation() = cluster_centers[0];
-            }
-            else
-            {
-                target_gripper_poses[0].translation() = cluster_centers[0];
-                target_gripper_poses[1].translation() = cluster_centers[1];
-            }
+            target_gripper_poses[0].translation() = cluster_centers[1];
+            target_gripper_poses[1].translation() = cluster_centers[0];
         }
-        // Otherwise, each one is closer to just one cluster center, so match them accordingly
+        // TODO: this comment is not currently correct
+        // Otherwise, pick the matching that minimizes the total squared distances
         else
         {
-            if (gripper0_is_closest_to_cluster_0)
+            if (cluster_centers[0].y() < cluster_centers[1].y())
             {
                 target_gripper_poses[0].translation() = cluster_centers[0];
                 target_gripper_poses[1].translation() = cluster_centers[1];
@@ -725,8 +978,25 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
                 target_gripper_poses[0].translation() = cluster_centers[1];
                 target_gripper_poses[1].translation() = cluster_centers[0];
             }
+//            const double assign_gripper0_to_cluster0_total_dist_sq = dist_sq_gripper0_to_cluster0 + dist_sq_gripper1_to_cluster1;
+//            const double assign_gripper0_to_cluster1_total_dist_sq = dist_sq_gripper0_to_cluster1 + dist_sq_gripper1_to_cluster0;
+
+//            if (assign_gripper0_to_cluster0_total_dist_sq < assign_gripper0_to_cluster1_total_dist_sq)
+//            {
+//                target_gripper_poses[0].translation() = cluster_centers[0];
+//                target_gripper_poses[1].translation() = cluster_centers[1];
+//            }
+//            else
+//            {
+//                target_gripper_poses[0].translation() = cluster_centers[1];
+//                target_gripper_poses[1].translation() = cluster_centers[0];
+//            }
         }
     }
+
+    vis_.visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[0].translation(), target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
+    vis_.visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[1].translation(), target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
+#endif
 
     return target_gripper_poses;
 }
@@ -736,13 +1006,14 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
     static int num_times_invoked = 0;
     num_times_invoked++;
 
-    // Deserialization
+    if (GetRRTReuseOldResults(ph_))
     {
+        // Deserialization
         try
         {
             ROS_INFO_NAMED("rrt_planner_results", "Checking if RRT solution already exists");
-            const std::string rrt_file_path = GetDijkstrasStorageLocation(nh_) + ".rrt." + PrettyPrint::PrettyPrint(num_times_invoked);
-            stopwatch(RESET);
+            const std::string rrt_file_path = GetLogFolder(nh_) + "rrt_cache_step." + PrettyPrint::PrettyPrint(num_times_invoked);
+            GlobalStopwatch(RESET);
             std::ifstream prev_rrt_result(rrt_file_path, std::ios::binary | std::ios::in | std::ios::ate);
             if (!prev_rrt_result.is_open())
             {
@@ -767,7 +1038,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
             executing_global_gripper_trajectory_ = true;
             global_plan_gripper_trajectory_ = deserialized_results.first;
 
-            ROS_INFO_STREAM_NAMED("rrt_planner_results", "Read RRT solutions in " << stopwatch(READ) << " seconds");
+            ROS_INFO_STREAM_NAMED("rrt_planner_results", "Read RRT solutions in " << GlobalStopwatch(READ) << " seconds");
             return;
         }
         catch (...)
@@ -776,7 +1047,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
         }
     }
 
-    // Planning
+    // Planning if we did not load a plan from file
     {
         RRTConfig start_config(
                     std::pair<Vector3d, Vector3d>(
@@ -799,47 +1070,48 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
         global_plan_current_timestep_ = 0;
         executing_global_gripper_trajectory_ = true;
         global_plan_gripper_trajectory_ = convertRRTResultIntoGripperTrajectory(world_state.all_grippers_single_pose_, rrt_results);
-    }
 
-    // Serialization
-    {
-        try
+        // Serialization
+        if (GetRRTStoreNewResults(ph_))
         {
-            // First serialize
-            std::vector<uint8_t> buffer;
-            const uint64_t bytes_used = SerializeAllGrippersPoseTrajectory(global_plan_gripper_trajectory_, buffer);
-            const auto deserialized_results = DeserializeAllGrippersPoseTrajectory(buffer, 0);
-            const auto& deserialized_traj = deserialized_results.first;
-            const auto deserialized_bytes_read = deserialized_results.second;
-
-            // Verify no mistakes made in serialization
-            assert(deserialized_bytes_read == bytes_used);
-            assert(global_plan_gripper_trajectory_.size() == deserialized_traj.size());
-            for (size_t time_idx = 0; time_idx < deserialized_traj.size(); ++time_idx)
+            try
             {
-                const auto& planned_poses = global_plan_gripper_trajectory_[time_idx];
-                const auto& deserialized_poses = deserialized_traj[time_idx];
+                // First serialize
+                std::vector<uint8_t> buffer;
+                const uint64_t bytes_used = SerializeAllGrippersPoseTrajectory(global_plan_gripper_trajectory_, buffer);
+                const auto deserialized_results = DeserializeAllGrippersPoseTrajectory(buffer, 0);
+                const auto& deserialized_traj = deserialized_results.first;
+                const auto deserialized_bytes_read = deserialized_results.second;
 
-                assert(planned_poses.size() == deserialized_poses.size());
-                for (size_t gripper_idx = 0; gripper_idx < deserialized_poses.size(); ++gripper_idx)
+                // Verify no mistakes made in serialization
+                assert(deserialized_bytes_read == bytes_used);
+                assert(global_plan_gripper_trajectory_.size() == deserialized_traj.size());
+                for (size_t time_idx = 0; time_idx < deserialized_traj.size(); ++time_idx)
                 {
-                    assert(planned_poses[gripper_idx].matrix() == deserialized_poses[gripper_idx].matrix());
-                }
-            }
+                    const auto& planned_poses = global_plan_gripper_trajectory_[time_idx];
+                    const auto& deserialized_poses = deserialized_traj[time_idx];
 
-            // Compress and save to file
-            ROS_INFO_NAMED("rrt_planner_results", "Compressing for storage");
-            const std::vector<uint8_t> compressed_serialized_data = ZlibHelpers::CompressBytes(buffer);
-            ROS_INFO_NAMED("rrt_planner_results", "Saving RRT results to file");
-            const std::string rrt_file_path = GetDijkstrasStorageLocation(nh_) + ".rrt." + PrettyPrint::PrettyPrint(num_times_invoked);
-            std::ofstream output_file(rrt_file_path, std::ios::out | std::ios::binary);
-            uint64_t serialized_size = compressed_serialized_data.size();
-            output_file.write(reinterpret_cast<const char*>(compressed_serialized_data.data()), (std::streamsize)serialized_size);
-            output_file.close();
-        }
-        catch (...)
-        {
-            ROS_ERROR_NAMED("coverage_task", "Saving RRT results to file failed");
+                    assert(planned_poses.size() == deserialized_poses.size());
+                    for (size_t gripper_idx = 0; gripper_idx < deserialized_poses.size(); ++gripper_idx)
+                    {
+                        assert(planned_poses[gripper_idx].matrix() == deserialized_poses[gripper_idx].matrix());
+                    }
+                }
+
+                // Compress and save to file
+                ROS_INFO_NAMED("rrt_planner_results", "Compressing for storage");
+                const std::vector<uint8_t> compressed_serialized_data = ZlibHelpers::CompressBytes(buffer);
+                ROS_INFO_NAMED("rrt_planner_results", "Saving RRT results to file");
+                const std::string rrt_file_path = GetLogFolder(nh_) + "rrt_cache_step." + PrettyPrint::PrettyPrint(num_times_invoked);
+                std::ofstream output_file(rrt_file_path, std::ios::out | std::ios::binary);
+                uint64_t serialized_size = compressed_serialized_data.size();
+                output_file.write(reinterpret_cast<const char*>(compressed_serialized_data.data()), (std::streamsize)serialized_size);
+                output_file.close();
+            }
+            catch (...)
+            {
+                ROS_ERROR_NAMED("coverage_task", "Saving RRT results to file failed");
+            }
         }
     }
 }
