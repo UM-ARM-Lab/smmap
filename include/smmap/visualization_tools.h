@@ -138,7 +138,8 @@ namespace smmap
                     const std::string& marker_name,
                     const EigenHelpers::VectorVector3d& point_sequence,
                     const std_msgs::ColorRGBA& color,
-                    const int32_t id = 1) const;
+                    const int32_t id = 1,
+                    const double scale = 0.001) const;
 
             void visualizeXYZTrajectory(
                     const std::string& marker_name,

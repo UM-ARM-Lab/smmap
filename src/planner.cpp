@@ -90,6 +90,7 @@ Planner::Planner(
                         dijkstras_task_->work_space_grid_.getZMin(),
                         dijkstras_task_->work_space_grid_.getZMax(),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
+                        GetRRTGoalBias(ph_),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
                         GetRRTMinGripperDistanceToObstacles(ph_),
                         GetRRTHomotopyDistancePenalty(),
@@ -165,12 +166,8 @@ WorldState Planner::sendNextCommand(
         }
         else
         {
-            const auto detection_results = detectFutureConstraintViolations(world_state);
-            const std::vector<VectorVector3d>& projected_deformable_point_paths = detection_results.first;
-            const std::vector<VirtualRubberBand>& projected_rubber_bands = detection_results.second;
-
             const bool global_planner_needed_due_to_overstretch =
-                    globalPlannerNeededDueToOverstretch(projected_rubber_bands);
+                    globalPlannerNeededDueToOverstretch(world_state);
 
             const bool global_planner_needed_due_to_lack_of_progress =
                     globalPlannerNeededDueToLackOfProgress(world_state);
@@ -186,8 +183,8 @@ WorldState Planner::sendNextCommand(
 
                 vis_.deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)max_lookahead_steps_ + 10);
                 vis_.deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
-                vis_.deleteObjects(PROJECTED_POINT_PATH_NS,         1, (int32_t)projected_deformable_point_paths.size() + 10);
-                vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS,   1, (int32_t)projected_deformable_point_paths.size() + 10);
+                vis_.deleteObjects(PROJECTED_POINT_PATH_NS,         1, 2);
+                vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS,   1, 2);
 
                 rrt_helper_->addBandToBlacklist(virtual_rubber_band_between_grippers_->getVectorRepresentation());
                 planGlobalGripperTrajectory(world_state);
@@ -381,20 +378,25 @@ void Planner::visualizeProjectedPaths(
 {
     if (visualization_enabled)
     {
+        EigenHelpers::VectorVector3d points;
+        EigenHelpers::VectorVector3d lines_start_points;
+        EigenHelpers::VectorVector3d lines_end_points;
+
         for (ssize_t node_ind = 0; node_ind < (ssize_t)projected_paths.size(); ++node_ind)
         {
-            if (projected_paths[node_ind].size() > 1)
+            const auto& current_points = projected_paths[node_ind];
+            if (current_points.size() > 1)
             {
-                vis_.visualizePoints(PROJECTED_POINT_PATH_NS, projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind + 1);
-                vis_.visualizeXYZTrajectory(PROJECTED_POINT_PATH_LINES_NS, projected_paths[node_ind], Visualizer::Magenta(), (int32_t)node_ind + 1);
-            }
-            else
-            {
-                const VectorVector3d empty_path;
-                vis_.visualizePoints(PROJECTED_POINT_PATH_NS, empty_path,Visualizer::Magenta(), (int32_t)node_ind + 1);
-                vis_.visualizeXYZTrajectory(PROJECTED_POINT_PATH_LINES_NS, empty_path, Visualizer::Magenta(), (int32_t)node_ind + 1);
+                points.insert(points.end(), current_points.begin(), current_points.end());
+                for (size_t point_idx = 1; point_idx < current_points.size(); ++point_idx)
+                {
+                    lines_start_points.push_back(current_points[point_idx - 1]);
+                    lines_end_points.push_back(current_points[point_idx]);
+                }
             }
         }
+        vis_.visualizePoints(PROJECTED_POINT_PATH_NS, points, Visualizer::Magenta(), 1);
+        vis_.visualizeLines(PROJECTED_POINT_PATH_LINES_NS, lines_start_points, lines_end_points, Visualizer::Magenta(), 1);
     }
 }
 
@@ -567,8 +569,11 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
 }
 
 bool Planner::globalPlannerNeededDueToOverstretch(
-        const std::vector<VirtualRubberBand>& projected_rubber_bands)
+        const WorldState& current_world_state)
 {
+    const auto detection_results = detectFutureConstraintViolations(current_world_state);
+    const auto& projected_rubber_bands = detection_results.second;
+
     size_t num_violations = 0;
 
     for (size_t t = 0; t < projected_rubber_bands.size(); ++t)
@@ -932,71 +937,6 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
 
     vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
     vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
-
-#if 0
-    // Project the cluster centers to be out of collision
-    const double min_dist_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_);
-    cluster_centers[0] = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(cluster_centers[0], min_dist_to_obstacles);
-    cluster_centers[1] = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(cluster_centers[1], min_dist_to_obstacles);
-    assert(dijkstras_task_->environment_sdf_.EstimateDistance3d(cluster_centers[0]) > min_dist_to_obstacles);
-    assert(dijkstras_task_->environment_sdf_.EstimateDistance3d(cluster_centers[1]) > min_dist_to_obstacles);
-    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Green(), 1);
-
-    // Assign the gripper poses based on which one is nearest to each cluster center
-    AllGrippersSinglePose target_gripper_poses = world_state.all_grippers_single_pose_;
-    {
-        const double dist_sq_gripper0_to_cluster0 = (target_gripper_poses[0].translation() - cluster_centers[0]).squaredNorm();
-        const double dist_sq_gripper0_to_cluster1 = (target_gripper_poses[0].translation() - cluster_centers[1]).squaredNorm();
-        const double dist_sq_gripper1_to_cluster0 = (target_gripper_poses[1].translation() - cluster_centers[0]).squaredNorm();
-        const double dist_sq_gripper1_to_cluster1 = (target_gripper_poses[1].translation() - cluster_centers[1]).squaredNorm();
-
-        const bool gripper0_is_closest_to_cluster_0 = dist_sq_gripper0_to_cluster0 < dist_sq_gripper1_to_cluster0;
-        const bool gripper0_is_closest_to_cluster_1 = dist_sq_gripper0_to_cluster1 < dist_sq_gripper1_to_cluster1;
-
-        // If the gripper0 is not closest to both, then there is a easy best match
-        if (gripper0_is_closest_to_cluster_0 && !gripper0_is_closest_to_cluster_1)
-        {
-            target_gripper_poses[0].translation() = cluster_centers[0];
-            target_gripper_poses[1].translation() = cluster_centers[1];
-        }
-        else if (!gripper0_is_closest_to_cluster_0 && gripper0_is_closest_to_cluster_1)
-        {
-            target_gripper_poses[0].translation() = cluster_centers[1];
-            target_gripper_poses[1].translation() = cluster_centers[0];
-        }
-        // TODO: this comment is not currently correct
-        // Otherwise, pick the matching that minimizes the total squared distances
-        else
-        {
-            if (cluster_centers[0].y() < cluster_centers[1].y())
-            {
-                target_gripper_poses[0].translation() = cluster_centers[0];
-                target_gripper_poses[1].translation() = cluster_centers[1];
-            }
-            else
-            {
-                target_gripper_poses[0].translation() = cluster_centers[1];
-                target_gripper_poses[1].translation() = cluster_centers[0];
-            }
-//            const double assign_gripper0_to_cluster0_total_dist_sq = dist_sq_gripper0_to_cluster0 + dist_sq_gripper1_to_cluster1;
-//            const double assign_gripper0_to_cluster1_total_dist_sq = dist_sq_gripper0_to_cluster1 + dist_sq_gripper1_to_cluster0;
-
-//            if (assign_gripper0_to_cluster0_total_dist_sq < assign_gripper0_to_cluster1_total_dist_sq)
-//            {
-//                target_gripper_poses[0].translation() = cluster_centers[0];
-//                target_gripper_poses[1].translation() = cluster_centers[1];
-//            }
-//            else
-//            {
-//                target_gripper_poses[0].translation() = cluster_centers[1];
-//                target_gripper_poses[1].translation() = cluster_centers[0];
-//            }
-        }
-    }
-
-    vis_.visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[0].translation(), target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
-    vis_.visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[1].translation(), target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
-#endif
 
     return target_gripper_poses;
 }

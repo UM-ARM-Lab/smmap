@@ -518,7 +518,8 @@ void Visualizer::visualizeLineStrip(
         const std::string& marker_name,
         const EigenHelpers::VectorVector3d& point_sequence,
         const std_msgs::ColorRGBA& color,
-        const int32_t id) const
+        const int32_t id,
+        const double scale) const
 {
     if (!disable_all_visualizations_)
     {
@@ -529,7 +530,7 @@ void Visualizer::visualizeLineStrip(
         marker.type = visualization_msgs::Marker::LINE_STRIP;
         marker.ns = marker_name;
         marker.id = id;
-        marker.scale.x = 0.001;
+        marker.scale.x = scale;
 
         marker.points = EigenHelpersConversions::VectorEigenVector3dToVectorGeometryPoint(point_sequence);
         marker.colors = std::vector<std_msgs::ColorRGBA>(marker.points.size(), color);

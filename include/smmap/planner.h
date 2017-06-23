@@ -70,7 +70,7 @@ namespace smmap
                     const bool visualization_enabled = true);
 
             bool globalPlannerNeededDueToOverstretch(
-                    const std::vector<VirtualRubberBand>& projected_rubber_bands);
+                    const WorldState& current_world_state);
 
             bool globalPlannerNeededDueToLackOfProgress(
                     const WorldState& current_world_state);

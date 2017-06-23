@@ -89,6 +89,7 @@ namespace smmap
                     const double z_limits_lower,
                     const double z_limits_upper,
                     const double max_step_size,
+                    const double goal_bias,
                     const double goal_reach_radius,
                     const double gripper_min_distance_to_obstacles,
                     const double homotopy_distance_penalty,
@@ -126,6 +127,8 @@ namespace smmap
 
             RRTGrippersRepresentation posPairSampling();
 
+            bool goalReached(const RRTConfig& node);
+
             /* const std::function<std::vector<std::pair<T, int64_t>>(const T&, const T&)>& forward_propagation_fn,
              * forward_propagation_fn - given the nearest neighbor and a new target state, returns the states that would grow the tree towards the target
              * SHOULD : collosion checking, constraint violation checking
@@ -159,6 +162,7 @@ namespace smmap
             const std::pair<double, double> y_limits_;
             const std::pair<double, double> z_limits_;
             const double max_step_size_;
+            const double goal_bias_;
             const double goal_reach_radius_;
             const double homotopy_distance_penalty_;
 

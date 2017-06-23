@@ -157,6 +157,7 @@ RRTHelper::RRTHelper(
         const double z_limits_lower,
         const double z_limits_upper,
         const double max_step_size,
+        const double goal_bias,
         const double goal_reach_radius,
         const double gripper_min_distance_to_obstacles,
         const double homotopy_distance_penalty,
@@ -167,6 +168,7 @@ RRTHelper::RRTHelper(
     , y_limits_(y_limits_lower,y_limits_upper)
     , z_limits_(z_limits_lower,z_limits_upper)
     , max_step_size_(max_step_size)
+    , goal_bias_(goal_bias)
     , goal_reach_radius_(goal_reach_radius)
     , homotopy_distance_penalty_(homotopy_distance_penalty)
     , max_shortcut_index_distance_(max_shortcut_index_distance)
@@ -249,10 +251,10 @@ int64_t RRTHelper::nearestNeighbour(
 }
 
 // const std::function<T(void)>& sampling_fn,
-inline RRTGrippersRepresentation RRTHelper::posPairSampling()
+RRTGrippersRepresentation RRTHelper::posPairSampling()
 {
     RRTGrippersRepresentation rand_sample;
-    const bool sample_goal = uniform_unit_distribution_(generator_) < 0.1;
+    const bool sample_goal = uniform_unit_distribution_(generator_) < goal_bias_;
 
     if (sample_goal)
     {
@@ -273,6 +275,23 @@ inline RRTGrippersRepresentation RRTHelper::posPairSampling()
     }
 
     return rand_sample;
+}
+
+bool RRTHelper::goalReached(const RRTConfig& node)
+{
+    if (RRTConfig::Distance(node.getGrippers(), grippers_goal_position_) < goal_reach_radius_)
+    {
+        vis_.visualizeLineStrip("RRT_GOAL_TESTING", node.getBand().getVectorRepresentation(), Visualizer::Blue(), 1, 0.01);
+        ros::spinOnce();
+        std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+
+        // Only accept paths that are different from those on the blacklist
+        if (!node.isVisibleToBlacklist())
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 /*
@@ -448,15 +467,8 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     // Build the functions that are needed by SimpleHybridRRTPlanner
     const std::function<bool(const RRTConfig&)> goal_reached_fn = [&] (const RRTConfig& node)
     {
-        if (RRTConfig::Distance(node.getGrippers(), grippers_goal) < goal_reach_radius_)
-        {
-            // Only accept paths that are different from those on the blacklist
-            if (!node.isVisibleToBlacklist())
-            {
-                return true;
-            }
-        }
-        return false;
+        const bool goal_reached = goalReached(node);
+        return goal_reached;
     };
 
     const std::function<RRTConfig(void)> sampling_fn = [&] ()
@@ -477,8 +489,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
             const RRTConfig& nearest_neighbor,
             const RRTConfig& random_target )
     {
-        const std::vector<std::pair<RRTConfig, int64_t>> propotation_results =
-                forwardPropogationFunction(nearest_neighbor, random_target);
+        const std::vector<std::pair<RRTConfig, int64_t>> propotation_results = forwardPropogationFunction(nearest_neighbor, random_target);
         return propotation_results;
     };
 
