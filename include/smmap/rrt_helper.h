@@ -12,20 +12,6 @@
 
 namespace smmap
 {
-    class RRTConfig;
-}
-
-namespace std
-{
-    template<>
-    struct hash<smmap::RRTConfig>
-    {
-        std::size_t operator()(const smmap::RRTConfig& rrt_config) const;
-    };
-}
-
-namespace smmap
-{
     typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> RRTGrippersRepresentation;
 
     class RRTConfig
@@ -57,7 +43,19 @@ namespace smmap
     };
     typedef std::allocator<RRTConfig> RRTAllocator;
     typedef simple_rrt_planner::SimpleRRTPlannerState<RRTConfig, RRTAllocator> ExternalRRTState;
+}
 
+namespace std
+{
+    template<>
+    struct hash<smmap::RRTConfig>
+    {
+        std::size_t operator()(const smmap::RRTConfig& rrt_config) const;
+    };
+}
+
+namespace smmap
+{
     class RRTHelper
     {
         public:
@@ -95,7 +93,7 @@ namespace smmap
                     const double homotopy_distance_penalty,
                     const int64_t max_shortcut_index_distance,
                     const uint32_t max_smoothing_iterations,
-                    const uint32_t max_failed_smoothing_iterations);
+                    const uint32_t max_failed_smoothing_iterations, const bool visualization_enabled);
 
             std::vector<RRTConfig, RRTAllocator> rrtPlan(
                     const RRTConfig& start,
@@ -171,14 +169,15 @@ namespace smmap
             const uint32_t max_failed_smoothing_iterations_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
 
+            std::mt19937_64& generator_;
             const sdf_tools::SignedDistanceField& environment_sdf_;
             const Visualizer& vis_;
-            std::mt19937_64& generator_;
-
+            const bool visualization_enabled_;
             const std_msgs::ColorRGBA band_safe_color_;
             const std_msgs::ColorRGBA band_overstretched_color_;
 
             RRTGrippersRepresentation grippers_goal_position_;
+            double max_grippers_distance_;
             std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
 
             const double gripper_min_distance_to_obstacles_;

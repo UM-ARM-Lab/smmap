@@ -163,7 +163,8 @@ RRTHelper::RRTHelper(
         const double homotopy_distance_penalty,
         const int64_t max_shortcut_index_distance,
         const uint32_t max_smoothing_iterations,
-        const uint32_t max_failed_smoothing_iterations)
+        const uint32_t max_failed_smoothing_iterations,
+        const bool visualization_enabled)
     : x_limits_(x_limits_lower,x_limits_upper)
     , y_limits_(y_limits_lower,y_limits_upper)
     , z_limits_(z_limits_lower,z_limits_upper)
@@ -175,9 +176,10 @@ RRTHelper::RRTHelper(
     , max_smoothing_iterations_(max_smoothing_iterations)
     , max_failed_smoothing_iterations_(max_failed_smoothing_iterations)
     , uniform_unit_distribution_(0.0, 1.0)
+    , generator_(generator)
     , environment_sdf_(environment_sdf)
     , vis_(vis)
-    , generator_(generator)
+    , visualization_enabled_(visualization_enabled)
     , band_safe_color_(Visualizer::Black())
     , band_overstretched_color_(Visualizer::Cyan())
     , gripper_min_distance_to_obstacles_(gripper_min_distance_to_obstacles)
@@ -217,7 +219,7 @@ int64_t RRTHelper::nearestNeighbour(
             const RRTConfig& rrt_config)
     {
         const auto blacklist_itr = goal_expansion_nn_blacklist_.find(rrt_state.GetValueImmutable());
-        const bool goal_blacklisted = blacklist_itr != goal_expansion_nn_blacklist_.end();
+        const bool goal_blacklisted = (blacklist_itr != goal_expansion_nn_blacklist_.end());
         if (goal_blacklisted)
         {
             return NN_BLACKLIST_DISTANCE;
@@ -250,7 +252,6 @@ int64_t RRTHelper::nearestNeighbour(
     return nn_idx;
 }
 
-// const std::function<T(void)>& sampling_fn,
 RRTGrippersRepresentation RRTHelper::posPairSampling()
 {
     RRTGrippersRepresentation rand_sample;
@@ -266,12 +267,24 @@ RRTGrippersRepresentation RRTHelper::posPairSampling()
         const double y1 = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_distribution_(generator_));
         const double z1 = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_distribution_(generator_));
 
-        const double x2 = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_distribution_(generator_));
-        const double y2 = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_distribution_(generator_));
-        const double z2 = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_distribution_(generator_));
+        // Pick a second point within band_max_length of the first point
+        // Math taken from here:
+        // http://mathworld.wolfram.com/SpherePointPicking.html
+        // https://math.stackexchange.com/questions/87230/picking-random-points-in-the-volume-of-sphere-with-uniform-probability
+
+        const double u = uniform_unit_distribution_(generator_);
+        const double v = uniform_unit_distribution_(generator_);
+        const double theta = 2.0 * M_PI * u;
+        const double phi = std::acos(2.0 * v - 1);
+        const double radial_distance = uniform_unit_distribution_(generator_);
+        const double r = max_grippers_distance_ * std::pow(radial_distance, 1.0 / 3.0);
+
+        const double x2_delta = r * std::cos(theta) * std::sin(phi);
+        const double y2_delta = r * std::sin(theta) * std::sin(phi);
+        const double z2_delta = r * std::cos(phi);
 
         rand_sample.first = Eigen::Vector3d(x1, y1, z1);
-        rand_sample.second = Eigen::Vector3d(x2, y2, z2);
+        rand_sample.second = Eigen::Vector3d(x1 + x2_delta, y1 + y2_delta, z1 + z2_delta);
     }
 
     return rand_sample;
@@ -451,7 +464,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
         const RRTConfig& start,
         const RRTGrippersRepresentation& grippers_goal,
         const std::chrono::duration<double>& time_limit)
-{
+{    
     visualizeBlacklist();
 
     if ((environment_sdf_.EstimateDistance3d(grippers_goal.first).first < gripper_min_distance_to_obstacles_) ||
@@ -463,6 +476,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     }
 
     grippers_goal_position_ = grippers_goal;
+    max_grippers_distance_ = start.getBand().maxSafeLength();
 
     // Build the functions that are needed by SimpleHybridRRTPlanner
     const std::function<bool(const RRTConfig&)> goal_reached_fn = [&] (const RRTConfig& node)
@@ -478,16 +492,14 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     };
 
     const std::function<int64_t(const std::vector<ExternalRRTState>&, const RRTConfig&)> nearest_neighbor_fn = [&] (
-            const std::vector<ExternalRRTState>& nodes,
-            const RRTConfig& config )
+            const std::vector<ExternalRRTState>& nodes, const RRTConfig& config )
     {
         const int64_t neighbour_idx = nearestNeighbour(nodes, config);
         return neighbour_idx;
     };
 
     const std::function<std::vector<std::pair<RRTConfig, int64_t>>(const RRTConfig&, const RRTConfig&)> forward_propagation_fn = [&] (
-            const RRTConfig& nearest_neighbor,
-            const RRTConfig& random_target )
+            const RRTConfig& nearest_neighbor, const RRTConfig& random_target )
     {
         const std::vector<std::pair<RRTConfig, int64_t>> propotation_results = forwardPropogationFunction(nearest_neighbor, random_target);
         return propotation_results;

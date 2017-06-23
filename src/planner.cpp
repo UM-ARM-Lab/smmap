@@ -96,7 +96,8 @@ Planner::Planner(
                         GetRRTHomotopyDistancePenalty(),
                         GetRRTMaxShortcutIndexDistance(ph_),
                         GetRRTMaxSmoothingIterations(ph_),
-                        GetRRTMaxFailedSmoothingIterations(ph_)));
+                        GetRRTMaxFailedSmoothingIterations(ph_),
+                        !GetDisableAllVisualizations(nh_)));
     }
 
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
@@ -922,6 +923,7 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
             }
         }
     }
+    // If none of the above are true, than there is a logic error
     else
     {
         assert(false && "Unhandled edge case in get gripper targets");
