@@ -103,7 +103,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
         }
 
 
-        /* // Using avoidance result
+         // Using avoidance result
         const std::vector<CollisionAvoidanceResult> grippers_collision_avoidance_result =
                 ComputeGripperObjectAvoidance(
                     input_data.world_current_state_.gripper_collision_data_,
@@ -134,10 +134,9 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
                 optimal_gripper_command.push_back(grippers_motion_collision_avoidance.at(ind_gripper));
             }
         }
-        */
 
 
-
+        /*
         // Method 1: use constraint_violation checker for gripper collosion
         // Constraint violation checking here
         const bool constraint_violation = gripperCollisionCheckResult(input_data.world_current_state_.all_grippers_single_pose_,
@@ -165,6 +164,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
                 }
             }
         }
+        */
     }
 
     std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> suggested_grippers_command(
