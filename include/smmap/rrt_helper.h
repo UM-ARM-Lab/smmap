@@ -12,6 +12,22 @@
 
 namespace smmap
 {
+    class RRTConfig;
+    typedef std::allocator<RRTConfig> RRTAllocator;
+    typedef simple_rrt_planner::SimpleRRTPlannerState<RRTConfig, RRTAllocator> ExternalRRTState;
+}
+
+namespace std
+{
+    template<>
+    struct hash<smmap::RRTConfig>
+    {
+        std::size_t operator()(const smmap::RRTConfig& rrt_config) const;
+    };
+}
+
+namespace smmap
+{
     typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> RRTGrippersRepresentation;
 
     class RRTConfig
@@ -32,6 +48,7 @@ namespace smmap
             double distance(const RRTConfig& other) const;
             static double Distance(const RRTConfig& c1, const RRTConfig& c2);
             static double Distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
+            static double PathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index);
 
             bool operator==(const RRTConfig& other) const;
 
@@ -41,21 +58,7 @@ namespace smmap
             VirtualRubberBand band_;
             bool is_visible_to_blacklist_;
     };
-    typedef std::allocator<RRTConfig> RRTAllocator;
-    typedef simple_rrt_planner::SimpleRRTPlannerState<RRTConfig, RRTAllocator> ExternalRRTState;
-}
 
-namespace std
-{
-    template<>
-    struct hash<smmap::RRTConfig>
-    {
-        std::size_t operator()(const smmap::RRTConfig& rrt_config) const;
-    };
-}
-
-namespace smmap
-{
     class RRTHelper
     {
         public:
@@ -109,7 +112,7 @@ namespace smmap
             // Visualization and other debugging tools
             ///////////////////////////////////////////////////////////////////////////////////////
 
-            void visualize(const std::vector<RRTConfig, RRTAllocator>& path) const;
+            void visualizePath(const std::vector<RRTConfig, RRTAllocator>& path) const;
 
             void visualizeBlacklist() const;
 

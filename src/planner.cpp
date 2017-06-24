@@ -1007,7 +1007,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
         const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
         const auto rrt_results = rrt_helper_->rrtPlan(start_config, rrt_grippers_goal, time_limit);
 
-        rrt_helper_->visualize(rrt_results);
+        rrt_helper_->visualizePath(rrt_results);
 
         global_plan_current_timestep_ = 0;
         executing_global_gripper_trajectory_ = true;
