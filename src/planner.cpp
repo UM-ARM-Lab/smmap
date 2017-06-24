@@ -934,8 +934,10 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
 
     // Project the targets out of collision
     const double min_dist_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_);
-    target_gripper_poses[0].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(target_gripper_poses[0].translation(), min_dist_to_obstacles);
-    target_gripper_poses[1].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(target_gripper_poses[1].translation(), min_dist_to_obstacles);
+    const Eigen::Vector3d gripper0_position_pre_project = target_gripper_poses[0].translation();
+    const Eigen::Vector3d gripper1_position_pre_project = target_gripper_poses[1].translation();
+    target_gripper_poses[0].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(gripper0_position_pre_project, min_dist_to_obstacles);
+    target_gripper_poses[1].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(gripper1_position_pre_project, min_dist_to_obstacles);
 
     vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
     vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);

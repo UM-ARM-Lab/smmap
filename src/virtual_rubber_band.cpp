@@ -1,7 +1,6 @@
 #include "smmap/virtual_rubber_band.h"
 
 #include <arc_utilities/shortcut_smoothing.hpp>
-#include <thread>
 
 using namespace smmap;
 

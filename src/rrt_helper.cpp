@@ -105,9 +105,9 @@ double RRTConfig::PathDistance(const std::vector<RRTConfig, RRTAllocator>& path,
     assert(start_index < end_index);
     assert(end_index < path.size());
     double distance = 0;
-    for (size_t idx = start_index + 1; idx <= end_index; ++idx)
+    for (size_t idx = start_index; idx < end_index; ++idx)
     {
-        distance += Distance(path[idx - 1], path[idx]);
+        distance += Distance(path[idx], path[idx + 1]);
     }
     return distance;
 }
@@ -680,13 +680,108 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VirtualRubberBand& tes
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Helper function for shortcut smoothing
+// Helper functions for shortcut smoothing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+static EigenHelpers::VectorVector3d findKinksFirstGripper(
+        const std::vector<RRTConfig, RRTAllocator>& path,
+        const size_t start_index,
+        const size_t end_index)
+{
+    assert(start_index < end_index);
+    assert(end_index < path.size());
+
+    // The start of the path is clearly the first 'kink'
+    EigenHelpers::VectorVector3d gripper_path_kinks(1, path[start_index].getGrippers().first);
+
+    size_t last_kink = start_index;
+    Eigen::Vector3d last_kink_gripper_position = path[last_kink].getGrippers().first;
+    double path_distance = 0;
+    for (size_t idx = start_index; start_index < end_index; ++idx)
+    {
+        const Eigen::Vector3d& current_gripper_position = path[idx].getGrippers().first;
+        const Eigen::Vector3d& next_gripper_position    = path[idx + 1].getGrippers().first;
+        path_distance += (next_gripper_position - current_gripper_position).norm();
+        const double straight_line_distance = (next_gripper_position - last_kink_gripper_position).norm();
+
+        // If the straight line distance between the start and the next gripper does not match the path distance, then the current node is a kink
+        if (!EigenHelpers::IsApprox(straight_line_distance, path_distance, 1e-6))
+        {
+            last_kink = idx;
+            last_kink_gripper_position = path[last_kink].getGrippers().first;
+            path_distance = 0;
+            gripper_path_kinks.push_back(last_kink_gripper_position);
+        }
+    }
+
+    return gripper_path_kinks;
+}
+
+static EigenHelpers::VectorVector3d findKinksSecondGripper(
+        const std::vector<RRTConfig, RRTAllocator>& path,
+        const size_t start_index,
+        const size_t end_index)
+{
+    assert(start_index < end_index);
+    assert(end_index < path.size());
+
+    // The start of the path is clearly the first 'kink'
+    EigenHelpers::VectorVector3d gripper_path_kinks(1, path[start_index].getGrippers().second);
+
+    size_t last_kink = start_index;
+    Eigen::Vector3d last_kink_gripper_position = path[last_kink].getGrippers().second;
+    double path_distance = 0;
+    for (size_t idx = start_index; start_index < end_index; ++idx)
+    {
+        const Eigen::Vector3d& current_gripper_position = path[idx].getGrippers().second;
+        const Eigen::Vector3d& next_gripper_position    = path[idx + 1].getGrippers().second;
+        path_distance += (next_gripper_position - current_gripper_position).norm();
+        const double straight_line_distance = (next_gripper_position - last_kink_gripper_position).norm();
+
+        // If the straight line distance between the start and the next gripper does not match the path distance, then the current node is a kink
+        if (!EigenHelpers::IsApprox(straight_line_distance, path_distance, 1e-6))
+        {
+            last_kink = idx;
+            last_kink_gripper_position = current_gripper_position;
+            path_distance = 0;
+            gripper_path_kinks.push_back(last_kink_gripper_position);
+        }
+    }
+
+    return gripper_path_kinks;
+}
+
+static EigenHelpers::VectorVector3d createOtherGripperWaypoints(
+        const EigenHelpers::VectorVector3d& given_gripper_waypoints,
+        const Eigen::Vector3d& start_point,
+        const Eigen::Vector3d& end_point)
+{
+    const size_t num_waypoints = given_gripper_waypoints.size();
+    assert(num_waypoints >= 2);
+
+    EigenHelpers::VectorVector3d other_gripper_waypoints;
+    other_gripper_waypoints.reserve(num_waypoints);
+    other_gripper_waypoints.push_back(start_point);
+
+    // We will need to "space out" the distance between start_point and end_point to match those of the given waypoints
+    // Note that we've already inserted the first waypoint, and we'll insert the last manually as well
+    const std::vector<double> cummulative_distances = EigenHelpers::CalculateCumulativeDistances(given_gripper_waypoints);
+    for (size_t idx = 1; idx < num_waypoints - 1; ++idx)
+    {
+        const double ratio = cummulative_distances[idx - 1] / cummulative_distances.back();
+        const auto next_waypoint = EigenHelpers::Interpolate(start_point, end_point, ratio);
+        other_gripper_waypoints.push_back(next_waypoint);
+    }
+    other_gripper_waypoints.push_back(end_point);
+
+    assert(other_gripper_waypoints.size() == num_waypoints);
+    return other_gripper_waypoints;
+}
 
 /**
  * @brief RRTHelper::forwardSimulateGrippersPath
  *   Forward simulates the rubber band starting the grippers at position path[start_index]
- *   and ending at position path[end_index - 1]. Used by rrtShortcutSmooth.
+ *   and ending at the end of the path. Used by rrtShortcutSmooth.
  * @param rubber_band
  * @param path
  * @param start_index
@@ -694,16 +789,14 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VirtualRubberBand& tes
  * @return A vector of RRTConfig of at most (end_index - start_index) elements; includes path[start_index].
  */
 std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulateGrippersPath(
-        VirtualRubberBand rubber_band,
         const std::vector<RRTConfig, RRTAllocator>& path,
         const size_t start_index,
-        const size_t end_index)
+        VirtualRubberBand rubber_band)
 {
     Stopwatch function_wide_stopwatch;
     Stopwatch stopwatch;
 
-    assert(start_index <= end_index);
-    assert(end_index <= path.size());
+    assert(start_index < path.size());
 
     // Verify that the endpoints of the rubber band match the start of the grippers path
     if (!bandEndpointsMatchGripperPositions(rubber_band, path[start_index].getGrippers()))
@@ -720,16 +813,22 @@ std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulate
 
     // Collect the results for use by the rrtShortcutSmooth function
     std::vector<RRTConfig, RRTAllocator> resulting_path;
-    resulting_path.reserve(end_index - start_index);
-    resulting_path.push_back(RRTConfig(path[start_index].getGrippers(), rubber_band, isBandFirstOrderVisibileToBlacklist(rubber_band)));
-    resulting_path.push_back(RRTConfig(path[start_index].getGrippers(), rubber_band, false));
+    // Put the start position on the path
+    {
+        resulting_path.reserve(path.size() - start_index);
+        stopwatch(RESET);
+        const bool is_first_order_visible = isBandFirstOrderVisibileToBlacklist(rubber_band);
+        const double first_order_vis_time = stopwatch(READ);
+        total_first_order_vis_propogation_time_ += first_order_vis_time;
+        resulting_path.push_back(RRTConfig(path[start_index].getGrippers(), rubber_band, is_first_order_visible));
+    }
 
     // Advance the grippers, simulating the rubber band until we reach the end of the path, or the band is overstretched
     bool band_is_overstretched = rubber_band.isOverstretched();
     bool band_got_stuck = false;
     size_t path_idx = start_index + 1;
     const bool rubber_band_verbose = false && visualization_enabled_globally_;
-    while (!band_is_overstretched && !band_got_stuck && path_idx < end_index)
+    while (!band_is_overstretched && !band_got_stuck && path_idx < path.size())
     {
         // Forward simulate the band
         stopwatch(RESET);
@@ -763,7 +862,7 @@ std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulate
     if (success)
     {
         const RRTGrippersRepresentation rubber_band_endpoints = rubber_band.getEndpoints();
-        assert(gripperPositionsAreApproximatelyEqual(path[end_index - 1].getGrippers(), rubber_band_endpoints));
+        assert(gripperPositionsAreApproximatelyEqual(path.back().getGrippers(), rubber_band_endpoints));
     }
 
     const double everything_included_forward_propogation_time = function_wide_stopwatch(READ);
@@ -800,7 +899,8 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
             vis_.deleteObjects(RRT_SHORTCUT_REMAINDER_NS);
         }
 
-        // Attempt a shortcut
+        ///////////////////// Determine which nodes to try to shortcut between /////////////////////////////////////////
+
         const int64_t base_index = (int64_t)std::uniform_int_distribution<size_t>(0, path.size() - 1)(generator_);
 
         // Compute the offset index
@@ -815,6 +915,8 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         const size_t smoothing_start_index = (size_t)std::min(base_index, second_index);
         const size_t smoothing_end_index = (size_t)std::max(base_index, second_index);
 
+        ///////////////////// Determine if a shortcut is even possible /////////////////////////////////////////////////
+
         // We know start_index <= end_index, this essentially checks if start == end or start + 1 == end
         if (smoothing_start_index + 1 >= smoothing_end_index)
         {
@@ -822,8 +924,8 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         }
 
         // Check if the edge possibly can be smoothed
-        const RRTConfig& smoothing_start_config = path[smoothing_start_index];
-        const RRTConfig& smoothing_target_end_config = path[smoothing_end_index];
+        const auto& smoothing_start_config = path[smoothing_start_index];
+        const auto& smoothing_target_end_config = path[smoothing_end_index];
         const double minimum_distance = RRTConfig::Distance(smoothing_start_config, smoothing_target_end_config);
         const double path_distance = RRTConfig::PathDistance(path, smoothing_start_index, smoothing_end_index);
 
@@ -832,6 +934,8 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         {
             continue;
         }
+
+        ///////////////////// Attempte a shortcut //////////////////////////////////////////////////////////////////////
 
         // Visualization
         if (visualization_enabled_globally_)
@@ -862,29 +966,25 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         // We still need to check that the rubber band can still reach the goal correctly from this state,
         // so we'll forward propogate along the rest of the trajectory to check feasibility
         const std::pair<bool, std::vector<RRTConfig, RRTAllocator>> end_of_smoothing_to_goal_results =
-                forwardSimulateGrippersPath(
-                    smoothing_propogation_results.back().first.getBand(),
-                    path,
-                    smoothing_end_index,
-                    path.size());
+                forwardSimulateGrippersPath(path, smoothing_end_index, smoothing_propogation_results.back().first.getBand());
         const bool final_band_at_goal_success = end_of_smoothing_to_goal_results.first;
-        const std::vector<RRTConfig, RRTAllocator>& end_of_smoothing_to_goal_path_ = end_of_smoothing_to_goal_results.second;
-        const RRTConfig final_node_of_smoothing = end_of_smoothing_to_goal_path_.back();
-        const bool final_band_visibile_to_blacklist = final_node_of_smoothing.isVisibleToBlacklist();
+        const auto& end_of_smoothing_to_goal_path_ = end_of_smoothing_to_goal_results.second;
+        const auto& final_node_of_smoothing = end_of_smoothing_to_goal_path_.back();
+        const bool final_band_visible_to_blacklist = final_node_of_smoothing.isVisibleToBlacklist();
 
         // Check if the rubber band gets overstretched or ends up in a blacklisted first order homotopy class
         // while following the tail of the starting trajectory
-        if (!final_band_at_goal_success || final_band_visibile_to_blacklist)
+        if (!final_band_at_goal_success || final_band_visible_to_blacklist)
         {
             ++failed_iterations;
             continue;
         }
 
-        ////////// Smoothing success - Create the new smoothed path ////////////////////////////////////////////////////
+        ///////////////////// Smoothing success - Create the new smoothed path /////////////////////////////////////////
 
         // Allocate space for the total smoothed path
         std::vector<RRTConfig, RRTAllocator> smoothed_path;
-        smoothed_path.reserve(path.size() - (smoothing_end_index - smoothing_start_index) + smoothing_propogation_results.size());
+        smoothed_path.reserve((smoothing_start_index  + 1) + smoothing_propogation_results.size() + (end_of_smoothing_to_goal_results.second.size() - 1));
 
         // Insert the starting unchanged part of the path
         smoothed_path.insert(smoothed_path.begin(), path.begin(), path.begin() + smoothing_start_index + 1);
@@ -961,6 +1061,8 @@ void RRTHelper::visualizePath(const std::vector<RRTConfig, RRTAllocator>& path) 
     vis_.visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), 1);
     vis_.visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Blue(), 1);
     vis_.visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
+    ros::spinOnce();
+    std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
 }
 
 void RRTHelper::visualizeBlacklist() const

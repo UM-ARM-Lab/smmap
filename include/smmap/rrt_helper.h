@@ -150,10 +150,9 @@ namespace smmap
             ///////////////////////////////////////////////////////////////////////////////////////
 
             std::pair<bool, std::vector<RRTConfig, RRTAllocator>> forwardSimulateGrippersPath(
-                    VirtualRubberBand rubber_band,
                     const std::vector<RRTConfig, RRTAllocator>& path,
                     const size_t start_index,
-                    const size_t end_index);
+                    VirtualRubberBand rubber_band);
 
             std::vector<RRTConfig, RRTAllocator> rrtShortcutSmooth(
                     std::vector<RRTConfig, RRTAllocator> path);
