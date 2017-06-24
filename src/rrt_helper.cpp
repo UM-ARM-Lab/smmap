@@ -188,6 +188,7 @@ RRTHelper::RRTHelper(
     , max_smoothing_iterations_(max_smoothing_iterations)
     , max_failed_smoothing_iterations_(max_failed_smoothing_iterations)
     , uniform_unit_distribution_(0.0, 1.0)
+    , uniform_shortcut_smoothing_int_distribution_(1, 4)
     , generator_(generator)
     , environment_sdf_(environment_sdf)
     , vis_(vis)
@@ -553,14 +554,11 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     total_band_forward_propogation_time_ = 0.0;
     total_first_order_vis_propogation_time_ = 0.0;
 
+    ROS_INFO_NAMED("rrt", "Starting SimpleHybridRRTPlanner");
+
     // Call the actual planner
     const auto rrt_results = simple_rrt_planner::SimpleHybridRRTPlanner::Plan(
-                start,
-                nearest_neighbor_fn,
-                goal_reached_fn,
-                sampling_fn,
-                forward_propagation_fn,
-                time_limit);
+                start, nearest_neighbor_fn, goal_reached_fn, sampling_fn, forward_propagation_fn, time_limit);
 
     if (visualization_enabled_globally_)
     {
@@ -574,6 +572,9 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     statistics_["planning2_forward_propogation_first_order_vis_time      "] = total_first_order_vis_propogation_time_;
     statistics_["planning3_forward_propogation_everything_included_time  "] = total_everything_included_forward_propogation_time_;
 
+    std::cout << "\nSimpleRRT Statistics:\n" << PrettyPrint::PrettyPrint(rrt_results.second, false, "\n") << std::endl << std::endl;
+    ROS_INFO_NAMED("rrt", "Starting Shortcut Smoothing");
+
     const auto smoothed_path = rrtShortcutSmooth(rrt_results.first);
 
     if (visualization_enabled_globally_)
@@ -581,8 +582,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
         vis_.deleteObjects(RRTHelper::RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
     }
 
-    std::cout << "\nSimpleRRT Statistics:\n" << PrettyPrint::PrettyPrint(rrt_results.second, false, "\n") << std::endl << std::endl;
-    std::cout << "Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
+    std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
 
     return smoothed_path;
 }
@@ -683,7 +683,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VirtualRubberBand& tes
 // Helper functions for shortcut smoothing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static EigenHelpers::VectorVector3d findKinksFirstGripper(
+static EigenHelpers::VectorVector3d findFirstGripperWaypoints(
         const std::vector<RRTConfig, RRTAllocator>& path,
         const size_t start_index,
         const size_t end_index)
@@ -697,8 +697,13 @@ static EigenHelpers::VectorVector3d findKinksFirstGripper(
     size_t last_kink = start_index;
     Eigen::Vector3d last_kink_gripper_position = path[last_kink].getGrippers().first;
     double path_distance = 0;
-    for (size_t idx = start_index; start_index < end_index; ++idx)
+
+    // We don't include the last index because it is clearly the last 'kink'
+    for (size_t idx = start_index; idx < end_index - 1; ++idx)
     {
+//        std::cout << "Curr Idx: " << idx << " Grippers: " << PrettyPrint::PrettyPrint(path[idx].getGrippers()) << std::endl;
+//        std::cout << "Next Idx: " << idx  + 1 << " Grippers: " << PrettyPrint::PrettyPrint(path[idx + 1].getGrippers()) << std::endl;
+
         const Eigen::Vector3d& current_gripper_position = path[idx].getGrippers().first;
         const Eigen::Vector3d& next_gripper_position    = path[idx + 1].getGrippers().first;
         path_distance += (next_gripper_position - current_gripper_position).norm();
@@ -713,11 +718,12 @@ static EigenHelpers::VectorVector3d findKinksFirstGripper(
             gripper_path_kinks.push_back(last_kink_gripper_position);
         }
     }
+    gripper_path_kinks.push_back(path[end_index].getGrippers().first);
 
     return gripper_path_kinks;
 }
 
-static EigenHelpers::VectorVector3d findKinksSecondGripper(
+static EigenHelpers::VectorVector3d findSecondGripperWaypoints(
         const std::vector<RRTConfig, RRTAllocator>& path,
         const size_t start_index,
         const size_t end_index)
@@ -725,14 +731,21 @@ static EigenHelpers::VectorVector3d findKinksSecondGripper(
     assert(start_index < end_index);
     assert(end_index < path.size());
 
+//    std::cout << "Getting second gripper waypoints: Start: " << start_index << " End: " << end_index << " Path Size: " << path.size() << std::endl;
+
     // The start of the path is clearly the first 'kink'
     EigenHelpers::VectorVector3d gripper_path_kinks(1, path[start_index].getGrippers().second);
 
     size_t last_kink = start_index;
     Eigen::Vector3d last_kink_gripper_position = path[last_kink].getGrippers().second;
     double path_distance = 0;
-    for (size_t idx = start_index; start_index < end_index; ++idx)
+
+    // We don't include the last index because it is clearly the last 'kink'
+    for (size_t idx = start_index; idx < end_index - 1; ++idx)
     {
+//        std::cout << "Curr Idx: " << idx << " Grippers: " << PrettyPrint::PrettyPrint(path[idx].getGrippers()) << std::endl;
+//        std::cout << "Next Idx: " << idx  + 1 << " Grippers: " << PrettyPrint::PrettyPrint(path[idx + 1].getGrippers()) << std::endl;
+
         const Eigen::Vector3d& current_gripper_position = path[idx].getGrippers().second;
         const Eigen::Vector3d& next_gripper_position    = path[idx + 1].getGrippers().second;
         path_distance += (next_gripper_position - current_gripper_position).norm();
@@ -747,6 +760,7 @@ static EigenHelpers::VectorVector3d findKinksSecondGripper(
             gripper_path_kinks.push_back(last_kink_gripper_position);
         }
     }
+    gripper_path_kinks.push_back(path[end_index].getGrippers().second);
 
     return gripper_path_kinks;
 }
@@ -937,7 +951,6 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
         ///////////////////// Attempte a shortcut //////////////////////////////////////////////////////////////////////
 
-        // Visualization
         if (visualization_enabled_globally_)
         {
             const RRTGrippersRepresentation& start_band_endpoints = smoothing_start_config.getBand().getEndpoints();
@@ -949,9 +962,78 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
             vis_.visualizeCubes(RRT_SHORTCUT_END_NS, {end_band_endpoints.first, end_band_endpoints.second}, Eigen::Vector3d(0.02, 0.02, 0.02), Visualizer::Red(), 10);
         }
 
-        // Forward simulate the rubber band along the straight line between gripper positions
-        const std::vector<std::pair<RRTConfig, int64_t>> smoothing_propogation_results =
-                forwardPropogationFunction(smoothing_start_config, smoothing_target_end_config, false);
+        // First determine which type of smoothing we are doing, both grippers, or a single gripper
+        // On a 1 or a 2, smooth both grippers,
+        // On a 3 smooth the first gripper only,
+        // On a 4 smooth the second gripper only
+        const int smoothing_type = uniform_shortcut_smoothing_int_distribution_(generator_);
+        // Create a structure to hold the results which will get filled by each part of the if/else chain
+        std::vector<std::pair<RRTConfig, int64_t>> smoothing_propogation_results;
+        if (smoothing_type == 1 || smoothing_type == 2)
+        {
+            // Forward simulate the rubber band along the straight line between gripper positions
+            smoothing_propogation_results = forwardPropogationFunction(smoothing_start_config, smoothing_target_end_config, false);
+        }
+        else if (smoothing_type == 3 || smoothing_type == 4)
+        {
+            // Once we know the fixed waypoints, then we do smoothing between these waypoints
+            EigenHelpers::VectorVector3d first_gripper_fixed_waypoints;
+            EigenHelpers::VectorVector3d second_gripper_fixed_waypoints;
+            // Smooth the first gripper
+            if (smoothing_type == 3)
+            {
+                second_gripper_fixed_waypoints = findSecondGripperWaypoints(path, smoothing_start_index, smoothing_end_index);
+                first_gripper_fixed_waypoints = createOtherGripperWaypoints(
+                            second_gripper_fixed_waypoints,
+                            smoothing_start_config.getGrippers().first,
+                            smoothing_target_end_config.getGrippers().first);
+            }
+            else
+            {
+                first_gripper_fixed_waypoints = findFirstGripperWaypoints(path, smoothing_start_index, smoothing_end_index);
+                second_gripper_fixed_waypoints = createOtherGripperWaypoints(
+                            first_gripper_fixed_waypoints,
+                            smoothing_start_config.getGrippers().second,
+                            smoothing_target_end_config.getGrippers().second);
+            }
+            assert(first_gripper_fixed_waypoints.size() == second_gripper_fixed_waypoints.size());
+            const size_t num_waypoints = first_gripper_fixed_waypoints.size();
+            // Make a guess about the number of nodes we'll end up using
+            smoothing_propogation_results.reserve(10 * num_waypoints);
+
+            // Now that we have the waypoints, start building the smoothed path, shortcutting if we encouter an infeasible configuration
+            RRTConfig interm_start_config = smoothing_start_config;
+            for (size_t waypoint_idx = 1; waypoint_idx < num_waypoints; ++waypoint_idx)
+            {
+                const RRTConfig forward_prop_target_config(
+                            RRTGrippersRepresentation(
+                                first_gripper_fixed_waypoints[waypoint_idx],
+                                second_gripper_fixed_waypoints[waypoint_idx]),
+                            path.front().getBand(),
+                            false);
+
+                const auto interm_forward_prop_results = forwardPropogationFunction(interm_start_config, forward_prop_target_config, false);
+
+                // Check if the rubber band gets overstretched while propogating the grippers on the new path
+                if (interm_forward_prop_results.size() == 0 ||
+                    !gripperPositionsAreApproximatelyEqual(
+                        interm_forward_prop_results.back().first.getGrippers(),
+                        forward_prop_target_config.getGrippers()))
+                {
+                    // If we have overstretched or otherwise have problems, exit the loop
+                    // We will let the exterior check for success keep track of the failed iteration count
+                    break;
+                }
+
+                // If we were succesful, then insert the results, and move the interm start config forward by a waypoint
+                smoothing_propogation_results.insert(smoothing_propogation_results.begin(), interm_forward_prop_results.begin(), interm_forward_prop_results.end());
+                interm_start_config = smoothing_propogation_results.back().first;
+            }
+        }
+        else
+        {
+            assert(false && "Smoothing type was something other than [1, 4], this ougth to be impossible");
+        }
 
         // Check if the rubber band gets overstretched while propogating the grippers on the new path
         if (smoothing_propogation_results.size() == 0 ||

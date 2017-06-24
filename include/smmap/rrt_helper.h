@@ -171,6 +171,7 @@ namespace smmap
             const uint32_t max_smoothing_iterations_;
             const uint32_t max_failed_smoothing_iterations_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
+            std::uniform_int_distribution<int> uniform_shortcut_smoothing_int_distribution_;
 
             std::mt19937_64& generator_;
             const sdf_tools::SignedDistanceField& environment_sdf_;

@@ -136,8 +136,8 @@ Visualizer::Visualizer(
     if (!disable_all_visualizations_)
     {
         // Publish visualization request markers
-        visualization_marker_pub_       = nh.advertise<visualization_msgs::Marker>(marker_topic, 3000);
-        visualization_marker_vector_pub_ = nh.advertise<visualization_msgs::MarkerArray>(marker_array_topic, 3000);
+        visualization_marker_pub_        = nh.advertise<visualization_msgs::Marker>(marker_topic, 100);
+        visualization_marker_vector_pub_ = nh.advertise<visualization_msgs::MarkerArray>(marker_array_topic, 100);
     }
 }
 
