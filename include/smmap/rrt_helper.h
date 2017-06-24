@@ -75,9 +75,8 @@ namespace smmap
             static const std::string RRT_SOLUTION_GRIPPER_B_NS;
             static const std::string RRT_SOLUTION_RUBBER_BAND_NS;
 
-            static const std::string RRT_SHORTCUT_START_NS;
-            static const std::string RRT_SHORTCUT_END_NS;
-            static const std::string RRT_SHORTCUT_REMAINDER_NS;
+            static const std::string RRT_SHORTCUT_FIRST_GRIPPER_NS;
+            static const std::string RRT_SHORTCUT_SECOND_GRIPPER_NS;
 
             RRTHelper(
                     const sdf_tools::SignedDistanceField& environment_sdf,

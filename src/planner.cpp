@@ -646,7 +646,11 @@ bool Planner::globalPlannerNeededDueToLackOfProgress(
 // Global gripper planner functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-std::vector<uint32_t> NumberOfPointsInEachCluster(const std::vector<uint32_t>& cluster_labels, const uint32_t num_clusters, const std::vector<long>& grapsed_points, const DijkstrasCoverageTask::Correspondences& correspondences)
+std::vector<uint32_t> NumberOfPointsInEachCluster(
+        const std::vector<uint32_t>& cluster_labels,
+        const uint32_t num_clusters,
+        const std::vector<long>& grapsed_points,
+        const DijkstrasCoverageTask::Correspondences& correspondences)
 {
     std::vector<uint32_t> counts(num_clusters, 0);
     const auto& uncovered_target_point_idxs = correspondences.uncovered_target_points_idxs_;
@@ -723,7 +727,7 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
     const uint32_t num_clusters = (uint32_t)cluster_centers.size();
     assert(num_clusters == 2);
 
-    vis_.visualizeCubes(CLUSTERING_RESULTS_PRE_PROJECT_NS, cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Red(), 1);
+//    vis_.visualizeCubes(CLUSTERING_RESULTS_PRE_PROJECT_NS, cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Red(), 1);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////// Determine which gripper gets assigned which cluster center ////////////////////////////
@@ -929,8 +933,8 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
         assert(false && "Unhandled edge case in get gripper targets");
     }
 
-    vis_.visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[0].translation(), target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
-    vis_.visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[1].translation(), target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
+//    vis_.visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[0].translation(), target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
+//    vis_.visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[1].translation(), target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
 
     // Project the targets out of collision
     const double min_dist_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_);
@@ -939,8 +943,8 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
     target_gripper_poses[0].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(gripper0_position_pre_project, min_dist_to_obstacles);
     target_gripper_poses[1].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(gripper1_position_pre_project, min_dist_to_obstacles);
 
-    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
-    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
+//    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
+//    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
 
     return target_gripper_poses;
 }
