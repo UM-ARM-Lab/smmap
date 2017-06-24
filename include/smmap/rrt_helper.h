@@ -142,7 +142,8 @@ namespace smmap
              */
             std::vector<std::pair<RRTConfig, int64_t>> forwardPropogationFunction(
                     const RRTConfig& nearest_neighbor,
-                    const RRTConfig& random_target);
+                    const RRTConfig& random_target,
+                    const bool visualization_enabled_locally);
 
             ///////////////////////////////////////////////////////////////////////////////////////
             // Helper function for shortcut smoothing
@@ -175,7 +176,7 @@ namespace smmap
             std::mt19937_64& generator_;
             const sdf_tools::SignedDistanceField& environment_sdf_;
             const Visualizer& vis_;
-            const bool visualization_enabled_;
+            const bool visualization_enabled_globally_;
             const std_msgs::ColorRGBA band_safe_color_;
             const std_msgs::ColorRGBA band_overstretched_color_;
 

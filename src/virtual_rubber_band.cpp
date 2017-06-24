@@ -76,7 +76,6 @@ const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRub
         const Eigen::Vector3d second_endpoint_target,
         bool verbose)
 {
-
     vis_.deleteObjects(BAND_POST_FORWARD_STEP_NS, 1, 30);
     vis_.deleteObjects(BAND_POST_SUBDIVIDE_STEP_NS, 1, 30);
     vis_.deleteObjects(BAND_POST_SHORTCUT_SMOOTHING_NS, 1, 500);

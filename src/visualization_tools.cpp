@@ -163,10 +163,12 @@ void Visualizer::deleteObjects(
 
             if (id % 100 == 0)
             {
+                ros::spinOnce();
                 std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));
             }
         }
 
+        ros::spinOnce();
         std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
     }
 }

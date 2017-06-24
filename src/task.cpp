@@ -42,6 +42,14 @@ void Task::execute()
         if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()
                      || task_specification_->taskDone(world_feedback)))
         {
+            if (world_feedback.sim_time_ - start_time >= task_specification_->maxTime())
+            {
+                ROS_INFO("Terminating task as time has run out");
+            }
+            if (task_specification_->taskDone(world_feedback))
+            {
+                ROS_INFO("Terminating task as the task has been completed");
+            }
             robot_.shutdown();
         }
     }
