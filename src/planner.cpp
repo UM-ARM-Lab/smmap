@@ -585,6 +585,8 @@ bool Planner::globalPlannerNeededDueToOverstretch(
 
     double filtered_band_length = projected_rubber_bands.front().totalLength();
 
+    std::cerr << "Max band length: " << virtual_rubber_band_between_grippers_->maxSafeLength() << std::endl;
+
     for (size_t t = 0; t < projected_rubber_bands.size(); ++t)
     {
         const VirtualRubberBand& band = projected_rubber_bands[t];
@@ -593,7 +595,8 @@ bool Planner::globalPlannerNeededDueToOverstretch(
         const double distance_between_endpoints = (endpoints.first - endpoints.second).norm();
 
         // Apply a low pass filter to the band length to try and remove "blips" in the estimate
-        filtered_band_length = annealing_factor * filtered_band_length + (1.0 - filtered_band_length) * band_length;
+        filtered_band_length = annealing_factor * filtered_band_length + (1.0 - annealing_factor) * band_length;
+        std::cerr << "Current band length: " << band_length << " Filtered band length: " << filtered_band_length << std::endl;
         // If the band is currently overstretched, and not in free space, then predict future problems
         if (filtered_band_length > band.maxSafeLength() && !CloseEnough(band_length, distance_between_endpoints, 1e-6))
         {

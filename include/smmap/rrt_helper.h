@@ -143,6 +143,7 @@ namespace smmap
             std::vector<std::pair<RRTConfig, int64_t>> forwardPropogationFunction(
                     const RRTConfig& nearest_neighbor,
                     const RRTConfig& random_target,
+                    const bool calculate_first_order_vis,
                     const bool visualization_enabled_locally);
 
             ///////////////////////////////////////////////////////////////////////////////////////

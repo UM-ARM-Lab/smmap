@@ -342,6 +342,7 @@ bool RRTHelper::goalReached(const RRTConfig& node)
 std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction(
         const RRTConfig& nearest_neighbor,
         const RRTConfig& random_target,
+        const bool calculate_first_order_vis,
         const bool visualization_enabled_locally)
 {
     Stopwatch function_wide_stopwatch;
@@ -485,10 +486,14 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
             }
         }
 
-        stopwatch(RESET);
-        const bool is_first_order_visible = isBandFirstOrderVisibileToBlacklist(next_band);
-        const double first_order_vis_time = stopwatch(READ);
-        total_first_order_vis_propogation_time_ += first_order_vis_time;
+        bool is_first_order_visible = false;
+        if (calculate_first_order_vis)
+        {
+            stopwatch(RESET);
+            is_first_order_visible = isBandFirstOrderVisibileToBlacklist(next_band);
+            const double first_order_vis_time = stopwatch(READ);
+            total_first_order_vis_propogation_time_ += first_order_vis_time;
+        }
         const RRTConfig next_node(
                     next_grippers_position,
                     next_band,
@@ -576,8 +581,10 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     const std::function<std::vector<std::pair<RRTConfig, int64_t>>(const RRTConfig&, const RRTConfig&)> forward_propagation_fn = [&] (
             const RRTConfig& nearest_neighbor, const RRTConfig& random_target )
     {
+        const bool local_visualization_enabled = true;
+        const bool calculate_first_order_vis = true;
         const std::vector<std::pair<RRTConfig, int64_t>> propogation_results =
-                forwardPropogationFunction(nearest_neighbor, random_target, true);
+                forwardPropogationFunction(nearest_neighbor, random_target, calculate_first_order_vis, local_visualization_enabled);
         return propogation_results;
     };
 
@@ -891,11 +898,11 @@ std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulate
 //        rubber_band.visualize(RRT_SHORTCUT_REMAINDER_NS, Visualizer::Yellow(), Visualizer::Cyan(), (int32_t)path_idx, true);
 
         // Store the band in the results
-        stopwatch(RESET);
-        const bool is_first_order_visible = isBandFirstOrderVisibileToBlacklist(rubber_band);
-        const double first_order_vis_time = stopwatch(READ);
-        total_first_order_vis_propogation_time_ += first_order_vis_time;
-        resulting_path.push_back(RRTConfig(ending_grippers_pos, rubber_band, is_first_order_visible));
+//        stopwatch(RESET);
+//        const bool is_first_order_visible = isBandFirstOrderVisibileToBlacklist(rubber_band);
+//        const double first_order_vis_time = stopwatch(READ);
+//        total_first_order_vis_propogation_time_ += first_order_vis_time;
+        resulting_path.push_back(RRTConfig(ending_grippers_pos, rubber_band, false));
 
         // Record if the band is overstretched
         band_is_overstretched = rubber_band.isOverstretched();
@@ -921,6 +928,7 @@ std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulate
 std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         std::vector<RRTConfig, RRTAllocator> path)
 {
+    Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
 
     uint32_t num_iterations = 0;
@@ -1006,7 +1014,9 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
             }
 
             // Forward simulate the rubber band along the straight line between gripper positions
-            smoothing_propogation_results = forwardPropogationFunction(smoothing_start_config, smoothing_target_end_config, false);
+            const bool local_visualization_enabled = false;
+            const bool calculate_first_order_vis = false;
+            smoothing_propogation_results = forwardPropogationFunction(smoothing_start_config, smoothing_target_end_config, calculate_first_order_vis, local_visualization_enabled);
         }
         else if (smoothing_type == 3 || smoothing_type == 4)
         {
@@ -1096,7 +1106,9 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 //                    std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
 //                }
 
-                const auto interm_forward_prop_results = forwardPropogationFunction(interm_start_config, forward_prop_target_config, false);
+                const bool local_visualization_enabled = false;
+                const bool calculate_first_order_vis = false;
+                const auto interm_forward_prop_results = forwardPropogationFunction(interm_start_config, forward_prop_target_config, calculate_first_order_vis, local_visualization_enabled);
                 const auto& target_gripper_position = forward_prop_target_config.getGrippers();
                 const auto& last_gripper_position = interm_forward_prop_results.back().first.getGrippers();
 
@@ -1149,22 +1161,30 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                 forwardSimulateGrippersPath(path, smoothing_end_index, smoothing_propogation_results.back().first.getBand());
         const bool final_band_at_goal_success = end_of_smoothing_to_goal_results.first;
         const auto& end_of_smoothing_to_goal_path_ = end_of_smoothing_to_goal_results.second;
-        const auto& final_node_of_smoothing = end_of_smoothing_to_goal_path_.back();
-        const bool final_band_visible_to_blacklist = final_node_of_smoothing.isVisibleToBlacklist();
 
-        // Check if the rubber band gets overstretched or ends up in a blacklisted first order homotopy class
-        // while following the tail of the starting trajectory
-        if (!final_band_at_goal_success || final_band_visible_to_blacklist)
+        // And last we'll need to check if the resulting band is still not visible to the blacklist
         {
-            ++failed_iterations;
-            continue;
+            const auto& final_node_of_smoothing = end_of_smoothing_to_goal_path_.back();
+
+            stopwatch(RESET);
+            const bool final_band_visible_to_blacklist = isBandFirstOrderVisibileToBlacklist(final_node_of_smoothing.getBand());
+            const double first_order_vis_time = stopwatch(READ);
+            total_first_order_vis_propogation_time_ += first_order_vis_time;
+
+            // Check if the rubber band gets overstretched or ends up in a blacklisted first order homotopy class
+            // while following the tail of the starting trajectory
+            if (!final_band_at_goal_success || final_band_visible_to_blacklist)
+            {
+                ++failed_iterations;
+                continue;
+            }
         }
 
         ///////////////////// Smoothing success - Create the new smoothed path /////////////////////////////////////////
 
         // Allocate space for the total smoothed path
         std::vector<RRTConfig, RRTAllocator> smoothed_path;
-        smoothed_path.reserve((smoothing_start_index  + 1) + smoothing_propogation_results.size() + (end_of_smoothing_to_goal_results.second.size() - 1));
+        smoothed_path.reserve((smoothing_start_index  + 1) + smoothing_propogation_results.size() + (end_of_smoothing_to_goal_path_.size() - 1));
 
         // Insert the starting unchanged part of the path
         smoothed_path.insert(smoothed_path.begin(), path.begin(), path.begin() + smoothing_start_index + 1);
@@ -1176,7 +1196,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         }
 
         // Insert the changed end of the path with the new rubber band - gripper positions are identical
-        smoothed_path.insert(smoothed_path.end(), end_of_smoothing_to_goal_results.second.begin() + 1, end_of_smoothing_to_goal_results.second.end());
+        smoothed_path.insert(smoothed_path.end(), end_of_smoothing_to_goal_path_.begin() + 1, end_of_smoothing_to_goal_path_.end());
 
         // Record the change and re-visualize
         path = smoothed_path;
