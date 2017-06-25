@@ -72,6 +72,7 @@ Planner::Planner(
     , global_plan_current_timestep_(-1)
     , global_plan_gripper_trajectory_(0)
     , rrt_helper_(nullptr)
+    , logging_enabled_(GetLoggingEnabled(nh_))
 {
     // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
     if (task_specification_->is_dijkstras_type_task_)
@@ -102,19 +103,19 @@ Planner::Planner(
 
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
 
-    if (GetLoggingEnabled(nh_))
+    if (logging_enabled_)
     {
         const std::string log_folder = GetLogFolder(nh_);
         Log::Log seed_log(log_folder + "seed.txt", false);
         LOG_STREAM(seed_log, std::hex << seed_);
 
         loggers_.insert(std::make_pair<std::string, Log::Log>(
-                            "19_step_grippers_distance_delta",
-                            Log::Log(log_folder + "19_step_grippers_distance_delta.txt", false)));
+                            "grippers_distance_delta_history",
+                            Log::Log(log_folder + "grippers_distance_delta_history.txt", false)));
 
         loggers_.insert(std::make_pair<std::string, Log::Log>(
-                            "19_step_error_delta",
-                            Log::Log(log_folder + "19_step_error_delta.txt", false)));
+                            "error_delta_history",
+                            Log::Log(log_folder + "error_delta_history.txt", false)));
     }
 }
 
@@ -572,10 +573,17 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
 bool Planner::globalPlannerNeededDueToOverstretch(
         const WorldState& current_world_state)
 {
+    static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(ph_);
+
     const auto detection_results = detectFutureConstraintViolations(current_world_state);
     const auto& projected_rubber_bands = detection_results.second;
 
-    size_t num_violations = 0;
+    if (projected_rubber_bands.size() == 0)
+    {
+        return false;
+    }
+
+    double filtered_band_length = projected_rubber_bands.front().totalLength();
 
     for (size_t t = 0; t < projected_rubber_bands.size(); ++t)
     {
@@ -584,13 +592,16 @@ bool Planner::globalPlannerNeededDueToOverstretch(
         const std::pair<Eigen::Vector3d, Eigen::Vector3d> endpoints = band.getEndpoints();
         const double distance_between_endpoints = (endpoints.first - endpoints.second).norm();
 
-        if (band.isOverstretched() && !CloseEnough(band_length, distance_between_endpoints, 1e-6))
+        // Apply a low pass filter to the band length to try and remove "blips" in the estimate
+        filtered_band_length = annealing_factor * filtered_band_length + (1.0 - filtered_band_length) * band_length;
+        // If the band is currently overstretched, and not in free space, then predict future problems
+        if (filtered_band_length > band.maxSafeLength() && !CloseEnough(band_length, distance_between_endpoints, 1e-6))
         {
-            ++num_violations;
+            return true;
         }
     }
 
-    return num_violations > (projected_rubber_bands.size() / 2);
+    return false;
 }
 
 bool Planner::globalPlannerNeededDueToLackOfProgress(
@@ -621,11 +632,14 @@ bool Planner::globalPlannerNeededDueToLackOfProgress(
         error_deltas[time_idx - 1] = error_history_[time_idx] - start_error;
     }
 
-    // Determine if there is a general positive slope on the distances
-    // - we should be moving away from the start config if we are not stuck
-    LOG(loggers_.at("19_step_grippers_distance_delta"), PrettyPrint::PrettyPrint(grippers_distance_deltas, false, ", "));
+    if (logging_enabled_)
+    {
+        // Determine if there is a general positive slope on the distances
+        // - we should be moving away from the start config if we are not stuck
+        LOG(loggers_.at("grippers_distance_delta_history"), PrettyPrint::PrettyPrint(grippers_distance_deltas, false, ", "));
 
-    LOG(loggers_.at("19_step_error_delta"), PrettyPrint::PrettyPrint(error_deltas, false, ", "));
+        LOG(loggers_.at("error_delta_history"), PrettyPrint::PrettyPrint(error_deltas, false, ", "));
+    }
 
     // If error has not decreased sufficiently, then we may not be making progress
     const double error_improvemnt = start_error - error_history_.back();
@@ -1118,10 +1132,12 @@ void Planner::updateModels(const WorldState& starting_world_state,
         const ssize_t model_used,
         const WorldState& world_feedback)
 {
+    const static double reward_annealing_factor = GetRewardScaleAnnealingFactor(ph_);
+
     // First we update the bandit algorithm
     const double starting_error = task_specification_->calculateError(starting_world_state);
     const double true_error_reduction = starting_error - task_specification_->calculateError(world_feedback);
-    reward_std_dev_scale_factor_ = std::max(1e-10, 0.9 * reward_std_dev_scale_factor_ + 0.1 * std::abs(true_error_reduction));
+    reward_std_dev_scale_factor_ = std::max(1e-10, reward_annealing_factor * reward_std_dev_scale_factor_ + (1.0 - reward_annealing_factor) * std::abs(true_error_reduction));
     const double process_noise_scaling_factor = process_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);
     const double observation_noise_scaling_factor = observation_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);
 

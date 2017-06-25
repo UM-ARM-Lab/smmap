@@ -163,6 +163,7 @@ namespace smmap
             // Debugging tools
             ////////////////////////////////////////////////////////////////////
 
+            const bool logging_enabled_;
             std::map<std::string, Log::Log> loggers_;
 
             const static std::string DESIRED_DELTA_NS;

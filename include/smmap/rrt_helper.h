@@ -63,6 +63,7 @@ namespace smmap
     {
         public:
             static const std::string RRT_BLACKLISTED_GOAL_BANDS_NS;
+            static const std::string RRT_GOAL_TESTING_NS;
 
             static const std::string RRT_TREE_GRIPPER_A_NS;
             static const std::string RRT_TREE_GRIPPER_B_NS;

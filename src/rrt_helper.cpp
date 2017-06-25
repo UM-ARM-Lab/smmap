@@ -9,6 +9,7 @@ using namespace smmap;
 #define NN_BLACKLIST_DISTANCE (std::numeric_limits<double>::max() - 1e10)
 
 const std::string RRTHelper::RRT_BLACKLISTED_GOAL_BANDS_NS  = "rrt_blacklisted_goal_bands";
+const std::string RRTHelper::RRT_GOAL_TESTING_NS            = "rrt_goal_testing";
 
 const std::string RRTHelper::RRT_TREE_GRIPPER_A_NS          = "rrt_tree_gripper_a";
 const std::string RRTHelper::RRT_TREE_GRIPPER_B_NS          = "rrt_tree_gripper_b";
@@ -314,7 +315,7 @@ bool RRTHelper::goalReached(const RRTConfig& node)
     {
         if (visualization_enabled_globally_)
         {
-            vis_.visualizeLineStrip("RRT_GOAL_TESTING", node.getBand().getVectorRepresentation(), Visualizer::Blue(), 1, 0.01);
+            vis_.visualizeLineStrip(RRT_GOAL_TESTING_NS, node.getBand().getVectorRepresentation(), Visualizer::White(), 1, 0.01);
             ros::spinOnce();
             std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         }
@@ -346,8 +347,13 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
     Stopwatch function_wide_stopwatch;
     Stopwatch stopwatch;
 
-    static EigenHelpers::VectorVector3d visualization_line_start_points;
-    static EigenHelpers::VectorVector3d visualization_line_end_points;
+    static EigenHelpers::VectorVector3d band_visualization_line_start_points;
+    static EigenHelpers::VectorVector3d band_visualization_line_end_points;
+    static EigenHelpers::VectorVector3d gripper_a_tree_start_points;
+    static EigenHelpers::VectorVector3d gripper_a_tree_end_points;
+    static EigenHelpers::VectorVector3d gripper_b_tree_start_points;
+    static EigenHelpers::VectorVector3d gripper_b_tree_end_points;
+    static int32_t marker_id = 1;
     static size_t num_bands_in_visualize_list = 0;
 
     const RRTGrippersRepresentation& starting_grippers_position = nearest_neighbor.getGrippers();
@@ -466,15 +472,15 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
             const EigenHelpers::VectorVector3d band = next_band.getVectorRepresentation();
             for (size_t band_idx = 0; band_idx + 1 < band.size(); ++band_idx)
             {
-                visualization_line_start_points.push_back(band[band_idx]);
-                visualization_line_end_points.push_back(band[band_idx + 1]);
+                band_visualization_line_start_points.push_back(band[band_idx]);
+                band_visualization_line_end_points.push_back(band[band_idx + 1]);
             }
 
             if (num_bands_in_visualize_list >= 20)
             {
-                vis_.visualizeLines(RRT_FORWARD_PROP_STEPS_NS, visualization_line_start_points, visualization_line_end_points, Visualizer::Blue(), 1);
-                visualization_line_start_points.clear();
-                visualization_line_end_points.clear();
+                vis_.visualizeLines(RRT_FORWARD_PROP_STEPS_NS, band_visualization_line_start_points, band_visualization_line_end_points, Visualizer::Blue(), 1);
+                band_visualization_line_start_points.clear();
+                band_visualization_line_end_points.clear();
                 num_bands_in_visualize_list = 0;
             }
         }
@@ -489,22 +495,26 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
                     is_first_order_visible);
         propagated_states.push_back(std::pair<RRTConfig, int64_t>(next_node, parent_offset));
 
-//        if (visualization_enabled_globally_ && visualization_enabled_locally && false)
-//        {
-//            const RRTGrippersRepresentation& prev_grippers_position = prev_node.getGrippers();
-//            if (next_node.isVisibleToBlacklist())
-//            {
-//                vis_.visualizeLineStrip(RRT_TREE_GRIPPER_A_NS, {prev_grippers_position.first, gripper_a_interpolated}, Visualizer::Magenta(), marker_id);
-//                vis_.visualizeLineStrip(RRT_TREE_GRIPPER_B_NS, {prev_grippers_position.second, gripper_b_interpolated}, Visualizer::Cyan(), marker_id);
-//                ++marker_id;
-//            }
-//            else
-//            {
-//                vis_.visualizeLineStrip(RRT_TREE_GRIPPER_A_NS, {prev_grippers_position.first, gripper_a_interpolated}, Visualizer::Red(), marker_id);
-//                vis_.visualizeLineStrip(RRT_TREE_GRIPPER_B_NS, {prev_grippers_position.second, gripper_b_interpolated}, Visualizer::Blue(), marker_id);
-//                ++marker_id;
-//            }
-//        }
+        if (visualization_enabled_globally_ && visualization_enabled_locally)
+        {
+            const RRTGrippersRepresentation& prev_grippers_position = prev_node.getGrippers();
+
+            gripper_a_tree_start_points.push_back(prev_grippers_position.first);
+            gripper_b_tree_start_points.push_back(prev_grippers_position.second);
+            gripper_a_tree_end_points.push_back(gripper_a_interpolated);
+            gripper_b_tree_end_points.push_back(gripper_b_interpolated);
+
+            if (gripper_a_tree_start_points.size() >= 100)
+            {
+                vis_.visualizeLines(RRT_TREE_GRIPPER_A_NS, gripper_a_tree_start_points, gripper_a_tree_end_points, Visualizer::Magenta(), marker_id);
+                vis_.visualizeLines(RRT_TREE_GRIPPER_B_NS, gripper_b_tree_start_points, gripper_b_tree_end_points, Visualizer::Cyan(), marker_id);
+                gripper_a_tree_start_points.clear();
+                gripper_b_tree_start_points.clear();
+                gripper_a_tree_end_points.clear();
+                gripper_b_tree_end_points.clear();
+                ++marker_id;
+            }
+        }
 
         ++parent_offset;
         ++step_index;
@@ -567,7 +577,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
             const RRTConfig& nearest_neighbor, const RRTConfig& random_target )
     {
         const std::vector<std::pair<RRTConfig, int64_t>> propogation_results =
-                forwardPropogationFunction(nearest_neighbor, random_target, false);
+                forwardPropogationFunction(nearest_neighbor, random_target, true);
         return propogation_results;
     };
 
@@ -587,6 +597,8 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
         vis_.deleteObjects(RRT_SAMPLE_NS, 1, 2);
         vis_.deleteObjects(RRT_FORWARD_PROP_START_NS, 1, 20);
         vis_.deleteObjects(RRT_FORWARD_PROP_STEPS_NS);
+        vis_.deleteObjects(RRT_TREE_GRIPPER_A_NS, 1, (int32_t)std::ceil(rrt_results.second.at("total_states") / 100.0));
+        vis_.deleteObjects(RRT_TREE_GRIPPER_B_NS, 1, (int32_t)std::ceil(rrt_results.second.at("total_states") / 100.0));
     }
 
     statistics_["planning0_nearest_neighbour_time                        "] = total_nearest_neighbour_time_;
