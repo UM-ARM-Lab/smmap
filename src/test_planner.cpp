@@ -273,7 +273,7 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
     vis_.visualizeObjectDelta(
                 "Model back_generated position",
                 current_world_state.object_configuration_,
-                current_world_state.object_configuration_ + 100*p_projected,
+                current_world_state.object_configuration_ + 20*p_projected,
                 Visualizer::Blue());
 
 
