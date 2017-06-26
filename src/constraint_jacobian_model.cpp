@@ -338,7 +338,6 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
 }
 
 
-
 // Backup for dislinearModel
 /*
 double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, const double dist_rest) const
@@ -508,14 +507,12 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
 // Candidate function to count vector effect, return 3x3 matrix = diag{exp[beta(.,.)]}
 Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node_to_gripper, const Vector3d node_v) const
 {
-    Matrix3d beta_rigidity=MatrixXd::Zero(3,3);
-    Vector3d dot_product = node_to_gripper.cwiseProduct(node_v);
+    Matrix3d beta_rigidity = Matrix3d::Zero();
     double dot1, dot2, dot3;
-    if (node_to_gripper.size()>1 && node_v.size() >1 && node_to_gripper.norm()>0.0001 && node_v.norm()>0)
+    if (node_to_gripper.norm() > 0.0001 && node_v.norm() > 0)
     {
-        double dot_Value = dot_product(0)+dot_product(1)+dot_product(2);
-        dot_Value = dot_Value/(node_to_gripper.norm());
-        dot_Value = dot_Value-std::fabs(dot_Value);
+        double dot_Value = node_to_gripper.normalized().dot(node_v);
+        dot_Value = dot_Value - std::fabs(dot_Value);
         dot1 = dot_Value;
         dot2 = dot_Value;
         dot3 = dot_Value;
@@ -525,17 +522,23 @@ Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node
         dot3 = (dot_product(2)-std::fabs(dot_product(2)))/(node_to_gripper.norm()*node_v.norm());
         */
     }
-    else if (node_v.size()<1 || node_v.norm()<0.0001)
-    {   double dot_Value = 0;
-        dot1 = dot_Value; dot2 = dot_Value; dot3 =dot_Value; }
+    else if (node_v.norm() < 0.0001)
+    {
+        double dot_Value = 0;
+        dot1 = dot_Value;
+        dot2 = dot_Value;
+        dot3 = dot_Value;
+    }
     else
     {
-        dot1 = 0; dot2 = 0; dot3 = 0;
+        dot1 = 0;
+        dot2 = 0;
+        dot3 = 0;
     }
 
-    beta_rigidity(0,0) = std::exp(translation_dir_deformability_*dot1);
-    beta_rigidity(1,1) = std::exp(translation_dir_deformability_*dot2);
-    beta_rigidity(2,2) = std::exp(translation_dir_deformability_*dot3);
+    beta_rigidity(0,0) = std::exp(translation_dir_deformability_ * dot1);
+    beta_rigidity(1,1) = std::exp(translation_dir_deformability_ * dot2);
+    beta_rigidity(2,2) = std::exp(translation_dir_deformability_ * dot3);
 /*
     beta_rigidity(0,0) = std::exp(translation_dir_deformability_*(dot_product(0)-std::fabs(dot_product(0))));
     beta_rigidity(1,1) = std::exp(translation_dir_deformability_*(dot_product(1)-std::fabs(dot_product(1))));
@@ -558,11 +561,14 @@ Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node
 double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, const double dist_rest) const
 {
     double ration;
-    if (std::fabs(dist_rest)<0.00001)
-    { ration = 1;
+    if (std::fabs(dist_rest) < 0.00001)
+    {
+        ration = 1;
     }
     else
-    { ration = dist_to_gripper/dist_rest;}
+    {
+        ration = dist_to_gripper / dist_rest;
+    }
 
 //    return exp(-translation_dis_deformability_*(1-ration));
 
