@@ -95,12 +95,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
 
     for (int64_t ind_count = 0; ind_count < max_count_; ind_count++)
     {
-        AllGrippersSinglePoseDelta grippers_motion_sample;
-        for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
-        {
-            // Eigen::Affine3d single_gripper_motion_sample = EigenHelpers::ExpTwist(singleGripperPoseDeltaSampler(), 1.0);
-            grippers_motion_sample.push_back(singelGripperPoseDeltaSampler());
-        }
+        AllGrippersSinglePoseDelta grippers_motion_sample = allGripperPoseDeltaSampler(num_grippers);
 
         /*
         // Method 2: Using avoidance result
@@ -188,7 +183,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
 // Helper function
 //////////////////////////////////////////////////////////////////////////////////
 
-kinematics::Vector6d GripperMotionGenerator::singelGripperPoseDeltaSampler()
+kinematics::Vector6d GripperMotionGenerator::singleGripperPoseDeltaSampler()
 {
     const double x1 = EigenHelpers::Interpolate(translation_lower_bound_, translation_upper_bound_, uniform_unit_distribution_(generator_));
     const double y1 = EigenHelpers::Interpolate(translation_lower_bound_, translation_upper_bound_, uniform_unit_distribution_(generator_));
@@ -222,6 +217,18 @@ kinematics::Vector6d GripperMotionGenerator::singelGripperPoseDeltaSampler()
 
     return random_sample;
 }
+
+AllGrippersSinglePoseDelta GripperMotionGenerator::allGripperPoseDeltaSampler(const ssize_t num_grippers)
+{
+    AllGrippersSinglePoseDelta grippers_motion_sample;
+    for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
+    {
+        // Eigen::Affine3d single_gripper_motion_sample = EigenHelpers::ExpTwist(singleGripperPoseDeltaSampler(), 1.0);
+        grippers_motion_sample.push_back(singleGripperPoseDeltaSampler());
+    }
+    return grippers_motion_sample;
+}
+
 
 double GripperMotionGenerator::errorOfControlByPrediction(
         const ObjectPointSet& predicted_object_p_dot,

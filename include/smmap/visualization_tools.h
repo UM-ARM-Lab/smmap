@@ -21,6 +21,10 @@ namespace smmap
             static std_msgs::ColorRGBA Yellow();
             static std_msgs::ColorRGBA Cyan();
             static std_msgs::ColorRGBA White();
+            static std_msgs::ColorRGBA Silver();
+            static std_msgs::ColorRGBA Coral();
+            static std_msgs::ColorRGBA Olive();
+            static std_msgs::ColorRGBA Orange();
 
         public:
             Visualizer(ros::NodeHandle& nh, ros::NodeHandle& ph);
@@ -168,6 +172,10 @@ namespace smmap
             static std_msgs::ColorRGBA yellow_;
             static std_msgs::ColorRGBA cyan_;
             static std_msgs::ColorRGBA white_;
+            static std_msgs::ColorRGBA silver_;
+            static std_msgs::ColorRGBA coral_;
+            static std_msgs::ColorRGBA olive_;
+            static std_msgs::ColorRGBA orange_;
     };
 }
 

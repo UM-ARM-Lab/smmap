@@ -211,7 +211,6 @@ double TaskSpecification::maxTime() const
     return max_time_;
 }
 
-
 inline void addStrechingCorrectionVector(
         ObjectDeltaAndWeight& stretching_correction,
         const ObjectPointSet& object_configuration,
@@ -251,7 +250,6 @@ bool TaskSpecification::stretchingConstraintViolated(
     const double max_dist = object_initial_node_distance_(first_node_ind, second_node_ind) * maxOverstretchFactor();
     return dist > max_dist;
 }
-
 
 /**
  * @brief TaskSpecification::calculateStretchingCorrectionDeltaFullyConnected
@@ -406,6 +404,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
     else
     {
         std::lock_guard<std::mutex> lock(first_step_mtx_);
+        #pragma message "This should also check that first_step_last_simtime_calced_ != world_state.sim_time_, and the same for all similar functions, probably should write a wrapper"
         if (first_step_calculated_.load())
         {
             return first_step_desired_motion_;
@@ -420,6 +419,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
             const bool visualize_stretching_lines = false;
             first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, visualize_stretching_lines);
             ROS_INFO_STREAM_NAMED("task_specification", "Found stretching correction delta in " << GlobalStopwatch(READ) << " seconds");
+            first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, true);
 
             GlobalStopwatch(RESET);
             first_step_desired_motion_ = combineErrorCorrectionAndStretchingCorrection(

@@ -59,11 +59,13 @@ namespace smmap {
             // Helper function
             //////////////////////////////////////////////////////////////////////////////////
 
-            kinematics::Vector6d singelGripperPoseDeltaSampler();
+            kinematics::Vector6d singleGripperPoseDeltaSampler();
 
             double errorOfControlByPrediction(
                     const ObjectPointSet& predicted_object_p_dot,
                     const Eigen::VectorXd &desired_object_p_dot) const;
+
+            AllGrippersSinglePoseDelta allGripperPoseDeltaSampler(const ssize_t num_grippers);
 
             std::pair<bool, std::vector<CollisionData>> gripperCollisionCheckResult(
                     const AllGrippersSinglePose& current_gripper_pose,

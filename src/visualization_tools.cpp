@@ -18,6 +18,10 @@ std_msgs::ColorRGBA Visualizer::magenta_;
 std_msgs::ColorRGBA Visualizer::yellow_;
 std_msgs::ColorRGBA Visualizer::cyan_;
 std_msgs::ColorRGBA Visualizer::white_;
+std_msgs::ColorRGBA Visualizer::silver_;
+std_msgs::ColorRGBA Visualizer::coral_;
+std_msgs::ColorRGBA Visualizer::olive_;
+std_msgs::ColorRGBA Visualizer::orange_;
 
 void Visualizer::InitializeStandardColors()
 {
@@ -60,6 +64,26 @@ void Visualizer::InitializeStandardColors()
     white_.g = 1.0f;
     white_.b = 1.0f;
     white_.a = 1.0f;
+
+    silver_.r = 0.75f;
+    silver_.g = 0.75f;
+    silver_.b = 0.75f;
+    silver_.a = 1.0f;
+
+    coral_.r = 0.8f;
+    coral_.g = 0.36f;
+    coral_.b = 0.27f;
+    coral_.a = 1.0f;
+
+    olive_.r = 0.31f;
+    olive_.g = 0.31f;
+    olive_.b = 0.18f;
+    olive_.a = 1.0f;
+
+    orange_.r = 0.8f;
+    orange_.g = 0.2f;
+    orange_.b = 0.2f;
+    orange_.a = 1.0f;
 
     standard_colors_initialized_ = true;
 }
@@ -110,6 +134,30 @@ std_msgs::ColorRGBA Visualizer::White()
 {
     assert(standard_colors_initialized_);
     return white_;
+}
+
+std_msgs::ColorRGBA Visualizer::Silver()
+{
+    assert(standard_colors_initialized_);
+    return silver_;
+}
+
+std_msgs::ColorRGBA Visualizer::Coral()
+{
+    assert(standard_colors_initialized_);
+    return coral_;
+}
+
+std_msgs::ColorRGBA Visualizer::Olive()
+{
+    assert(standard_colors_initialized_);
+    return olive_;
+}
+
+std_msgs::ColorRGBA Visualizer::Orange()
+{
+    assert(standard_colors_initialized_);
+    return orange_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
