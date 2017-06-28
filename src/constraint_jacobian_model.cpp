@@ -241,9 +241,6 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
     // Retrieve the desired object velocity (p_dot)
     const VectorXd& object_p_dot = input_data.task_desired_object_delta_fn_(world_state).delta;
 
-    // Mask:
-//    Eigen::MatrixXd Mask = computeObjectVelocityMask(current_configuration,object_p_dot);
-//    Eigen::MatrixXd Mask = computeObjectVelocityMask(current_configuration,grippers_pose);
 
     // for each gripper
     for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
@@ -264,10 +261,12 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
                     current_configuration.col(node_ind) -
                     grippers_pose[(size_t)gripper_ind].translation();
 
+            /*
             // TODO: get dist_rest, get node velocity
             // Dist_real_vec is vector form, it is for translation rigidity utilization
             // Dist_real is the distance between two nodes on objects
             // Gripper_to_node is the radius of rotation, one node may not on object
+            */
             const Vector3d dist_real_vec =
                     current_configuration.col(nearest_node_on_gripper.second)-
                     current_configuration.col(node_ind) ; // in .hpp file ;
@@ -305,9 +304,11 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
 
             const Matrix3d& J_trans = gripper_rot;
 
+            /*
             // Translation rigidity depends on both gamma(scalar) function and beta(vector) function
             // Gamma inputs are real distance between two nodes and distance at rest
             // Beta inputs are distance vector, node velocity
+            */
             const Matrix3d rigidity_translation =
                     disLinearModel(dist_real, nearest_node_on_gripper.first)*
                     dirPropotionalModel(dist_real_vec, node_v);
