@@ -106,7 +106,7 @@ namespace smmap
             void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
 
             bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const;
-            bool isBandFirstOrderVisibileToBlacklist(const VirtualRubberBand& test_band) const;
+            bool isBandFirstOrderVisibileToBlacklist(const VirtualRubberBand& test_band);
 
             ///////////////////////////////////////////////////////////////////////////////////////
             // Visualization and other debugging tools

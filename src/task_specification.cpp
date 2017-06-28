@@ -81,7 +81,7 @@ TaskSpecification::TaskSpecification(
     : TaskSpecification(
           nh,
           ph,
-          Visualizer(nh),
+          Visualizer(nh, ph),
           deformable_type,
           task_type,
           is_dijkstras_type_task)

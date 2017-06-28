@@ -42,6 +42,10 @@ void Task::execute()
         if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()
                      || task_specification_->taskDone(world_feedback)))
         {
+            ROS_INFO_NAMED("task", "------------------------------- End of Task -------------------------------------------");
+            const double current_error = task_specification_->calculateError(world_state);
+            ROS_INFO_STREAM_NAMED("task", "   Planner/Task sim time " << world_state.sim_time_ << "\t Error: " << current_error);
+
             if (world_feedback.sim_time_ - start_time >= task_specification_->maxTime())
             {
                 ROS_INFO("Terminating task as time has run out");

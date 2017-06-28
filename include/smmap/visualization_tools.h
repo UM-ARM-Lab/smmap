@@ -23,11 +23,11 @@ namespace smmap
             static std_msgs::ColorRGBA White();
 
         public:
-            Visualizer(
-                    ros::NodeHandle& nh);
+            Visualizer(ros::NodeHandle& nh, ros::NodeHandle& ph);
 
             Visualizer(
                     ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
                     const std::string& marker_topic,
                     const std::string& marker_array_topic);
 

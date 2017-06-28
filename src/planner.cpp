@@ -98,7 +98,7 @@ Planner::Planner(
                         GetRRTMaxShortcutIndexDistance(ph_),
                         GetRRTMaxSmoothingIterations(ph_),
                         GetRRTMaxFailedSmoothingIterations(ph_),
-                        !GetDisableAllVisualizations(nh_)));
+                        !GetDisableAllVisualizations(ph_)));
     }
 
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
@@ -480,8 +480,9 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
     const bool verbose = false;
 
-    vis_.deleteObjects(PROJECTED_POINT_PATH_NS, 1, (int32_t)max_lookahead_steps_ + 10);
-    vis_.deleteObjects(PROJECTED_GRIPPER_NS,    1, (int32_t)max_lookahead_steps_ + 10);
+    vis_.deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
+    vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
+    vis_.deleteObjects(PROJECTED_GRIPPER_NS, 1, 3);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Constraint violation Version 1 - Purely cloth overstretch
@@ -496,6 +497,12 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     ROS_INFO_STREAM_NAMED("planner", "Calculated projected cloth paths                 - Version 1 - in " << GlobalStopwatch(READ) << " seconds");
     visualizeProjectedPaths(projected_deformable_point_paths, visualization_enabled);
     projected_deformable_point_paths_and_projected_virtual_rubber_bands.first = projected_deformable_point_paths;
+
+
+
+    vis_.deleteObjects(PROJECTED_BAND_NS, 1, 30);
+
+
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Constraint violation Version 2a - Vector field forward "simulation" - rubber band
@@ -519,6 +526,15 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     virtual_rubber_band_between_grippers_->visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
 
 
+
+
+    vis_.deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
+    vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
+    vis_.deleteObjects(PROJECTED_GRIPPER_NS, 1, 3);
+
+
+
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     WorldState world_state_copy = current_world_state;
     VirtualRubberBand virtual_rubber_band_between_grippers_copy = *virtual_rubber_band_between_grippers_.get();
@@ -536,6 +552,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
 
         // Move the grippers forward
         world_state_copy.all_grippers_single_pose_ = kinematics::applyTwist(world_state_copy.all_grippers_single_pose_, robot_command.first);
+        #warning "This projection shouold be projecting to distance"
         world_state_copy.all_grippers_single_pose_[0].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollision3d(world_state_copy.all_grippers_single_pose_[0].translation());
         world_state_copy.all_grippers_single_pose_[1].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollision3d(world_state_copy.all_grippers_single_pose_[1].translation());
 
@@ -954,7 +971,7 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
 //    vis_.visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[1].translation(), target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
 
     // Project the targets out of collision
-    const double min_dist_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_);
+    const double min_dist_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_) * GetRRTTargetMinDistanceScaleFactor(ph_);
     const Eigen::Vector3d gripper0_position_pre_project = target_gripper_poses[0].translation();
     const Eigen::Vector3d gripper1_position_pre_project = target_gripper_poses[1].translation();
     target_gripper_poses[0].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(gripper0_position_pre_project, min_dist_to_obstacles);

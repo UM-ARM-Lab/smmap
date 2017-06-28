@@ -116,18 +116,21 @@ std_msgs::ColorRGBA Visualizer::White()
 ////////////////////////////////////////////////////////////////////////////////
 
 Visualizer::Visualizer(
-        ros::NodeHandle& nh)
+        ros::NodeHandle& nh,
+        ros::NodeHandle& ph)
     : Visualizer(
           nh,
+          ph,
           GetVisualizationMarkerTopic(nh),
           GetVisualizationMarkerArrayTopic(nh))
 {}
 
 Visualizer::Visualizer(
         ros::NodeHandle& nh,
-           const std::string& marker_topic,
-           const std::string& marker_array_topic)
-    : disable_all_visualizations_(GetDisableAllVisualizations(nh))
+        ros::NodeHandle& ph,
+        const std::string& marker_topic,
+        const std::string& marker_array_topic)
+    : disable_all_visualizations_(GetDisableAllVisualizations(ph))
     , world_frame_name_(GetWorldFrameName())
     , gripper_apperture_(GetGripperApperture(nh))
 {
