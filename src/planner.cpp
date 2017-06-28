@@ -168,11 +168,16 @@ WorldState Planner::sendNextCommand(
         }
         else
         {
+            Stopwatch stopwatch;
+            arc_helpers::DoNotOptimize(world_state);
             const bool global_planner_needed_due_to_overstretch =
                     globalPlannerNeededDueToOverstretch(world_state);
 
             const bool global_planner_needed_due_to_lack_of_progress =
                     globalPlannerNeededDueToLackOfProgress(world_state);
+            arc_helpers::DoNotOptimize(global_planner_needed_due_to_lack_of_progress);
+            ROS_INFO_STREAM_NAMED("planner", "Determined if global planner needed in " << stopwatch(READ) << " seconds");
+
 
             ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
 
@@ -247,6 +252,9 @@ void Planner::visualizeDesiredMotion(
 WorldState Planner::sendNextCommandUsingLocalController(
         const WorldState& world_state)
 {
+    Stopwatch stopwatch;
+    Stopwatch function_wide_stopwatch;
+
     const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
     {
         return task_specification_->calculateDesiredDirection(world_state);
@@ -262,7 +270,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
 
     // Querry each model for it's best gripper delta
-    GlobalStopwatch(RESET);
+    stopwatch(RESET);
     std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>> suggested_robot_commands(num_models_);
     #pragma omp parallel for
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
@@ -277,13 +285,13 @@ WorldState Planner::sendNextCommandUsingLocalController(
         }
     }
     // Measure the time it took to pick a model
-    ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in  " << GlobalStopwatch(READ) << " seconds");
+    ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in  " << stopwatch(READ) << " seconds");
 
     // Calculate regret if we need to
     std::vector<double> individual_rewards(num_models_, std::numeric_limits<double>::infinity());
     if (calculate_regret_ && num_models_ > 1)
     {
-        GlobalStopwatch(RESET);
+        stopwatch(RESET);
         const double prev_error = task_specification_->calculateError(world_state);
         const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
         {
@@ -297,14 +305,20 @@ WorldState Planner::sendNextCommandUsingLocalController(
         }
         robot_.testGrippersPoses(poses_to_test, test_feedback_fn);
 
-        ROS_INFO_STREAM_NAMED("planner", "Collected data to calculate regret in " << GlobalStopwatch(READ) << " seconds");
+        ROS_INFO_STREAM_NAMED("planner", "Collected data to calculate regret in " << stopwatch(READ) << " seconds");
     }
 
 
     // Execute the command
     const AllGrippersSinglePoseDelta& selected_command = suggested_robot_commands[(size_t)model_to_use].first;
     ROS_INFO_STREAM_NAMED("planner", "Sending command to robot, action norm:  " << MultipleGrippersVelocity6dNorm(selected_command));
-    const WorldState world_feedback = robot_.sendGrippersPoses(kinematics::applyTwist(world_state.all_grippers_single_pose_, selected_command));
+    const auto all_grippers_single_pose = kinematics::applyTwist(world_state.all_grippers_single_pose_, selected_command);
+    // Measure execution time
+    stopwatch(RESET);
+    arc_helpers::DoNotOptimize(all_grippers_single_pose);
+    const WorldState world_feedback = robot_.sendGrippersPoses(all_grippers_single_pose);
+    arc_helpers::DoNotOptimize(world_feedback);
+    const double robot_execution_time = stopwatch(READ);
 
     if (virtual_rubber_band_between_grippers_ != nullptr)
     {
@@ -329,6 +343,9 @@ WorldState Planner::sendNextCommandUsingLocalController(
     updateModels(world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
 
     logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use, individual_rewards);
+
+    const double controller_time = function_wide_stopwatch(READ) - robot_execution_time;
+    ROS_INFO_STREAM_NAMED("planner", "Total local controller time                     " << controller_time << " seconds");
 
     return world_feedback;
 }
@@ -472,6 +489,9 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
         const WorldState& current_world_state,
         const bool visualization_enabled)
 {
+    Stopwatch stopwatch;
+    Stopwatch function_wide_stopwatch;
+
     assert(task_specification_->is_dijkstras_type_task_ && current_world_state.all_grippers_single_pose_.size() == 2);
     std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 
@@ -487,14 +507,14 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Constraint violation Version 1 - Purely cloth overstretch
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    GlobalStopwatch(RESET);
+    stopwatch(RESET);
     const std::vector<VectorVector3d> projected_deformable_point_paths = dijkstras_task_->findPathFromObjectToTarget(current_world_state, max_lookahead_steps_);
 
     const size_t actual_lookahead_steps = sizeOfLargestVector(projected_deformable_point_paths) - 1;
     // sizeOfLargest(...) should be at least 2, so this assert should always be true
     assert(actual_lookahead_steps <= max_lookahead_steps_);
 
-    ROS_INFO_STREAM_NAMED("planner", "Calculated projected cloth paths                 - Version 1 - in " << GlobalStopwatch(READ) << " seconds");
+    ROS_INFO_STREAM_NAMED("planner", "Calculated projected cloth paths                 - Version 1 - in " << stopwatch(READ) << " seconds");
     visualizeProjectedPaths(projected_deformable_point_paths, visualization_enabled);
     projected_deformable_point_paths_and_projected_virtual_rubber_bands.first = projected_deformable_point_paths;
 
@@ -582,7 +602,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
         // Finish collecting the gripper collision data
         world_state_copy.gripper_collision_data_ = collision_check_future.get();
     }
-    ROS_INFO_STREAM_NAMED("planner", "Calculated future constraint violation detection - Version 2a - in " << GlobalStopwatch(READ) << " seconds");
+    ROS_INFO_STREAM_NAMED("planner", "Calculated future constraint violation detection - Version 2a - in " << function_wide_stopwatch(READ) << " seconds");
 
     return projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 }
@@ -602,7 +622,7 @@ bool Planner::globalPlannerNeededDueToOverstretch(
 
     double filtered_band_length = projected_rubber_bands.front().totalLength();
 
-    std::cerr << "Max band length: " << virtual_rubber_band_between_grippers_->maxSafeLength() << std::endl;
+//    std::cerr << "Max band length: " << virtual_rubber_band_between_grippers_->maxSafeLength() << std::endl;
 
     for (size_t t = 0; t < projected_rubber_bands.size(); ++t)
     {
@@ -613,7 +633,7 @@ bool Planner::globalPlannerNeededDueToOverstretch(
 
         // Apply a low pass filter to the band length to try and remove "blips" in the estimate
         filtered_band_length = annealing_factor * filtered_band_length + (1.0 - annealing_factor) * band_length;
-        std::cerr << "Current band length: " << band_length << " Filtered band length: " << filtered_band_length << std::endl;
+//        std::cerr << "Current band length: " << band_length << " Filtered band length: " << filtered_band_length << std::endl;
         // If the band is currently overstretched, and not in free space, then predict future problems
         if (filtered_band_length > band.maxSafeLength() && !CloseEnough(band_length, distance_between_endpoints, 1e-6))
         {
@@ -993,9 +1013,9 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
         // Deserialization
         try
         {
+            Stopwatch stopwatch;
             ROS_INFO_NAMED("rrt_planner_results", "Checking if RRT solution already exists");
             const std::string rrt_file_path = GetLogFolder(nh_) + "rrt_cache_step." + PrettyPrint::PrettyPrint(num_times_invoked);
-            GlobalStopwatch(RESET);
             std::ifstream prev_rrt_result(rrt_file_path, std::ios::binary | std::ios::in | std::ios::ate);
             if (!prev_rrt_result.is_open())
             {
@@ -1020,7 +1040,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
             executing_global_gripper_trajectory_ = true;
             global_plan_gripper_trajectory_ = deserialized_results.first;
 
-            ROS_INFO_STREAM_NAMED("rrt_planner_results", "Read RRT solutions in " << GlobalStopwatch(READ) << " seconds");
+            ROS_INFO_STREAM_NAMED("rrt_planner_results", "Read RRT solutions in " << stopwatch(READ) << " seconds");
             return;
         }
         catch (...)
