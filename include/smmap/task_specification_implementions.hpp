@@ -14,6 +14,7 @@ namespace smmap
         public:
             RopeCylinderCoverage(ros::NodeHandle& nh)
                 : DirectCoverageTask(nh, DeformableType::ROPE, TaskType::ROPE_CYLINDER_COVERAGE)
+                , stretching_scaling_thershold_(GetStretchingScalingThreshold(nh))
             {}
 
         private:
@@ -29,7 +30,7 @@ namespace smmap
 
             virtual double stretchingScalingThreshold_impl() const
             {
-                return 0.005; // lambda
+                return stretching_scaling_thershold_; // lambda
             }
 
             virtual double maxTime_impl() const
@@ -60,6 +61,8 @@ namespace smmap
             {
                 return 0.01;
             }
+
+            double stretching_scaling_thershold_;
     };
 
     /**

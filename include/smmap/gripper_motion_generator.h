@@ -29,6 +29,7 @@ namespace smmap {
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> findOptimalGripperMotion(
                     const DeformableModel::Ptr deformable_model,
                     const DeformableModel::DeformableModelInputData &input_data,
+                    const ObjectPointSet& object_configuration,
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale);
 
@@ -46,12 +47,16 @@ namespace smmap {
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByRandomSampling(
                     const DeformableModel::Ptr deformable_model,
                     const DeformableModel::DeformableModelInputData &input_data,
-                    const double max_gripper_velocity);
+                    const ObjectPointSet& object_configuration,
+                    const double max_gripper_velocity,
+                    const double obstacle_avoidance_scale);
 
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByUniformSampling(
                     const DeformableModel::Ptr deformable_model,
                     const DeformableModel::DeformableModelInputData &input_data,
-                    const double max_gripper_velocity);
+                    const ObjectPointSet& object_configuration,
+                    const double max_gripper_velocity,
+                    const double obstacle_avoidance_scale);
 
 
 
@@ -71,6 +76,10 @@ namespace smmap {
                     const AllGrippersSinglePose& current_gripper_pose,
                     const AllGrippersSinglePoseDelta &test_gripper_motion);
 
+            bool stretchingDetection(const DeformableModel::DeformableModelInputData &input_data,
+                                     const AllGrippersSinglePose &current_gripper_pose,
+                                     const AllGrippersSinglePoseDelta &test_gripper_motion,
+                                     const ObjectPointSet& object_configuration);
 
 
         private:

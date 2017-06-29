@@ -44,9 +44,9 @@ void GripperMotionGenerator::SetGripperControllerType(GripperControllerType grip
 }
 
 
-std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::findOptimalGripperMotion(
-        const DeformableModel::Ptr deformable_model,
+std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::findOptimalGripperMotion(const DeformableModel::Ptr deformable_model,
         const DeformableModel::DeformableModelInputData& input_data,
+        const ObjectPointSet& object_configuration,
         const double max_gripper_velocity,
         const double obstacle_avoidance_scale)
 {
@@ -54,12 +54,24 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::fi
         case GripperControllerType::RANDOM_SAMPLING:
             return solvedByRandomSampling(deformable_model,
                                       input_data,
+<<<<<<< HEAD
                                       max_gripper_velocity);
+=======
+                                      object_configuration,
+                                      max_gripper_velocity,
+                                      obstacle_avoidance_scale);
+>>>>>>> apply stretching in task
             break;
         case GripperControllerType::UNIFORM_SAMPLING:
             return solvedByUniformSampling(deformable_model,
                                       input_data,
+<<<<<<< HEAD
                                       max_gripper_velocity);
+=======
+                                      object_configuration,
+                                      max_gripper_velocity,
+                                      obstacle_avoidance_scale);
+>>>>>>> apply stretching in task
             break;
         // Default: return non-optimized result, simple pseudo inverse
         default:
@@ -77,10 +89,11 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::fi
 // Private optimization function
 /////////////////////////////////////////////////////////////////////////////////
 
-std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::solvedByRandomSampling(
-        const DeformableModel::Ptr deformable_model,
+std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::solvedByRandomSampling(const DeformableModel::Ptr deformable_model,
         const DeformableModel::DeformableModelInputData &input_data,
-        const double max_gripper_velocity)
+        const ObjectPointSet& object_configuration,
+        const double max_gripper_velocity,
+        const double obstacle_avoidance_scale)
 {
     const double max_step_size = max_gripper_velocity * input_data.dt_;
 
@@ -173,7 +186,9 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
 std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::solvedByUniformSampling(
         const DeformableModel::Ptr deformable_model,
         const DeformableModel::DeformableModelInputData &input_data,
-        const double max_gripper_velocity)
+        const ObjectPointSet& object_configuration,
+        const double max_gripper_velocity,
+        const double obstacle_avoidance_scale)
 {
 
 }
@@ -277,5 +292,67 @@ std::pair<bool, std::vector<CollisionData>> GripperMotionGenerator::gripperColli
 
     return collision_result;
 }
+
+
+bool GripperMotionGenerator::stretchingDetection(const DeformableModel::DeformableModelInputData &input_data,
+        const AllGrippersSinglePose &current_gripper_pose,
+        const AllGrippersSinglePoseDelta &test_gripper_motion,
+        const ObjectPointSet &object_configuration)
+{
+    /*
+    const Eigen::MatrixXd node_squared_distance =
+            CalculateSquaredDistanceMatrix(object_configuration);
+
+    const double stretching_correction_threshold = stretchingScalingThreshold();
+
+    bool over_strech = false;
+
+    const ssize_t start_node = 1;
+    const ssize_t end_node = num_nodes_ - 2;
+
+    const Eigen::Vector3d first_correction_vector =
+            (object_configuration.block<3, 1>(0, start_node + 1)
+                - object_configuration.block<3, 1>(0, start_node));
+
+    const Eigen::Vector3d second_correction_vector =
+            (object_configuration.block<3, 1>(0, end_node - 1)
+                - object_configuration.block<3, 1>(0, end_node));
+
+    for (ssize_t first_node = 0; first_node < num_nodes_; ++first_node)
+    {
+        for (ssize_t second_node = first_node + 1; second_node < num_nodes_; ++second_node)
+        {
+            const double max_distance = stretching_correction_threshold + object_initial_node_distance_(first_node, second_node);
+            if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
+            {
+                over_strech = true;
+                break;
+            }
+        }
+        if(over_strech)
+        {
+            break;
+        }
+    }
+
+    if(over_strech)
+    {
+        AllGrippersSinglePose gripper_test_pose;
+        for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
+        {
+            gripper_test_pose.push_back(current_gripper_pose.at(gripper_ind) * kinematics::expTwistAffine3d(test_gripper_motion.at(gripper_ind), 1.0));
+            Eigen::Vector3d resulting_gripper_motion = gripper_test_pose.at(gripper_ind).translation()
+                    - current_gripper_pose.at(gripper_ind).translation();
+//            if (resulting_gripper_motion.dot())
+        }
+
+
+    }
+
+    return over_strech;
+    */
+}
+
+
 
 

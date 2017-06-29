@@ -146,6 +146,7 @@ void TaskSpecification::visualizeDeformableObject(
 
 double TaskSpecification::calculateError(const WorldState& world_state)
 {
+<<<<<<< HEAD
     if (current_error_last_simtime_calced_ != world_state.sim_time_)
     {
         current_error_calculated_.store(false);
@@ -172,9 +173,32 @@ double TaskSpecification::calculateError(const WorldState& world_state)
             current_error_calculated_.store(true);
             return current_error_;
         }
+=======
+    ObjectDeltaAndWeight stretching_correction (num_nodes_ * 3);
+
+    const Eigen::MatrixXd node_squared_distance =
+            CalculateSquaredDistanceMatrix(object_configuration);
+
+    const double stretching_correction_threshold = stretchingScalingThreshold();
+
+    EigenHelpers::VectorVector3d start_points;
+    EigenHelpers::VectorVector3d end_points;
+
+
+    // Method 2 begin there
+    /*
+    double sum_of_distance = 0.0;
+    const double max_distance = stretching_correction_threshold + object_initial_node_distance_(0, num_nodes_-1);
+
+    for (ssize_t first_node = 0; first_node < num_nodes_ - 1; ++first_node)
+    {
+        ssize_t second_node = first_node + 1;
+        sum_of_distance += std::sqrt(node_squared_distance(first_node, second_node));
+>>>>>>> apply stretching in task
     }
 }
 
+<<<<<<< HEAD
 ObjectDeltaAndWeight TaskSpecification::calculateObjectErrorCorrectionDelta(
         const WorldState& world_state)
 {
@@ -190,6 +214,25 @@ bool TaskSpecification::taskDone(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+=======
+    if (sum_of_distance > max_distance)
+    {
+        const ssize_t first_node = 0;
+        const ssize_t second_node = num_nodes_ - 1;
+
+        const double node_distance_delta = sum_of_distance - object_initial_node_distance_(0, num_nodes_-1);
+        const Eigen::Vector3d first_correction_vector = 1.1
+                * (object_configuration.block<3, 1>(0, first_node + 1)
+                    - object_configuration.block<3, 1>(0, first_node));
+
+//        const Eigen::Vector3d second_correction_vector = 0.1 * node_distance_delta
+        const Eigen::Vector3d second_correction_vector = 1.1
+                * (object_configuration.block<3, 1>(0, second_node - 1)
+                    - object_configuration.block<3, 1>(0, second_node));
+
+        stretching_correction.delta.segment<3>(3 * first_node) = first_correction_vector;
+        stretching_correction.delta.segment<3>(3 * second_node) = second_correction_vector;
+>>>>>>> apply stretching in task
 
 double TaskSpecification::defaultDeformability() const
 {
@@ -206,6 +249,7 @@ double TaskSpecification::maxOverstretchFactor() const
     return max_overstretch_factor_;
 }
 
+<<<<<<< HEAD
 double TaskSpecification::maxTime() const
 {
     return max_time_;
@@ -264,10 +308,49 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyC
     ObjectDeltaAndWeight stretching_correction(num_nodes_ * 3);
     const double max_overstretch_multiplier = maxOverstretchFactor();
     const Eigen::MatrixXd object_current_node_distance = CalculateDistanceMatrix(object_configuration);
+=======
+        if (visualize)
+        {
+            start_points.push_back(object_configuration.block<3, 1>(0, first_node));
+            end_points.push_back(object_configuration.block<3, 1>(0, first_node)
+                                 + stretching_correction.delta.segment<3>(3 * first_node));
+
+            start_points.push_back(object_configuration.block<3, 1>(0, second_node));
+            end_points.push_back(object_configuration.block<3, 1>(0, second_node)
+                                 + stretching_correction.delta.segment<3>(3 * second_node));
+        }
+
+        std::cout << "stretching happens, need correction!!" << std::endl;
+        std::cout << "maximum allow distance is: " << max_distance << std::endl;
+        std::cout << "sum of distance is: " << sum_of_distance << std::endl;
+    }
+    */
+    // END Method 2: check only total length
+>>>>>>> apply stretching in task
 
     EigenHelpers::VectorVector3d vis_start_points;
     EigenHelpers::VectorVector3d vis_end_points;
 
+<<<<<<< HEAD
+=======
+
+    // Method 1: check all node
+    bool over_strech = false;
+
+    double node_distance_delta = 0;
+
+    const ssize_t start_node = 1;
+    const ssize_t end_node = num_nodes_ - 2;
+
+    const Eigen::Vector3d first_correction_vector =
+            (object_configuration.block<3, 1>(0, start_node + 1)
+                - object_configuration.block<3, 1>(0, start_node));
+
+    const Eigen::Vector3d second_correction_vector =
+            (object_configuration.block<3, 1>(0, end_node - 1)
+                - object_configuration.block<3, 1>(0, end_node));
+
+>>>>>>> apply stretching in task
     for (ssize_t first_node = 0; first_node < num_nodes_; ++first_node)
     {
         for (ssize_t second_node = first_node + 1; second_node < num_nodes_; ++second_node)
@@ -276,6 +359,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyC
             const double dist = object_current_node_distance(first_node, second_node);
             if (max_dist < dist)
             {
+<<<<<<< HEAD
                 addStrechingCorrectionVector(stretching_correction, object_configuration, first_node, second_node, dist - object_initial_node_distance_(first_node, second_node));
 
                 if (visualize)
@@ -291,6 +375,60 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyC
     {
         vis_.visualizeLines("stretching_lines", vis_start_points, vis_end_points, Visualizer::Blue());
     }
+=======
+                over_strech = true;
+                node_distance_delta += std::sqrt(node_squared_distance(first_node, second_node))
+                        - object_initial_node_distance_(first_node, second_node);
+            //    assert(node_distance_delta > stretching_correction_threshold);
+
+                stretching_correction.delta.segment<3>(3 * 0) +=
+                        node_distance_delta * first_correction_vector;
+                stretching_correction.delta.segment<3>(3 * (num_nodes_-1)) +=
+                        node_distance_delta * second_correction_vector;
+
+                const double first_node_max_stretch = std::max(stretching_correction.weight(3 * start_node), node_distance_delta);
+                stretching_correction.weight(3 * 0) = first_node_max_stretch;
+                stretching_correction.weight(3 * 1) = first_node_max_stretch;
+                stretching_correction.weight(3 * 2) = first_node_max_stretch;
+
+                // Set the weight to be the stretch distance of the worst offender
+                const double second_node_max_stretch = std::max(stretching_correction.weight(3 * end_node), node_distance_delta);
+                stretching_correction.weight(3 * (num_nodes_-1)) = second_node_max_stretch;
+                stretching_correction.weight(3 * (num_nodes_-1) + 1) = second_node_max_stretch;
+                stretching_correction.weight(3 * (num_nodes_-1) + 2) = second_node_max_stretch;
+            }            
+        }
+    }
+
+    if (visualize && over_strech)
+    {
+//        start_points.push_back(object_configuration.block<3, 1>(0, start_node));
+//        end_points.push_back(object_configuration.block<3, 1>(0, start_node) + first_correction_vector);
+
+//        start_points.push_back(object_configuration.block<3, 1>(0, end_node));
+//        end_points.push_back(object_configuration.block<3, 1>(0, end_node) + second_correction_vector);
+
+        vis_.visualizeObjectDelta(
+                    "stretching correction",
+                    object_configuration,
+                    AddObjectDelta(object_configuration, 500 * stretching_correction.delta),
+                    Visualizer::Silver());
+
+
+        std::cout << "stretching happens, need correction!!" << std::endl;
+        std::cout << "node_distance delta is: " << node_distance_delta << std::endl;
+    }
+
+
+    // Method 1: Check all nodes
+
+
+//    if (visualize && start_points.size() > 0)
+//    {
+//        vis_.visualizeLines("stretching_lines", start_points, end_points, Visualizer::Silver());
+//    }
+
+>>>>>>> apply stretching in task
 
     return stretching_correction;
 }
@@ -336,7 +474,13 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaPairwi
 
     if (visualize)
     {
+<<<<<<< HEAD
         vis_.visualizeLines("stretching_lines", vis_start_points, vis_end_points, Visualizer::Blue());
+=======
+        vis_.visualizeLines("stretching_lines", start_points, end_points, Visualizer::Silver());
+        std::cout << "stretching happens, need correction!!" << std::endl;
+//        std::cout << "node_distance delta is: " << node_distance_delta << std::endl;
+>>>>>>> apply stretching in task
     }
 
     return stretching_correction;
