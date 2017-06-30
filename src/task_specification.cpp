@@ -559,11 +559,17 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
             first_step_error_correction_ = calculateObjectErrorCorrectionDelta(world_state);
             ROS_INFO_STREAM_NAMED("task_specification", "Found best error correction delta in " << GlobalStopwatch(READ) << " seconds");
 
+<<<<<<< HEAD
             GlobalStopwatch(RESET);
             const bool visualize_stretching_lines = false;
             first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, visualize_stretching_lines);
             ROS_INFO_STREAM_NAMED("task_specification", "Found stretching correction delta in " << GlobalStopwatch(READ) << " seconds");
             first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, true);
+=======
+//            first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, true);
+            ObjectDeltaAndWeight non_stretching_correction(num_nodes_ * 3);
+            first_step_stretching_correction_ = non_stretching_correction;
+>>>>>>> keep working
 
             GlobalStopwatch(RESET);
             first_step_desired_motion_ = combineErrorCorrectionAndStretchingCorrection(

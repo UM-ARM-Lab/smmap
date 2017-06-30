@@ -27,9 +27,11 @@ namespace smmap {
             //////////////////////////////////////////////////////////////////////////////////////
 
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> findOptimalGripperMotion(
+                    const WorldState& current_world_state,
                     const DeformableModel::Ptr deformable_model,
                     const DeformableModel::DeformableModelInputData &input_data,
                     const ObjectPointSet& object_configuration,
+                    const AllGrippersSinglePose &current_gripper_pose,
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale);
 
@@ -45,16 +47,20 @@ namespace smmap {
             /////////////////////////////////////////////////////////////////////////////////////////
 
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByRandomSampling(
+                    const WorldState &current_world_state,
                     const DeformableModel::Ptr deformable_model,
                     const DeformableModel::DeformableModelInputData &input_data,
                     const ObjectPointSet& object_configuration,
+                    const AllGrippersSinglePose& current_gripper_pose,
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale);
 
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByUniformSampling(
+                    const WorldState &current_world_state,
                     const DeformableModel::Ptr deformable_model,
                     const DeformableModel::DeformableModelInputData &input_data,
                     const ObjectPointSet& object_configuration,
+                    const AllGrippersSinglePose &current_gripper_pose,
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale);
 
@@ -87,6 +93,7 @@ namespace smmap {
 //            ros::NodeHandle nh_;
 
 //            DeformableModel::Ptr deformable_model_;
+            const Eigen::MatrixXd object_initial_node_distance_;
             GripperCollisionChecker gripper_collision_checker_;
             const sdf_tools::SignedDistanceField enviroment_sdf_;
 //            RobotInterface& robot_;
