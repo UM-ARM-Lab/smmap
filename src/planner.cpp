@@ -339,9 +339,9 @@ WorldState Planner::sendNextCommandUsingLocalController(
     {
         if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
         {
-            // grippers motion generated from pseudo-invese
-            suggested_robot_commands[model_ind] =
-                model_list_[model_ind]->getSuggestedGrippersCommand(
+            suggested_robot_commands[model_ind] =gripper_motion_generator_->findOptimalGripperMotion(
+                        current_world_state,
+                        model_list_[model_ind],
                         model_input_data,
                         robot_.max_gripper_velocity_,
                         task_specification_->collisionScalingFactor());

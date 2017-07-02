@@ -22,6 +22,8 @@ GripperMotionGenerator::GripperMotionGenerator(ros::NodeHandle &nh,
     , generator_(generator)
     , uniform_unit_distribution_(0.0, 1.0)
     , gripper_controller_type_(gripper_controller_type)
+    , deformable_type_(GetDeformableType(nh))
+    , task_type_(GetTaskType(nh))
     , translation_lower_bound_(-max_gripper_translation_step)
     , translation_upper_bound_(max_gripper_translation_step)
     , rotation_lower_bound_(-max_gripper_rotation_step)
@@ -49,8 +51,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::fi
         const WorldState &current_world_state,
         const DeformableModel::Ptr deformable_model,
         const DeformableModel::DeformableModelInputData& input_data,
-        const ObjectPointSet& object_configuration,
-        const AllGrippersSinglePose& current_gripper_pose,
         const double max_gripper_velocity,
         const double obstacle_avoidance_scale)
 {
@@ -61,10 +61,13 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::fi
                                       deformable_model,
                                       input_data,
 <<<<<<< HEAD
+<<<<<<< HEAD
                                       max_gripper_velocity);
 =======
                                       object_configuration,
                                       current_gripper_pose,
+=======
+>>>>>>> reformatting
                                       max_gripper_velocity,
                                       obstacle_avoidance_scale);
 >>>>>>> apply stretching in task
@@ -75,10 +78,13 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::fi
                                       deformable_model,
                                       input_data,
 <<<<<<< HEAD
+<<<<<<< HEAD
                                       max_gripper_velocity);
 =======
                                       object_configuration,
                                       current_gripper_pose,
+=======
+>>>>>>> reformatting
                                       max_gripper_velocity,
                                       obstacle_avoidance_scale);
 >>>>>>> apply stretching in task
@@ -103,19 +109,13 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
         const WorldState& current_world_state,
         const DeformableModel::Ptr deformable_model,
         const DeformableModel::DeformableModelInputData &input_data,
-        const ObjectPointSet& object_configuration,
-        const AllGrippersSinglePose &current_gripper_pose,
         const double max_gripper_velocity,
         const double obstacle_avoidance_scale)
 {
     const double max_step_size = max_gripper_velocity * input_data.dt_;
 
     const Eigen::VectorXd& desired_object_p_dot =
-<<<<<<< HEAD
-            input_data.task_desired_object_delta_fn_(input_data.world_current_state_).delta;
-=======
             input_data.task_desired_object_delta_fn_(current_world_state).delta;
->>>>>>> keep working
 
     const ssize_t num_grippers = input_data.world_current_state_.all_grippers_single_pose_.size();
     const ssize_t num_nodes = input_data.world_current_state_.object_configuration_.cols();
@@ -165,13 +165,13 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
 
         // Method 1: use constraint_violation checker for gripper collosion
         // Constraint violation checking here
-        bool constraint_violation = gripperCollisionCheckResult(current_gripper_pose,
+        bool constraint_violation = gripperCollisionCheckResult(current_world_state.all_grippers_single_pose_,
                                                                 grippers_motion_sample).first;
 
         bool stretching_violation = stretchingDetection(input_data,
-                                                       current_gripper_pose,
+                                                       current_world_state.all_grippers_single_pose_,
                                                        grippers_motion_sample,
-                                                       object_configuration);
+                                                       current_world_state.object_configuration_);
 
         // If no constraint violation
         if ((!constraint_violation) && (!stretching_violation))
@@ -179,7 +179,8 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
             // get predicted object motion
             const ObjectPointSet predicted_object_p_dot = deformable_model->getObjectDelta(
                         input_data,
-                        grippers_motion_sample);
+                        grippers_motion_sample,
+                        current_world_state.object_configuration_);
 
             const double sample_error = errorOfControlByPrediction(predicted_object_p_dot, desired_object_p_dot);
 
@@ -209,8 +210,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
         const WorldState &current_world_state,
         const DeformableModel::Ptr deformable_model,
         const DeformableModel::DeformableModelInputData &input_data,
-        const ObjectPointSet& object_configuration,
-        const AllGrippersSinglePose &current_gripper_pose,
         const double max_gripper_velocity,
         const double obstacle_avoidance_scale)
 {
@@ -323,6 +322,28 @@ bool GripperMotionGenerator::stretchingDetection(
         const AllGrippersSinglePose &current_gripper_pose,
         const AllGrippersSinglePoseDelta &test_gripper_motion,
         const ObjectPointSet &object_configuration)
+{
+    switch (deformable_type_) {
+    case ROPE:
+        return RopeTwoGrippersStretchingDetection(
+                    input_data,
+                    current_gripper_pose,
+                    test_gripper_motion,
+                    object_configuration);
+
+        break;
+    default:
+        return false;
+        break;
+    }
+}
+
+
+bool GripperMotionGenerator::RopeTwoGrippersStretchingDetection(
+        const DeformableModel::DeformableModelInputData &input_data,
+        const AllGrippersSinglePose &current_gripper_pose,
+        const AllGrippersSinglePoseDelta &test_gripper_motion,
+        const ObjectPointSet& object_configuration)
 {
     // This Version only works for two grippers situation, should be revised later
 

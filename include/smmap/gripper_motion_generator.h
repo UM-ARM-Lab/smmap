@@ -26,12 +26,9 @@ namespace smmap {
             // Called from outside to find the optimal gripper command
             //////////////////////////////////////////////////////////////////////////////////////
 
-            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> findOptimalGripperMotion(
-                    const WorldState& current_world_state,
+            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> findOptimalGripperMotion(const WorldState& current_world_state,
                     const DeformableModel::Ptr deformable_model,
                     const DeformableModel::DeformableModelInputData &input_data,
-                    const ObjectPointSet& object_configuration,
-                    const AllGrippersSinglePose &current_gripper_pose,
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale);
 
@@ -50,8 +47,6 @@ namespace smmap {
                     const WorldState &current_world_state,
                     const DeformableModel::Ptr deformable_model,
                     const DeformableModel::DeformableModelInputData &input_data,
-                    const ObjectPointSet& object_configuration,
-                    const AllGrippersSinglePose& current_gripper_pose,
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale);
 
@@ -59,8 +54,6 @@ namespace smmap {
                     const WorldState &current_world_state,
                     const DeformableModel::Ptr deformable_model,
                     const DeformableModel::DeformableModelInputData &input_data,
-                    const ObjectPointSet& object_configuration,
-                    const AllGrippersSinglePose &current_gripper_pose,
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale);
 
@@ -78,14 +71,30 @@ namespace smmap {
 
             AllGrippersSinglePoseDelta allGripperPoseDeltaSampler(const ssize_t num_grippers);
 
+            //////////////////////////////////////////////////////////////////////////////////
+            // Collision constraint related function
+            //////////////////////////////////////////////////////////////////////////////////
+
             std::pair<bool, std::vector<CollisionData>> gripperCollisionCheckResult(
                     const AllGrippersSinglePose& current_gripper_pose,
                     const AllGrippersSinglePoseDelta &test_gripper_motion);
+
+            //////////////////////////////////////////////////////////////////////////////////
+            // Stretching constraint related function
+            //////////////////////////////////////////////////////////////////////////////////
 
             bool stretchingDetection(const DeformableModel::DeformableModelInputData &input_data,
                                      const AllGrippersSinglePose &current_gripper_pose,
                                      const AllGrippersSinglePoseDelta &test_gripper_motion,
                                      const ObjectPointSet& object_configuration);
+
+            bool RopeTwoGrippersStretchingDetection(
+                    const DeformableModel::DeformableModelInputData &input_data,
+                    const AllGrippersSinglePose &current_gripper_pose,
+                    const AllGrippersSinglePoseDelta &test_gripper_motion,
+                    const ObjectPointSet& object_configuration);
+
+
 
 
         private:
@@ -103,6 +112,8 @@ namespace smmap {
 //            std::vector<GripperData> grippers_data_;
 
             GripperControllerType gripper_controller_type_;
+            DeformableType deformable_type_;
+            TaskType task_type_;
 
             const double translation_lower_bound_;
             const double translation_upper_bound_;
