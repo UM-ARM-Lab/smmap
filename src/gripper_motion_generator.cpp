@@ -30,6 +30,7 @@ GripperMotionGenerator::GripperMotionGenerator(ros::NodeHandle &nh,
     , rotation_upper_bound_(max_gripper_rotation_step)
     , distance_to_obstacle_threshold_(distance_to_obstacle_threshold)
     , max_count_(max_count)
+    , sample_count_(0)
 {
 
 }
@@ -259,12 +260,41 @@ kinematics::Vector6d GripperMotionGenerator::singleGripperPoseDeltaSampler()
 AllGrippersSinglePoseDelta GripperMotionGenerator::allGripperPoseDeltaSampler(const ssize_t num_grippers)
 {
     AllGrippersSinglePoseDelta grippers_motion_sample;
-    for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
+
+    // if sample_count_ < 0, return all-sampled motion, otherwise, return one-for-each-time sample
+    if (sample_count_ < 0 )
     {
-        // Eigen::Affine3d single_gripper_motion_sample = EigenHelpers::ExpTwist(singleGripperPoseDeltaSampler(), 1.0);
-        grippers_motion_sample.push_back(singleGripperPoseDeltaSampler());
+        for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
+        {
+            // Eigen::Affine3d single_gripper_motion_sample = EigenHelpers::ExpTwist(singleGripperPoseDeltaSampler(), 1.0);
+            grippers_motion_sample.push_back(singelGripperPoseDeltaSampler());
+        }
+        return grippers_motion_sample;
     }
-    return grippers_motion_sample;
+    else if (sample_count_ < num_grippers)
+    {
+        for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
+        {
+            if (ind_gripper == sample_count_)
+            {
+                grippers_motion_sample.push_back(singelGripperPoseDeltaSampler());
+            }
+            else
+            {
+                kinematics::Vector6d no_sample = Eigen::MatrixXd::Zero(6,1);
+                grippers_motion_sample.push_back(no_sample);
+            }
+
+        }
+        sample_count_++;
+
+        if(sample_count_ >= num_grippers)
+        {
+            sample_count_ = 0;
+        }
+        return grippers_motion_sample;
+    }
+
 }
 
 

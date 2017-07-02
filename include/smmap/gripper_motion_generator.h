@@ -123,6 +123,7 @@ namespace smmap {
             const double distance_to_obstacle_threshold_;
 
             const int64_t max_count_;
+            int sample_count_;
 
 
 //            Visualizer& vis_;
