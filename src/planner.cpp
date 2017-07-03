@@ -85,10 +85,13 @@ Planner::Planner(
                         vis_,
                         generator_,
                         dijkstras_task_->work_space_grid_.getXMin(),
+//                        0.0,
                         dijkstras_task_->work_space_grid_.getXMax(),
                         dijkstras_task_->work_space_grid_.getYMin(),
+//                        -0.4,
                         dijkstras_task_->work_space_grid_.getYMax(),
                         dijkstras_task_->work_space_grid_.getZMin(),
+//                        0.5,
                         dijkstras_task_->work_space_grid_.getZMax(),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
                         GetRRTGoalBias(ph_),
@@ -188,7 +191,7 @@ WorldState Planner::sendNextCommand(
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "planner", "Invoking global planner due to overstretch");
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "planner", "Invoking global planner due to collision");
 
-                vis_.deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)max_lookahead_steps_ + 10);
+                vis_.deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
                 vis_.deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
                 vis_.deleteObjects(PROJECTED_POINT_PATH_NS,         1, 2);
                 vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS,   1, 2);
@@ -500,9 +503,12 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
     const bool verbose = false;
 
+
+    vis_.deleteObjects(PROJECTED_BAND_NS, 1, (int32_t)max_lookahead_steps_ + 10);
     vis_.deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
     vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
-    vis_.deleteObjects(PROJECTED_GRIPPER_NS, 1, 3);
+    vis_.deleteObjects(PROJECTED_GRIPPER_NS, 1, (int32_t)(4 * max_lookahead_steps_) + 10);
+
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Constraint violation Version 1 - Purely cloth overstretch
@@ -517,11 +523,6 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     ROS_INFO_STREAM_NAMED("planner", "Calculated projected cloth paths                 - Version 1 - in " << stopwatch(READ) << " seconds");
     visualizeProjectedPaths(projected_deformable_point_paths, visualization_enabled);
     projected_deformable_point_paths_and_projected_virtual_rubber_bands.first = projected_deformable_point_paths;
-
-
-
-    vis_.deleteObjects(PROJECTED_BAND_NS, 1, 30);
-
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -548,9 +549,9 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
 
 
 
-    vis_.deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
-    vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
-    vis_.deleteObjects(PROJECTED_GRIPPER_NS, 1, 3);
+//    vis_.deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
+//    vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
+//    vis_.deleteObjects(PROJECTED_GRIPPER_NS, 1, (int32_t)(4 * max_lookahead_steps_) + 10);
 
 
 
@@ -597,7 +598,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
 
         // Visualize
         virtual_rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
-        vis_.visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color);
+        vis_.visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color, (int32_t)(4 * t) + 1);
 
         // Finish collecting the gripper collision data
         world_state_copy.gripper_collision_data_ = collision_check_future.get();
@@ -1067,6 +1068,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
         const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
         const auto rrt_results = rrt_helper_->rrtPlan(start_config, rrt_grippers_goal, time_limit);
 
+        vis_.deleteObjects(CLUSTERING_TARGETS_NS, 1, 2);
         rrt_helper_->visualizePath(rrt_results);
 
         global_plan_current_timestep_ = 0;

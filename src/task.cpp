@@ -46,6 +46,11 @@ void Task::execute()
             const double current_error = task_specification_->calculateError(world_state);
             ROS_INFO_STREAM_NAMED("task", "   Planner/Task sim time " << world_state.sim_time_ << "\t Error: " << current_error);
 
+            vis_.deleteObjects(Planner::PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * GetNumLookaheadSteps(ph_)) + 10);
+            vis_.deleteObjects(Planner::PROJECTED_BAND_NS,               1, (int32_t)GetNumLookaheadSteps(ph_) + 10);
+            vis_.deleteObjects(Planner::PROJECTED_POINT_PATH_NS,         1, 2);
+            vis_.deleteObjects(Planner::PROJECTED_POINT_PATH_LINES_NS,   1, 2);
+
             if (world_feedback.sim_time_ - start_time >= task_specification_->maxTime())
             {
                 ROS_INFO("Terminating task as time has run out");

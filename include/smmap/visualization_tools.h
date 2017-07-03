@@ -31,6 +31,8 @@ namespace smmap
                     const std::string& marker_topic,
                     const std::string& marker_array_topic);
 
+            void clearVisualizationsBullet() const;
+
             void deleteObjects(
                     const std::string& marker_name,
                     const int32_t start_id = 0,
@@ -149,6 +151,7 @@ namespace smmap
 
         private:
             const bool disable_all_visualizations_;
+            mutable ros::ServiceClient clear_markers_srv_;
             mutable ros::Publisher visualization_marker_pub_;
             mutable ros::Publisher visualization_marker_vector_pub_;
 

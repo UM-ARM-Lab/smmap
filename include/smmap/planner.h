@@ -166,6 +166,7 @@ namespace smmap
             const bool logging_enabled_;
             std::map<std::string, Log::Log> loggers_;
 
+        public:
             const static std::string DESIRED_DELTA_NS;
             const static std::string PROJECTED_GRIPPER_NS;
             const static std::string PROJECTED_BAND_NS;

@@ -156,7 +156,8 @@ namespace smmap
                     VirtualRubberBand rubber_band);
 
             std::vector<RRTConfig, RRTAllocator> rrtShortcutSmooth(
-                    std::vector<RRTConfig, RRTAllocator> path);
+                    std::vector<RRTConfig, RRTAllocator> path,
+                    const bool visualization_enabled_locally);
 
 
         private:

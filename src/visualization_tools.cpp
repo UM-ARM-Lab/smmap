@@ -1,6 +1,7 @@
 #include "smmap/visualization_tools.h"
 
 #include <thread>
+#include <std_srvs/Empty.h>
 
 using namespace smmap;
 
@@ -131,6 +132,7 @@ Visualizer::Visualizer(
         const std::string& marker_topic,
         const std::string& marker_array_topic)
     : disable_all_visualizations_(GetDisableAllVisualizations(ph))
+    , clear_markers_srv_(nh.serviceClient<std_srvs::Empty>(GetClearVisualizationsTopic(nh), true))
     , world_frame_name_(GetWorldFrameName())
     , gripper_apperture_(GetGripperApperture(nh))
 {
@@ -138,9 +140,24 @@ Visualizer::Visualizer(
 
     if (!disable_all_visualizations_)
     {
+        clear_markers_srv_.waitForExistence();
+
         // Publish visualization request markers
         visualization_marker_pub_        = nh.advertise<visualization_msgs::Marker>(marker_topic, 100);
         visualization_marker_vector_pub_ = nh.advertise<visualization_msgs::MarkerArray>(marker_array_topic, 100);
+    }
+}
+
+void Visualizer::clearVisualizationsBullet() const
+{
+    if (!disable_all_visualizations_)
+    {
+        std_srvs::Empty srv_data;
+
+        if (!clear_markers_srv_.call(srv_data))
+        {
+            ROS_ERROR_NAMED("visualizer", "Unable to clear visualization data");
+        }
     }
 }
 
@@ -167,7 +184,7 @@ void Visualizer::deleteObjects(
             if (id % 100 == 0)
             {
                 ros::spinOnce();
-                std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));
+                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
             }
         }
 
@@ -338,7 +355,8 @@ visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
     markers[0].type = visualization_msgs::Marker::CUBE;
     markers[0].ns = marker_name;
     markers[0].id = id;
-    markers[0].scale.x = 0.03;
+    //markers[0].scale.x = 0.03;
+    markers[0].scale.x = 0.01;
     markers[0].scale.y = 0.03;
     markers[0].scale.z = 0.01;
     markers[0].pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(eigen_pose * Eigen::Translation3d(0.0, 0.0, gripper_apperture_));
@@ -349,7 +367,8 @@ visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
     markers[1].type = visualization_msgs::Marker::CUBE;
     markers[1].ns = marker_name;
     markers[1].id = id + 1;
-    markers[1].scale.x = 0.03;
+//    markers[1].scale.x = 0.03;
+    markers[0].scale.x = 0.01;
     markers[1].scale.y = 0.03;
     markers[1].scale.z = 0.01;
     markers[1].pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(eigen_pose * Eigen::Translation3d(0.0, 0.0, -gripper_apperture_));

@@ -365,7 +365,7 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
 
     const double target_is_goal_config = RRTConfig::Distance(random_target.getGrippers(), grippers_goal_position_) < goal_reach_radius_;
 
-    if (visualization_enabled_globally_ && visualization_enabled_locally && target_is_goal_config && true)
+    if (visualization_enabled_globally_ && visualization_enabled_locally && target_is_goal_config && false)
     {
         vis_.visualizeCubes(
                     RRT_FORWARD_PROP_START_NS,
@@ -584,7 +584,6 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
             const RRTConfig& nearest_neighbor, const RRTConfig& random_target )
     {
         const bool local_visualization_enabled = true;
-//        const bool calculate_first_order_vis = true;
         const bool calculate_first_order_vis = false;
         const std::vector<std::pair<RRTConfig, int64_t>> propogation_results =
                 forwardPropogationFunction(nearest_neighbor, random_target, calculate_first_order_vis, local_visualization_enabled);
@@ -604,11 +603,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
 
     if (visualization_enabled_globally_)
     {
-        vis_.deleteObjects(RRT_SAMPLE_NS, 1, 11);
-        vis_.deleteObjects(RRT_FORWARD_PROP_START_NS, 1, 20);
-        vis_.deleteObjects(RRT_FORWARD_PROP_STEPS_NS);
-        vis_.deleteObjects(RRT_TREE_GRIPPER_A_NS, 1, (int32_t)std::ceil(rrt_results.second.at("total_states") / 100.0));
-        vis_.deleteObjects(RRT_TREE_GRIPPER_B_NS, 1, (int32_t)std::ceil(rrt_results.second.at("total_states") / 100.0));
+        vis_.clearVisualizationsBullet();
     }
 
     statistics_["planning0_nearest_neighbour_time                        "] = total_nearest_neighbour_time_;
@@ -619,11 +614,12 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     std::cout << "\nSimpleRRT Statistics:\n" << PrettyPrint::PrettyPrint(rrt_results.second, false, "\n") << std::endl << std::endl;
     ROS_INFO_NAMED("rrt", "Starting Shortcut Smoothing");
 
-    const auto smoothed_path = rrtShortcutSmooth(rrt_results.first);
+    const bool visualize_rrt_smoothing = true;
+    const auto smoothed_path = rrtShortcutSmooth(rrt_results.first, visualize_rrt_smoothing);
 
     if (visualization_enabled_globally_)
     {
-        vis_.deleteObjects(RRTHelper::RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
+        vis_.deleteObjects(RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
     }
 
     std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
@@ -933,9 +929,9 @@ std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulate
 }
 
 std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
-        std::vector<RRTConfig, RRTAllocator> path)
+        std::vector<RRTConfig, RRTAllocator> path,
+        const bool visualization_enabled_locally)
 {
-    Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
 
     uint32_t num_iterations = 0;
@@ -944,7 +940,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
     total_band_forward_propogation_time_ = 0.0;
     total_first_order_vis_propogation_time_ = 0.0;
 
-    if (visualization_enabled_globally_)
+    if (visualization_enabled_globally_ && visualization_enabled_locally)
     {
         visualizePath(path);
     }
@@ -956,7 +952,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
     {
         ++num_iterations;
 
-        if (visualization_enabled_globally_)
+        if (visualization_enabled_globally_ && visualization_enabled_locally)
         {
             vis_.deleteObjects(RRT_FORWARD_PROP_STEPS_NS, 1, 2);
         }
@@ -1009,7 +1005,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                 continue;
             }
 
-            if (visualization_enabled_globally_)
+            if (visualization_enabled_globally_ && visualization_enabled_locally)
             {
                 const RRTGrippersRepresentation& start_band_endpoints = smoothing_start_config.getBand().getEndpoints();
                 const RRTGrippersRepresentation& end_band_endpoints = smoothing_target_end_config.getBand().getEndpoints();
@@ -1082,7 +1078,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                             second_gripper_end_pos);
             }
 
-            if (visualization_enabled_globally_)
+            if (visualization_enabled_globally_ && visualization_enabled_locally)
             {
                 vis_.visualizeCubes(RRT_SHORTCUT_FIRST_GRIPPER_NS, target_waypoints_first_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 10);
                 vis_.visualizeCubes(RRT_SHORTCUT_SECOND_GRIPPER_NS, target_waypoints_second_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Cyan(), 10);
@@ -1201,13 +1197,13 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
         // Record the change and re-visualize
         path = smoothed_path;
-        if (visualization_enabled_globally_)
+        if (visualization_enabled_globally_ && visualization_enabled_locally)
         {
             visualizePath(path);
         }
     }
 
-    if (visualization_enabled_globally_)
+    if (visualization_enabled_globally_ && visualization_enabled_locally)
     {
         vis_.deleteObjects(RRT_SHORTCUT_FIRST_GRIPPER_NS, 1, 21);
         vis_.deleteObjects(RRT_SHORTCUT_SECOND_GRIPPER_NS, 1, 21);
@@ -1259,13 +1255,13 @@ void RRTHelper::visualizePath(const std::vector<RRTConfig, RRTAllocator>& path) 
             }
         }
 
-        vis_.visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), 1);
+        vis_.visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 1);
         ros::spinOnce();
         std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
-        vis_.visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Blue(), 1);
+        vis_.visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Cyan(), 1);
         ros::spinOnce();
         std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
-        vis_.visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
+//        vis_.visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
         ros::spinOnce();
         std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
     }
