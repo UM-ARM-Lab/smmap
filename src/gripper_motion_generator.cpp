@@ -127,8 +127,14 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
     {
         AllGrippersSinglePoseDelta grippers_motion_sample = allGripperPoseDeltaSampler(num_grippers);
 
-
-
+        if(sample_count_ >= 0)
+        {
+            sample_count_++;
+            if(sample_count_ >= num_grippers)
+            {
+                sample_count_=0;
+            }
+        }
 
         /*
         // Method 2: Using avoidance result
@@ -164,9 +170,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
         }
         */
 
-
-
-
 //        #if defined(_OPENMP)
 //        const size_t thread_num = (size_t)omp_get_thread_num();
 //        #else
@@ -174,22 +177,11 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
 //        #endif
 
 
-
-
         // Method 1: use constraint_violation checker for gripper collosion
         // Constraint violation checking here
-//        const bool constraint_violation = gripperCollisionCheckResult(
-//                    current_world_state.all_grippers_single_pose_,
-//                    grippers_motion_sample).first;
-
-        const auto grippers_test_poses = kinematics::applyTwist(current_world_state.all_grippers_single_pose_, grippers_motion_sample);
-
-        bool constraint_violation = false;
-        for (size_t gripper_idx = 0; gripper_idx < grippers_test_poses.size(); ++gripper_idx)
-        {
-            const bool collision = enviroment_sdf_.Get3d(grippers_test_poses[gripper_idx].translation()) < 0.023;
-            constraint_violation |= collision;
-        }
+        const bool collision_violation = gripperCollisionCheckResult(
+                    current_world_state.all_grippers_single_pose_,
+                    grippers_motion_sample);
 
         const bool stretching_violation = stretchingDetection(
                     input_data,
@@ -198,7 +190,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
                     current_world_state.object_configuration_);
 
         // If no constraint violation
-        if ((!constraint_violation) && (!stretching_violation))
+        if ((!collision_violation) && (!stretching_violation))
         {
             std::pair<AllGrippersSinglePoseDelta, double>& current_thread_optimal = per_thread_optimal_command[thread_num];
 
@@ -325,12 +317,7 @@ AllGrippersSinglePoseDelta GripperMotionGenerator::allGripperPoseDeltaSampler(co
             }
 
         }
-        sample_count_++;
 
-        if(sample_count_ >= num_grippers)
-        {
-            sample_count_ = 0;
-        }
         return grippers_motion_sample;
     }
 
@@ -356,16 +343,23 @@ double GripperMotionGenerator::errorOfControlByPrediction(
     return sum_of_error;
 }
 
-std::pair<bool, std::vector<CollisionData>> GripperMotionGenerator::gripperCollisionCheckResult(
+bool GripperMotionGenerator::gripperCollisionCheckResult(
         const AllGrippersSinglePose& current_gripper_pose,
         const AllGrippersSinglePoseDelta& test_gripper_motion)
 {
-    AllGrippersSinglePose gripper_test_pose;
-    for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
+    const auto grippers_test_poses = kinematics::applyTwist(current_gripper_pose, test_gripper_motion);
+
+    bool collision_result = false;
+
+    for (size_t gripper_idx = 0; gripper_idx < grippers_test_poses.size(); ++gripper_idx)
     {
-        gripper_test_pose.push_back(current_gripper_pose.at(gripper_ind) * kinematics::expTwistAffine3d(test_gripper_motion.at(gripper_ind), 1.0));
+//        const bool collision = enviroment_sdf_.Get3d(grippers_test_poses[gripper_idx].translation()) < 0.023;
+        const bool collision = enviroment_sdf_.Get3d(grippers_test_poses[gripper_idx].translation()) < 0.023;
+        collision_result |= collision;
     }
 
+
+    /* // Previous method, by collision checker, very time-consuming
     std::vector<CollisionData> collision_data = gripper_collision_checker_.gripperCollisionCheck(gripper_test_pose);
 
     bool collision_violation = false;
@@ -381,6 +375,7 @@ std::pair<bool, std::vector<CollisionData>> GripperMotionGenerator::gripperColli
             return collision_result;
         }
     }
+    */
 
     return collision_result;
 }

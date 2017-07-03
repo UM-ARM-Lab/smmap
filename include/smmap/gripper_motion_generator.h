@@ -76,7 +76,7 @@ namespace smmap {
             // Collision constraint related function
             //////////////////////////////////////////////////////////////////////////////////
 
-            std::pair<bool, std::vector<CollisionData>> gripperCollisionCheckResult(
+            bool gripperCollisionCheckResult(
                     const AllGrippersSinglePose& current_gripper_pose,
                     const AllGrippersSinglePoseDelta &test_gripper_motion);
 
