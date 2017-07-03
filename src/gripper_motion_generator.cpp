@@ -1,5 +1,6 @@
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
+#include <omp.h>
 
 #include "smmap/gripper_motion_generator.h"
 #include "smmap/task.h"
@@ -63,34 +64,20 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::fi
                                       current_world_state,
                                       deformable_model,
                                       input_data,
-<<<<<<< HEAD
-<<<<<<< HEAD
-                                      max_gripper_velocity);
-=======
                                       object_configuration,
                                       current_gripper_pose,
-=======
->>>>>>> reformatting
                                       max_gripper_velocity,
                                       obstacle_avoidance_scale);
->>>>>>> apply stretching in task
             break;
         case GripperControllerType::UNIFORM_SAMPLING:
             return solvedByUniformSampling(
                                       current_world_state,
                                       deformable_model,
                                       input_data,
-<<<<<<< HEAD
-<<<<<<< HEAD
-                                      max_gripper_velocity);
-=======
                                       object_configuration,
                                       current_gripper_pose,
-=======
->>>>>>> reformatting
                                       max_gripper_velocity,
                                       obstacle_avoidance_scale);
->>>>>>> apply stretching in task
             break;
         // Default: return non-optimized result, simple pseudo inverse
         default:
@@ -123,12 +110,25 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
     const ssize_t num_grippers = input_data.world_current_state_.all_grippers_single_pose_.size();
     const ssize_t num_nodes = input_data.world_current_state_.object_configuration_.cols();
 
+<<<<<<< HEAD
     double min_error = std::numeric_limits<double>::infinity();
     AllGrippersSinglePoseDelta optimal_gripper_command;
+=======
+>>>>>>> Changed to SDF based collision check, added ability to enable parallel sampling.
 
+    std::vector<std::pair<AllGrippersSinglePoseDelta, double>> per_thread_optimal_command(
+//                arc_helpers::GetNumOMPThreads(),
+                1,
+                std::make_pair(AllGrippersSinglePoseDelta(), std::numeric_limits<double>::infinity()));
+
+
+//    #pragma omp parallel for
     for (int64_t ind_count = 0; ind_count < max_count_; ind_count++)
     {
         AllGrippersSinglePoseDelta grippers_motion_sample = allGripperPoseDeltaSampler(num_grippers);
+
+
+
 
         /*
         // Method 2: Using avoidance result
@@ -166,19 +166,42 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
 
 
 
+
+//        #if defined(_OPENMP)
+//        const size_t thread_num = (size_t)omp_get_thread_num();
+//        #else
+        const size_t thread_num = 0;
+//        #endif
+
+
+
+
         // Method 1: use constraint_violation checker for gripper collosion
         // Constraint violation checking here
-        bool constraint_violation = gripperCollisionCheckResult(current_world_state.all_grippers_single_pose_,
-                                                                grippers_motion_sample).first;
+//        const bool constraint_violation = gripperCollisionCheckResult(
+//                    current_world_state.all_grippers_single_pose_,
+//                    grippers_motion_sample).first;
 
-        bool stretching_violation = stretchingDetection(input_data,
-                                                       current_world_state.all_grippers_single_pose_,
-                                                       grippers_motion_sample,
-                                                       current_world_state.object_configuration_);
+        const auto grippers_test_poses = kinematics::applyTwist(current_world_state.all_grippers_single_pose_, grippers_motion_sample);
+
+        bool constraint_violation = false;
+        for (size_t gripper_idx = 0; gripper_idx < grippers_test_poses.size(); ++gripper_idx)
+        {
+            const bool collision = enviroment_sdf_.Get3d(grippers_test_poses[gripper_idx].translation()) < 0.023;
+            constraint_violation |= collision;
+        }
+
+        const bool stretching_violation = stretchingDetection(
+                    input_data,
+                    current_world_state.all_grippers_single_pose_,
+                    grippers_motion_sample,
+                    current_world_state.object_configuration_);
 
         // If no constraint violation
         if ((!constraint_violation) && (!stretching_violation))
         {
+            std::pair<AllGrippersSinglePoseDelta, double>& current_thread_optimal = per_thread_optimal_command[thread_num];
+
             // get predicted object motion
             const ObjectPointSet predicted_object_p_dot = deformable_model->getObjectDelta(
                         input_data,
@@ -188,17 +211,31 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
             const double sample_error = errorOfControlByPrediction(predicted_object_p_dot, desired_object_p_dot);
 
             // Compare if the sample grippers motion is better than the best to now
+<<<<<<< HEAD
             if (sample_error < min_error)
+=======
+            if (sample_error < current_thread_optimal.second)
+>>>>>>> Changed to SDF based collision check, added ability to enable parallel sampling.
             {
-                min_error = sample_error;
-                optimal_gripper_command.clear();
-
-                for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
-                {
-                    optimal_gripper_command.push_back(grippers_motion_sample.at(ind_gripper));
-                }
+                current_thread_optimal.first = grippers_motion_sample;
+                current_thread_optimal.second = sample_error;
             }
         }
+<<<<<<< HEAD
+=======
+    }
+
+    // Aggreate the results from each thread into a single best command
+    double best_error = std::numeric_limits<double>::infinity();
+    AllGrippersSinglePoseDelta optimal_gripper_command;
+    for (size_t thread_idx = 0; thread_idx < per_thread_optimal_command.size(); thread_idx++)
+    {
+        if (per_thread_optimal_command[thread_idx].second < best_error)
+        {
+            optimal_gripper_command = per_thread_optimal_command[thread_idx].first;
+            best_error = per_thread_optimal_command[thread_idx].second;
+        }
+>>>>>>> Changed to SDF based collision check, added ability to enable parallel sampling.
     }
 
     std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> suggested_grippers_command(
