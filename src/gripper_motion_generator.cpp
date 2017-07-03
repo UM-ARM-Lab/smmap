@@ -10,6 +10,7 @@ GripperMotionGenerator::GripperMotionGenerator(ros::NodeHandle &nh,
         const sdf_tools::SignedDistanceField& environment_sdf,
 //        RobotInterface& robot,
         std::mt19937_64& generator,
+        Visualizer vis,
         GripperControllerType gripper_controller_type,
         const double max_gripper_translation_step,
         const double max_gripper_rotation_step,
@@ -21,6 +22,7 @@ GripperMotionGenerator::GripperMotionGenerator(ros::NodeHandle &nh,
 //    , robot_(robot)
     , generator_(generator)
     , uniform_unit_distribution_(0.0, 1.0)
+    , vis_(vis)
     , gripper_controller_type_(gripper_controller_type)
     , deformable_type_(GetDeformableType(nh))
     , task_type_(GetTaskType(nh))
@@ -434,6 +436,21 @@ bool GripperMotionGenerator::RopeTwoGrippersStretchingDetection(
         {
             over_strech = false;
         }
+    }
+
+    if(over_strech)
+    {
+        EigenHelpers::VectorVector3d line_starts;
+        EigenHelpers::VectorVector3d line_ends;
+        line_starts.push_back(object_configuration.block<3,1>(0, 0));
+        line_starts.push_back(object_configuration.block<3,1>(0, num_nodes-1));
+        line_ends.push_back(line_starts.at(0) + first_correction_vector);
+        line_ends.push_back(line_starts.at(1) + second_correction_vector);
+
+        vis_.visualizeLines("gripper overstretch motion",
+                            line_starts,
+                            line_ends,
+                            Visualizer::Olive());
     }
 
 

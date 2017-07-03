@@ -16,6 +16,7 @@ namespace smmap {
                                    const sdf_tools::SignedDistanceField& environment_sdf,
                            //        RobotInterface& robot,
                                    std::mt19937_64& generator,
+                                   Visualizer vis,
                                    GripperControllerType gripper_controller_type,
                                    const double max_gripper_translation_step,
                                    const double max_gripper_rotation_step,
@@ -108,6 +109,9 @@ namespace smmap {
 //            RobotInterface& robot_;
             std::mt19937_64& generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
+
+            Visualizer vis_;
+
 //            AllGrippersSinglePoseDelta grippers_pose_delta_;
 //            std::vector<GripperData> grippers_data_;
 
