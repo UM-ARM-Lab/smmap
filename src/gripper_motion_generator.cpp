@@ -349,13 +349,20 @@ bool GripperMotionGenerator::gripperCollisionCheckResult(
 {
     const auto grippers_test_poses = kinematics::applyTwist(current_gripper_pose, test_gripper_motion);
 
-    bool collision_result = false;
+    bool collision_violation = false;
 
     for (size_t gripper_idx = 0; gripper_idx < grippers_test_poses.size(); ++gripper_idx)
     {
 //        const bool collision = enviroment_sdf_.Get3d(grippers_test_poses[gripper_idx].translation()) < 0.023;
-        const bool collision = enviroment_sdf_.Get3d(grippers_test_poses[gripper_idx].translation()) < 0.023;
-        collision_result |= collision;
+        const auto collision_result = enviroment_sdf_.EstimateDistance3d(grippers_test_poses[gripper_idx].translation());
+
+        bool collision = false;
+        if(collision_result.first < 0.023)
+        {
+            collision = true;
+        }
+
+        collision_violation |= collision;
     }
 
 
@@ -377,7 +384,7 @@ bool GripperMotionGenerator::gripperCollisionCheckResult(
     }
     */
 
-    return collision_result;
+    return collision_violation;
 }
 
 
