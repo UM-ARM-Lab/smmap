@@ -64,7 +64,7 @@ ConstraintJacobianModel::ConstraintJacobianModel(
     , trans_dir_type_(trans_dir_fn)
     , trans_dis_type_(trans_dis_fn)
     , environment_sdf_(environment_sdf)
-    , obstacle_threshold_(1.0)
+    , obstacle_threshold_(0.03)
 {
     // Set obstacle distance threshold, to be modified later
     // Should check with Dale, whether it counts as #grids
@@ -257,9 +257,14 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
 
             // Calculate the cross product between the grippers x, y, and z axes
             // and the vector from the gripper to the node, for rotation utilization
+
+        //            const Vector3d gripper_to_node =
+    //                current_configuration.col(node_ind) -
+    //                grippers_pose[(size_t)gripper_ind].translation();
+
             const Vector3d gripper_to_node =
                     current_configuration.col(node_ind) -
-                    grippers_pose[(size_t)gripper_ind].translation();
+                    current_configuration.col(nearest_node_on_gripper.second);
 
             /*
             // TODO: get dist_rest, get node velocity
@@ -375,7 +380,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
     for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
     {
         // if is far from obstacle
-        if (environment_sdf_.Get3d(current_configuration.col(node_ind))>obstacle_threshold_)
+        if (environment_sdf_.EstimateDistance3d(current_configuration.col(node_ind)).first > obstacle_threshold_)
         {
             continue;
         }

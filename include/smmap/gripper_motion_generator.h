@@ -66,11 +66,22 @@ namespace smmap {
 
             kinematics::Vector6d singleGripperPoseDeltaSampler();
 
+<<<<<<< HEAD
             double errorOfControlByPrediction(
                     const ObjectPointSet& predicted_object_p_dot,
                     const Eigen::VectorXd &desired_object_p_dot) const;
+=======
+            AllGrippersSinglePoseDelta setAllGripperPoseDeltaZero(const ssize_t num_grippers);
+
+>>>>>>> wrapping done, parameters to be tuned: 1. stretching factor; 2. stretching allowance cosine threshold
 
             AllGrippersSinglePoseDelta allGripperPoseDeltaSampler(const ssize_t num_grippers);
+
+            void visualize_stretching_vector(const ObjectPointSet& object_configuration);
+
+            void visualize_gripper_motion(
+                    const AllGrippersSinglePose& current_gripper_pose,
+                    const AllGrippersSinglePoseDelta& gripper_motion);
 
             //////////////////////////////////////////////////////////////////////////////////
             // Collision constraint related function
@@ -128,6 +139,7 @@ namespace smmap {
 
             const int64_t max_count_;
             int sample_count_;
+            bool over_stretch_;
 
 
 //            Visualizer& vis_;

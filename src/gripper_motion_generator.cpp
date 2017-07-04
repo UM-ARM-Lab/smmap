@@ -34,6 +34,7 @@ GripperMotionGenerator::GripperMotionGenerator(ros::NodeHandle &nh,
     , distance_to_obstacle_threshold_(distance_to_obstacle_threshold)
     , max_count_(max_count)
     , sample_count_(0)
+    , over_stretch_(false)
 {
 
 }
@@ -111,15 +112,44 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
     const ssize_t num_nodes = input_data.world_current_state_.object_configuration_.cols();
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     double min_error = std::numeric_limits<double>::infinity();
     AllGrippersSinglePoseDelta optimal_gripper_command;
 =======
 >>>>>>> Changed to SDF based collision check, added ability to enable parallel sampling.
+=======
+    const Eigen::MatrixXd node_squared_distance =
+            CalculateSquaredDistanceMatrix(current_world_state.object_configuration_);
+
+    // This should be fixed later, not using +, using * instead
+    const double stretching_correction_threshold = 0.005;
+>>>>>>> wrapping done, parameters to be tuned: 1. stretching factor; 2. stretching allowance cosine threshold
 
     std::vector<std::pair<AllGrippersSinglePoseDelta, double>> per_thread_optimal_command(
 //                arc_helpers::GetNumOMPThreads(),
                 1,
                 std::make_pair(AllGrippersSinglePoseDelta(), std::numeric_limits<double>::infinity()));
+
+    // Checking the stretching status for current object configuration for once
+    over_stretch_ = false;
+    for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
+    {
+        for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
+        {
+            const double max_distance = stretching_correction_threshold + object_initial_node_distance_(first_node, second_node);
+            if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
+            {
+                over_stretch_ = true;
+                visualize_stretching_vector(current_world_state.object_configuration_);
+                break;
+            }
+        }
+        if(over_stretch_)
+        {
+            break;
+        }
+    }
+
 
 
 //    #pragma omp parallel for
@@ -127,6 +157,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
     {
         AllGrippersSinglePoseDelta grippers_motion_sample = allGripperPoseDeltaSampler(num_grippers);
 
+        /*
         if(sample_count_ >= 0)
         {
             sample_count_++;
@@ -135,6 +166,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
                 sample_count_=0;
             }
         }
+        */
 
         /*
         // Method 2: Using avoidance result
@@ -234,6 +266,23 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
                 optimal_gripper_command,
                 ObjectPointSet::Zero(3, num_nodes));
 
+    if(sample_count_ >= 0)
+    {
+        sample_count_++;
+        if(sample_count_ >= num_grippers)
+        {
+            sample_count_=0;
+        }
+    }
+
+    if(suggested_grippers_command.first.size() > 0)
+    {
+        visualize_gripper_motion(current_world_state.all_grippers_single_pose_, suggested_grippers_command.first);
+    }
+    else
+    {
+        suggested_grippers_command.first = setAllGripperPoseDeltaZero(num_grippers);
+    }
     return suggested_grippers_command;
 }
 
@@ -288,7 +337,8 @@ kinematics::Vector6d GripperMotionGenerator::singleGripperPoseDeltaSampler()
     return random_sample;
 }
 
-AllGrippersSinglePoseDelta GripperMotionGenerator::allGripperPoseDeltaSampler(const ssize_t num_grippers)
+AllGrippersSinglePoseDelta GripperMotionGenerator::allGripperPoseDeltaSampler(
+        const ssize_t num_grippers)
 {
     AllGrippersSinglePoseDelta grippers_motion_sample;
 
@@ -323,6 +373,16 @@ AllGrippersSinglePoseDelta GripperMotionGenerator::allGripperPoseDeltaSampler(co
 
 }
 
+AllGrippersSinglePoseDelta GripperMotionGenerator::setAllGripperPoseDeltaZero(const ssize_t num_grippers)
+{
+    AllGrippersSinglePoseDelta grippers_motion_sample;
+    kinematics::Vector6d no_sample = Eigen::MatrixXd::Zero(6,1);
+    for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
+    {
+        grippers_motion_sample.push_back(no_sample);
+    }
+    return grippers_motion_sample;
+}
 
 double GripperMotionGenerator::errorOfControlByPrediction(
         const ObjectPointSet& predicted_object_p_dot,
@@ -342,6 +402,59 @@ double GripperMotionGenerator::errorOfControlByPrediction(
 
     return sum_of_error;
 }
+
+void GripperMotionGenerator::visualize_stretching_vector(
+        const ObjectPointSet& object_configuration)
+{
+    const ssize_t num_nodes = object_configuration.cols();
+    const ssize_t start_node = 0;
+    const ssize_t end_node = num_nodes - 1;
+
+    Eigen::Vector3d first_correction_vector =
+            (object_configuration.block<3, 1>(0, start_node + 1)
+                - object_configuration.block<3, 1>(0, start_node));
+    first_correction_vector = first_correction_vector/first_correction_vector.norm();
+
+    Eigen::Vector3d second_correction_vector =
+            (object_configuration.block<3, 1>(0, end_node - 1)
+                - object_configuration.block<3, 1>(0, end_node));
+    second_correction_vector = second_correction_vector/second_correction_vector.norm();
+
+    EigenHelpers::VectorVector3d line_starts;
+    EigenHelpers::VectorVector3d line_ends;
+    line_starts.push_back(object_configuration.block<3,1>(0, 0));
+    line_starts.push_back(object_configuration.block<3,1>(0, num_nodes-1));
+    line_ends.push_back(line_starts.at(0) + first_correction_vector);
+    line_ends.push_back(line_starts.at(1) + second_correction_vector);
+
+    vis_.visualizeLines("gripper overstretch motion",
+                        line_starts,
+                        line_ends,
+                        Visualizer::Orange());
+
+
+}
+
+void GripperMotionGenerator::visualize_gripper_motion(
+        const AllGrippersSinglePose& current_gripper_pose,
+        const AllGrippersSinglePoseDelta& gripper_motion)
+{
+    const auto grippers_test_poses = kinematics::applyTwist(current_gripper_pose, gripper_motion);
+    EigenHelpers::VectorVector3d line_starts;
+    EigenHelpers::VectorVector3d line_ends;
+
+    for (ssize_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
+    {
+        line_starts.push_back(current_gripper_pose.at(gripper_ind).translation());
+        line_ends.push_back(current_gripper_pose.at(gripper_ind).translation() + 100*(grippers_test_poses.at(gripper_ind).translation() - current_gripper_pose.at(gripper_ind).translation()));
+    }
+
+    vis_.visualizeLines("gripper motion",
+                        line_starts,
+                        line_ends,
+                        Visualizer::Black());
+}
+
 
 bool GripperMotionGenerator::gripperCollisionCheckResult(
         const AllGrippersSinglePose& current_gripper_pose,
@@ -418,17 +531,21 @@ bool GripperMotionGenerator::RopeTwoGrippersStretchingDetection(
 {
     // This Version only works for two grippers situation, should be revised later
 
+    /* // move it to upper level stretching check
     const Eigen::MatrixXd node_squared_distance =
             CalculateSquaredDistanceMatrix(object_configuration);
 
     const double stretching_correction_threshold = 0.005;
+    */
+
     const ssize_t num_nodes = object_configuration.cols();
 
-    bool over_strech = false;
+    bool motion_induced_streching = false;
+
     double streching_sum = 0.0;
 
-    const ssize_t start_node = 1;
-    const ssize_t end_node = num_nodes - 2;
+    const ssize_t start_node = 0;
+    const ssize_t end_node = num_nodes - 1;
 
     Eigen::Vector3d first_correction_vector =
             (object_configuration.block<3, 1>(0, start_node + 1)
@@ -444,6 +561,7 @@ bool GripperMotionGenerator::RopeTwoGrippersStretchingDetection(
     stretching_correction_vector.push_back(first_correction_vector);
     stretching_correction_vector.push_back(second_correction_vector);
 
+    /* // move it to the upper level function
     for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
     {
         for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
@@ -452,6 +570,7 @@ bool GripperMotionGenerator::RopeTwoGrippersStretchingDetection(
             if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
             {
                 over_strech = true;
+                motion_induced_streching = true;
                 break;
             }
         }
@@ -460,24 +579,31 @@ bool GripperMotionGenerator::RopeTwoGrippersStretchingDetection(
             break;
         }
     }
+    */
 
-    if(over_strech)
+    if(over_stretch_)
     {
-        AllGrippersSinglePose gripper_test_pose;
+//        AllGrippersSinglePose gripper_test_pose;
+        const auto grippers_test_poses = kinematics::applyTwist(current_gripper_pose, test_gripper_motion);
+        double sum_resulting_motion_norm = 0.0;
+
         for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
         {
-            gripper_test_pose.push_back(current_gripper_pose.at(gripper_ind) * kinematics::expTwistAffine3d(test_gripper_motion.at(gripper_ind), 1.0));
-            Eigen::Vector3d resulting_gripper_motion = gripper_test_pose.at(gripper_ind).translation()
+            Eigen::Vector3d resulting_gripper_motion = grippers_test_poses.at(gripper_ind).translation()
                     - current_gripper_pose.at(gripper_ind).translation();
+//            Eigen::Vector3d resulting_gripper_motion = test_gripper_motion.at(gripper_ind).segment<3>(0);
             streching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind));
+            sum_resulting_motion_norm += resulting_gripper_motion.norm();
         }
-        if(streching_sum > 0.0)
+        if(streching_sum <= 0.75 * sum_resulting_motion_norm)
         {
-            over_strech = false;
+//            over_strech = false;
+            motion_induced_streching = true;
         }
     }
 
-    if(over_strech)
+    /*
+    if(over_stretch_)
     {
         EigenHelpers::VectorVector3d line_starts;
         EigenHelpers::VectorVector3d line_ends;
@@ -491,9 +617,10 @@ bool GripperMotionGenerator::RopeTwoGrippersStretchingDetection(
                             line_ends,
                             Visualizer::Olive());
     }
+    */
 
 
-    return over_strech;
+    return motion_induced_streching;
 
 }
 
