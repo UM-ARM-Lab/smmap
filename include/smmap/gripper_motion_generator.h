@@ -136,6 +136,8 @@ namespace smmap {
             const double rotation_upper_bound_;
 
             const double distance_to_obstacle_threshold_;
+            double stretching_factor_threshold_;
+            double stretching_cosine_threshold_;
 
             const int64_t max_count_;
             int sample_count_;

@@ -32,6 +32,8 @@ GripperMotionGenerator::GripperMotionGenerator(ros::NodeHandle &nh,
     , rotation_lower_bound_(-max_gripper_rotation_step)
     , rotation_upper_bound_(max_gripper_rotation_step)
     , distance_to_obstacle_threshold_(distance_to_obstacle_threshold)
+    , stretching_factor_threshold_(GetStretchingFactorThreshold(nh))
+    , stretching_cosine_threshold_(GetStretchingCosineThreshold(nh))
     , max_count_(max_count)
     , sample_count_(0)
     , over_stretch_(false)
@@ -121,10 +123,13 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
     const Eigen::MatrixXd node_squared_distance =
             CalculateSquaredDistanceMatrix(current_world_state.object_configuration_);
 
+<<<<<<< HEAD
     // This should be fixed later, not using +, using * instead
     const double stretching_correction_threshold = 0.005;
 >>>>>>> wrapping done, parameters to be tuned: 1. stretching factor; 2. stretching allowance cosine threshold
 
+=======
+>>>>>>> rope wrapping pretty
     std::vector<std::pair<AllGrippersSinglePoseDelta, double>> per_thread_optimal_command(
 //                arc_helpers::GetNumOMPThreads(),
                 1,
@@ -136,7 +141,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
     {
         for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
         {
-            const double max_distance = stretching_correction_threshold + object_initial_node_distance_(first_node, second_node);
+            const double max_distance = stretching_factor_threshold_ * object_initial_node_distance_(first_node, second_node);
             if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
             {
                 over_stretch_ = true;
@@ -424,8 +429,8 @@ void GripperMotionGenerator::visualize_stretching_vector(
     EigenHelpers::VectorVector3d line_ends;
     line_starts.push_back(object_configuration.block<3,1>(0, 0));
     line_starts.push_back(object_configuration.block<3,1>(0, num_nodes-1));
-    line_ends.push_back(line_starts.at(0) + first_correction_vector);
-    line_ends.push_back(line_starts.at(1) + second_correction_vector);
+    line_ends.push_back(line_starts.at(0) + 0.1 * first_correction_vector);
+    line_ends.push_back(line_starts.at(1) + 0.1 * second_correction_vector);
 
     vis_.visualizeLines("gripper overstretch motion",
                         line_starts,
@@ -595,7 +600,7 @@ bool GripperMotionGenerator::RopeTwoGrippersStretchingDetection(
             streching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind));
             sum_resulting_motion_norm += resulting_gripper_motion.norm();
         }
-        if(streching_sum <= 0.75 * sum_resulting_motion_norm)
+        if(streching_sum <= stretching_cosine_threshold_ * sum_resulting_motion_norm)
         {
 //            over_strech = false;
             motion_induced_streching = true;
