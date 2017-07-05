@@ -9,7 +9,7 @@ using namespace smmap;
 
 GripperMotionGenerator::GripperMotionGenerator(ros::NodeHandle &nh,
         const sdf_tools::SignedDistanceField& environment_sdf,
-//        RobotInterface& robot,
+        RobotInterface& robot,
         std::mt19937_64& generator,
         Visualizer vis,
         GripperControllerType gripper_controller_type,
@@ -19,6 +19,7 @@ GripperMotionGenerator::GripperMotionGenerator(ros::NodeHandle &nh,
         const double distance_to_obstacle_threshold)
     : object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
     , gripper_collision_checker_(nh)
+    , grippers_data_(robot.getGrippersData())
     , enviroment_sdf_(environment_sdf)
 //    , robot_(robot)
     , generator_(generator)
@@ -131,8 +132,8 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
 =======
 >>>>>>> rope wrapping pretty
     std::vector<std::pair<AllGrippersSinglePoseDelta, double>> per_thread_optimal_command(
-//                arc_helpers::GetNumOMPThreads(),
-                1,
+                arc_helpers::GetNumOMPThreads(),
+//                1,
                 std::make_pair(AllGrippersSinglePoseDelta(), std::numeric_limits<double>::infinity()));
 
     // Checking the stretching status for current object configuration for once
@@ -157,7 +158,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
 
 
 
-//    #pragma omp parallel for
+    #pragma omp parallel for
     for (int64_t ind_count = 0; ind_count < max_count_; ind_count++)
     {
         AllGrippersSinglePoseDelta grippers_motion_sample = allGripperPoseDeltaSampler(num_grippers);
@@ -207,11 +208,11 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
         }
         */
 
-//        #if defined(_OPENMP)
-//        const size_t thread_num = (size_t)omp_get_thread_num();
-//        #else
+        #if defined(_OPENMP)
+        const size_t thread_num = (size_t)omp_get_thread_num();
+        #else
         const size_t thread_num = 0;
-//        #endif
+        #endif
 
 
         // Method 1: use constraint_violation checker for gripper collosion
@@ -429,8 +430,8 @@ void GripperMotionGenerator::visualize_stretching_vector(
     EigenHelpers::VectorVector3d line_ends;
     line_starts.push_back(object_configuration.block<3,1>(0, 0));
     line_starts.push_back(object_configuration.block<3,1>(0, num_nodes-1));
-    line_ends.push_back(line_starts.at(0) + 0.1 * first_correction_vector);
-    line_ends.push_back(line_starts.at(1) + 0.1 * second_correction_vector);
+    line_ends.push_back(line_starts.at(0) + 0.5 * first_correction_vector);
+    line_ends.push_back(line_starts.at(1) + 0.5 * second_correction_vector);
 
     vis_.visualizeLines("gripper overstretch motion",
                         line_starts,
@@ -521,6 +522,15 @@ bool GripperMotionGenerator::stretchingDetection(
                     object_configuration);
 
         break;
+
+    // should get revised later
+    case CLOTH:
+        return RopeTwoGrippersStretchingDetection(
+                    input_data,
+                    current_gripper_pose,
+                    test_gripper_motion,
+                    object_configuration);
+
     default:
         return false;
         break;

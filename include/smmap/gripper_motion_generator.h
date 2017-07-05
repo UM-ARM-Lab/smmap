@@ -14,7 +14,7 @@ namespace smmap {
         public:
             GripperMotionGenerator(ros::NodeHandle& nh,
                                    const sdf_tools::SignedDistanceField& environment_sdf,
-                           //        RobotInterface& robot,
+                                   RobotInterface& robot,
                                    std::mt19937_64& generator,
                                    Visualizer vis,
                                    GripperControllerType gripper_controller_type,
@@ -116,6 +116,9 @@ namespace smmap {
 //            DeformableModel::Ptr deformable_model_;
             const Eigen::MatrixXd object_initial_node_distance_;
             GripperCollisionChecker gripper_collision_checker_;
+
+            const std::vector<GripperData> grippers_data_;
+
             const sdf_tools::SignedDistanceField enviroment_sdf_;
 //            RobotInterface& robot_;
             std::mt19937_64& generator_;
