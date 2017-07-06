@@ -377,8 +377,10 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
     Matrix3d I3 = Matrix3d::Identity(3,3);
 //    MatrixXd v_mask = MatrixXd::Zero(num_lines,1);
 
+
     for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
     {
+
         // if is far from obstacle
         if (environment_sdf_.EstimateDistance3d(current_configuration.col(node_ind)).first > obstacle_threshold_)
         {
@@ -410,13 +412,11 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
                     M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
                 }
             }
-            // Check with Dale, whether the vector is normalized.
-//            const Matrix<double, 1, 3> surface_normal_invs
-//                    = EigenHelpers::Pinv(surface_normal, EigenHelpers::SuggestedRcond());
-//            M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
         }
 
     }
+
+
     return M;
 }
 

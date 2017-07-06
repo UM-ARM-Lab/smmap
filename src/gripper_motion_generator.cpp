@@ -132,12 +132,13 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
 =======
 >>>>>>> rope wrapping pretty
     std::vector<std::pair<AllGrippersSinglePoseDelta, double>> per_thread_optimal_command(
-                arc_helpers::GetNumOMPThreads(),
-//                1,
+//                arc_helpers::GetNumOMPThreads(),
+                1,
                 std::make_pair(AllGrippersSinglePoseDelta(), std::numeric_limits<double>::infinity()));
 
     // Checking the stretching status for current object configuration for once
     over_stretch_ = false;
+
     for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
     {
         for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
@@ -157,8 +158,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
     }
 
 
-
-    #pragma omp parallel for
+//    #pragma omp parallel for
     for (int64_t ind_count = 0; ind_count < max_count_; ind_count++)
     {
         AllGrippersSinglePoseDelta grippers_motion_sample = allGripperPoseDeltaSampler(num_grippers);
@@ -208,11 +208,11 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
         }
         */
 
-        #if defined(_OPENMP)
-        const size_t thread_num = (size_t)omp_get_thread_num();
-        #else
+//        #if defined(_OPENMP)
+//        const size_t thread_num = (size_t)omp_get_thread_num();
+//        #else
         const size_t thread_num = 0;
-        #endif
+//        #endif
 
 
         // Method 1: use constraint_violation checker for gripper collosion
@@ -221,11 +221,13 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
                     current_world_state.all_grippers_single_pose_,
                     grippers_motion_sample);
 
+//        const bool stretching_violation = false;
         const bool stretching_violation = stretchingDetection(
                     input_data,
                     current_world_state.all_grippers_single_pose_,
                     grippers_motion_sample,
                     current_world_state.object_configuration_);
+
 
         // If no constraint violation
         if ((!collision_violation) && (!stretching_violation))
@@ -233,12 +235,27 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
             std::pair<AllGrippersSinglePoseDelta, double>& current_thread_optimal = per_thread_optimal_command[thread_num];
 
             // get predicted object motion
+<<<<<<< HEAD
             const ObjectPointSet predicted_object_p_dot = deformable_model->getObjectDelta(
+=======
+
+            ObjectPointSet predicted_object_p_dot = deformable_model->getProjectedObjectDelta(
+>>>>>>> nothing change
                         input_data,
                         grippers_motion_sample,
                         current_world_state.object_configuration_);
 
+<<<<<<< HEAD
             const double sample_error = errorOfControlByPrediction(predicted_object_p_dot, desired_object_p_dot);
+=======
+            /*
+            ObjectPointSet predicted_object_p_dot = deformable_model->getObjectDelta(
+                        input_data,
+                        grippers_motion_sample);
+            */
+
+            double sample_error = errorOfControlByPrediction(predicted_object_p_dot, desired_object_p_dot);
+>>>>>>> nothing change
 
             // Compare if the sample grippers motion is better than the best to now
 <<<<<<< HEAD
