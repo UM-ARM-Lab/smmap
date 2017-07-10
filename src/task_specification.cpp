@@ -13,7 +13,7 @@ using namespace smmap;
 #pragma message "Magic number - Stretching weight multiplication factor here"
 #define STRETCHING_WEIGHT_MULTIPLICATION_FACTOR (2000.0)
 #pragma message "Magic number - Step size and min progress for forward projection of dijkstras field following"
-#define VECTOR_FIELD_FOLLOWING_NUM_STEPS        (10)
+#define VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS   (10)
 #define VECTOR_FIELD_FOLLOWING_MIN_PROGRESS     (1e-6)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -36,6 +36,7 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
     switch (task_type)
     {
         case TaskType::ROPE_CYLINDER_COVERAGE:
+        case TaskType::ROPE_CYLINDER_COVERAGE_TWO_GRIPPERS:
             return std::make_shared<RopeCylinderCoverage>(nh, ph);
 
         case TaskType::CLOTH_TABLE_COVERAGE:
@@ -971,7 +972,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
 
             if (deformable_type_ == DeformableType::CLOTH)
             {
-                summed_dijkstras_deltas += (target_point - graph_aligned_current_pos) / (double)VECTOR_FIELD_FOLLOWING_NUM_STEPS;
+                summed_dijkstras_deltas += (target_point - graph_aligned_current_pos) / (double)VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS;
             }
             else
             {
@@ -987,9 +988,9 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
 
             // Split the delta up into smaller steps to simulate "pulling" the cloth along with constant obstacle collision resolution
             Eigen::Vector3d net_delta = Eigen::Vector3d::Zero();
-            for (int i = 0; i < VECTOR_FIELD_FOLLOWING_NUM_STEPS; ++i)
+            for (int i = 0; i < VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS; ++i)
             {
-                net_delta += combined_delta / (double)VECTOR_FIELD_FOLLOWING_NUM_STEPS;
+                net_delta += combined_delta / (double)VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS;
                 net_delta = environment_sdf_.ProjectOutOfCollision3d(current_pos + net_delta) - current_pos;
             }
 
