@@ -59,10 +59,7 @@ void AdaptiveJacobianModel::updateModel_impl(const WorldState& previous, const W
 Eigen::MatrixXd AdaptiveJacobianModel::computeGrippersToDeformableObjectJacobian_impl(
         const DeformableModelInputData &input_data) const
 {
-    const AllGrippersSinglePose& grippers_pose = input_data.world_initial_state_.all_grippers_single_pose_;
-    const ObjectPointSet& current_configuration = input_data.world_initial_state_.object_configuration_;
-//    WorldState& world_state = input_data.world_initial_state_;
-    (void)(grippers_pose);
-    (void)(current_configuration);
+    (void)input_data;
     return current_jacobian_;
 }
+

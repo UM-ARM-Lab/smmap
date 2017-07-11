@@ -39,7 +39,7 @@ ObjectPointSet JacobianModel::getObjectDelta_impl(
 {
     const MatrixXd J = computeGrippersToDeformableObjectJacobian_impl(input_data);
 
-    MatrixXd delta = MatrixXd::Zero(input_data.world_initial_state_.object_configuration_.cols() * 3, 1);
+    MatrixXd delta = MatrixXd::Zero(input_data.world_current_state_.object_configuration_.cols() * 3, 1);
 
     // Move the object based on the movement of each gripper
     for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
@@ -48,7 +48,7 @@ ObjectPointSet JacobianModel::getObjectDelta_impl(
         delta += J.block(0, 6 * (ssize_t)gripper_ind, J.rows(), 6) * grippers_pose_delta[gripper_ind];
     }
 
-    delta.resizeLike(input_data.world_initial_state_.object_configuration_);
+    delta.resizeLike(input_data.world_current_state_.object_configuration_);
     return delta;
 }
 
@@ -68,7 +68,7 @@ JacobianModel::getSuggestedGrippersCommand_impl(
 {
     const double max_step_size = max_gripper_velocity * input_data.dt_;
     const size_t num_grippers = grippers_data_.size();
-    const ssize_t num_nodes = input_data.world_initial_state_.object_configuration_.cols();
+    const ssize_t num_nodes = input_data.world_current_state_.object_configuration_.cols();
 
     ////////////////////////////////////////////////////////////////////////
     // Find the velocities of each part of the algorithm
@@ -76,7 +76,7 @@ JacobianModel::getSuggestedGrippersCommand_impl(
 
     // Retrieve the desired object velocity (p_dot)
     const ObjectDeltaAndWeight desired_object_velocity =
-            input_data.task_desired_object_delta_fn_(input_data.world_initial_state_);
+            input_data.task_desired_object_delta_fn_(input_data.world_current_state_);
 
     // Recalculate the jacobian at each timestep, because of rotations being non-linear
     const MatrixXd jacobian = computeGrippersToDeformableObjectJacobian_impl(input_data);
@@ -99,8 +99,8 @@ JacobianModel::getSuggestedGrippersCommand_impl(
     // Find the collision avoidance data that we'll need
     const std::vector<CollisionAvoidanceResult> grippers_collision_avoidance_result =
             ComputeGripperObjectAvoidance(
-                input_data.world_initial_state_.gripper_collision_data_,
-                input_data.world_initial_state_.all_grippers_single_pose_,
+                input_data.world_current_state_.gripper_collision_data_,
+                input_data.world_current_state_.all_grippers_single_pose_,
                 max_step_size);
 
     ////////////////////////////////////////////////////////////////////////

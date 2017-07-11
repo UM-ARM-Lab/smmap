@@ -18,15 +18,15 @@ namespace smmap
                 public:
                     DeformableModelInputData(
                             const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn,
-                            const WorldState& world_initial_state,
+                            const WorldState& world_current_state,
                             const double dt)
                         : task_desired_object_delta_fn_(task_desired_object_delta_fn)
-                        , world_initial_state_(world_initial_state)
+                        , world_current_state_(world_current_state)
                         , dt_(dt)
                     {}
 
                     const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn_;
-                    const WorldState& world_initial_state_;
+                    const WorldState& world_current_state_;
                     const double dt_;
             };
 
@@ -57,6 +57,7 @@ namespace smmap
             static void SetCallbackFunctions(
                     const GripperCollisionCheckFunctionType& gripper_collision_check_fn);
 
+
         protected:
 
             ////////////////////////////////////////////////////////////////////
@@ -86,7 +87,6 @@ namespace smmap
                     const DeformableModelInputData& input_data,
                     const double max_gripper_velocity,
                     const double obstacle_avoidance_scale) const = 0;
-
     };
 }
 

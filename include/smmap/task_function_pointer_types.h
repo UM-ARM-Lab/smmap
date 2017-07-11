@@ -32,6 +32,15 @@ namespace smmap
             const std::vector<double> rewards_for_all_models
             )>
     LoggingFunctionType;
+
+    typedef std::function<void(
+            const WorldState& current_world_state,
+            const ObjectPointSet &real_delta_p,
+            const ObjectPointSet &model_delta_p,
+            Eigen::MatrixXd &real_time_error,
+            Eigen::MatrixXd &constraint_violation
+            )>
+    TestLoggingFunctionType;
 }
 
 #endif // TASK_FUNCTION_POINTER_TYPES_H

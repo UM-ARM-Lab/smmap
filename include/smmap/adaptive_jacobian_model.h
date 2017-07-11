@@ -27,9 +27,11 @@ namespace smmap
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            virtual void updateModel_impl(const WorldState& previous, const WorldState& next) override final;
+            virtual void updateModel_impl(
+                    const WorldState& previous, const WorldState& next) override final;
 
-            virtual Eigen::MatrixXd computeGrippersToDeformableObjectJacobian_impl(const DeformableModelInputData &input_data) const override final;
+            virtual Eigen::MatrixXd computeGrippersToDeformableObjectJacobian_impl(
+                    const DeformableModelInputData &input_data) const override final;
 
             ////////////////////////////////////////////////////////////////////
             // Private members

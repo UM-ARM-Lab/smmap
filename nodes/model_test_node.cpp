@@ -1,4 +1,4 @@
-#include "smmap/task.h"
+#include "smmap/model_test.h"
 
 using namespace smmap;
 
@@ -12,9 +12,10 @@ int main(int argc, char* argv[])
 
     RobotInterface robot(nh);
     Visualizer vis(nh, ph);
-    TaskSpecification::Ptr task_specification = TaskSpecification::MakeTaskSpecification(nh, ph);
-    Task task(robot, vis, task_specification);
-    task.execute();
+
+    TestSpecification::Ptr test_specification = TestSpecification::MakeTestSpecification(nh, ph);
+    ModelTest test(robot, vis, test_specification);
+    test.execute();
 
     return 0;
 }

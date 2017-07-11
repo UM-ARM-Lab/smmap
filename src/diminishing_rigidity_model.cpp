@@ -12,7 +12,7 @@ using namespace Eigen;
 
 std::atomic_bool DiminishingRigidityModel::static_data_initialized_(false);
 Eigen::MatrixXd DiminishingRigidityModel::object_initial_node_distance_;
-long DiminishingRigidityModel::num_nodes_;
+ssize_t DiminishingRigidityModel::num_nodes_;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Static helpers
@@ -87,8 +87,8 @@ void DiminishingRigidityModel::updateModel_impl(
 Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToDeformableObjectJacobian_impl(
         const DeformableModelInputData &input_data) const
 {
-    const AllGrippersSinglePose& grippers_pose = input_data.world_initial_state_.all_grippers_single_pose_;
-    const ObjectPointSet& current_configuration = input_data.world_initial_state_.object_configuration_;
+    const AllGrippersSinglePose& grippers_pose = input_data.world_current_state_.all_grippers_single_pose_;
+    const ObjectPointSet& current_configuration = input_data.world_current_state_.object_configuration_;
 
     const ssize_t num_grippers = (ssize_t)grippers_pose.size();
     const ssize_t num_Jcols = num_grippers * 6;

@@ -3,58 +3,42 @@
 
 #include <sdf_tools/sdf.hpp>
 
-#include "smmap/jacobian_model.h"
+#include "smmap/deformable_model.h"
 
 namespace smmap
 {
     enum RigidityFnType {simpleFn, midleverFn, complicateFn};
 
-    typedef std::function<Eigen::Matrix3d(
-            Eigen::Vector3d node_to_gripper, Eigen::Vector3d node_v
-            )>
-    translationDirectionFnPtr;
-    typedef std::function<double(
-            const double dist_to_gripper, const double dist_rest
-            )>
-    translationDistanceFnPtr;
+//    typedef std::function<Eigen::Matrix3d(
+//            Eigen::Vector3d node_to_gripper, Eigen::Vector3d node_v
+//            )>
+//    TranslationDirectionFnPtr;
 
-    // TODO: find a way to accept dynamic/online gripper re-grasping
-    class ConstraintJacobianModel final: public JacobianModel
+//    typedef std::function<double(
+//            const double dist_to_gripper, const double dist_rest
+//            )>
+//    TranslationDistanceFnPtr;
+
+    class ConstraintJacobianModel final : public DeformableModel
     {
         public:
             ////////////////////////////////////////////////////////////////////
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
-/*
+
             ConstraintJacobianModel(
                     const double translation_dir_deformability,
                     const double translation_dis_deformability,
                     const double rotation_deformability,
-                    const bool optimize);
-*/
+                    const sdf_tools::SignedDistanceField& environment_sdf);
+
             ConstraintJacobianModel(
                     const double translation_dir_deformability,
                     const double translation_dis_deformability,
                     const double rotation_deformability,
-                    const sdf_tools::SignedDistanceField environment_sdf,
-                    const bool optimize);
-/*
-            ConstraintJacobianModel(
-                    const double translation_dir_deformability,
-                    const double translation_dis_deformability,
-                    const double rotation_deformability,
-                    RigidityFnType trans_dir_fn,
-                    RigidityFnType trans_dis_fn,
-                    const bool optimize);
-*/
-            ConstraintJacobianModel(
-                    const double translation_dir_deformability,
-                    const double translation_dis_deformability,
-                    const double rotation_deformability,
-                    const sdf_tools::SignedDistanceField environment_sdf,
-                    RigidityFnType trans_dir_fn,
-                    RigidityFnType trans_dis_fn,
-                    const bool optimize);
+                    const sdf_tools::SignedDistanceField& environment_sdf,
+                    const RigidityFnType trans_dir_fn,
+                    const RigidityFnType trans_dis_fn);
 
             ////////////////////////////////////////////////////////////////////
             // Static functions to set data for all models
@@ -73,8 +57,14 @@ namespace smmap
                     const WorldState& previous,
                     const WorldState& next) final override;
 
-            virtual Eigen::MatrixXd computeGrippersToDeformableObjectJacobian_impl(
-                    const DeformableModelInputData &input_data) const final override;
+            virtual ObjectPointSet getObjectDelta_impl(
+                    const DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const final override;
+
+            virtual std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getSuggestedGrippersCommand_impl(
+                    const DeformableModelInputData& input_data,
+                    const double max_gripper_velocity,
+                    const double obstacle_avoidance_scale) const final override;
 
             ////////////////////////////////////////////////////////////////////
             // Static helpers
@@ -88,7 +78,7 @@ namespace smmap
 
             static std::atomic_bool static_data_initialized_;
             static Eigen::MatrixXd object_initial_node_distance_;
-            static long num_nodes_;
+            static ssize_t num_nodes_;
 
             ////////////////////////////////////////////////////////////////////
             // Model function parameters
@@ -118,18 +108,22 @@ namespace smmap
             Eigen::Matrix3d dirPropotionalModel(
                     const Eigen::Vector3d node_to_gripper,
                     const Eigen::Vector3d node_v) const;
+
             double disLinearModel(
                     const double dist_to_gripper,
                     const double dist_rest) const;
 
             ////////////////////////////////////////////////////////////////////
-            // Computation of Mask Matrix M, q_dot = pinv(J)*M*P_dot
+            // Jacobian and Mask matrix computation
             ////////////////////////////////////////////////////////////////////
+
+            Eigen::MatrixXd computeGrippersToDeformableObjectJacobian(
+                    const DeformableModelInputData& input_data) const;
+
+            // Null Projection
             Eigen::MatrixXd computeObjectVelocityMask(
                     const ObjectPointSet& current_configuration,
-                    const Eigen::VectorXd object_p_dot);
-
-
+                    const Eigen::MatrixXd& object_p_dot) const;
     };
 }
 

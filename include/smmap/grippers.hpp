@@ -27,6 +27,7 @@ namespace smmap
     typedef EigenHelpers::VectorAffine3d AllGrippersSinglePose;
     typedef std::vector<AllGrippersSinglePose> AllGrippersPoseTrajectory;
 
+    // VectorVector6d is a 6xn vector of 6d vectors, n cols
     typedef kinematics::VectorVector6d AllGrippersSinglePoseDelta;
     typedef std::vector<AllGrippersSinglePoseDelta> AllGrippersPoseDeltaTrajectory;
 

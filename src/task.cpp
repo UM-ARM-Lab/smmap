@@ -160,13 +160,14 @@ void Task::initializeModelSet(const WorldState& initial_world_state)
                               DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
                               GetAdaptiveModelLearningRate(ph_),
                               optimization_enabled));
+
     }
     // Mengyao's model here
     else if (GetUseConstraintModel(ph_))
     {
-        const double translation_dir_deformability=0.1;
-        const double translation_dis_deformability=1.0;
-        const double rotation_deformability=0.1;
+        const double translation_dir_deformability = 20.0;
+        const double translation_dis_deformability = 4.0;
+        const double rotation_deformability = 20.0;
         // Douoble check this usage
         const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
 
@@ -175,9 +176,12 @@ void Task::initializeModelSet(const WorldState& initial_world_state)
                               translation_dir_deformability,
                               translation_dis_deformability,
                               rotation_deformability,
-                              environment_sdf,
-                              optimization_enabled));
+                              environment_sdf));
 
+        // ADD a diminishing model at the same time
+        planner_.addModel(std::make_shared<DiminishingRigidityModel>(
+                              task_specification_->defaultDeformability(),
+                              optimization_enabled));
     }
     // Mengyao's model above
     else
@@ -188,10 +192,6 @@ void Task::initializeModelSet(const WorldState& initial_world_state)
         planner_.addModel(std::make_shared<DiminishingRigidityModel>(
                               task_specification_->defaultDeformability(),
                               optimization_enabled));
-
-//        planner_.addModel(std::make_shared<LeastSquaresJacobianModel>(
-//                              DiminishingRigidityModel(task_specification_->defaultDeformability(), false).getGrippersToObjectJacobian(robot_.getGrippersPose(), GetObjectInitialConfiguration(nh_)),
-//                              2));
     }
 
     planner_.createBandits();
@@ -231,10 +231,6 @@ void Task::initializeLogging()
         loggers_.insert(std::make_pair<std::string, Log::Log>(
                             "rewards_for_all_models",
                             Log::Log(log_folder + "rewards_for_all_models.txt", false)));
-
-//        loggers.insert(std::make_pair<std::string, Log::Log>(
-//                            "correlation_scale_factor",
-//                            Log::Log(log_folder + "correlation_scale_factor.txt", false)));
     }
 }
 

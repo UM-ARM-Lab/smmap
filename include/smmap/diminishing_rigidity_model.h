@@ -54,7 +54,7 @@ namespace smmap
 
             static std::atomic_bool static_data_initialized_;
             static Eigen::MatrixXd object_initial_node_distance_;
-            static long num_nodes_;
+            static ssize_t num_nodes_;
 
             ////////////////////////////////////////////////////////////////////
             // Private members
