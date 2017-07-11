@@ -106,7 +106,7 @@ namespace smmap
             // The planner itself
             ////////////////////////////////////////////////////////////////////
 
-            TestPlanner test_planner_;
+            ModelPredictionTester test_planner_;
 
     };
 }

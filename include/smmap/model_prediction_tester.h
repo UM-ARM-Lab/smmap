@@ -1,5 +1,5 @@
-#ifndef SMMAP_TEST_PLANNER_H
-#define SMMAP_TEST_PLANNER_H
+#ifndef SMMAP_MODEL_PREDICTION_TESTER_H
+#define SMMAP_MODEL_PREDICTION_TESTER_H
 
 //#include <arc_utilities/log.hpp>
 
@@ -14,14 +14,15 @@
 
 namespace smmap
 {
-    class TestPlanner
+    class ModelPredictionTester
     {
         public:
             ////////////////////////////////////////////////////////////////////
             // Constructor and model list builder
             ////////////////////////////////////////////////////////////////////
 
-            TestPlanner(RobotInterface& robot,
+            ModelPredictionTester(
+                    RobotInterface& robot,
                     Visualizer& vis,
                     const std::shared_ptr<TestSpecification> &test_specification,
                     const LoggingFunctionType& logging_fn,
@@ -100,4 +101,4 @@ namespace smmap
     };
 }
 
-#endif // SMMAP_PLANNER_H
+#endif // SMMAP_MODEL_PREDICTION_TESTER_H

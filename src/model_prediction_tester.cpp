@@ -22,7 +22,7 @@ using namespace EigenHelpersConversions;
  * @param vis
  * @param dt
  */
-TestPlanner::TestPlanner(RobotInterface& robot,
+ModelPredictionTester::ModelPredictionTester(RobotInterface& robot,
         Visualizer& vis,
         const std::shared_ptr<TestSpecification>& test_specification,
         const LoggingFunctionType& logging_fn,
@@ -53,12 +53,12 @@ TestPlanner::TestPlanner(RobotInterface& robot,
     }
 }
 
-void TestPlanner::addModel(DeformableModel::Ptr model)
+void ModelPredictionTester::addModel(DeformableModel::Ptr model)
 {
     model_list_.push_back(model);
 }
 
-void TestPlanner::createBandits()
+void ModelPredictionTester::createBandits()
 {
     num_models_ = (ssize_t)model_list_.size();
     ROS_INFO_STREAM_NAMED("planner", "Generating bandits for " << num_models_ << " bandits");
@@ -83,7 +83,7 @@ void TestPlanner::createBandits()
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO: To be revised for test constraints violation
-void TestPlanner::detectFutureConstraintViolations(const WorldState &current_world_state)
+void ModelPredictionTester::detectFutureConstraintViolations(const WorldState &current_world_state)
 {
     #warning "Removed Djikstra, should setup constraint violation later"
     ROS_INFO_NAMED("planner", "------------------------------------------------------------------------------------");
@@ -125,7 +125,7 @@ void TestPlanner::detectFutureConstraintViolations(const WorldState &current_wor
  * @param obstacle_avoidance_scale
  * @return
  */
-WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
+WorldState ModelPredictionTester::sendNextCommand(const WorldState& current_world_state)
 {
     ROS_INFO_NAMED("planner", "------------------------------------------------------------------------------------");
     const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
@@ -297,7 +297,7 @@ WorldState TestPlanner::sendNextCommand(const WorldState& current_world_state)
     return world_feedback;
 }
 
-void TestPlanner::visualizeDesiredMotion(const WorldState& current_world_state, const ObjectDeltaAndWeight& desired_motion)
+void ModelPredictionTester::visualizeDesiredMotion(const WorldState& current_world_state, const ObjectDeltaAndWeight& desired_motion)
 {
     ssize_t num_nodes = current_world_state.object_configuration_.cols();
     std::vector<std_msgs::ColorRGBA> colors((size_t)num_nodes);
@@ -334,7 +334,7 @@ void TestPlanner::visualizeDesiredMotion(const WorldState& current_world_state, 
  * @param model_used
  * @param world_feedback
  */
-void TestPlanner::updateModels(const WorldState& starting_world_state,
+void ModelPredictionTester::updateModels(const WorldState& starting_world_state,
         const ObjectDeltaAndWeight& task_desired_motion,
         const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands,
         const ssize_t model_used,
@@ -391,7 +391,7 @@ void TestPlanner::updateModels(const WorldState& starting_world_state,
     }
 }
 
-Eigen::MatrixXd TestPlanner::calculateProcessNoise(const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands)
+Eigen::MatrixXd ModelPredictionTester::calculateProcessNoise(const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands)
 {
     std::vector<double> grippers_velocity_norms((size_t)num_models_);
 
