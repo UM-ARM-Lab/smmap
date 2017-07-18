@@ -1,8 +1,9 @@
 #include "smmap/constraint_jacobian_model.h"
-//#include "smmap/grippers.hpp"
 
 #include <cmath>
 #include <arc_utilities/arc_exceptions.hpp>
+
+#include "smmap/gripper_motion_generator.h"
 
 using namespace smmap;
 using namespace Eigen;
@@ -35,7 +36,6 @@ void ConstraintJacobianModel::SetInitialObjectConfiguration(
 ////////////////////////////////////////////////////////////////////////////////
 // Constructors and Destructor
 ////////////////////////////////////////////////////////////////////////////////
-
 
 ConstraintJacobianModel::ConstraintJacobianModel(
         const double translation_dir_deformability,
@@ -128,7 +128,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> ConstraintJacobianModel::g
         const double max_gripper_velocity,
         const double obstacle_avoidance_scale) const
 {
-    assert(false && "Not written");
 }
 
 

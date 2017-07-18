@@ -52,7 +52,6 @@ ObjectPointSet JacobianModel::getObjectDelta_impl(
     return delta;
 }
 
-
 /**
  * @brief JacobianModel::getSuggestedGrippersCommand_impl
  * @param input_data

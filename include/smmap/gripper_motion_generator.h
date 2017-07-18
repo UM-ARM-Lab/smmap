@@ -17,7 +17,7 @@ namespace smmap
                     const sdf_tools::SignedDistanceField& environment_sdf,
                     RobotInterface& robot,
                     std::mt19937_64& generator,
-                    Visualizer vis,
+                    Visualizer& vis,
                     GripperControllerType gripper_controller_type,
                     const int64_t max_count,
                     const double distance_to_obstacle_threshold);
@@ -31,7 +31,7 @@ namespace smmap
                     const DeformableModel::Ptr deformable_model,
                     const double max_gripper_velocity);
 
-            void SetGripperControllerType(GripperControllerType gripper_controller_type);
+            void setGripperControllerType(GripperControllerType gripper_controller_type);
 
 
         private:
@@ -47,7 +47,7 @@ namespace smmap
                     const DeformableModel::Ptr deformable_model,
                     const double max_gripper_velocity);
 
-            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByUniformSampling(
+            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByDiscretization(
                     const DeformableModel::DeformableModelInputData& input_data,
                     const DeformableModel::Ptr deformable_model,
                     const double max_gripper_velocity);
@@ -64,9 +64,8 @@ namespace smmap
 
             AllGrippersSinglePoseDelta setAllGripperPoseDeltaZero(const ssize_t num_grippers);
 
-
             double errorOfControlByPrediction(const ObjectPointSet predicted_object_p_dot,
-                                              const Eigen::VectorXd &desired_object_p_dot);
+                                              const Eigen::VectorXd &desired_object_p_dot) const;
 
             void visualize_stretching_vector(const ObjectPointSet& object_configuration);
 
@@ -94,32 +93,21 @@ namespace smmap
                     const DeformableModel::DeformableModelInputData& input_data,
                     const AllGrippersSinglePoseDelta& test_gripper_motion);
 
-
-
-
         private:
-
-//            ros::NodeHandle nh_;
-
-//            DeformableModel::Ptr deformable_model_;
             const Eigen::MatrixXd object_initial_node_distance_;
             GripperCollisionChecker gripper_collision_checker_;
 
             const std::vector<GripperData> grippers_data_;
 
             const sdf_tools::SignedDistanceField enviroment_sdf_;
-//            RobotInterface& robot_;
             std::mt19937_64& generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
 
-            Visualizer vis_;
-
-//            AllGrippersSinglePoseDelta grippers_pose_delta_;
-//            std::vector<GripperData> grippers_data_;
+            Visualizer& vis_;
 
             GripperControllerType gripper_controller_type_;
-            DeformableType deformable_type_;
-            TaskType task_type_;
+            const DeformableType deformable_type_;
+            const TaskType task_type_;
 
             const double distance_to_obstacle_threshold_;
             double stretching_factor_threshold_;
@@ -128,16 +116,7 @@ namespace smmap
             const int64_t max_count_;
             int sample_count_;
             bool over_stretch_;
-
-
-//            Visualizer& vis_;
-//            const GripperMotionLoggingFunctionType logging_fn_;
-
-
-
-
-
-    };
+   };
 
 
 }

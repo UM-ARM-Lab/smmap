@@ -12,7 +12,7 @@ GripperMotionGenerator::GripperMotionGenerator(
         const sdf_tools::SignedDistanceField& environment_sdf,
         RobotInterface& robot,
         std::mt19937_64& generator,
-        Visualizer vis,
+        Visualizer& vis,
         GripperControllerType gripper_controller_type,
         const int64_t max_count,
         const double distance_to_obstacle_threshold)
@@ -20,7 +20,6 @@ GripperMotionGenerator::GripperMotionGenerator(
     , gripper_collision_checker_(nh)
     , grippers_data_(robot.getGrippersData())
     , enviroment_sdf_(environment_sdf)
-//    , robot_(robot)
     , generator_(generator)
     , uniform_unit_distribution_(0.0, 1.0)
     , vis_(vis)
@@ -44,7 +43,7 @@ GripperMotionGenerator::GripperMotionGenerator(
 ////////////////////////////////////////////////////////////////////////////////
 
 
-void GripperMotionGenerator::SetGripperControllerType(GripperControllerType gripper_controller_type)
+void GripperMotionGenerator::setGripperControllerType(GripperControllerType gripper_controller_type)
 {
     gripper_controller_type_ = gripper_controller_type;
 }
@@ -65,7 +64,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::fi
             break;
 
         case GripperControllerType::UNIFORM_SAMPLING:
-            return solvedByUniformSampling(
+            return solvedByDiscretization(
                         input_data,
                         deformable_model,
                         max_gripper_velocity);
@@ -255,7 +254,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
 }
 
 
-std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::solvedByUniformSampling(
+std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::solvedByDiscretization(
         const DeformableModel::DeformableModelInputData &input_data,
         const DeformableModel::Ptr deformable_model,
         const double max_gripper_velocity)
@@ -348,18 +347,14 @@ AllGrippersSinglePoseDelta GripperMotionGenerator::allGripperPoseDeltaSampler(
 
 AllGrippersSinglePoseDelta GripperMotionGenerator::setAllGripperPoseDeltaZero(const ssize_t num_grippers)
 {
-    AllGrippersSinglePoseDelta grippers_motion_sample;
-    kinematics::Vector6d no_sample = Eigen::MatrixXd::Zero(6,1);
-    for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
-    {
-        grippers_motion_sample.push_back(no_sample);
-    }
+    const kinematics::Vector6d no_movement = kinematics::Vector6d::Zero();
+    const AllGrippersSinglePoseDelta grippers_motion_sample(num_grippers, no_movement);
     return grippers_motion_sample;
 }
 
 double GripperMotionGenerator::errorOfControlByPrediction(
         const ObjectPointSet predicted_object_p_dot,
-        const Eigen::VectorXd& desired_object_p_dot)
+        const Eigen::VectorXd& desired_object_p_dot) const
 {
     ssize_t num_nodes = predicted_object_p_dot.cols();
     double sum_of_error = 0;
