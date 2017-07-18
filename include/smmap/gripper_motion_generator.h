@@ -1,37 +1,35 @@
 #ifndef GRIPPER_MOTION_GENERATOR_H
 #define GRIPPER_MOTION_GENERATOR_H
 
+#include <sdf_tools/sdf.hpp>
+
 #include "smmap/deformable_model.h"
 #include "smmap/grippers.hpp"
 #include "smmap/robot_interface.hpp"
 
-#include "sdf_tools/sdf.hpp"
-
-namespace smmap {
-
+namespace smmap
+{
     class GripperMotionGenerator
     {
         public:
-            GripperMotionGenerator(ros::NodeHandle& nh,
-                                   const sdf_tools::SignedDistanceField& environment_sdf,
-                                   RobotInterface& robot,
-                                   std::mt19937_64& generator,
-                                   Visualizer vis,
-                                   GripperControllerType gripper_controller_type,
-                                   const double max_gripper_translation_step,
-                                   const double max_gripper_rotation_step,
-                                   const int64_t max_count,
-                                   const double distance_to_obstacle_threshold);
+            GripperMotionGenerator(
+                    ros::NodeHandle& nh,
+                    const sdf_tools::SignedDistanceField& environment_sdf,
+                    RobotInterface& robot,
+                    std::mt19937_64& generator,
+                    Visualizer vis,
+                    GripperControllerType gripper_controller_type,
+                    const int64_t max_count,
+                    const double distance_to_obstacle_threshold);
 
             //////////////////////////////////////////////////////////////////////////////////////
             // Called from outside to find the optimal gripper command
             //////////////////////////////////////////////////////////////////////////////////////
 
-            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> findOptimalGripperMotion(const WorldState& current_world_state,
+            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> findOptimalGripperMotion(
+                    const DeformableModel::DeformableModelInputData& input_data,
                     const DeformableModel::Ptr deformable_model,
-                    const DeformableModel::DeformableModelInputData &input_data,
-                    const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale);
+                    const double max_gripper_velocity);
 
             void SetGripperControllerType(GripperControllerType gripper_controller_type);
 
@@ -45,18 +43,14 @@ namespace smmap {
             /////////////////////////////////////////////////////////////////////////////////////////
 
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByRandomSampling(
-                    const WorldState &current_world_state,
+                    const DeformableModel::DeformableModelInputData& input_data,
                     const DeformableModel::Ptr deformable_model,
-                    const DeformableModel::DeformableModelInputData &input_data,
-                    const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale);
+                    const double max_gripper_velocity);
 
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByUniformSampling(
-                    const WorldState &current_world_state,
+                    const DeformableModel::DeformableModelInputData& input_data,
                     const DeformableModel::Ptr deformable_model,
-                    const DeformableModel::DeformableModelInputData &input_data,
-                    const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale);
+                    const double max_gripper_velocity);
 
 
 
@@ -64,18 +58,15 @@ namespace smmap {
             // Helper function
             //////////////////////////////////////////////////////////////////////////////////
 
-            kinematics::Vector6d singleGripperPoseDeltaSampler();
+            kinematics::Vector6d singleGripperPoseDeltaSampler(const double max_delta);
 
-<<<<<<< HEAD
-            double errorOfControlByPrediction(
-                    const ObjectPointSet& predicted_object_p_dot,
-                    const Eigen::VectorXd &desired_object_p_dot) const;
-=======
+            AllGrippersSinglePoseDelta allGripperPoseDeltaSampler(const ssize_t num_grippers, const double max_delta);
+
             AllGrippersSinglePoseDelta setAllGripperPoseDeltaZero(const ssize_t num_grippers);
 
->>>>>>> wrapping done, parameters to be tuned: 1. stretching factor; 2. stretching allowance cosine threshold
 
-            AllGrippersSinglePoseDelta allGripperPoseDeltaSampler(const ssize_t num_grippers);
+            double errorOfControlByPrediction(const ObjectPointSet predicted_object_p_dot,
+                                              const Eigen::VectorXd &desired_object_p_dot);
 
             void visualize_stretching_vector(const ObjectPointSet& object_configuration);
 
@@ -95,16 +86,13 @@ namespace smmap {
             // Stretching constraint related function
             //////////////////////////////////////////////////////////////////////////////////
 
-            bool stretchingDetection(const DeformableModel::DeformableModelInputData &input_data,
-                                     const AllGrippersSinglePose &current_gripper_pose,
-                                     const AllGrippersSinglePoseDelta &test_gripper_motion,
-                                     const ObjectPointSet& object_configuration);
+            bool stretchingDetection(
+                    const DeformableModel::DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& test_gripper_motion);
 
-            bool RopeTwoGrippersStretchingDetection(
-                    const DeformableModel::DeformableModelInputData &input_data,
-                    const AllGrippersSinglePose &current_gripper_pose,
-                    const AllGrippersSinglePoseDelta &test_gripper_motion,
-                    const ObjectPointSet& object_configuration);
+            bool ropeTwoGrippersStretchingDetection(
+                    const DeformableModel::DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& test_gripper_motion);
 
 
 
@@ -132,11 +120,6 @@ namespace smmap {
             GripperControllerType gripper_controller_type_;
             DeformableType deformable_type_;
             TaskType task_type_;
-
-            const double translation_lower_bound_;
-            const double translation_upper_bound_;
-            const double rotation_lower_bound_;
-            const double rotation_upper_bound_;
 
             const double distance_to_obstacle_threshold_;
             double stretching_factor_threshold_;

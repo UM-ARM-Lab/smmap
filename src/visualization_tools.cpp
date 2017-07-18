@@ -350,7 +350,6 @@ void Visualizer::visualizeRope(
     }
 }
 
-
 void Visualizer::visualizeCloth(
         const std::string& marker_name,
         const ObjectPointSet& cloth,

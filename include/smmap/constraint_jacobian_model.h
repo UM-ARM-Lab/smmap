@@ -9,16 +9,6 @@ namespace smmap
 {
     enum RigidityFnType {simpleFn, midleverFn, complicateFn};
 
-//    typedef std::function<Eigen::Matrix3d(
-//            Eigen::Vector3d node_to_gripper, Eigen::Vector3d node_v
-//            )>
-//    TranslationDirectionFnPtr;
-
-//    typedef std::function<double(
-//            const double dist_to_gripper, const double dist_rest
-//            )>
-//    TranslationDistanceFnPtr;
-
     class ConstraintJacobianModel final : public DeformableModel
     {
         public:
