@@ -3,7 +3,7 @@
 #include <omp.h>
 
 #include "smmap/gripper_motion_generator.h"
-#include "smmap/task.h"
+#include "smmap/ros_communication_helpers.hpp"
 
 using namespace smmap;
 

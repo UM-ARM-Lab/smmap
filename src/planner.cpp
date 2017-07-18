@@ -13,6 +13,10 @@
 #include <arc_utilities/shortcut_smoothing.hpp>
 
 #include "smmap/timing.hpp"
+#include "smmap/diminishing_rigidity_model.h"
+#include "smmap/adaptive_jacobian_model.h"
+#include "smmap/least_squares_jacobian_model.h"
+#include "smmap/constraint_jacobian_model.h"
 
 using namespace smmap;
 using namespace Eigen;
@@ -105,15 +109,12 @@ std::vector<uint32_t> NumberOfPointsInEachCluster(
 Planner::Planner(
         RobotInterface& robot,
         Visualizer& vis,
-        const std::shared_ptr<TaskSpecification>& task_specification,
-        const LoggingFunctionType& logging_fn)
+        const std::shared_ptr<TaskSpecification>& task_specification)
     : nh_("")
     , ph_("~")
     , seed_(GetPlannerSeed(ph_))
     , generator_(seed_)
-    , logging_fn_(logging_fn)
     , robot_(robot)
-    , vis_(vis)
     , task_specification_(task_specification)
     , dijkstras_task_(nullptr)
     , calculate_regret_(GetCalculateRegret(ph_))
@@ -128,6 +129,7 @@ Planner::Planner(
     , global_plan_gripper_trajectory_(0)
     , rrt_helper_(nullptr)
     , logging_enabled_(GetLoggingEnabled(nh_))
+    , vis_(vis)
 {
     // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
     if (task_specification_->is_dijkstras_type_task_)
@@ -161,49 +163,53 @@ Planner::Planner(
 
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
 
-    if (logging_enabled_)
-    {
-        const std::string log_folder = GetLogFolder(nh_);
-        Log::Log seed_log(log_folder + "seed.txt", false);
-        LOG_STREAM(seed_log, std::hex << seed_);
-
-        loggers_.insert(std::make_pair<std::string, Log::Log>(
-                            "grippers_distance_delta_history",
-                            Log::Log(log_folder + "grippers_distance_delta_history.txt", false)));
-
-        loggers_.insert(std::make_pair<std::string, Log::Log>(
-                            "error_delta_history",
-                            Log::Log(log_folder + "error_delta_history.txt", false)));
-    }
-}
-
-void Planner::addModel(DeformableModel::Ptr model)
-{
-    model_list_.push_back(model);
-}
-
-void Planner::createBandits()
-{
-    num_models_ = (ssize_t)model_list_.size();
-    ROS_INFO_STREAM_NAMED("planner", "Generating bandits for " << num_models_ << " bandits");
-
-#ifdef UCB_BANDIT
-    model_utility_bandit_ = UCB1Normal<std::mt19937_64>(num_models_);
-#endif
-#ifdef KFMANB_BANDIT
-    model_utility_bandit_ = KalmanFilterMANB<std::mt19937_64>(
-                VectorXd::Zero(num_models_),
-                VectorXd::Ones(num_models_) * 1e6);
-#endif
-#ifdef KFMANDB_BANDIT
-    model_utility_bandit_ = KalmanFilterMANDB<std::mt19937_64>(
-                VectorXd::Zero(num_models_),
-                MatrixXd::Identity(num_models_, num_models_) * 1e6);
-#endif
+    initializeLogging();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// The two functions that gets invoked externally (repeatedly)
+// The one functions that gets invoked externally
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Planner::execute()
+{
+    // Run the planner at whatever rate we've been given
+    WorldState world_feedback = robot_.start();
+    const double start_time = world_feedback.sim_time_;
+
+    initializeModelSet(world_feedback);
+
+    while (robot_.ok())
+    {
+        const WorldState world_state = world_feedback;
+        world_feedback = sendNextCommand(world_state);
+
+        if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()
+                     || task_specification_->taskDone(world_feedback)))
+        {
+            ROS_INFO_NAMED("planner", "------------------------------- End of Task -------------------------------------------");
+            const double current_error = task_specification_->calculateError(world_state);
+            ROS_INFO_STREAM_NAMED("planner", "   Planner/Task sim time " << world_state.sim_time_ << "\t Error: " << current_error);
+
+            vis_.deleteObjects(Planner::PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * GetNumLookaheadSteps(ph_)) + 10);
+            vis_.deleteObjects(Planner::PROJECTED_BAND_NS,               1, (int32_t)GetNumLookaheadSteps(ph_) + 10);
+            vis_.deleteObjects(Planner::PROJECTED_POINT_PATH_NS,         1, 2);
+            vis_.deleteObjects(Planner::PROJECTED_POINT_PATH_LINES_NS,   1, 2);
+
+            if (world_feedback.sim_time_ - start_time >= task_specification_->maxTime())
+            {
+                ROS_INFO("Terminating task as time has run out");
+            }
+            if (task_specification_->taskDone(world_feedback))
+            {
+                ROS_INFO("Terminating task as the task has been completed");
+            }
+            robot_.shutdown();
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Gripper movement functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -270,43 +276,11 @@ WorldState Planner::sendNextCommand(
     }
 }
 
-void Planner::visualizeDesiredMotion(
-        const WorldState& current_world_state,
-        const ObjectDeltaAndWeight& desired_motion,
-        const bool visualization_enabled) const
-{
-    if (visualization_enabled)
-    {
-        ssize_t num_nodes = current_world_state.object_configuration_.cols();
-        std::vector<std_msgs::ColorRGBA> colors((size_t)num_nodes);
-        for (size_t node_ind = 0; node_ind < (size_t)num_nodes; node_ind++)
-        {
-            colors[node_ind].r = (float)desired_motion.weight((ssize_t)node_ind * 3);
-            colors[node_ind].g = 0.0f;
-            colors[node_ind].b = 0.0f;
-            colors[node_ind].a = desired_motion.weight((ssize_t)node_ind * 3) > 0 ? 1.0f : 0.0f;
-        }
-        task_specification_->visualizeDeformableObject(
-                vis_,
-                DESIRED_DELTA_NS,
-                AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
-                colors);
-
-        if (task_specification_->deformable_type_ == DeformableType::CLOTH)
-        {
-            vis_.visualizeObjectDelta(
-                        DESIRED_DELTA_NS,
-                        current_world_state.object_configuration_,
-                        AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
-                        Visualizer::Green());
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Gripper movement functions
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+/**
+ * @brief Planner::sendNextCommandUsingLocalController
+ * @param world_state
+ * @return
+ */
 WorldState Planner::sendNextCommandUsingLocalController(
         const WorldState& world_state)
 {
@@ -422,7 +396,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     ROS_INFO_NAMED("planner", "Updating models and logging data");
     updateModels(world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
 
-    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use, individual_rewards);
+    logData(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use, individual_rewards);
 
     const double controller_time = function_wide_stopwatch(READ) - robot_execution_time;
     ROS_INFO_STREAM_NAMED("planner", "Total local controller time                     " << controller_time << " seconds");
@@ -430,6 +404,11 @@ WorldState Planner::sendNextCommandUsingLocalController(
     return world_feedback;
 }
 
+/**
+ * @brief Planner::sendNextCommandUsingGlobalGripperPlannerResults
+ * @param current_world_state
+ * @return
+ */
 WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
         const WorldState& current_world_state)
 {
@@ -460,7 +439,7 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
     }
 
     const std::vector<double> fake_rewards(model_list_.size(), NAN);
-    logging_fn_(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), -1, fake_rewards);
+    logData(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), -1, fake_rewards);
 
     return world_feedback;
 }
@@ -1184,6 +1163,158 @@ AllGrippersPoseTrajectory Planner::convertRRTResultIntoGripperTrajectory(
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Model list management
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Planner::initializeModelSet(const WorldState& initial_world_state)
+{
+    // Initialze each model type with the shared data
+    DeformableModel::SetGrippersData(robot_.getGrippersData());
+    // TODO: fix this interface so that I'm not passing a null ptr here
+    DeformableModel::SetCallbackFunctions(
+                std::bind(
+                    &RobotInterface::checkGripperCollision, &robot_, std::placeholders::_1));
+    DiminishingRigidityModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
+    ConstraintJacobianModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
+
+    const bool optimization_enabled = GetOptimizationEnabled(ph_);
+
+    // Create some models and add them to the model set
+    double translational_deformability, rotational_deformability;
+    if (ph_.getParam("translational_deformability", translational_deformability) &&
+             ph_.getParam("rotational_deformability", rotational_deformability))
+    {
+        ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                               << translational_deformability << " "
+                               << rotational_deformability);
+
+        addModel(std::make_shared<DiminishingRigidityModel>(
+                              translational_deformability,
+                              rotational_deformability,
+                              optimization_enabled));
+    }
+    else if (GetUseMultiModel(ph_))
+    {
+        ////////////////////////////////////////////////////////////////////////
+        // Diminishing rigidity models
+        ////////////////////////////////////////////////////////////////////////
+
+        const double deform_min = 0.0;
+        const double deform_max = 25.0;
+        const double deform_step = 4.0;
+
+        for (double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step)
+        {
+            for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
+            {
+                addModel(std::make_shared<DiminishingRigidityModel>(
+                                      trans_deform,
+                                      rot_deform,
+                                      optimization_enabled));
+            }
+        }
+        ROS_INFO_STREAM_NAMED("planner", "Num diminishing rigidity models: "
+                               << std::floor((deform_max - deform_min) / deform_step));
+
+        ////////////////////////////////////////////////////////////////////////
+        // Adaptive jacobian models
+        ////////////////////////////////////////////////////////////////////////
+
+        const double learning_rate_min = 1e-10;
+        const double learning_rate_max = 1.1e0;
+        const double learning_rate_step = 10.0;
+
+        const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
+        {
+            return task_specification_->calculateDesiredDirection(world_state);
+        };
+
+        const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
+        for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
+        {
+                addModel(std::make_shared<AdaptiveJacobianModel>(
+                                      DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
+                                      learning_rate,
+                                      optimization_enabled));
+        }
+        ROS_INFO_STREAM_NAMED("planner", "Num adaptive Jacobian models: "
+                               << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
+
+        ////////////////////////////////////////////////////////////////////////
+        // Single manually tuned model
+        ////////////////////////////////////////////////////////////////////////
+
+//        planner_.addModel(std::make_shared<DiminishingRigidityModel>(
+//                              task_specification_->defaultDeformability(),
+//                              GetOptimizationEnabled(nh_)));
+    }
+    else if (GetUseAdaptiveModel(ph_))
+    {
+        const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
+        {
+            return task_specification_->calculateDesiredDirection(world_state);
+        };
+
+        const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
+        addModel(std::make_shared<AdaptiveJacobianModel>(
+                              DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
+                              GetAdaptiveModelLearningRate(ph_),
+                              optimization_enabled));
+
+    }
+    else if (GetUseConstraintModel(ph_))
+    {
+        const double translation_dir_deformability = 20.0;
+        const double translation_dis_deformability = 4.0;
+        const double rotation_deformability = 20.0;
+        // Douoble check this usage
+        const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+        addModel(std::make_shared<ConstraintJacobianModel>(
+                              translation_dir_deformability,
+                              translation_dis_deformability,
+                              rotation_deformability,
+                              environment_sdf));
+    }
+    else
+    {
+        ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                               << task_specification_->defaultDeformability());
+
+        addModel(std::make_shared<DiminishingRigidityModel>(
+                              task_specification_->defaultDeformability(),
+                              optimization_enabled));
+    }
+
+    createBandits();
+}
+
+void Planner::addModel(DeformableModel::Ptr model)
+{
+    model_list_.push_back(model);
+}
+
+void Planner::createBandits()
+{
+    num_models_ = (ssize_t)model_list_.size();
+    ROS_INFO_STREAM_NAMED("planner", "Generating bandits for " << num_models_ << " bandits");
+
+#ifdef UCB_BANDIT
+    model_utility_bandit_ = UCB1Normal<std::mt19937_64>(num_models_);
+#endif
+#ifdef KFMANB_BANDIT
+    model_utility_bandit_ = KalmanFilterMANB<std::mt19937_64>(
+                VectorXd::Zero(num_models_),
+                VectorXd::Ones(num_models_) * 1e6);
+#endif
+#ifdef KFMANDB_BANDIT
+    model_utility_bandit_ = KalmanFilterMANDB<std::mt19937_64>(
+                VectorXd::Zero(num_models_),
+                MatrixXd::Identity(num_models_, num_models_) * 1e6);
+#endif
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Model utility functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1288,4 +1419,119 @@ MatrixXd Planner::calculateProcessNoise(
     }
 
     return correlation_strength_factor_ * process_noise + (1.0 - correlation_strength_factor_) * MatrixXd::Identity(num_models_, num_models_);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Logging and visualization functionality
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Planner::visualizeDesiredMotion(
+        const WorldState& current_world_state,
+        const ObjectDeltaAndWeight& desired_motion,
+        const bool visualization_enabled) const
+{
+    if (visualization_enabled)
+    {
+        ssize_t num_nodes = current_world_state.object_configuration_.cols();
+        std::vector<std_msgs::ColorRGBA> colors((size_t)num_nodes);
+        for (size_t node_ind = 0; node_ind < (size_t)num_nodes; node_ind++)
+        {
+            colors[node_ind].r = (float)desired_motion.weight((ssize_t)node_ind * 3);
+            colors[node_ind].g = 0.0f;
+            colors[node_ind].b = 0.0f;
+            colors[node_ind].a = desired_motion.weight((ssize_t)node_ind * 3) > 0 ? 1.0f : 0.0f;
+        }
+        task_specification_->visualizeDeformableObject(
+                vis_,
+                DESIRED_DELTA_NS,
+                AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
+                colors);
+
+        if (task_specification_->deformable_type_ == DeformableType::CLOTH)
+        {
+            vis_.visualizeObjectDelta(
+                        DESIRED_DELTA_NS,
+                        current_world_state.object_configuration_,
+                        AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
+                        Visualizer::Green());
+        }
+    }
+}
+
+void Planner::initializeLogging()
+{
+    if (logging_enabled_)
+    {
+        const std::string log_folder = GetLogFolder(nh_);
+        ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
+
+        Log::Log seed_log(log_folder + "seed.txt", false);
+        LOG_STREAM(seed_log, std::hex << seed_);
+
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "time",
+                            Log::Log(log_folder + "time.txt", false)));
+
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "error",
+                            Log::Log(log_folder + "error.txt", false)));
+
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "utility_mean",
+                            Log::Log(log_folder + "utility_mean.txt", false)));
+
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "utility_covariance",
+                            Log::Log(log_folder + "utility_covariance.txt", false)));
+
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "model_chosen",
+                            Log::Log(log_folder + "model_chosen.txt", false)));
+
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "rewards_for_all_models",
+                            Log::Log(log_folder + "rewards_for_all_models.txt", false)));
+
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "grippers_distance_delta_history",
+                            Log::Log(log_folder + "grippers_distance_delta_history.txt", false)));
+
+        loggers_.insert(std::make_pair<std::string, Log::Log>(
+                            "error_delta_history",
+                            Log::Log(log_folder + "error_delta_history.txt", false)));
+    }
+}
+
+void Planner::logData(
+        const WorldState& current_world_state,
+        const Eigen::VectorXd& model_utility_mean,
+        const Eigen::MatrixXd& model_utility_covariance,
+        const ssize_t model_used,
+        const std::vector<double>& rewards_for_all_models)
+{
+    if (logging_enabled_)
+    {
+        const static Eigen::IOFormat single_line(
+                    Eigen::StreamPrecision,
+                    Eigen::DontAlignCols,
+                    " ", " ", "", "");
+
+        LOG(loggers_.at("time"),
+             current_world_state.sim_time_);
+
+        LOG(loggers_.at("error"),
+             task_specification_->calculateError(current_world_state));
+
+        LOG(loggers_.at("utility_mean"),
+             model_utility_mean.format(single_line));
+
+        LOG(loggers_.at("utility_covariance"),
+             model_utility_covariance.format(single_line));
+
+        LOG(loggers_.at("model_chosen"),
+             model_used);
+
+        LOG(loggers_.at("rewards_for_all_models"),
+            PrettyPrint::PrettyPrint(rewards_for_all_models, false, " "));
+    }
 }

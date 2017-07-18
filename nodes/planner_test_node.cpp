@@ -1,4 +1,4 @@
-#include "smmap/task.h"
+#include "smmap/planner.h"
 
 using namespace smmap;
 
@@ -14,8 +14,8 @@ int main(int argc, char* argv[])
     Visualizer vis(nh, ph);
 
     TaskSpecification::Ptr task_specification = TaskSpecification::MakeTaskSpecification(nh, ph);
-    Task task(robot, vis, task_specification);
-    task.execute();
+    Planner planner(robot, vis, task_specification);
+    planner.execute();
 
     return 0;
 }

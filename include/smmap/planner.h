@@ -19,33 +19,35 @@ namespace smmap
     {
         public:
             ////////////////////////////////////////////////////////////////////
-            // Constructor and model list builder
+            // Constructor and the one function that gets called externally
             ////////////////////////////////////////////////////////////////////
 
             Planner(RobotInterface& robot,
                     Visualizer& vis,
-                    const std::shared_ptr<TaskSpecification>& task_specification,
-                    const LoggingFunctionType& logging_fn);
+                    const std::shared_ptr<TaskSpecification>& task_specification);
 
-            void addModel(DeformableModel::Ptr model);
-            void createBandits();
+            void execute();
+
+        private:            
+            ////////////////////////////////////////////////////////////////////
+            // Multipurpose
+            ////////////////////////////////////////////////////////////////////
+
+            ros::NodeHandle nh_;
+            ros::NodeHandle ph_;
+            const unsigned long seed_;
+            std::mt19937_64 generator_;
+
+            RobotInterface& robot_;
+            std::shared_ptr<TaskSpecification> task_specification_;
+            std::shared_ptr<DijkstrasCoverageTask> dijkstras_task_;
 
             ////////////////////////////////////////////////////////////////////
-            // The two functions that gets invoked repeatedly
+            // Sending gripper commands
             ////////////////////////////////////////////////////////////////////
 
             WorldState sendNextCommand(
                     const WorldState& current_world_state);
-
-            void visualizeDesiredMotion(
-                    const WorldState& current_world_state,
-                    const ObjectDeltaAndWeight& desired_motion,
-                    const bool visualization_enabled = true) const;
-
-        private:
-            ////////////////////////////////////////////////////////////////////
-            // Sending gripper commands
-            ////////////////////////////////////////////////////////////////////
 
             WorldState sendNextCommandUsingLocalController(
                     const WorldState& current_world_state);
@@ -90,42 +92,12 @@ namespace smmap
                     const WorldState& world_state);
 
             ////////////////////////////////////////////////////////////////////
-            // Model utility functions
-            ////////////////////////////////////////////////////////////////////
-
-            void updateModels(
-                    const WorldState& starting_world_state,
-                    const ObjectDeltaAndWeight& task_desired_motion,
-                    const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands,
-                    const ssize_t model_used,
-                    const WorldState& world_feedback);
-
-            Eigen::MatrixXd calculateProcessNoise(
-                    const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands) const;
-
-            ////////////////////////////////////////////////////////////////////
-            // Multipurpose
-            ////////////////////////////////////////////////////////////////////
-
-            ros::NodeHandle nh_;
-            ros::NodeHandle ph_;
-            const unsigned long seed_;
-            std::mt19937_64 generator_;
-
-            ////////////////////////////////////////////////////////////////////
-            // Logging and visualization functionality
-            ////////////////////////////////////////////////////////////////////
-
-            const LoggingFunctionType logging_fn_;
-
-            RobotInterface& robot_;
-            Visualizer& vis_;
-            std::shared_ptr<TaskSpecification> task_specification_;
-            std::shared_ptr<DijkstrasCoverageTask> dijkstras_task_;
-
-            ////////////////////////////////////////////////////////////////////
             // Model list management
             ////////////////////////////////////////////////////////////////////
+
+            void initializeModelSet(const WorldState& initial_world_state);
+            void addModel(DeformableModel::Ptr model);
+            void createBandits();
 
             const bool calculate_regret_;
             ssize_t num_models_;
@@ -145,6 +117,20 @@ namespace smmap
             const double correlation_strength_factor_;
 
             ////////////////////////////////////////////////////////////////////
+            // Model utility functions
+            ////////////////////////////////////////////////////////////////////
+
+            void updateModels(
+                    const WorldState& starting_world_state,
+                    const ObjectDeltaAndWeight& task_desired_motion,
+                    const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands,
+                    const ssize_t model_used,
+                    const WorldState& world_feedback);
+
+            Eigen::MatrixXd calculateProcessNoise(
+                    const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands) const;
+
+            ////////////////////////////////////////////////////////////////////
             // Constraint violation and global planner data
             ////////////////////////////////////////////////////////////////////
 
@@ -160,11 +146,26 @@ namespace smmap
             std::unique_ptr<RRTHelper> rrt_helper_;
 
             ////////////////////////////////////////////////////////////////////
-            // Debugging tools
+            // Logging and visualization functionality
             ////////////////////////////////////////////////////////////////////
 
+            void visualizeDesiredMotion(
+                    const WorldState& current_world_state,
+                    const ObjectDeltaAndWeight& desired_motion,
+                    const bool visualization_enabled = true) const;
+
+            void initializeLogging();
+
+            void logData(
+                    const WorldState& current_world_state,
+                    const Eigen::VectorXd& model_utility_mean,
+                    const Eigen::MatrixXd& model_utility_covariance,
+                    const ssize_t model_used,
+                    const std::vector<double>& rewards_for_all_models);
+
             const bool logging_enabled_;
-            std::map<std::string, Log::Log> loggers_;
+            std::unordered_map<std::string, Log::Log> loggers_;
+            Visualizer& vis_;
 
         public:
             const static std::string DESIRED_DELTA_NS;

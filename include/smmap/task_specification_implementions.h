@@ -1,5 +1,5 @@
-#ifndef TASK_SPECIFICATION_IMPLEMENTIONS_HPP
-#define TASK_SPECIFICATION_IMPLEMENTIONS_HPP
+#ifndef TASK_SPECIFICATION_IMPLEMENTIONS_H
+#define TASK_SPECIFICATION_IMPLEMENTIONS_H
 
 #include "smmap/task_specification.h"
 #include "smmap/point_reflector.hpp"
@@ -284,4 +284,4 @@ namespace smmap
     };
 }
 
-#endif // TASK_SPECIFICATION_IMPLEMENTIONS_HPP
+#endif // TASK_SPECIFICATION_IMPLEMENTIONS_H

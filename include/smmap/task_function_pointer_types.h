@@ -23,24 +23,6 @@ namespace smmap
             const WorldState& resulting_world_state
             )>
     TestGrippersPosesFeedbackCallbackFunctionType;
-
-    typedef std::function<void(
-            const WorldState& world_state,
-            const Eigen::VectorXd& model_utility_mean,
-            const Eigen::MatrixXd& model_utility_covariance,
-            const ssize_t model_used,
-            const std::vector<double> rewards_for_all_models
-            )>
-    LoggingFunctionType;
-
-    typedef std::function<void(
-            const WorldState& current_world_state,
-            const ObjectPointSet &real_delta_p,
-            const ObjectPointSet &model_delta_p,
-            Eigen::MatrixXd &real_time_error,
-            Eigen::MatrixXd &constraint_violation
-            )>
-    TestLoggingFunctionType;
 }
 
 #endif // TASK_FUNCTION_POINTER_TYPES_H
