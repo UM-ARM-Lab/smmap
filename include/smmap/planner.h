@@ -8,6 +8,7 @@
 #include "smmap/visualization_tools.h"
 #include "smmap/robot_interface.hpp"
 #include "smmap/deformable_model.h"
+#include "smmap/deformable_controller.hpp"
 #include "smmap/kalman_filter_multiarm_bandit.hpp"
 #include "smmap/ucb_multiarm_bandit.hpp"
 #include "smmap/virtual_rubber_band.h"
@@ -95,13 +96,15 @@ namespace smmap
             // Model list management
             ////////////////////////////////////////////////////////////////////
 
-            void initializeModelSet(const WorldState& initial_world_state);
+            void initializeModelAndControllerSet(const WorldState& initial_world_state);
             void addModel(DeformableModel::Ptr model);
             void createBandits();
 
             const bool calculate_regret_;
             ssize_t num_models_;
             std::vector<DeformableModel::Ptr> model_list_;
+            std::vector<DeformableController::Ptr> controller_list_;
+
 #ifdef UCB_BANDIT
             UCB1Normal<std::mt19937_64> model_utility_bandit_;
 #endif

@@ -36,17 +36,14 @@ void DiminishingRigidityModel::SetInitialObjectConfiguration(
 ////////////////////////////////////////////////////////////////////////////////
 
 DiminishingRigidityModel::DiminishingRigidityModel(
-        const double deformability,
-        const bool optimize)
-    : DiminishingRigidityModel(deformability, deformability, optimize)
+        const double deformability)
+    : DiminishingRigidityModel(deformability, deformability)
 {}
 
 DiminishingRigidityModel::DiminishingRigidityModel(
         const double translation_deformability,
-        const double rotation_deformability,
-        const bool optimize)
-    : JacobianModel(optimize)
-    , translation_deformability_(translation_deformability)
+        const double rotation_deformability)
+    : translation_deformability_(translation_deformability)
     , rotation_deformability_(rotation_deformability)
 {
     if (!static_data_initialized_.load())

@@ -3,8 +3,6 @@
 #include <cmath>
 #include <arc_utilities/arc_exceptions.hpp>
 
-#include "smmap/gripper_motion_generator.h"
-
 using namespace smmap;
 using namespace Eigen;
 
@@ -123,14 +121,6 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
     return delta_with_mask;
 }
 
-std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> ConstraintJacobianModel::getSuggestedGrippersCommand_impl(
-        const DeformableModelInputData& input_data,
-        const double max_gripper_velocity,
-        const double obstacle_avoidance_scale) const
-{
-}
-
-
 ////////////////////////////////////////////////////////////////////////////////
 // Jacobian and Mask matrix computation
 ////////////////////////////////////////////////////////////////////////////////
@@ -225,7 +215,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
 // Mask Version
 
 Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobian(
-        const DeformableModelInputData &input_data) const
+        const DeformableModelInputData& input_data) const
 {
     const WorldState& world_state = input_data.world_current_state_;
     const AllGrippersSinglePose& grippers_pose = world_state.all_grippers_single_pose_;
@@ -277,13 +267,13 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
             const double dist_real = dist_real_vec.norm();
 
             // P dot of the node on object, grasped gripper
-            const Vector3d& node_v = object_p_dot.segment<3>(nearest_node_on_gripper.second*3); // planner
+            const Vector3d& node_v = object_p_dot.segment<3>(nearest_node_on_gripper.second * 3); // planner
 
             // P dot of the node on object, at this node
 //            const Vector3d& target_p_dot = object_p_dot.segment<3>(node_ind*3); // planner
 
 
-            // Mask from obstacle constrain:
+            // Mask from obstacle constraint:
             /*
             const Vector3d& target_node_v = object_p_dot.segment<3>(node_ind);
             Matrix3d M3 = Matrix3d::Identity(3,3);

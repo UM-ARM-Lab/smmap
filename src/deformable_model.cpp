@@ -35,7 +35,11 @@ void DeformableModel::SetGrippersData(
     grippers_data_initialized_.store(true);
 }
 
-
+const std::vector<GripperData>& DeformableModel::GetGrippersData()
+{
+    assert(grippers_data_initialized_);
+    return grippers_data_;
+}
 
 std::atomic_bool DeformableModel::function_pointers_initialized_(false);
 GripperCollisionCheckFunctionType DeformableModel::gripper_collision_check_fn_;
@@ -63,12 +67,4 @@ ObjectPointSet DeformableModel::getObjectDelta(
         const AllGrippersSinglePoseDelta& grippers_pose_delta)
 {
     return getObjectDelta_impl(input_data, grippers_pose_delta);
-}
-
-std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> DeformableModel::getSuggestedGrippersCommand(
-        const DeformableModelInputData& input_data,
-        const double max_gripper_velocity,
-        const double obstacle_avoidance_scale)
-{
-    return getSuggestedGrippersCommand_impl(input_data, max_gripper_velocity, obstacle_avoidance_scale);
 }

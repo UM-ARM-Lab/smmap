@@ -14,8 +14,7 @@ namespace smmap
 
             LeastSquaresJacobianModel(
                     const Eigen::MatrixXd& initial_jacobian,
-                    const long extra_samples,
-                    const bool optimize);
+                    const long extra_samples);
 
         private:
 

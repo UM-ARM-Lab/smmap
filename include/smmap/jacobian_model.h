@@ -12,7 +12,7 @@ namespace smmap
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
-            JacobianModel(bool optimize);
+            JacobianModel();
 
             Eigen::MatrixXd computeGrippersToDeformableObjectJacobian(
                     const DeformableModelInputData& input_data) const;
@@ -39,18 +39,6 @@ namespace smmap
             virtual ObjectPointSet getObjectDelta_impl(
                     const DeformableModelInputData& input_data,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta) const override final;
-
-            virtual std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getSuggestedGrippersCommand_impl(
-                    const DeformableModelInputData& input_data,
-                    const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale) const override final;
-
-            ////////////////////////////////////////////////////////////////////
-            // Private members
-            ////////////////////////////////////////////////////////////////////
-
-            // Controls if we perform an optimization pass between the weighted pseudo inverse and the gripper collision avoidance
-            bool optimize_;
     };
 }
 

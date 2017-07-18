@@ -13,9 +13,8 @@ using namespace EigenHelpersConversions;
 
 AdaptiveJacobianModel::AdaptiveJacobianModel(
         const MatrixXd& initial_jacobian,
-        const double learning_rate,
-        const bool optimize)
-    : JacobianModel(optimize)
+        const double learning_rate)
+    : JacobianModel()
     , current_jacobian_(initial_jacobian)
     , learning_rate_(learning_rate)
 {

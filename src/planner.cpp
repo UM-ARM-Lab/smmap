@@ -18,6 +18,9 @@
 #include "smmap/least_squares_jacobian_model.h"
 #include "smmap/constraint_jacobian_model.h"
 
+#include "smmap/least_squares_controller_with_object_avoidance.h"
+#include "smmap/least_squares_controller_random_sampling.h"
+
 using namespace smmap;
 using namespace Eigen;
 using namespace EigenHelpers;
@@ -176,7 +179,7 @@ void Planner::execute()
     WorldState world_feedback = robot_.start();
     const double start_time = world_feedback.sim_time_;
 
-    initializeModelSet(world_feedback);
+    initializeModelAndControllerSet(world_feedback);
 
     while (robot_.ok())
     {
@@ -314,10 +317,9 @@ WorldState Planner::sendNextCommandUsingLocalController(
         if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
         {
             suggested_robot_commands[model_ind] =
-                model_list_[model_ind]->getSuggestedGrippersCommand(
+                controller_list_[model_ind]->getGripperMotion(
                         model_input_data,
-                        robot_.max_gripper_velocity_,
-                        task_specification_->collisionScalingFactor());
+                        robot_.max_gripper_velocity_);
         }
     }
 
@@ -608,10 +610,9 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     {
         // Determine what direction to move the grippers
         const std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command =
-                model_list_[0]->getSuggestedGrippersCommand(
+                controller_list_[0]->getGripperMotion(
                     model_input_data,
-                    dijkstras_task_->work_space_grid_.minStepDimension() / robot_.dt_,
-                    dijkstras_task_->collisionScalingFactor());
+                    dijkstras_task_->work_space_grid_.minStepDimension() / robot_.dt_);
 
         // Move the grippers forward
         world_state_copy.all_grippers_single_pose_ = kinematics::applyTwist(world_state_copy.all_grippers_single_pose_, robot_command.first);
@@ -1166,14 +1167,13 @@ AllGrippersPoseTrajectory Planner::convertRRTResultIntoGripperTrajectory(
 // Model list management
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void Planner::initializeModelSet(const WorldState& initial_world_state)
+void Planner::initializeModelAndControllerSet(const WorldState& initial_world_state)
 {
     // Initialze each model type with the shared data
     DeformableModel::SetGrippersData(robot_.getGrippersData());
     // TODO: fix this interface so that I'm not passing a null ptr here
-    DeformableModel::SetCallbackFunctions(
-                std::bind(
-                    &RobotInterface::checkGripperCollision, &robot_, std::placeholders::_1));
+    DeformableModel::SetCallbackFunctions(std::bind(
+                                              &RobotInterface::checkGripperCollision, &robot_, std::placeholders::_1));
     DiminishingRigidityModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
     ConstraintJacobianModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
 
@@ -1188,10 +1188,14 @@ void Planner::initializeModelSet(const WorldState& initial_world_state)
                                << translational_deformability << " "
                                << rotational_deformability);
 
-        addModel(std::make_shared<DiminishingRigidityModel>(
-                              translational_deformability,
-                              rotational_deformability,
-                              optimization_enabled));
+        model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                  translational_deformability,
+                                  rotational_deformability));
+
+        controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                       model_list_.back(),
+                                       task_specification_->collisionScalingFactor(),
+                                       optimization_enabled));
     }
     else if (GetUseMultiModel(ph_))
     {
@@ -1207,10 +1211,14 @@ void Planner::initializeModelSet(const WorldState& initial_world_state)
         {
             for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
             {
-                addModel(std::make_shared<DiminishingRigidityModel>(
-                                      trans_deform,
-                                      rot_deform,
-                                      optimization_enabled));
+                model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                          trans_deform,
+                                          rot_deform));
+
+                controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                               model_list_.back(),
+                                               task_specification_->collisionScalingFactor(),
+                                               optimization_enabled));
             }
         }
         ROS_INFO_STREAM_NAMED("planner", "Num diminishing rigidity models: "
@@ -1232,21 +1240,17 @@ void Planner::initializeModelSet(const WorldState& initial_world_state)
         const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
         for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
         {
-                addModel(std::make_shared<AdaptiveJacobianModel>(
-                                      DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
-                                      learning_rate,
-                                      optimization_enabled));
+                model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
+                                          DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
+                                          learning_rate));
+
+                controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                               model_list_.back(),
+                                               task_specification_->collisionScalingFactor(),
+                                               optimization_enabled));
         }
         ROS_INFO_STREAM_NAMED("planner", "Num adaptive Jacobian models: "
                                << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
-
-        ////////////////////////////////////////////////////////////////////////
-        // Single manually tuned model
-        ////////////////////////////////////////////////////////////////////////
-
-//        planner_.addModel(std::make_shared<DiminishingRigidityModel>(
-//                              task_specification_->defaultDeformability(),
-//                              GetOptimizationEnabled(nh_)));
     }
     else if (GetUseAdaptiveModel(ph_))
     {
@@ -1256,42 +1260,60 @@ void Planner::initializeModelSet(const WorldState& initial_world_state)
         };
 
         const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
-        addModel(std::make_shared<AdaptiveJacobianModel>(
-                              DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
-                              GetAdaptiveModelLearningRate(ph_),
-                              optimization_enabled));
+        model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
+                                  DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
+                                  GetAdaptiveModelLearningRate(ph_)));
+
+        controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                       model_list_.back(),
+                                       task_specification_->collisionScalingFactor(),
+                                       optimization_enabled));
 
     }
     else if (GetUseConstraintModel(ph_))
     {
+        ROS_INFO_NAMED("planner", "Using constraint model and random sampling controller");
+
         const double translation_dir_deformability = 20.0;
         const double translation_dis_deformability = 4.0;
         const double rotation_deformability = 20.0;
         // Douoble check this usage
         const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
 
-        addModel(std::make_shared<ConstraintJacobianModel>(
+        model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
                               translation_dir_deformability,
                               translation_dis_deformability,
                               rotation_deformability,
                               environment_sdf));
+
+        controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                       nh_,
+                                       robot_,
+                                       environment_sdf,
+                                       generator_,
+                                       vis_,
+                                       GetGripperControllerType(nh_),
+                                       model_list_.back(),
+                                       GetMaxSamplingCounts(nh_),
+                                       GetRobotGripperRadius() + GetRobotMinGripperDistance()));
     }
     else
     {
         ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
                                << task_specification_->defaultDeformability());
 
-        addModel(std::make_shared<DiminishingRigidityModel>(
-                              task_specification_->defaultDeformability(),
-                              optimization_enabled));
+        model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                  task_specification_->defaultDeformability()));
+
+        controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                       model_list_.back(),
+                                       task_specification_->collisionScalingFactor(),
+                                       optimization_enabled));
     }
 
-    createBandits();
-}
+    assert(controller_list_.size() == model_list_.size());
 
-void Planner::addModel(DeformableModel::Ptr model)
-{
-    model_list_.push_back(model);
+    createBandits();
 }
 
 void Planner::createBandits()

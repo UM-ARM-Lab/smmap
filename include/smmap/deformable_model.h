@@ -42,17 +42,14 @@ namespace smmap
                     const DeformableModelInputData& input_data,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta);
 
-            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getSuggestedGrippersCommand(
-                    const DeformableModelInputData& input_data,
-                    const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale);
-
             ////////////////////////////////////////////////////////////////////
             // Update/Set function for static members
             ////////////////////////////////////////////////////////////////////
 
             static void SetGrippersData(
                     const std::vector<GripperData>& grippers_data);
+
+            static const std::vector<GripperData>& GetGrippersData();
 
             static void SetCallbackFunctions(
                     const GripperCollisionCheckFunctionType& gripper_collision_check_fn);
@@ -82,11 +79,6 @@ namespace smmap
             virtual ObjectPointSet getObjectDelta_impl(
                     const DeformableModelInputData& input_data,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta) const = 0;
-
-            virtual std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getSuggestedGrippersCommand_impl(
-                    const DeformableModelInputData& input_data,
-                    const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale) const = 0;
     };
 }
 

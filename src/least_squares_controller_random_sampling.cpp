@@ -2,30 +2,32 @@
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <omp.h>
 
-#include "smmap/gripper_motion_generator.h"
+#include "smmap/least_squares_controller_random_sampling.h"
 #include "smmap/ros_communication_helpers.hpp"
 
 using namespace smmap;
 
-GripperMotionGenerator::GripperMotionGenerator(
+LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
         ros::NodeHandle& nh,
-        const sdf_tools::SignedDistanceField& environment_sdf,
         RobotInterface& robot,
+        const sdf_tools::SignedDistanceField& sdf,
         std::mt19937_64& generator,
         Visualizer& vis,
         GripperControllerType gripper_controller_type,
+        const DeformableModel::Ptr& deformable_model,
         const int64_t max_count,
         const double distance_to_obstacle_threshold)
     : object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
     , gripper_collision_checker_(nh)
     , grippers_data_(robot.getGrippersData())
-    , enviroment_sdf_(environment_sdf)
+    , enviroment_sdf_(sdf)
     , generator_(generator)
     , uniform_unit_distribution_(0.0, 1.0)
     , vis_(vis)
     , gripper_controller_type_(gripper_controller_type)
     , deformable_type_(GetDeformableType(nh))
     , task_type_(GetTaskType(nh))
+    , model_(deformable_model)
     , distance_to_obstacle_threshold_(distance_to_obstacle_threshold)
     , stretching_factor_threshold_(GetStretchingFactorThreshold(nh))
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(nh))
@@ -43,15 +45,14 @@ GripperMotionGenerator::GripperMotionGenerator(
 ////////////////////////////////////////////////////////////////////////////////
 
 
-void GripperMotionGenerator::setGripperControllerType(GripperControllerType gripper_controller_type)
+void LeastSquaresControllerRandomSampling::setGripperControllerType(GripperControllerType gripper_controller_type)
 {
     gripper_controller_type_ = gripper_controller_type;
 }
 
 
-std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::findOptimalGripperMotion(
+std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRandomSampling::getGripperMotion_impl(
         const DeformableModel::DeformableModelInputData& input_data,
-        const DeformableModel::Ptr deformable_model,
         const double max_gripper_velocity)
 {
     switch (gripper_controller_type_)
@@ -59,14 +60,12 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::fi
         case GripperControllerType::RANDOM_SAMPLING:
             return solvedByRandomSampling(
                         input_data,
-                        deformable_model,
                         max_gripper_velocity);
             break;
 
         case GripperControllerType::UNIFORM_SAMPLING:
             return solvedByDiscretization(
                         input_data,
-                        deformable_model,
                         max_gripper_velocity);
             break;
 
@@ -74,7 +73,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::fi
             assert(false && "This code should be un-reachable");
             break;
     };
-
 }
 
 
@@ -82,9 +80,8 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::fi
 // Private optimization function
 /////////////////////////////////////////////////////////////////////////////////
 
-std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::solvedByRandomSampling(
+std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRandomSampling::solvedByRandomSampling(
         const DeformableModel::DeformableModelInputData& input_data,
-        const DeformableModel::Ptr deformable_model,
         const double max_gripper_velocity)
 {
     const double max_step_size = max_gripper_velocity * input_data.dt_;
@@ -202,7 +199,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
             std::pair<AllGrippersSinglePoseDelta, double>& current_thread_optimal = per_thread_optimal_command[thread_num];
 
             // get predicted object motion
-            ObjectPointSet predicted_object_p_dot = deformable_model->getObjectDelta(
+            ObjectPointSet predicted_object_p_dot = model_->getObjectDelta(
                         input_data,
                         grippers_motion_sample);
 
@@ -254,13 +251,11 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
 }
 
 
-std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::solvedByDiscretization(
+std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRandomSampling::solvedByDiscretization(
         const DeformableModel::DeformableModelInputData &input_data,
-        const DeformableModel::Ptr deformable_model,
         const double max_gripper_velocity)
 {
     UNUSED(input_data);
-    UNUSED(deformable_model);
     UNUSED(max_gripper_velocity);
 
     assert(false && "This function is not written");
@@ -271,7 +266,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> GripperMotionGenerator::so
 // Helper function
 //////////////////////////////////////////////////////////////////////////////////
 
-kinematics::Vector6d GripperMotionGenerator::singleGripperPoseDeltaSampler(const double max_delta)
+kinematics::Vector6d LeastSquaresControllerRandomSampling::singleGripperPoseDeltaSampler(const double max_delta)
 {
     const double x_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
     const double y_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
@@ -306,7 +301,7 @@ kinematics::Vector6d GripperMotionGenerator::singleGripperPoseDeltaSampler(const
     return ClampGripperPoseDeltas(random_sample, max_delta);
 }
 
-AllGrippersSinglePoseDelta GripperMotionGenerator::allGripperPoseDeltaSampler(
+AllGrippersSinglePoseDelta LeastSquaresControllerRandomSampling::allGripperPoseDeltaSampler(
         const ssize_t num_grippers,
         const double max_delta)
 {
@@ -345,14 +340,14 @@ AllGrippersSinglePoseDelta GripperMotionGenerator::allGripperPoseDeltaSampler(
     }
 }
 
-AllGrippersSinglePoseDelta GripperMotionGenerator::setAllGripperPoseDeltaZero(const ssize_t num_grippers)
+AllGrippersSinglePoseDelta LeastSquaresControllerRandomSampling::setAllGripperPoseDeltaZero(const ssize_t num_grippers)
 {
     const kinematics::Vector6d no_movement = kinematics::Vector6d::Zero();
     const AllGrippersSinglePoseDelta grippers_motion_sample(num_grippers, no_movement);
     return grippers_motion_sample;
 }
 
-double GripperMotionGenerator::errorOfControlByPrediction(
+double LeastSquaresControllerRandomSampling::errorOfControlByPrediction(
         const ObjectPointSet predicted_object_p_dot,
         const Eigen::VectorXd& desired_object_p_dot) const
 {
@@ -371,7 +366,7 @@ double GripperMotionGenerator::errorOfControlByPrediction(
     return sum_of_error;
 }
 
-void GripperMotionGenerator::visualize_stretching_vector(
+void LeastSquaresControllerRandomSampling::visualize_stretching_vector(
         const ObjectPointSet& object_configuration)
 {
     const ssize_t num_nodes = object_configuration.cols();
@@ -403,7 +398,7 @@ void GripperMotionGenerator::visualize_stretching_vector(
 
 }
 
-void GripperMotionGenerator::visualize_gripper_motion(
+void LeastSquaresControllerRandomSampling::visualize_gripper_motion(
         const AllGrippersSinglePose& current_gripper_pose,
         const AllGrippersSinglePoseDelta& gripper_motion)
 {
@@ -424,7 +419,7 @@ void GripperMotionGenerator::visualize_gripper_motion(
 }
 
 
-bool GripperMotionGenerator::gripperCollisionCheckResult(
+bool LeastSquaresControllerRandomSampling::gripperCollisionCheckResult(
         const AllGrippersSinglePose& current_gripper_pose,
         const AllGrippersSinglePoseDelta& test_gripper_motion)
 {
@@ -469,7 +464,7 @@ bool GripperMotionGenerator::gripperCollisionCheckResult(
 }
 
 
-bool GripperMotionGenerator::stretchingDetection(
+bool LeastSquaresControllerRandomSampling::stretchingDetection(
         const DeformableModel::DeformableModelInputData& input_data,
         const AllGrippersSinglePoseDelta& test_gripper_motion)
 {
@@ -489,7 +484,7 @@ bool GripperMotionGenerator::stretchingDetection(
 }
 
 
-bool GripperMotionGenerator::ropeTwoGrippersStretchingDetection(
+bool LeastSquaresControllerRandomSampling::ropeTwoGrippersStretchingDetection(
         const DeformableModel::DeformableModelInputData& input_data,
         const AllGrippersSinglePoseDelta& test_gripper_motion)
 {

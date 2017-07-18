@@ -12,9 +12,8 @@ using namespace Eigen;
 
 LeastSquaresJacobianModel::LeastSquaresJacobianModel(
         const Eigen::MatrixXd& initial_jacobian,
-        const long extra_samples,
-        const bool optimize)
-    : JacobianModel(optimize)
+        const long extra_samples)
+    : JacobianModel()
     , current_jacobian_(initial_jacobian)
     , next_buffer_ind_(0)
     , buffer_size_(initial_jacobian.cols() + extra_samples)

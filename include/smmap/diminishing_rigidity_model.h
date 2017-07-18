@@ -14,13 +14,11 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             DiminishingRigidityModel(
-                    const double deformability,
-                    const bool optimize);
+                    const double deformability);
 
             DiminishingRigidityModel(
                     const double translation_deformability,
-                    const double rotation_deformability,
-                    const bool optimize);
+                    const double rotation_deformability);
 
             ////////////////////////////////////////////////////////////////////
             // Static functions to set data for all models

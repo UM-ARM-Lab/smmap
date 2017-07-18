@@ -51,11 +51,6 @@ namespace smmap
                     const DeformableModelInputData& input_data,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta) const final override;
 
-            virtual std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getSuggestedGrippersCommand_impl(
-                    const DeformableModelInputData& input_data,
-                    const double max_gripper_velocity,
-                    const double obstacle_avoidance_scale) const final override;
-
             ////////////////////////////////////////////////////////////////////
             // Static helpers
             ////////////////////////////////////////////////////////////////////
