@@ -84,21 +84,6 @@ FILE(GLOB hpp_SRC "include/${PROJECT_NAME}/*.hpp")
 FILE(GLOB h_SRC "include/${PROJECT_NAME}/*.h")
 FILE(GLOB cpp_SRC "src/*.cpp")
 
-#add_library(${PROJECT_NAME}_KFMANDB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
-#add_dependencies(${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(${PROJECT_NAME}_KFMANDB ${GUROBI_LIBRARIES} ${catkin_LIBRARIES})
-#set_target_properties(${PROJECT_NAME}_KFMANDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANDB_BANDIT")
-
-#add_library(${PROJECT_NAME}_KFMANB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
-#add_dependencies(${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(${PROJECT_NAME}_KFMANB ${GUROBI_LIBRARIES} ${catkin_LIBRARIES})
-#set_target_properties(${PROJECT_NAME}_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
-
-#add_library(${PROJECT_NAME}_UCB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
-#add_dependencies(${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(${PROJECT_NAME}_UCB ${GUROBI_LIBRARIES} ${catkin_LIBRARIES})
-#set_target_properties(${PROJECT_NAME}_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
-
 ## Simulator tests
 #add_executable(${PROJECT_NAME}_test_node_KFMANDB nodes/${PROJECT_NAME}_test_node.cpp)
 #add_dependencies(${PROJECT_NAME}_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
@@ -114,11 +99,6 @@ add_executable(planner_test_node_UCB nodes/planner_test_node.cpp ${hpp_SRC} ${h_
 add_dependencies(planner_test_node_UCB ${catkin_EXPORTED_TARGETS})
 target_link_libraries(planner_test_node_UCB ${catkin_LIBRARIES} ${GUROBI_LIBRARIES})
 set_target_properties(planner_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT -DENABLE_PARALLEL_K_NEAREST_NEIGHBORS")
-
-add_executable(model_test_node_UCB nodes/model_test_node.cpp ${hpp_SRC} ${h_SRC} ${cpp_SRC})
-add_dependencies(model_test_node_UCB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(model_test_node_UCB ${catkin_LIBRARIES} ${GUROBI_LIBRARIES})
-set_target_properties(model_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT -DENABLE_PARALLEL_K_NEAREST_NEIGHBORS")
 
 ## Synthethic trials
 #add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp src/cvxopt_solvers.cpp src/gurobi_solvers.cpp)
