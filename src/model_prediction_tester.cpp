@@ -1,4 +1,4 @@
-#include "smmap/test_planner.h"
+#include "smmap/model_test.h"
 
 #include <assert.h>
 #include <numeric>

@@ -5,9 +5,7 @@
 #include <arc_utilities/log.hpp>
 
 #include "smmap/robot_interface.hpp"
-#include "smmap/test_planner.h"
-//#include "smmap/test_specification.h"
-//#include "smmap/task_function_pointer_types.h"
+#include "smmap/model_prediction_tester.h"
 
 namespace smmap
 {
