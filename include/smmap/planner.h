@@ -137,6 +137,7 @@ namespace smmap
             // Constraint violation and global planner data
             ////////////////////////////////////////////////////////////////////
 
+            const bool enable_stuck_detection_;
             const size_t max_lookahead_steps_;
             std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_;
             const size_t max_grippers_pose_history_length_;
@@ -169,9 +170,12 @@ namespace smmap
             const bool logging_enabled_;
             std::unordered_map<std::string, Log::Log> loggers_;
             Visualizer& vis_;
+            const bool visualize_desired_motion_;
+            const bool visualize_predicted_motion_;
 
         public:
             const static std::string DESIRED_DELTA_NS;
+            const static std::string PREDICTED_DELTA_NS;
             const static std::string PROJECTED_GRIPPER_NS;
             const static std::string PROJECTED_BAND_NS;
             const static std::string PROJECTED_POINT_PATH_NS;

@@ -29,13 +29,12 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , task_type_(GetTaskType(nh))
     , model_(deformable_model)
     , distance_to_obstacle_threshold_(distance_to_obstacle_threshold)
-    , stretching_factor_threshold_(GetStretchingFactorThreshold(nh))
+    , max_stretch_factor_(GetMaxStretchFactor(nh))
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(nh))
     , max_count_(max_count)
     , sample_count_(0)
     , over_stretch_(false)
 {
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -108,7 +107,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
     {
         for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
         {
-            const double max_distance = stretching_factor_threshold_ * object_initial_node_distance_(first_node, second_node);
+            const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
             if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
             {
                 over_stretch_ = true;

@@ -90,7 +90,7 @@ namespace smmap
 
             double defaultDeformability() const;        // k
             double collisionScalingFactor() const;      // beta (or k2)
-            double maxOverstretchFactor() const;        // lambda
+            double maxStretchFactor() const;        // lambda
             double maxTime() const;                     // max simulation time when scripting things
 
             bool stretchingConstraintViolated(
@@ -187,7 +187,7 @@ namespace smmap
 
             const double default_deformability_;        // k
             const double collision_scaling_factor_;     // beta (or k2)
-            const double max_overstretch_factor_;       // lambda
+            const double max_stretch_factor_;           // used to be lambda
             const double max_time_;                     // max simulation time when scripting things
 
         private:

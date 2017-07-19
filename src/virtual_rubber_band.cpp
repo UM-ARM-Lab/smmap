@@ -23,7 +23,7 @@ VirtualRubberBand::VirtualRubberBand(
     , max_distance_between_rubber_band_points_(task_->work_space_grid_.minStepDimension() / 2.0)
     , num_smoothing_ittrs_(200)
     , min_object_radius_(0.04)
-    , max_total_band_distance_((end_point - start_point).norm() * task_->maxOverstretchFactor())
+    , max_total_band_distance_((end_point - start_point).norm() * task_->maxStretchFactor())
     , generator_(generator)
 {
     band_ = {start_point, end_point};

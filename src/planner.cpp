@@ -30,6 +30,7 @@ using namespace EigenHelpersConversions;
 #define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
 
 const std::string Planner::DESIRED_DELTA_NS                         = "desired delta";
+const std::string Planner::PREDICTED_DELTA_NS                       = "predicted_delta";
 
 const std::string Planner::PROJECTED_GRIPPER_NS                     = "projected_grippers";
 const std::string Planner::PROJECTED_BAND_NS                        = "projected_band";
@@ -104,10 +105,9 @@ std::vector<uint32_t> NumberOfPointsInEachCluster(
 
 /**
  * @brief Planner::Planner
- * @param error_fn
- * @param execute_trajectory_fn
+ * @param robot
  * @param vis
- * @param dt
+ * @param task_specification
  */
 Planner::Planner(
         RobotInterface& robot,
@@ -125,6 +125,7 @@ Planner::Planner(
     , process_noise_factor_(GetProcessNoiseFactor(ph_))
     , observation_noise_factor_(GetObservationNoiseFactor(ph_))
     , correlation_strength_factor_(GetCorrelationStrengthFactor(ph_))
+    , enable_stuck_detection_(GetEnableStuckDetection(ph_))
     , max_lookahead_steps_(GetNumLookaheadSteps(ph_))
     , max_grippers_pose_history_length_(GetMaxGrippersPoseHistoryLength(ph_))
     , executing_global_gripper_trajectory_(false)
@@ -133,26 +134,26 @@ Planner::Planner(
     , rrt_helper_(nullptr)
     , logging_enabled_(GetLoggingEnabled(nh_))
     , vis_(vis)
+    , visualize_desired_motion_(GetVisualizeObjectDesiredMotion(ph_))
+    , visualize_predicted_motion_(GetVisualizeObjectPredictedMotion(ph_))
 {
     // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
-    if (task_specification_->is_dijkstras_type_task_)
+    if (enable_stuck_detection_)
     {
         dijkstras_task_ = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
+        assert(dijkstras_task_ != nullptr);
 
         rrt_helper_ = std::unique_ptr<RRTHelper>(
                     new RRTHelper(
                         dijkstras_task_->environment_sdf_,
                         vis_,
                         generator_,
-                        dijkstras_task_->work_space_grid_.getXMin(),
-//                        0.0,
-                        dijkstras_task_->work_space_grid_.getXMax(),
-                        dijkstras_task_->work_space_grid_.getYMin(),
-//                        -0.4,
-                        dijkstras_task_->work_space_grid_.getYMax(),
-                        dijkstras_task_->work_space_grid_.getZMin(),
-//                        0.5,
-                        dijkstras_task_->work_space_grid_.getZMax(),
+                        GetRRTPlanningXMin(ph_),
+                        GetRRTPlanningXMax(ph_),
+                        GetRRTPlanningYMin(ph_),
+                        GetRRTPlanningYMax(ph_),
+                        GetRRTPlanningZMin(ph_),
+                        GetRRTPlanningZMax(ph_),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
                         GetRRTGoalBias(ph_),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
@@ -227,11 +228,12 @@ WorldState Planner::sendNextCommand(
     const double current_error = task_specification_->calculateError(world_state);
     ROS_INFO_STREAM_NAMED("planner", "Planner/Task sim time " << world_state.sim_time_ << "\t Error: " << current_error);
 
-    if (task_specification_->is_dijkstras_type_task_ && world_state.all_grippers_single_pose_.size() == 2)
+    if (enable_stuck_detection_)
     {
+        WorldState world_feedback;
         if (executing_global_gripper_trajectory_)
         {
-            return sendNextCommandUsingGlobalGripperPlannerResults(world_state);
+            world_feedback = sendNextCommandUsingGlobalGripperPlannerResults(world_state);
         }
         else
         {
@@ -264,13 +266,31 @@ WorldState Planner::sendNextCommand(
                 planGlobalGripperTrajectory(world_state);
 
                 ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
-                return sendNextCommandUsingGlobalGripperPlannerResults(world_state);
+                world_feedback = sendNextCommandUsingGlobalGripperPlannerResults(world_state);
             }
             else
             {
-                return sendNextCommandUsingLocalController(world_state);
+                world_feedback = sendNextCommandUsingLocalController(world_state);
             }
         }
+
+        const bool verbose = false;
+        virtual_rubber_band_between_grippers_->forwardSimulateVirtualRubberBandToEndpointTargets(
+                    world_feedback.all_grippers_single_pose_[0].translation(),
+                    world_feedback.all_grippers_single_pose_[1].translation(),
+                    verbose);
+
+        // Keep the last N grippers positions recorded to detect if the grippers are stuck
+        grippers_pose_history_.push_back(world_feedback.all_grippers_single_pose_);
+        error_history_.push_back(dijkstras_task_->calculateError(world_feedback));
+        assert(grippers_pose_history_.size() == error_history_.size());
+        if (grippers_pose_history_.size() > max_grippers_pose_history_length_)
+        {
+            grippers_pose_history_.erase(grippers_pose_history_.begin());
+            error_history_.erase(error_history_.begin());
+        }
+
+        return world_feedback;
     }
     else
     {
@@ -294,11 +314,13 @@ WorldState Planner::sendNextCommandUsingLocalController(
     {
         return task_specification_->calculateDesiredDirection(world_state);
     };
-
-    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(world_state);
     const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, world_state, robot_.dt_);
+    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(world_state);
 
-//    visualizeDesiredMotion(current_world_state, task_desired_motion);
+    if (visualize_desired_motion_)
+    {
+        visualizeDesiredMotion(world_state, task_desired_motion);
+    }
 
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
@@ -359,41 +381,15 @@ WorldState Planner::sendNextCommandUsingLocalController(
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
 
-    if (virtual_rubber_band_between_grippers_ != nullptr)
+    if (visualize_predicted_motion_)
     {
-        const bool verbose = false;
-        virtual_rubber_band_between_grippers_->forwardSimulateVirtualRubberBandToEndpointTargets(
-                    world_feedback.all_grippers_single_pose_[0].translation(),
-                    world_feedback.all_grippers_single_pose_[1].translation(),
-                    verbose);
-
-        // Keep the last N grippers positions recorded to detect if the grippers are stuck
-        grippers_pose_history_.push_back(world_feedback.all_grippers_single_pose_);
-        error_history_.push_back(dijkstras_task_->calculateError(world_state));
-        assert(grippers_pose_history_.size() == error_history_.size());
-        if (grippers_pose_history_.size() > max_grippers_pose_history_length_)
-        {
-            grippers_pose_history_.erase(grippers_pose_history_.begin());
-            error_history_.erase(error_history_.begin());
-        }
+        const ObjectPointSet& object_delta = suggested_robot_commands[(size_t)model_to_use].second;
+        vis_.visualizeObjectDelta(
+                    PREDICTED_DELTA_NS,
+                    world_state.object_configuration_,
+                    world_state.object_configuration_ + 300.0 * object_delta,
+                    Visualizer::Blue());
     }
-
-    // Visualization of target p_dot  Mengyao
-//    visualizeDesiredMotion(current_world_state, task_desired_motion);
-    // Visualization of p_dot back_generated by Model
-
-//    Eigen::MatrixXd p_before_projection = model_list_[(size_t)model_to_use]->getVectorObjectDelta(model_input_data, selected_command);
-//    Eigen::MatrixXd p_after_projection = model_list_[(size_t)model_to_use]->computeObjectVelocityMask(current_world_state.object_configuration_, p_before_projection);
-
-    const ObjectPointSet& object_delta = suggested_robot_commands[(size_t)model_to_use].second;
-
-    vis_.visualizeObjectDelta(
-                "Model back_generated position",
-                world_state.object_configuration_,
-                world_state.object_configuration_ + 300.0 * object_delta,
-                Visualizer::Blue());
-//                Visualizer::Black());
-
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
     updateModels(world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
@@ -615,12 +611,14 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
                     dijkstras_task_->work_space_grid_.minStepDimension() / robot_.dt_);
 
         // Move the grippers forward
-        world_state_copy.all_grippers_single_pose_ = kinematics::applyTwist(world_state_copy.all_grippers_single_pose_, robot_command.first);
-        #warning "This projection shouold be projecting to distance"
-        world_state_copy.all_grippers_single_pose_[0].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollision3d(world_state_copy.all_grippers_single_pose_[0].translation());
-        world_state_copy.all_grippers_single_pose_[1].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollision3d(world_state_copy.all_grippers_single_pose_[1].translation());
+        auto& current_grippers_pose = world_state_copy.all_grippers_single_pose_;
+        current_grippers_pose = kinematics::applyTwist(world_state_copy.all_grippers_single_pose_, robot_command.first);
+        for (auto& pose : current_grippers_pose)
+        {
+            pose.translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(pose.translation(), GetRobotGripperRadius());
+        }
 
-        auto collision_check_future = std::async(std::launch::async, &RobotInterface::checkGripperCollision, &robot_, world_state_copy.all_grippers_single_pose_);
+        auto collision_check_future = std::async(std::launch::async, &RobotInterface::checkGripperCollision, &robot_, current_grippers_pose);
 
         // Move the cloth forward - copy the projected state of the cloth into the world_state_copy
         world_state_copy.sim_time_ += robot_.dt_;
@@ -634,8 +632,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
 
         // Move the virtual rubber band to follow the grippers, projecting out of collision as needed
         virtual_rubber_band_between_grippers_copy.forwardSimulateVirtualRubberBandToEndpointTargets(
-                    world_state_copy.all_grippers_single_pose_[0].translation(),
-                    world_state_copy.all_grippers_single_pose_[1].translation(),
+                    current_grippers_pose[0].translation(),
+                    current_grippers_pose[1].translation(),
                     verbose);
         projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.push_back(virtual_rubber_band_between_grippers_copy);
 
@@ -1171,22 +1169,30 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
 {
     // Initialze each model type with the shared data
     DeformableModel::SetGrippersData(robot_.getGrippersData());
-    // TODO: fix this interface so that I'm not passing a null ptr here
-    DeformableModel::SetCallbackFunctions(std::bind(
-                                              &RobotInterface::checkGripperCollision, &robot_, std::placeholders::_1));
+    DeformableModel::SetCallbackFunctions(std::bind(&RobotInterface::checkGripperCollision, &robot_, std::placeholders::_1));
     DiminishingRigidityModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
     ConstraintJacobianModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
 
-    const bool optimization_enabled = GetOptimizationEnabled(ph_);
+    const bool optimization_enabled = GetJacobianControllerOptimizationEnabled(ph_);
 
     // Create some models and add them to the model set
-    double translational_deformability, rotational_deformability;
-    if (ph_.getParam("translational_deformability", translational_deformability) &&
-             ph_.getParam("rotational_deformability", rotational_deformability))
+    if (GetUseDiminishingRigidityModel(ph_))
     {
-        ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
-                               << translational_deformability << " "
-                               << rotational_deformability);
+        double translational_deformability, rotational_deformability;
+        if (ph_.getParam("translational_deformability", translational_deformability) &&
+                 ph_.getParam("rotational_deformability", rotational_deformability))
+        {
+            ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                                   << translational_deformability << " "
+                                   << rotational_deformability);
+        }
+        else
+        {
+            translational_deformability = task_specification_->defaultDeformability();
+            rotational_deformability = task_specification_->defaultDeformability();
+            ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                                   << task_specification_->defaultDeformability());
+        }
 
         model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
                                   translational_deformability,
@@ -1203,6 +1209,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
         // Diminishing rigidity models
         ////////////////////////////////////////////////////////////////////////
 
+        #pragma message "Magic numbers: Multi-model deform range"
         const double deform_min = 0.0;
         const double deform_max = 25.0;
         const double deform_step = 4.0;
@@ -1228,6 +1235,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
         // Adaptive jacobian models
         ////////////////////////////////////////////////////////////////////////
 
+        #pragma message "Magic numbers: Multi-model adaptive range"
         const double learning_rate_min = 1e-10;
         const double learning_rate_max = 1.1e0;
         const double learning_rate_step = 10.0;
@@ -1295,20 +1303,12 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                        GetGripperControllerType(nh_),
                                        model_list_.back(),
                                        GetMaxSamplingCounts(nh_),
-                                       GetRobotGripperRadius() + GetRobotMinGripperDistance()));
+                                       GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
     }
     else
     {
-        ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
-                               << task_specification_->defaultDeformability());
-
-        model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                  task_specification_->defaultDeformability()));
-
-        controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                       model_list_.back(),
-                                       task_specification_->collisionScalingFactor(),
-                                       optimization_enabled));
+        ROS_FATAL_NAMED("planner", "No model specified, terminating");
+        assert(false && "You must specify at a model type");
     }
 
     assert(controller_list_.size() == model_list_.size());

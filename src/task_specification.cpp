@@ -116,10 +116,10 @@ TaskSpecification::TaskSpecification(
     , grippers_data_(GetGrippersData(nh_))
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
     , num_nodes_(object_initial_node_distance_.cols())
-    , default_deformability_(GetDefaultDeformability(nh_))
-    , collision_scaling_factor_(GetCollisionScalingFactor(nh_))
-    , max_overstretch_factor_(GetStretchingFactorThreshold(nh_))
-    , max_time_(GetMaxTime(nh_))
+    , default_deformability_(GetDefaultDeformability(ph_))
+    , collision_scaling_factor_(GetCollisionScalingFactor(ph_))
+    , max_stretch_factor_(GetMaxStretchFactor(ph_))
+    , max_time_(GetMaxTime(ph_))
 {}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -201,9 +201,9 @@ double TaskSpecification::collisionScalingFactor() const
     return collision_scaling_factor_;
 }
 
-double TaskSpecification::maxOverstretchFactor() const
+double TaskSpecification::maxStretchFactor() const
 {
-    return max_overstretch_factor_;
+    return max_stretch_factor_;
 }
 
 double TaskSpecification::maxTime() const
@@ -248,7 +248,7 @@ bool TaskSpecification::stretchingConstraintViolated(
         const Eigen::Vector3d& second_node) const
 {
     const double dist = (first_node - second_node).norm();
-    const double max_dist = object_initial_node_distance_(first_node_ind, second_node_ind) * maxOverstretchFactor();
+    const double max_dist = object_initial_node_distance_(first_node_ind, second_node_ind) * maxStretchFactor();
     return dist > max_dist;
 }
 
@@ -264,7 +264,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyC
         bool visualize) const
 {
     ObjectDeltaAndWeight stretching_correction(num_nodes_ * 3);
-    const double max_overstretch_multiplier = maxOverstretchFactor();
+    const double max_stretch_factor = maxStretchFactor();
     const Eigen::MatrixXd object_current_node_distance = CalculateDistanceMatrix(object_configuration);
 
     EigenHelpers::VectorVector3d vis_start_points;
@@ -274,7 +274,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyC
     {
         for (ssize_t second_node = first_node + 1; second_node < num_nodes_; ++second_node)
         {
-            const double max_dist = object_initial_node_distance_(first_node, second_node) * max_overstretch_multiplier;
+            const double max_dist = object_initial_node_distance_(first_node, second_node) * max_stretch_factor;
             const double dist = object_current_node_distance(first_node, second_node);
             if (max_dist < dist)
             {
@@ -308,7 +308,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaPairwi
         bool visualize) const
 {
     ObjectDeltaAndWeight stretching_correction(num_nodes_ * 3);
-    const double max_threshold_multiplier = maxOverstretchFactor();
+    const double max_stretch_factor = maxStretchFactor();
 
     EigenHelpers::VectorVector3d vis_start_points;
     EigenHelpers::VectorVector3d vis_end_points;
@@ -320,7 +320,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaPairwi
             // Only calculate corrections for nodes beyond the first so as to avoid duplicating work
             if (first_node < second_node)
             {
-                const double max_dist = object_initial_node_distance_(first_node, second_node) * max_threshold_multiplier;
+                const double max_dist = object_initial_node_distance_(first_node, second_node) * max_stretch_factor;
                 const double dist = (object_configuration.col(second_node) - object_configuration.col(first_node)).norm();
                 if (max_dist < dist)
                 {
