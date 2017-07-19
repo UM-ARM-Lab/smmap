@@ -1282,10 +1282,10 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
     {
         ROS_INFO_NAMED("planner", "Using constraint model and random sampling controller");
 
-        const double translation_dir_deformability = 30.0;
-        const double translation_dis_deformability = 4.0;
-        const double rotation_deformability = 7.0;
-        // Douoble check this usage
+        const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
+        const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
+        const double rotation_deformability = GetConstraintRotational(ph_);
+
         const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
 
         model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
@@ -1301,9 +1301,9 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                        environment_sdf,
                                        generator_,
                                        vis_,
-                                       GetGripperControllerType(nh_),
+                                       GetGripperControllerType(ph_),
                                        model_list_.back(),
-                                       GetMaxSamplingCounts(nh_),
+                                       GetMaxSamplingCounts(ph_),
                                        GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
     }
     else
