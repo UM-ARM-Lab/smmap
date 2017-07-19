@@ -103,7 +103,8 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             Eigen::MatrixXd computeGrippersToDeformableObjectJacobian(
-                    const DeformableModelInputData& input_data) const;
+                    const DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const;
 
             // Null Projection
             Eigen::MatrixXd computeObjectVelocityMask(
