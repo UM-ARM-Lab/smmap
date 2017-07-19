@@ -14,6 +14,7 @@ namespace smmap
         public:
             LeastSquaresControllerRandomSampling(
                     ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
                     RobotInterface& robot,
                     const sdf_tools::SignedDistanceField& sdf,
                     std::mt19937_64& generator,

@@ -1296,6 +1296,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
 
         controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
                                        nh_,
+                                       ph_,
                                        robot_,
                                        environment_sdf,
                                        generator_,

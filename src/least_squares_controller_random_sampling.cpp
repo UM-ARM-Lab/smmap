@@ -9,6 +9,7 @@ using namespace smmap;
 
 LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
         ros::NodeHandle& nh,
+        ros::NodeHandle& ph,
         RobotInterface& robot,
         const sdf_tools::SignedDistanceField& sdf,
         std::mt19937_64& generator,
@@ -29,8 +30,8 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , task_type_(GetTaskType(nh))
     , model_(deformable_model)
     , distance_to_obstacle_threshold_(distance_to_obstacle_threshold)
-    , max_stretch_factor_(GetMaxStretchFactor(nh))
-    , stretching_cosine_threshold_(GetStretchingCosineThreshold(nh))
+    , max_stretch_factor_(GetMaxStretchFactor(ph))
+    , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
     , sample_count_(0)
     , over_stretch_(false)
