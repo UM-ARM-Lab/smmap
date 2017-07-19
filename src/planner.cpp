@@ -1282,9 +1282,9 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
     {
         ROS_INFO_NAMED("planner", "Using constraint model and random sampling controller");
 
-        const double translation_dir_deformability = 20.0;
+        const double translation_dir_deformability = 30.0;
         const double translation_dis_deformability = 4.0;
-        const double rotation_deformability = 20.0;
+        const double rotation_deformability = 7.0;
         // Douoble check this usage
         const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
 

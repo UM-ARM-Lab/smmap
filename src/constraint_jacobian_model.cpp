@@ -102,7 +102,7 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
         const DeformableModelInputData& input_data,
         const AllGrippersSinglePoseDelta& grippers_pose_delta) const
 {
-    const MatrixXd J = computeGrippersToDeformableObjectJacobian(input_data);
+    const MatrixXd J = computeGrippersToDeformableObjectJacobian(input_data, grippers_pose_delta);
 
     MatrixXd delta = MatrixXd::Zero(input_data.world_current_state_.object_configuration_.cols() * 3, 1);
 
@@ -215,27 +215,39 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
 // Mask Version
 
 Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobian(
-        const DeformableModelInputData& input_data) const
+        const DeformableModelInputData& input_data,
+        const AllGrippersSinglePoseDelta &grippers_pose_delta) const
 {
     const WorldState& world_state = input_data.world_current_state_;
-    const AllGrippersSinglePose& grippers_pose = world_state.all_grippers_single_pose_;
+    const AllGrippersSinglePose& grippers_current_poses = world_state.all_grippers_single_pose_;
     const ObjectPointSet& current_configuration = world_state.object_configuration_;
 
-    const ssize_t num_grippers = (ssize_t)grippers_pose.size();
+    const kinematics::VectorAffine3d grippers_next_poses = kinematics::applyTwist(
+                grippers_current_poses,
+                grippers_pose_delta);
+
+    const ssize_t num_grippers = (ssize_t)grippers_current_poses.size();
     const ssize_t num_Jcols = num_grippers * 6;
     const ssize_t num_Jrows = num_nodes_ * 3;
 
     MatrixXd J(num_Jrows, num_Jcols);
 
     // Retrieve the desired object velocity (p_dot)
-    const VectorXd& object_p_dot = input_data.task_desired_object_delta_fn_(world_state).delta;
+    // const VectorXd& object_p_dot = input_data.task_desired_object_delta_fn_(world_state).delta;
 
 
     // for each gripper
     for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
     {
         // Get all the data we need for a given gripper
-        const Matrix3d& gripper_rot = grippers_pose[(size_t)gripper_ind].rotation();
+        const Matrix3d& gripper_rot = grippers_current_poses[(size_t)gripper_ind].rotation();
+
+        // P dot of the node on object, grasped gripper
+        // Due to the assumption of free-flying grippers, I simply take it as the xyz motion of grippers
+        // In the future, it should be the translational motion of end effector.
+        // const Vector3d& node_v = object_p_dot.segment<3>(nearest_node_on_gripper.second * 3); // planner
+        const Vector3d& node_v = grippers_next_poses.at(gripper_ind).translation()
+                - grippers_current_poses.at(gripper_ind).translation();
 
         for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
         {
@@ -267,11 +279,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
             const double dist_real = dist_real_vec.norm();
 
             // P dot of the node on object, grasped gripper
-            const Vector3d& node_v = object_p_dot.segment<3>(nearest_node_on_gripper.second * 3); // planner
-
-            // P dot of the node on object, at this node
-//            const Vector3d& target_p_dot = object_p_dot.segment<3>(node_ind*3); // planner
-
+            //const Vector3d& node_v = object_p_dot.segment<3>(nearest_node_on_gripper.second * 3); // planner
 
             // Mask from obstacle constraint:
             /*
