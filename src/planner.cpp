@@ -49,6 +49,63 @@ const std::string Planner::CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS   = "clusterin
 // Internal helpers
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/**
+ * @brief GetShortestPathBetweenGrippersThroughObject
+ * @param grippers_data
+ * @param object
+ * @param neighour_fn
+ * @return The index of the nodes between the grippers, following the shortest path through the object
+ */
+static std::vector<ssize_t> GetShortestPathBetweenGrippersThroughObject(
+        const std::vector<GripperData>& grippers_data,
+        const ObjectPointSet& object,
+        const std::function<std::vector<ssize_t>(const ssize_t& node)> neighbour_fn)
+{
+    assert(grippers_data.size() == 2);
+    assert(grippers_data[0].node_indices_.size() > 0);
+    assert(grippers_data[1].node_indices_.size() > 0);
+
+    const auto start = grippers_data[0].node_indices_[0];
+    const auto goal = grippers_data[1].node_indices_[0];
+    const auto distance_fn = [&] (const ssize_t& first_node, const ssize_t& second_node)
+    {
+        return (object.col(first_node) - object.col(second_node)).norm();
+    };
+    const auto heuristic_fn = [&] (const ssize_t& node)
+    {
+        return distance_fn(node, goal);
+    };
+    const auto goal_reached_fn = [&] (const ssize_t& test_node)
+    {
+        return test_node == goal;
+    };
+    const auto astar_results = simple_astar_planner::SimpleAStarPlanner<ssize_t>::Plan(
+                start, neighbour_fn, distance_fn, heuristic_fn, goal_reached_fn);
+
+    const auto plan = astar_results.first;
+    assert(plan.size() > 0);
+    return plan;
+}
+
+static EigenHelpers::VectorVector3d GetPathBetweenGrippersThroughObject(
+        const WorldState& world_state,
+        const std::vector<ssize_t>& object_node_idxs_between_grippers)
+{
+    assert(world_state.all_grippers_single_pose_.size() == 2);
+    EigenHelpers::VectorVector3d nodes;
+    nodes.reserve(object_node_idxs_between_grippers.size() + 2);
+
+    nodes.push_back(world_state.all_grippers_single_pose_[0].translation());
+    for (size_t path_idx = 0; path_idx < object_node_idxs_between_grippers.size(); ++path_idx)
+    {
+        const ssize_t node_idx = object_node_idxs_between_grippers[path_idx];
+        nodes.push_back(world_state.object_configuration_.col(node_idx));
+    }
+    nodes.push_back(world_state.all_grippers_single_pose_[1].translation());
+
+    return nodes;
+}
+
 static size_t SizeOfLargestVector(const std::vector<VectorVector3d>& vectors)
 {
     size_t largest_vector = 0;
@@ -120,11 +177,13 @@ Planner::Planner(
     , robot_(robot)
     , task_specification_(task_specification)
     , dijkstras_task_(nullptr)
+
     , calculate_regret_(GetCalculateRegret(ph_))
     , reward_std_dev_scale_factor_(REWARD_STANDARD_DEV_SCALING_FACTOR_START)
     , process_noise_factor_(GetProcessNoiseFactor(ph_))
     , observation_noise_factor_(GetObservationNoiseFactor(ph_))
     , correlation_strength_factor_(GetCorrelationStrengthFactor(ph_))
+
     , enable_stuck_detection_(GetEnableStuckDetection(ph_))
     , max_lookahead_steps_(GetNumLookaheadSteps(ph_))
     , max_grippers_pose_history_length_(GetMaxGrippersPoseHistoryLength(ph_))
@@ -132,17 +191,34 @@ Planner::Planner(
     , global_plan_current_timestep_(-1)
     , global_plan_gripper_trajectory_(0)
     , rrt_helper_(nullptr)
+
     , logging_enabled_(GetLoggingEnabled(nh_))
     , vis_(vis)
     , visualize_desired_motion_(GetVisualizeObjectDesiredMotion(ph_))
     , visualize_predicted_motion_(GetVisualizeObjectPredictedMotion(ph_))
 {
-    // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
+    ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
+    initializeLogging();
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// The one function that gets invoked externally
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Planner::execute()
+{
+    WorldState world_feedback = robot_.start();
+    const double start_time = world_feedback.sim_time_;
+    initializeModelAndControllerSet(world_feedback);
+
     if (enable_stuck_detection_)
     {
+        assert(robot_.getGrippersData().size() == 2);
+
         dijkstras_task_ = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
         assert(dijkstras_task_ != nullptr);
 
+        // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         rrt_helper_ = std::unique_ptr<RRTHelper>(
                     new RRTHelper(
                         dijkstras_task_->environment_sdf_,
@@ -163,24 +239,23 @@ Planner::Planner(
                         GetRRTMaxSmoothingIterations(ph_),
                         GetRRTMaxFailedSmoothingIterations(ph_),
                         !GetDisableAllVisualizations(ph_)));
+
+        // Create the initial rubber band
+        const auto neighbour_fn = [&] (const ssize_t& node)
+        {
+            return dijkstras_task_->getNodeNeighbours(node);
+        };
+        path_between_grippers_through_object_ = GetShortestPathBetweenGrippersThroughObject(robot_.getGrippersData(), GetObjectInitialConfiguration(nh_), neighbour_fn);
+        const auto starting_band_points = GetPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
+
+        const double max_band_distance = (world_feedback.all_grippers_single_pose_[0].translation() - world_feedback.all_grippers_single_pose_[1].translation()).norm() * dijkstras_task_->maxStretchFactor();
+        virtual_rubber_band_between_grippers_ = std::make_shared<VirtualRubberBand>(
+                    starting_band_points,
+                    max_band_distance,
+                    dijkstras_task_,
+                    vis_,
+                    generator_);
     }
-
-    ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
-
-    initializeLogging();
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// The one functions that gets invoked externally
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-void Planner::execute()
-{
-    // Run the planner at whatever rate we've been given
-    WorldState world_feedback = robot_.start();
-    const double start_time = world_feedback.sim_time_;
-
-    initializeModelAndControllerSet(world_feedback);
 
     while (robot_.ok())
     {
@@ -230,6 +305,51 @@ WorldState Planner::sendNextCommand(
 
     if (enable_stuck_detection_)
     {
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // First, check if we need to (re)plan
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        bool planning_needed = false;
+
+        // Check if the global plan has 'hooked' the deformable object on something
+        if (executing_global_gripper_trajectory_)
+        {
+
+        }
+        // Check if the local controller will be stuck
+        else
+        {
+            Stopwatch stopwatch;
+            arc_helpers::DoNotOptimize(world_state);
+            const bool global_planner_needed_due_to_overstretch = globalPlannerNeededDueToOverstretch(world_state);
+            const bool global_planner_needed_due_to_lack_of_progress = globalPlannerNeededDueToLackOfProgress();
+            arc_helpers::DoNotOptimize(global_planner_needed_due_to_lack_of_progress);
+            ROS_INFO_STREAM_NAMED("planner", "Determined if global planner needed in " << stopwatch(READ) << " seconds");
+
+            if (global_planner_needed_due_to_overstretch || global_planner_needed_due_to_lack_of_progress)
+            {
+                planning_needed = true;
+
+                vis_.deleteObjects(DESIRED_DELTA_NS, 1, 100);
+                vis_.deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
+                vis_.deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
+                vis_.deleteObjects(PROJECTED_POINT_PATH_NS,         1, 2);
+                vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS,   1, 2);
+
+                ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "planner", "Invoking global planner due to overstretch");
+                ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "planner", "Invoking global planner due to collision");
+
+                ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
+            }
+        }
+
+        // If we need to (re)plan due to the local controller getting stuck, or the gobal plan failing, then do so
+        if (planning_needed)
+        {
+            rrt_helper_->addBandToBlacklist(virtual_rubber_band_between_grippers_->getVectorRepresentation());
+            planGlobalGripperTrajectory(world_state);
+        }
+
+        // Execute a single step in the global plan, or use the local controller if we have no plan to follow
         WorldState world_feedback;
         if (executing_global_gripper_trajectory_)
         {
@@ -237,48 +357,12 @@ WorldState Planner::sendNextCommand(
         }
         else
         {
-            Stopwatch stopwatch;
-            arc_helpers::DoNotOptimize(world_state);
-            const bool global_planner_needed_due_to_overstretch =
-                    globalPlannerNeededDueToOverstretch(world_state);
-
-            const bool global_planner_needed_due_to_lack_of_progress =
-                    globalPlannerNeededDueToLackOfProgress(world_state);
-            arc_helpers::DoNotOptimize(global_planner_needed_due_to_lack_of_progress);
-            ROS_INFO_STREAM_NAMED("planner", "Determined if global planner needed in " << stopwatch(READ) << " seconds");
-
-
-            ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
-
-            if (global_planner_needed_due_to_overstretch || global_planner_needed_due_to_lack_of_progress)
-            {
-                vis_.deleteObjects(DESIRED_DELTA_NS, 1, 100);
-
-                ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "planner", "Invoking global planner due to overstretch");
-                ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "planner", "Invoking global planner due to collision");
-
-                vis_.deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
-                vis_.deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
-                vis_.deleteObjects(PROJECTED_POINT_PATH_NS,         1, 2);
-                vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS,   1, 2);
-
-                rrt_helper_->addBandToBlacklist(virtual_rubber_band_between_grippers_->getVectorRepresentation());
-                planGlobalGripperTrajectory(world_state);
-
-                ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
-                world_feedback = sendNextCommandUsingGlobalGripperPlannerResults(world_state);
-            }
-            else
-            {
-                world_feedback = sendNextCommandUsingLocalController(world_state);
-            }
+            world_feedback = sendNextCommandUsingLocalController(world_state);
         }
 
-        const bool verbose = false;
-        virtual_rubber_band_between_grippers_->forwardSimulateVirtualRubberBandToEndpointTargets(
-                    world_feedback.all_grippers_single_pose_[0].translation(),
-                    world_feedback.all_grippers_single_pose_[1].translation(),
-                    verbose);
+        // Update the band with the new position of the deformable object
+        const auto band_points = GetPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
+        virtual_rubber_band_between_grippers_->setPointsAndSmooth(band_points);
 
         // Keep the last N grippers positions recorded to detect if the grippers are stuck
         grippers_pose_history_.push_back(world_feedback.all_grippers_single_pose_);
@@ -576,14 +660,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
         return dijkstras_task_->calculateErrorCorrectionDeltaFixedCorrespondences(world_state, correspondences.correspondences_);
     };
 
-    // Create the initial rubber band if needed
-    if (unlikely(virtual_rubber_band_between_grippers_ == nullptr))
-    {
-        virtual_rubber_band_between_grippers_ = std::make_shared<VirtualRubberBand>(
-                    current_world_state.all_grippers_single_pose_[0].translation(),
-                    current_world_state.all_grippers_single_pose_[1].translation(),
-                    dijkstras_task_, vis_, generator_);
-    }
+
     virtual_rubber_band_between_grippers_->visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
 
 
@@ -686,12 +763,10 @@ bool Planner::globalPlannerNeededDueToOverstretch(
     return false;
 }
 
-bool Planner::globalPlannerNeededDueToLackOfProgress(
-        const WorldState& current_world_state)
+bool Planner::globalPlannerNeededDueToLackOfProgress()
 {
     static double error_delta_threshold_for_progress = GetErrorDeltaThresholdForProgress(ph_);
     static double grippers_distance_delta_threshold_for_progress = GetGrippersDistanceDeltaThresholdForProgress(ph_);
-    (void)current_world_state;
 
     // If we have not yet collected enough data, then assume we are not stuck
     if (grippers_pose_history_.size() < max_grippers_pose_history_length_)
