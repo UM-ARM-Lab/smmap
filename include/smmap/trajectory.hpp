@@ -14,6 +14,49 @@ namespace smmap
     typedef std::vector<ObjectPointSet> ObjectTrajectory;
     typedef std::vector<ObjectTrajectory> VectorObjectTrajectory;
 
+    // structure for wrench  --- Added by Mengyao
+    struct Wrench
+    {
+        public:
+            Wrench()
+            {}
+
+            Wrench(std::pair<Eigen::Vector3d, Eigen::Vector3d> wrench)
+                : force(wrench.first)
+                , torque(wrench.second)
+            {}
+
+            Wrench(const Wrench& wrench)
+                : force(wrench.force)
+                , torque(wrench.torque)
+            {}
+
+            Eigen::Vector3d force;
+            Eigen::Vector3d torque;
+    };
+
+    struct SingleGripperWrench
+    {
+        public:
+            SingleGripperWrench()
+            {}
+
+            SingleGripperWrench(const Wrench& top_data, const Wrench& bottom_data)
+                : top_clamp(top_data)
+                , bottom_clamp(bottom_data)
+            {}
+
+            SingleGripperWrench(const SingleGripperWrench& single_gripper_wrench)
+                : top_clamp(single_gripper_wrench.top_clamp)
+                , bottom_clamp(single_gripper_wrench.bottom_clamp)
+            {}
+
+            Wrench top_clamp;
+            Wrench bottom_clamp;
+    };
+    typedef std::vector<SingleGripperWrench> AllGrippersWrench;
+
+
     struct ObjectDeltaAndWeight
     {
         public:
@@ -35,6 +78,10 @@ namespace smmap
         ObjectPointSet object_configuration_;
         AllGrippersSinglePose all_grippers_single_pose_;
         std::vector<CollisionData> gripper_collision_data_;
+
+        // Force and torque data --- Added by Mengyao
+        AllGrippersWrench gripper_wrench_;
+
         double sim_time_;
     };
 
@@ -68,6 +115,14 @@ namespace smmap
                             EigenHelpersConversions::GeometryVector3ToEigenVector3d(
                                 feedback_ros.obstacle_surface_normal[gripper_ind]),
                             feedback_ros.gripper_distance_to_obstacle[gripper_ind]));
+            // Read wrench information --- Added by Mengyao
+            feedback_eigen.gripper_wrench_.push_back(
+                        SingleGripperWrench(
+                            Wrench(EigenHelpersConversions::GeometryWrenchToEigenPairVector(
+                                       feedback_ros.gripper_wrenches[gripper_ind * 2])),
+                            Wrench(EigenHelpersConversions::GeometryWrenchToEigenPairVector(
+                                       feedback_ros.gripper_wrenches[gripper_ind * 2 + 1]))));
+
         }
 
         feedback_eigen.sim_time_ = feedback_ros.sim_time;
