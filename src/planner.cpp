@@ -319,7 +319,10 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
     if (visualize_desired_motion_)
     {
-        visualizeDesiredMotion(world_state, task_desired_motion);
+    //    visualizeDesiredMotion(world_state, task_desired_motion);
+
+        //visulize Force --- Added by Mengyao
+        visualizeTotalForceOnGripper(world_state);
     }
 
     // Pick an arm to use
@@ -1480,6 +1483,34 @@ void Planner::visualizeDesiredMotion(
         }
     }
 }
+
+// Visulize Force on Gripper  --- Added by Mengyao
+void Planner::visualizeTotalForceOnGripper(
+        const WorldState &current_world_state,
+        const bool visualization_enabled) const
+{
+    if(visualization_enabled)
+    {
+        const AllGrippersSinglePose gripper_poses = current_world_state.all_grippers_single_pose_;
+        const AllGrippersWrench gripper_wrenchs = current_world_state.gripper_wrench_;
+        for (int gripper_ind = 0; gripper_ind < gripper_poses.size(); gripper_ind++)
+        {
+            vis_.visualizeTranslation(
+                        "total_force_on_gripper_top",
+                        gripper_poses.at(gripper_ind).translation(),
+                        gripper_poses.at(gripper_ind).translation()
+                        + gripper_wrenchs.at(gripper_ind).top_clamp.force,
+                        Visualizer::Silver());
+            vis_.visualizeTranslation(
+                        "total_force_on_gripper_bottom",
+                        gripper_poses.at(gripper_ind).translation(),
+                        gripper_poses.at(gripper_ind).translation()
+                        + gripper_wrenchs.at(gripper_ind).bottom_clamp.force,
+                        Visualizer::Yellow());
+        }
+    }
+}
+
 
 void Planner::initializeLogging()
 {

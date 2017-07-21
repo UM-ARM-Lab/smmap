@@ -158,6 +158,12 @@ namespace smmap
                     const ObjectDeltaAndWeight& desired_motion,
                     const bool visualization_enabled = true) const;
 
+            // Visulize Force on Gripper  --- Added by Mengyao
+            void visualizeTotalForceOnGripper(
+                    const WorldState& current_world_state,
+                    const bool visualization_enabled = true) const;
+
+
             void initializeLogging();
 
             void logData(
