@@ -41,7 +41,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             ros::NodeHandle nh_;
-            std::vector<GripperData> grippers_data_;
+            const std::vector<GripperData> grippers_data_;
             GripperCollisionChecker gripper_collision_checker_;
             ros::ServiceClient execute_gripper_movement_client_;
             actionlib::SimpleActionClient<deformable_manipulation_msgs::TestGrippersPosesAction> test_grippers_poses_client_;
