@@ -9,6 +9,9 @@ const std::string VirtualRubberBand::BAND_POST_SUBDIVIDE_STEP_NS        = "band_
 const std::string VirtualRubberBand::BAND_POST_SHORTCUT_SMOOTHING_NS    = "band_post_shortcut_smoothing";
 const std::string VirtualRubberBand::BAND_BADNESS_NS                    = "band_badness";
 
+#pragma message "Magic number for smoothing distance here"
+#define MIN_BAND_SMOOTHING_INDEX_DISTANCE (10)
+
 #pragma message "Magic number - virtual rubber band constructor parameters"
 VirtualRubberBand::VirtualRubberBand(
         const Eigen::Vector3d& start_point,
@@ -69,6 +72,12 @@ smmap::VirtualRubberBand& VirtualRubberBand::operator=(const smmap::VirtualRubbe
     return *this;
 }
 
+void VirtualRubberBand::setPointsAndSmooth(const EigenHelpers::VectorVector3d& points)
+{
+    band_ = points;
+    resampleBand(false);
+    shortcutSmoothBand(false);
+}
 
 const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRubberBandToEndpointTargets(
         const Eigen::Vector3d first_endpoint_target,
@@ -261,6 +270,7 @@ void VirtualRubberBand::resampleBand(const bool verbose)
             }
             std::cout << std::endl;
 
+            #warning "Band resample needs refinement to avoid this crash"
             assert(false && "After resampling, the maximum distance between points is still violated");
         }
     }
@@ -277,8 +287,7 @@ void VirtualRubberBand::shortcutSmoothBand(const bool verbose)
         std::uniform_int_distribution<ssize_t> first_distribution(0, band_.size() - 1);
         const size_t first_ind = first_distribution(generator_);
 
-        #warning "Magic number for smoothing distance here"
-        const ssize_t max_smooth_distance = std::max((ssize_t)10, (ssize_t)std::floor(sdf_.Get3d(band_[first_ind]) / max_distance_between_rubber_band_points_));
+        const ssize_t max_smooth_distance = std::max((ssize_t)MIN_BAND_SMOOTHING_INDEX_DISTANCE, (ssize_t)std::floor(sdf_.Get3d(band_[first_ind]) / max_distance_between_rubber_band_points_));
         std::uniform_int_distribution<ssize_t> second_distribution(-max_smooth_distance, max_smooth_distance);
         const ssize_t second_offset = second_distribution(generator_);
         const size_t second_ind = (size_t)arc_helpers::ClampValue<ssize_t>(first_ind + second_offset, 0, (ssize_t)band_.size() - 1);

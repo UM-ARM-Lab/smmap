@@ -75,8 +75,7 @@ namespace smmap
             bool globalPlannerNeededDueToOverstretch(
                     const WorldState& current_world_state);
 
-            bool globalPlannerNeededDueToLackOfProgress(
-                    const WorldState& current_world_state);
+            bool globalPlannerNeededDueToLackOfProgress();
 
             ////////////////////////////////////////////////////////////////////
             // Global gripper planner functions
@@ -138,8 +137,9 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             const bool enable_stuck_detection_;
-            const size_t max_lookahead_steps_;
             std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_;
+            std::vector<ssize_t> path_between_grippers_through_object_;
+            const size_t max_lookahead_steps_;
             const size_t max_grippers_pose_history_length_;
             AllGrippersPoseTrajectory grippers_pose_history_;
             std::vector<double> error_history_;
