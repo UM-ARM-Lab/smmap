@@ -1499,14 +1499,17 @@ void Planner::visualizeTotalForceOnGripper(
                         "total_force_on_gripper_top",
                         gripper_poses.at(gripper_ind).translation(),
                         gripper_poses.at(gripper_ind).translation()
-                        + gripper_wrenchs.at(gripper_ind).top_clamp.force,
+                        + 10 * gripper_wrenchs.at(gripper_ind).top_clamp.force,
                         Visualizer::Silver());
+            std::cout << "Force magnitude on the top clamp is " << gripper_wrenchs.at(gripper_ind).top_clamp.force.norm() << std::endl;
             vis_.visualizeTranslation(
                         "total_force_on_gripper_bottom",
                         gripper_poses.at(gripper_ind).translation(),
                         gripper_poses.at(gripper_ind).translation()
-                        + gripper_wrenchs.at(gripper_ind).bottom_clamp.force,
+                        + 10 * gripper_wrenchs.at(gripper_ind).bottom_clamp.force,
                         Visualizer::Yellow());
+            std::cout << "Force magnitude on the bottom clamp is " << gripper_wrenchs.at(gripper_ind).bottom_clamp.force.norm() << std::endl;
+
         }
     }
 }
