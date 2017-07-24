@@ -35,6 +35,8 @@ namespace smmap
             Eigen::Vector3d torque;
     };
 
+    typedef std::vector<Wrench> ObjectWrench;
+
     struct SingleGripperWrench
     {
         public:
@@ -76,6 +78,10 @@ namespace smmap
     struct WorldState
     {
         ObjectPointSet object_configuration_;
+
+        // Force and torque data --- Added by Mengyao
+        ObjectWrench object_wrench_;
+
         AllGrippersSinglePose all_grippers_single_pose_;
         std::vector<CollisionData> gripper_collision_data_;
 
@@ -98,6 +104,16 @@ namespace smmap
         feedback_eigen.object_configuration_ =
                 EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(
                     feedback_ros.object_configuration);
+
+        // Read wrench information --- Added by Mengyao
+        feedback_eigen.object_wrench_.clear();
+        for (size_t node_ind = 0; node_ind < feedback_ros.object_wrenches.size(); node_ind++)
+        {
+            feedback_eigen.object_wrench_.push_back(
+                        smmap::Wrench(
+                                EigenHelpersConversions::GeometryWrenchToEigenPairVector(
+                                    feedback_ros.object_wrenches.at(node_ind))));
+        }
 
         feedback_eigen.all_grippers_single_pose_ =
                 EigenHelpersConversions::VectorGeometryPoseToVectorAffine3d(
