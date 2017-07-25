@@ -1592,23 +1592,42 @@ void Planner::visualizeTotalForceOnGripper(
     {
         const AllGrippersSinglePose gripper_poses = current_world_state.all_grippers_single_pose_;
         const AllGrippersWrench gripper_wrenchs = current_world_state.gripper_wrench_;
-        for (int gripper_ind = 0; gripper_ind < gripper_poses.size(); gripper_ind++)
+
         {
+            int gripper_ind = 0;
             std::cout << "Friction data on :" << gripper_ind << "th gripper :" << std::endl;
             vis_.visualizeTranslation(
-                        "total_force_on_gripper_top",
+                        "total_force_on_gripper_top_0",
                         gripper_poses.at(gripper_ind).translation(),
                         gripper_poses.at(gripper_ind).translation()
                         + 0.1 * gripper_wrenchs.at(gripper_ind).top_clamp.force,
                         Visualizer::Silver());
             std::cout << "Force magnitude on the top clamp is " << gripper_wrenchs.at(gripper_ind).top_clamp.force.norm() << std::endl;
             vis_.visualizeTranslation(
-                        "total_force_on_gripper_bottom",
+                        "total_force_on_gripper_bottom_0",
                         gripper_poses.at(gripper_ind).translation(),
                         gripper_poses.at(gripper_ind).translation()
                         + 0.1 * gripper_wrenchs.at(gripper_ind).bottom_clamp.force,
                         Visualizer::Yellow());
             std::cout << "Force magnitude on the bottom clamp is " << gripper_wrenchs.at(gripper_ind).bottom_clamp.force.norm() << std::endl;
+
+            gripper_ind = 1;
+            std::cout << "Friction data on :" << gripper_ind << "th gripper :" << std::endl;
+            vis_.visualizeTranslation(
+                        "total_force_on_gripper_top_1",
+                        gripper_poses.at(gripper_ind).translation(),
+                        gripper_poses.at(gripper_ind).translation()
+                        + 0.1 * gripper_wrenchs.at(gripper_ind).top_clamp.force,
+                        Visualizer::Silver());
+            std::cout << "Force magnitude on the top clamp is " << gripper_wrenchs.at(gripper_ind).top_clamp.force.norm() << std::endl;
+            vis_.visualizeTranslation(
+                        "total_force_on_gripper_bottom_1",
+                        gripper_poses.at(gripper_ind).translation(),
+                        gripper_poses.at(gripper_ind).translation()
+                        + 0.1 * gripper_wrenchs.at(gripper_ind).bottom_clamp.force,
+                        Visualizer::Yellow());
+            std::cout << "Force magnitude on the bottom clamp is " << gripper_wrenchs.at(gripper_ind).bottom_clamp.force.norm() << std::endl;
+
 
         }
     }
