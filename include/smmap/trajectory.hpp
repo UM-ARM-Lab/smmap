@@ -35,7 +35,73 @@ namespace smmap
             Eigen::Vector3d torque;
     };
 
-    typedef std::vector<Wrench> ObjectWrench;
+    struct ObjectWrench
+    {
+        public:
+            ObjectWrench()
+            { }
+
+            ObjectWrench(std::vector<Wrench> wrench_vector)
+            {
+                object_force.clear();
+                object_torque.clear();
+                for (size_t node_ind = 0; node_ind < wrench_vector.size(); node_ind++)
+                {
+                    object_force.push_back(wrench_vector.at(node_ind).force);
+                    object_torque.push_back(wrench_vector.at(node_ind).torque);
+                }
+            }
+
+            void SetObjectWrench(std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> wrench_pair_vector)
+            {
+                object_force.clear();
+                object_torque.clear();
+                for (size_t node_ind = 0; node_ind < wrench_pair_vector.size(); node_ind++)
+                {
+                    object_force.push_back(wrench_pair_vector.at(node_ind).first);
+                    object_torque.push_back(wrench_pair_vector.at(node_ind).second);
+                }
+
+            }
+
+            const std::vector<Eigen::Vector3d> MagnifiedForce(double scale) const
+            {
+                std::vector<Eigen::Vector3d> magnified_force;
+                for (size_t node_ind = 0; node_ind < object_force.size(); node_ind++)
+                {
+                    magnified_force.push_back(object_force.at(node_ind) * scale);
+                }
+                return magnified_force;
+            }
+            const std::vector<Eigen::Vector3d> MagnifiedTorque(double scale) const
+            {
+                std::vector<Eigen::Vector3d> magnified_torque;
+                for (size_t node_ind = 0; node_ind < object_force.size(); node_ind++)
+                {
+                    magnified_torque.push_back(object_torque.at(node_ind) * scale);
+                }
+                return magnified_torque;
+            }
+
+            const std::pair<Eigen::Vector3d, Eigen::Vector3d> GetRopeEndsForce() const
+            {
+                std::pair<Eigen::Vector3d, Eigen::Vector3d> ends_force;
+                if (object_force.size() > 0)
+                {
+                    ends_force = std::make_pair(object_force.at(0), object_force.at(object_force.size()-1));
+
+                }
+                else
+                {
+                    std::cout << "size of force data < 1"
+                              << std::endl;
+                }
+                return ends_force;
+            }
+
+            std::vector<Eigen::Vector3d> object_force;
+            std::vector<Eigen::Vector3d> object_torque;
+    };
 
     struct SingleGripperWrench
     {
@@ -106,14 +172,12 @@ namespace smmap
                     feedback_ros.object_configuration);
 
         // Read wrench information --- Added by Mengyao
-        feedback_eigen.object_wrench_.clear();
-        for (size_t node_ind = 0; node_ind < feedback_ros.object_wrenches.size(); node_ind++)
-        {
-            feedback_eigen.object_wrench_.push_back(
-                        smmap::Wrench(
-                                EigenHelpersConversions::GeometryWrenchToEigenPairVector(
-                                    feedback_ros.object_wrenches.at(node_ind))));
-        }
+        feedback_eigen.object_wrench_.object_force.clear();
+        feedback_eigen.object_wrench_.object_torque.clear();
+
+        feedback_eigen.object_wrench_.SetObjectWrench(
+                    EigenHelpersConversions::GeometryWrenchToEigenPairVector(
+                        feedback_ros.object_wrenches));
 
         feedback_eigen.all_grippers_single_pose_ =
                 EigenHelpersConversions::VectorGeometryPoseToVectorAffine3d(
@@ -134,9 +198,9 @@ namespace smmap
             // Read wrench information --- Added by Mengyao
             feedback_eigen.gripper_wrench_.push_back(
                         SingleGripperWrench(
-                            Wrench(EigenHelpersConversions::GeometryWrenchToEigenPairVector(
+                            Wrench(EigenHelpersConversions::GeometryWrenchToEigenPair(
                                        feedback_ros.gripper_wrenches[gripper_ind * 2])),
-                            Wrench(EigenHelpersConversions::GeometryWrenchToEigenPairVector(
+                            Wrench(EigenHelpersConversions::GeometryWrenchToEigenPair(
                                        feedback_ros.gripper_wrenches[gripper_ind * 2 + 1]))));
 
         }

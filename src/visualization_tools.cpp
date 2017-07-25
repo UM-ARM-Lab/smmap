@@ -488,6 +488,43 @@ void Visualizer::visualizeObjectDelta(
     }
 }
 
+// Visualization tool for object wrench (1D rope). --- Added by Mengyao
+// Q: What should be the right id?
+void Visualizer::visualizeObjectForce(
+        const std::string& marker_name,
+        const ObjectPointSet& current,
+        const std::vector<Eigen::Vector3d>& force,
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
+{
+    if (!disable_all_visualizations_)
+    {
+        visualization_msgs::Marker marker;
+
+        marker.header.frame_id = world_frame_name_;
+
+        marker.type = visualization_msgs::Marker::LINE_LIST;
+        marker.ns = marker_name;
+        marker.id = id;
+        marker.scale.x = 0.001;
+        marker.points.reserve((size_t)current.cols() * 2);
+        marker.colors.reserve((size_t)current.cols() * 2);
+        for (ssize_t col = 0; col < current.cols(); col++)
+        {
+            marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(current.col(col)));
+            marker.points.push_back(EigenHelpersConversions::EigenVector3dToGeometryPoint(
+                                        current.col(col) + force.at(col)));
+            marker.colors.push_back(color);
+            marker.colors.push_back(color);
+        }
+
+        marker.header.stamp = ros::Time::now();
+        visualization_marker_pub_.publish(marker);
+    }
+}
+
+
+
 void Visualizer::visualizeTranslation(
         const std::string& marker_name,
         const geometry_msgs::Point& start,

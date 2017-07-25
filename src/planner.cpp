@@ -407,6 +407,29 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
         //visulize Force --- Added by Mengyao
         visualizeTotalForceOnGripper(world_state);
+
+        // Visualize Force on 1D object. --- Added by Mengyao
+
+        /*
+        if(GetDeformableType(nh_) == ROPE)
+        {
+            // Use world_feedback or world state?
+            const ObjectWrench& object_wrench = world_state.object_wrench_;
+            vis_.visualizeObjectForce(
+                        "ForceOnObject",
+                        world_state.object_configuration_,
+                        object_wrench.MagnifiedForce(0.01),
+                        Visualizer::Silver());
+
+            std::cout << "head force norm: "
+                      << object_wrench.GetRopeEndsForce().first.norm()
+                      << std::endl;
+            std::cout << "head force norm: "
+                      << object_wrench.GetRopeEndsForce().second.norm()
+                      << std::endl;
+        }
+        */
+
     }
 
     // Pick an arm to use
@@ -476,6 +499,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
                     world_state.object_configuration_,
                     world_state.object_configuration_ + 300.0 * object_delta,
                     Visualizer::Blue());
+
     }
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
@@ -1570,18 +1594,19 @@ void Planner::visualizeTotalForceOnGripper(
         const AllGrippersWrench gripper_wrenchs = current_world_state.gripper_wrench_;
         for (int gripper_ind = 0; gripper_ind < gripper_poses.size(); gripper_ind++)
         {
+            std::cout << "Friction data on :" << gripper_ind << "th gripper :" << std::endl;
             vis_.visualizeTranslation(
                         "total_force_on_gripper_top",
                         gripper_poses.at(gripper_ind).translation(),
                         gripper_poses.at(gripper_ind).translation()
-                        + 10 * gripper_wrenchs.at(gripper_ind).top_clamp.force,
+                        + 0.1 * gripper_wrenchs.at(gripper_ind).top_clamp.force,
                         Visualizer::Silver());
             std::cout << "Force magnitude on the top clamp is " << gripper_wrenchs.at(gripper_ind).top_clamp.force.norm() << std::endl;
             vis_.visualizeTranslation(
                         "total_force_on_gripper_bottom",
                         gripper_poses.at(gripper_ind).translation(),
                         gripper_poses.at(gripper_ind).translation()
-                        + 10 * gripper_wrenchs.at(gripper_ind).bottom_clamp.force,
+                        + 0.1 * gripper_wrenchs.at(gripper_ind).bottom_clamp.force,
                         Visualizer::Yellow());
             std::cout << "Force magnitude on the bottom clamp is " << gripper_wrenchs.at(gripper_ind).bottom_clamp.force.norm() << std::endl;
 
