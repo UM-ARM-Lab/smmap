@@ -429,6 +429,12 @@ WorldState Planner::sendNextCommandUsingLocalController(
                           << std::endl;
                 break;
             }
+            case CLOTH:
+            {
+                const ObjectWrench& object_wrench = world_state.object_wrench_;
+
+                break;
+            }
             default:
                 break;
         }
