@@ -407,57 +407,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
         //visulize Force --- Added by Mengyao
         visualizeTotalForceOnGripper(world_state);
-
-        // Visualize Force on 1D object. --- Added by Mengyao
-
-        switch (GetDeformableType(nh_))
-        {
-            case ROPE:
-            {
-                const ObjectWrench& object_wrench = world_state.object_wrench_;
-                vis_.visualizeObjectForce(
-                            "ForceOnObject",
-                            world_state.object_configuration_,
-                            object_wrench.MagnifiedForce(0.1),
-                            Visualizer::Cyan());
-
-                std::cout << "head force norm: "
-                          << object_wrench.GetRopeEndsForce().first.norm()
-                          << std::endl;
-                std::cout << "head force norm: "
-                          << object_wrench.GetRopeEndsForce().second.norm()
-                          << std::endl;
-                break;
-            }
-            case CLOTH:
-            {
-                const ObjectWrench& object_wrench = world_state.object_wrench_;
-
-                break;
-            }
-            default:
-                break;
-        }
-
-        if(GetDeformableType(nh_) == ROPE)
-        {
-            // Use world_feedback or world state?
-            const ObjectWrench& object_wrench = world_state.object_wrench_;
-            vis_.visualizeObjectForce(
-                        "ForceOnObject",
-                        world_state.object_configuration_,
-                        object_wrench.MagnifiedForce(0.1),
-                        Visualizer::Cyan());
-
-            std::cout << "head force norm: "
-                      << object_wrench.GetRopeEndsForce().first.norm()
-                      << std::endl;
-            std::cout << "head force norm: "
-                      << object_wrench.GetRopeEndsForce().second.norm()
-                      << std::endl;
-        }
-
-
     }
 
     // Pick an arm to use
@@ -518,6 +467,75 @@ WorldState Planner::sendNextCommandUsingLocalController(
     const WorldState world_feedback = robot_.sendGrippersPoses(all_grippers_single_pose);
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
+
+    // Visualize Force on object, should add new ros function for new flag. --- Added by Mengyao
+    if (visualize_desired_motion_)
+    {
+        double force_scale = 0.1;
+        switch (GetDeformableType(nh_))
+        {
+            case ROPE:
+            {
+                const ObjectWrench& object_wrench = world_state.object_wrench_;
+                vis_.visualizeObjectForce(
+                            "ForceOnObject",
+                            world_state.object_configuration_,
+                            object_wrench.MagnifiedForce(force_scale),
+                            Visualizer::Cyan());
+
+                std::cout << "head force norm: "
+                          << object_wrench.GetRopeEndsForce().first.norm()
+                          << std::endl;
+                std::cout << "head force norm: "
+                          << object_wrench.GetRopeEndsForce().second.norm()
+                          << std::endl;
+                break;
+            }
+            case CLOTH:
+            {
+            break;
+                const ObjectPointSet& object_configuration = world_state.object_configuration_;
+                const ObjectWrench& object_wrench = world_state.object_wrench_;
+                const std::vector<GripperData>& grippers_data = model_list_[model_to_use]->GetGrippersData();
+                const int num_grippers = grippers_data.size();
+                int num_total_attached_nodes = 0;
+                for (int gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+                {
+                    num_total_attached_nodes += grippers_data.at(gripper_ind).node_indices_.size();
+                }
+
+                ObjectPointSet nodes_attached(3, num_total_attached_nodes);
+                std::vector<Eigen::Vector3d> forces_attached;
+
+                size_t node_ind = 0;
+                for(int gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+                {
+                    for (int node_gripper_ind = 0;
+                         node_gripper_ind < grippers_data.at(gripper_ind).node_indices_.size();
+                         node_gripper_ind++)
+                    {
+                        nodes_attached.col(node_ind)
+                                = object_configuration.col(
+                                    grippers_data.at(gripper_ind).node_indices_.at(node_gripper_ind));
+                        node_ind++;
+                        forces_attached.push_back(
+                                force_scale
+                                * object_wrench.object_force[grippers_data.at(gripper_ind).node_indices_.at(node_gripper_ind)]);
+                    }
+                }
+
+                vis_.visualizeObjectForce(
+                            "ForceOnObjectGraspedNodes",
+                            nodes_attached,
+                            forces_attached,
+                            Visualizer::Cyan());
+                break;
+            }
+            default:
+                assert(false && "deformable type is neither rope nor cloth -- planner.cpp");
+                break;
+        }
+    }
 
     if (visualize_predicted_motion_)
     {
