@@ -86,14 +86,14 @@ namespace smmap
             const std::pair<Eigen::Vector3d, Eigen::Vector3d> GetRopeEndsForce() const
             {
                 std::pair<Eigen::Vector3d, Eigen::Vector3d> ends_force;
-                if (object_force.size() > 0)
+                if (object_force.size() > 1)
                 {
                     ends_force = std::make_pair(object_force.at(0), object_force.at(object_force.size()-1));
 
                 }
                 else
                 {
-                    std::cout << "size of force data < 1"
+                    std::cout << "size of force data < 2"
                               << std::endl;
                 }
                 return ends_force;

@@ -410,7 +410,29 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
         // Visualize Force on 1D object. --- Added by Mengyao
 
-        /*
+        switch (GetDeformableType(nh_))
+        {
+            case ROPE:
+            {
+                const ObjectWrench& object_wrench = world_state.object_wrench_;
+                vis_.visualizeObjectForce(
+                            "ForceOnObject",
+                            world_state.object_configuration_,
+                            object_wrench.MagnifiedForce(0.1),
+                            Visualizer::Cyan());
+
+                std::cout << "head force norm: "
+                          << object_wrench.GetRopeEndsForce().first.norm()
+                          << std::endl;
+                std::cout << "head force norm: "
+                          << object_wrench.GetRopeEndsForce().second.norm()
+                          << std::endl;
+                break;
+            }
+            default:
+                break;
+        }
+
         if(GetDeformableType(nh_) == ROPE)
         {
             // Use world_feedback or world state?
@@ -418,8 +440,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
             vis_.visualizeObjectForce(
                         "ForceOnObject",
                         world_state.object_configuration_,
-                        object_wrench.MagnifiedForce(0.01),
-                        Visualizer::Silver());
+                        object_wrench.MagnifiedForce(0.1),
+                        Visualizer::Cyan());
 
             std::cout << "head force norm: "
                       << object_wrench.GetRopeEndsForce().first.norm()
@@ -428,7 +450,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
                       << object_wrench.GetRopeEndsForce().second.norm()
                       << std::endl;
         }
-        */
+
 
     }
 

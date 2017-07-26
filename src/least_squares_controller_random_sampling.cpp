@@ -475,7 +475,8 @@ bool LeastSquaresControllerRandomSampling::stretchingDetection(
 
         // should get revised later
         case CLOTH:
-            assert(false && "Not written yet");
+            break;
+          //  assert(false && "Not written yet");
 
         default:
             return false;
