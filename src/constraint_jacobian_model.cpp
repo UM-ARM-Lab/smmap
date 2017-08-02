@@ -1,4 +1,5 @@
 #include "smmap/constraint_jacobian_model.h"
+#include "smmap/timing.hpp"
 
 #include <cmath>
 #include <arc_utilities/arc_exceptions.hpp>
@@ -102,6 +103,9 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
         const DeformableModelInputData& input_data,
         const AllGrippersSinglePoseDelta& grippers_pose_delta) const
 {
+ //   Stopwatch stopwatch;
+ //   stopwatch(RESET);
+
     const MatrixXd J = computeGrippersToDeformableObjectJacobian(input_data, grippers_pose_delta);
 
     MatrixXd delta = MatrixXd::Zero(input_data.world_current_state_.object_configuration_.cols() * 3, 1);
@@ -113,11 +117,20 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
         delta += J.block(0, 6 * (ssize_t)gripper_ind, J.rows(), 6) * grippers_pose_delta[gripper_ind];
     }
 
+ //   Stopwatch stopwatch;
+ //   stopwatch(RESET);
+
     // This delta is a stacked vector
-    Eigen::MatrixXd delta_with_mask = computeObjectVelocityMask(input_data.world_current_state_.object_configuration_, delta) * delta;
+    Eigen::MatrixXd mask = computeObjectVelocityMask(input_data.world_current_state_.object_configuration_, delta);
+ //   ROS_INFO_STREAM_NAMED("constraint_model", "Calculate Mask for p_dot in  " << stopwatch(READ) << " seconds");
+
+ //   stopwatch(RESET);
+    Eigen::MatrixXd delta_with_mask = mask * delta;
+ //   ROS_INFO_STREAM_NAMED("constraint_model", "Calculate projected p_dot in  " << stopwatch(READ) << " seconds");
 
     // this delta is a 3xn vector
     delta_with_mask.resizeLike(input_data.world_current_state_.object_configuration_);
+
     return delta_with_mask;
 }
 
@@ -368,6 +381,9 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
         const ObjectPointSet &current_configuration,
         const MatrixXd &object_p_dot) const
 {
+    Stopwatch stopwatch;
+    stopwatch(RESET);
+
     const ssize_t num_lines = num_nodes_ * 3;
     MatrixXd M(num_lines, num_lines);
     M.setIdentity(num_lines,num_lines);
@@ -377,7 +393,6 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
 
     for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
     {
-
         // if is far from obstacle
         if (environment_sdf_.EstimateDistance3d(current_configuration.col(node_ind)).first > obstacle_threshold_)
         {
@@ -410,9 +425,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
                 }
             }
         }
-
     }
-
 
     return M;
 }

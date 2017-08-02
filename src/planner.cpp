@@ -401,14 +401,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
     const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, world_state, robot_.dt_);
     const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(world_state);
 
-    if (visualize_desired_motion_)
-    {
-    //    visualizeDesiredMotion(world_state, task_desired_motion);
-
-        //visulize Force --- Added by Mengyao
-        visualizeTotalForceOnGripper(world_state);
-    }
-
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
     assert(model_to_use == 0);
@@ -471,6 +463,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
     // Visualize Force on object, should add new ros function for new flag. --- Added by Mengyao
     if (visualize_desired_motion_)
     {
+    //    visualizeTotalForceOnGripper(world_state);
+
         double force_scale = 0.1;
         switch (GetDeformableType(nh_))
         {
@@ -493,10 +487,11 @@ WorldState Planner::sendNextCommandUsingLocalController(
             }
             case CLOTH:
             {
-            break;
                 const ObjectPointSet& object_configuration = world_state.object_configuration_;
                 const ObjectWrench& object_wrench = world_state.object_wrench_;
                 const std::vector<GripperData>& grippers_data = model_list_[model_to_use]->GetGrippersData();
+
+                // Assume knowing it is 2
                 const int num_grippers = grippers_data.size();
                 int num_total_attached_nodes = 0;
                 for (int gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
@@ -508,6 +503,9 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 std::vector<Eigen::Vector3d> forces_attached;
 
                 size_t node_ind = 0;
+
+                std::vector<double> total_force_per_gripper(2, 0.0);
+
                 for(int gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
                 {
                     for (int node_gripper_ind = 0;
@@ -517,11 +515,17 @@ WorldState Planner::sendNextCommandUsingLocalController(
                         nodes_attached.col(node_ind)
                                 = object_configuration.col(
                                     grippers_data.at(gripper_ind).node_indices_.at(node_gripper_ind));
-                        node_ind++;
+
                         forces_attached.push_back(
                                 force_scale
                                 * object_wrench.object_force[grippers_data.at(gripper_ind).node_indices_.at(node_gripper_ind)]);
+
+                        total_force_per_gripper.at(gripper_ind) += forces_attached.at(node_ind).norm();
+
+                        node_ind++;
                     }
+                    std::cout << "total force on " << gripper_ind << " is "
+                              << total_force_per_gripper.at(gripper_ind) << std::endl;
                 }
 
                 vis_.visualizeObjectForce(
@@ -1441,6 +1445,42 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                               translation_dis_deformability,
                               rotation_deformability,
                               environment_sdf));
+
+        controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                       nh_,
+                                       ph_,
+                                       robot_,
+                                       environment_sdf,
+                                       generator_,
+                                       vis_,
+                                       GetGripperControllerType(ph_),
+                                       model_list_.back(),
+                                       GetMaxSamplingCounts(ph_),
+                                       GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+    }
+    else if (GetUseDiminishingModelWithSamplingController(ph_))
+    {
+        double translational_deformability, rotational_deformability;
+        const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+        if (ph_.getParam("translational_deformability", translational_deformability) &&
+                 ph_.getParam("rotational_deformability", rotational_deformability))
+        {
+            ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                                   << translational_deformability << " "
+                                   << rotational_deformability);
+        }
+        else
+        {
+            translational_deformability = task_specification_->defaultDeformability();
+            rotational_deformability = task_specification_->defaultDeformability();
+            ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                                   << task_specification_->defaultDeformability());
+        }
+
+        model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                  translational_deformability,
+                                  rotational_deformability));
 
         controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
                                        nh_,
