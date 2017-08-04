@@ -60,7 +60,8 @@ namespace smmap
                                                             VectorAnytypeToVectorLong(node_indices_srv_data.response.indices),
                                                             stretching_vector_info_srv_data.response.to_gripper_name,
                                                             VectorAnytypeToVectorLong(stretching_vector_info_srv_data.response.attatched_indices),
-                                                            VectorAnytypeToVectorLong(stretching_vector_info_srv_data.response.neighbor_indices)));
+                                                            VectorAnytypeToVectorLong(stretching_vector_info_srv_data.response.neighbor_indices),
+                                                            stretching_vector_info_srv_data.response.contributions));
                     }
                     else
                     {

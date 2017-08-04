@@ -40,15 +40,18 @@ namespace smmap
         StretchingVectorInfo(
                 const std::string& to_gripper_name,
                 const std::vector<long>& from_nodes,
-                const std::vector<long>& to_nodes)
+                const std::vector<long>& to_nodes,
+                const std::vector<double>& node_contribution)
             : to_gripper_name_(to_gripper_name)
             , from_nodes_(from_nodes)
             , to_nodes_(to_nodes)
+            , node_contribution_(node_contribution)
         {}
 
         std::string to_gripper_name_;
         std::vector<long> from_nodes_;
         std::vector<long> to_nodes_;
+        std::vector<double> node_contribution_;
     };
 
     struct GripperData
@@ -62,12 +65,14 @@ namespace smmap
                     const std::vector<long>& node_indices,
                     const std::string& to_gripper_name,
                     const std::vector<long>& from_nodes,
-                    const std::vector<long>& to_nodes)
+                    const std::vector<long>& to_nodes,
+                    const std::vector<double>& node_contribution)
             : name_(name)
             , node_indices_(node_indices)
             , stretching_vector_info_(to_gripper_name,
                                       from_nodes,
-                                      to_nodes)
+                                      to_nodes,
+                                      node_contribution)
         {}
 
         /// The name associated with this gripper
