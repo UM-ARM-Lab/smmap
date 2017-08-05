@@ -103,18 +103,35 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
         const DeformableModelInputData& input_data,
         const AllGrippersSinglePoseDelta& grippers_pose_delta) const
 {
- //   Stopwatch stopwatch;
- //   stopwatch(RESET);
+    Stopwatch stopwatch;
+    stopwatch(RESET);
 
     const MatrixXd J = computeGrippersToDeformableObjectJacobian(input_data, grippers_pose_delta);
+    const ObjectPointSet &current_configuration = input_data.world_current_state_.object_configuration_;
+
+    ROS_INFO_STREAM_NAMED("constraint_model", "Calculate Mask for p_dot in  " << stopwatch(READ) << " seconds");
 
     MatrixXd delta = MatrixXd::Zero(input_data.world_current_state_.object_configuration_.cols() * 3, 1);
 
     // Move the object based on the movement of each gripper
-    for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
-    {
+    for (ssize_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
+    {        
         // Assume that our Jacobian is correct, and predict where we will end up
         delta += J.block(0, 6 * (ssize_t)gripper_ind, J.rows(), 6) * grippers_pose_delta[gripper_ind];
+    }
+
+    for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
+    {
+        if (environment_sdf_.EstimateDistance3d(current_configuration.col(node_ind)).first > obstacle_threshold_)
+        {
+            continue;
+        }
+        else
+        {
+            Vector3d node_p_dot_in_matrix = delta.block(node_ind*3, 0, 3, 1);
+//            Vector3d node_p_dot = Vector3d::Map(node_p_dot_in_matrix, node_p_dot_in_matrix.size());
+
+        }
     }
 
  //   Stopwatch stopwatch;
