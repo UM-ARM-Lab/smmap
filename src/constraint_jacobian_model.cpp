@@ -103,13 +103,13 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
         const DeformableModelInputData& input_data,
         const AllGrippersSinglePoseDelta& grippers_pose_delta) const
 {
-    Stopwatch stopwatch;
-    stopwatch(RESET);
+ //   Stopwatch stopwatch;
+ //   stopwatch(RESET);
 
     const MatrixXd J = computeGrippersToDeformableObjectJacobian(input_data, grippers_pose_delta);
     const ObjectPointSet &current_configuration = input_data.world_current_state_.object_configuration_;
 
-    ROS_INFO_STREAM_NAMED("constraint_model", "Calculate Mask for p_dot in  " << stopwatch(READ) << " seconds");
+//    ROS_INFO_STREAM_NAMED("constraint_model", "Calculate Mask for p_dot in  " << stopwatch(READ) << " seconds");
 
     MatrixXd delta = MatrixXd::Zero(input_data.world_current_state_.object_configuration_.cols() * 3, 1);
 
@@ -127,22 +127,39 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
             continue;
         }
         else
-        {
-            Vector3d node_p_dot_in_matrix = delta.block(node_ind*3, 0, 3, 1);
+        {            
+            Vector3d node_p_dot = delta.block(node_ind*3, 0, 3, 1);
 //            Vector3d node_p_dot = Vector3d::Map(node_p_dot_in_matrix, node_p_dot_in_matrix.size());
+            std::vector<double> sur_n
+                    = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
+            if(sur_n.size()>1)
+            {
+                Vector3d surface_normal= Vector3d::Map(sur_n.data(),sur_n.size());
+            //    double surface_vector_norm = std::sqrt(std::pow(surface_normal(0),2)+std::pow(surface_normal(1),2)+std::pow(surface_normal(2),2));
+            //    surface_normal = surface_normal/surface_vector_norm;
+                surface_normal = surface_normal/surface_normal.norm();
+
+                // if node is moving outward from obstacle, unmask.
+            //    double dot_result = 100*node_p_dot(0)*surface_normal(0)+100*node_p_dot(1)*surface_normal(1)+100*node_p_dot(2)*surface_normal(2);
+                double dot_result = node_p_dot.dot(surface_normal);
+                if (dot_result<0.0)
+                {
+                    MatrixXd projected_node_p_dot = node_p_dot - dot_result * surface_normal;
+                //    const Matrix<double, 1, 3> surface_normal_inv = surface_normal.adjoint();
+                //    M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
+                    delta.block(node_ind*3, 0, 3, 1) = projected_node_p_dot;
+                }
+            }
 
         }
     }
 
- //   Stopwatch stopwatch;
- //   stopwatch(RESET);
-
     // This delta is a stacked vector
-    Eigen::MatrixXd mask = computeObjectVelocityMask(input_data.world_current_state_.object_configuration_, delta);
- //   ROS_INFO_STREAM_NAMED("constraint_model", "Calculate Mask for p_dot in  " << stopwatch(READ) << " seconds");
+ //   Eigen::MatrixXd mask = computeObjectVelocityMask(input_data.world_current_state_.object_configuration_, delta);
 
  //   stopwatch(RESET);
-    Eigen::MatrixXd delta_with_mask = mask * delta;
+ //   Eigen::MatrixXd delta_with_mask = mask * delta;
+    Eigen::MatrixXd delta_with_mask = delta;
  //   ROS_INFO_STREAM_NAMED("constraint_model", "Calculate projected p_dot in  " << stopwatch(READ) << " seconds");
 
     // this delta is a 3xn vector
