@@ -207,6 +207,8 @@ Planner::Planner(
 
 void Planner::execute()
 {
+  ROS_INFO("Running Planner::execute");
+  ROS_INFO("                        ");
     WorldState world_feedback = robot_.start();
     const double start_time = world_feedback.sim_time_;
     initializeModelAndControllerSet(world_feedback);
@@ -257,6 +259,11 @@ void Planner::execute()
                     generator_);
     }
 
+
+    ROS_INFO("!!!!!!!!!!!!!!!!!!!");
+    ROS_INFO("");
+    ROS_INFO("Before for loop");
+    
     while (robot_.ok())
     {
         const WorldState world_state = world_feedback;
