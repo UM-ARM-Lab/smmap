@@ -65,6 +65,10 @@ namespace smmap
 
             void visualize_stretching_vector(const ObjectPointSet& object_configuration);
 
+            void visualize_rope_stretching_vector(const ObjectPointSet& object_configuration);
+
+            void visualize_cloth_stretching_vector(const ObjectPointSet& object_configuration);
+
             void visualize_gripper_motion(
                     const AllGrippersSinglePose& current_gripper_pose,
                     const AllGrippersSinglePoseDelta& gripper_motion);

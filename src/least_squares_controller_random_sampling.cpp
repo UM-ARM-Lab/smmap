@@ -369,6 +369,29 @@ double LeastSquaresControllerRandomSampling::errorOfControlByPrediction(
 void LeastSquaresControllerRandomSampling::visualize_stretching_vector(
         const ObjectPointSet& object_configuration)
 {
+    switch (deformable_type_)
+    {
+        case ROPE:
+        {
+            visualize_rope_stretching_vector(object_configuration);
+            break;
+        }
+        case CLOTH:
+        {
+            visualize_cloth_stretching_vector(object_configuration);
+            break;
+        }
+        default:
+        {
+            assert(false && "visualize stretching vector of neither cloth nor rope");
+            break;
+        }
+    }
+}
+
+void LeastSquaresControllerRandomSampling::visualize_rope_stretching_vector(
+        const ObjectPointSet& object_configuration)
+{
     const ssize_t num_nodes = object_configuration.cols();
     const ssize_t start_node = 0;
     const ssize_t end_node = num_nodes - 1;
@@ -394,8 +417,72 @@ void LeastSquaresControllerRandomSampling::visualize_stretching_vector(
                         line_starts,
                         line_ends,
                         Visualizer::Orange());
+}
 
+void LeastSquaresControllerRandomSampling::visualize_cloth_stretching_vector(
+        const ObjectPointSet& object_configuration)
+{
+    // Assume knowing there are two grippers.
+    assert(grippers_data_.size()==2 || "grippers size is not 2, stretching vector visualization not developed");
 
+    const StretchingVectorInfo& first_stretching_vector_info = grippers_data_.at(0).stretching_vector_info_;
+    const std::vector<long>& first_from_nodes = first_stretching_vector_info.from_nodes_;
+    const std::vector<long>& first_to_nodes = first_stretching_vector_info.to_nodes_;
+    const std::vector<double>& first_contribution = first_stretching_vector_info.node_contribution_;
+
+    const StretchingVectorInfo& second_stretching_vector_info = grippers_data_.at(1).stretching_vector_info_;
+    const std::vector<long>& second_from_nodes = second_stretching_vector_info.from_nodes_;
+    const std::vector<long>& second_to_nodes = second_stretching_vector_info.to_nodes_;
+    const std::vector<double>& second_contribution = second_stretching_vector_info.node_contribution_;
+
+    /* // Debug helper
+    std::cout << "First stretching TO_nodes: " << std::endl;
+    std::cout << first_to_nodes.at(0) << std::endl;
+    std::cout << first_to_nodes.at(1) << std::endl;
+
+    std::cout << "First stretching FROM_nodes: " << std::endl;
+    std::cout << first_from_nodes.at(0) << std::endl;
+    std::cout << first_from_nodes.at(1) << std::endl;
+
+    std::cout << "Second stretching TO_nodes: " << std::endl;
+    std::cout << second_to_nodes.at(0) << std::endl;
+    std::cout << second_to_nodes.at(1) << std::endl;
+
+    std::cout << "Second stretching FROM_nodes: " << std::endl;
+    std::cout << second_from_nodes.at(0) << std::endl;
+    std::cout << second_from_nodes.at(1) << std::endl;
+
+    std::cout << "total nodes: " << object_configuration.cols() << std::endl;
+    */
+
+    Eigen::Vector3d first_correction_vector = Eigen::MatrixXd::Zero(3,1);
+    for (int stretching_ind = 0; stretching_ind < first_from_nodes.size(); stretching_ind++)
+    {
+        first_correction_vector +=
+                first_contribution.at(stretching_ind) *
+                (object_configuration.block<3, 1>(0, first_to_nodes.at(stretching_ind))
+                 - object_configuration.block<3, 1>(0, first_from_nodes.at(stretching_ind)));
+    }
+    Eigen::Vector3d second_correction_vector = Eigen::MatrixXd::Zero(3,1);
+    for (int stretching_ind = 0; stretching_ind < second_from_nodes.size(); stretching_ind++)
+    {
+        second_correction_vector +=
+                second_contribution.at(stretching_ind) *
+                (object_configuration.block<3, 1>(0, second_to_nodes.at(stretching_ind))
+                 - object_configuration.block<3, 1>(0, second_from_nodes.at(stretching_ind)));
+    }
+
+    EigenHelpers::VectorVector3d line_starts;
+    EigenHelpers::VectorVector3d line_ends;
+    line_starts.push_back(object_configuration.block<3,1>(0, first_from_nodes.at(0)));
+    line_starts.push_back(object_configuration.block<3,1>(0, second_from_nodes.at(0)));
+    line_ends.push_back(line_starts.at(0) + 10 * first_correction_vector);
+    line_ends.push_back(line_starts.at(1) + 10 * second_correction_vector);
+
+    vis_.visualizeLines("gripper overstretch motion",
+                        line_starts,
+                        line_ends,
+                        Visualizer::Orange());
 }
 
 void LeastSquaresControllerRandomSampling::visualize_gripper_motion(
