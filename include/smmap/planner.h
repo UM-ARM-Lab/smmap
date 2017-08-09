@@ -56,6 +56,11 @@ namespace smmap
             WorldState sendNextCommandUsingGlobalGripperPlannerResults(
                     const WorldState& current_world_state);
 
+            // Helper function to force some task type use only local controller
+            // --- Added by Mengyao
+            bool canUseGlobalPlanner();
+
+
             ////////////////////////////////////////////////////////////////////
             // Constraint violation detection
             ////////////////////////////////////////////////////////////////////

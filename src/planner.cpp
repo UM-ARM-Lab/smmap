@@ -310,13 +310,16 @@ WorldState Planner::sendNextCommand(
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         bool planning_needed = false;
 
+        // This bool variable here forces some tasks to utilize only local controller --- Added by Mengyao
+        const bool can_use_global_planner = canUseGlobalPlanner();
+
         // Check if the global plan has 'hooked' the deformable object on something
         if (executing_global_gripper_trajectory_)
         {
 
         }
         // Check if the local controller will be stuck
-        else
+        else if(can_use_global_planner)
         {
             Stopwatch stopwatch;
             arc_helpers::DoNotOptimize(world_state);
@@ -340,6 +343,12 @@ WorldState Planner::sendNextCommand(
 
                 ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
             }
+        }
+        else
+        {
+            Stopwatch stopwatch;
+            arc_helpers::DoNotOptimize(world_state);
+            ROS_INFO_STREAM_NAMED("planner", "Determined if global planner needed in " << stopwatch(READ) << " seconds");
         }
 
         // If we need to (re)plan due to the local controller getting stuck, or the gobal plan failing, then do so
@@ -401,6 +410,11 @@ WorldState Planner::sendNextCommandUsingLocalController(
     const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, world_state, robot_.dt_);
     const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(world_state);
 
+    if (visualize_desired_motion_)
+    {
+        visualizeDesiredMotion(world_state, task_desired_motion);
+    }
+
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
     assert(model_to_use == 0);
@@ -461,6 +475,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
     const double robot_execution_time = stopwatch(READ);
 
     // Visualize Force on object, should add new ros function for new flag. --- Added by Mengyao
+
+    /*
     if (visualize_desired_motion_)
     {
     //    visualizeTotalForceOnGripper(world_state);
@@ -540,6 +556,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 break;
         }
     }
+    */
+
 
     if (visualize_predicted_motion_)
     {
@@ -547,7 +565,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
         vis_.visualizeObjectDelta(
                     PREDICTED_DELTA_NS,
                     world_state.object_configuration_,
-                    world_state.object_configuration_ + 300.0 * object_delta,
+                    world_state.object_configuration_ + 250.0 * object_delta,
                     Visualizer::Blue());
 
     }
@@ -601,6 +619,33 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
     logData(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), -1, fake_rewards);
 
     return world_feedback;
+}
+
+// Helper function to force some task type use only local controller
+// --- Added by Mengyao
+bool Planner::canUseGlobalPlanner()
+{
+    switch (GetDeformableType(nh_))
+    {
+        case ROPE:
+        {
+            return false;
+            break;
+        }
+        case CLOTH:
+        {
+            if (GetTaskType(nh_) == CLOTH_WAFR)
+            {
+                return false;
+            }
+            return true;
+        }
+        default:
+        {
+            assert(false && "deformabletype is neither cloth nor rope");
+            return true;
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -180,7 +180,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
         const size_t thread_num = 0;
 //        #endif
 
-
         // Method 1: use constraint_violation checker for gripper collosion
         // Constraint violation checking here
         const bool collision_violation = gripperCollisionCheckResult(
@@ -211,6 +210,12 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
                 current_thread_optimal.first = grippers_motion_sample;
                 current_thread_optimal.second = sample_error;
             }
+
+            vis_.visualizeObjectDelta(
+                        "prediction p dot for sampling",
+                        input_data.world_current_state_.object_configuration_,
+                        input_data.world_current_state_.object_configuration_ + 250.0 * predicted_object_p_dot,
+                        Visualizer::Silver());
         }
     }
 
@@ -247,6 +252,9 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
     {
         suggested_grippers_command.first = setAllGripperPoseDeltaZero(num_grippers);
     }
+    suggested_grippers_command.second = model_->getObjectDelta(
+                input_data,
+                suggested_grippers_command.first);
     return suggested_grippers_command;
 }
 
@@ -353,14 +361,19 @@ double LeastSquaresControllerRandomSampling::errorOfControlByPrediction(
 {
     ssize_t num_nodes = predicted_object_p_dot.cols();
     double sum_of_error = 0;
+    double zero_thrshold = 0.0000000001;
 
     for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
     {
         Eigen::Vector3d node_predicted_p_dot = predicted_object_p_dot.col(node_ind);
         Eigen::Vector3d node_desired_p_dot = desired_object_p_dot.segment<3>(node_ind*3);
 
-        double node_p_dot_error = (node_predicted_p_dot - node_desired_p_dot).norm();
-        sum_of_error += node_p_dot_error;
+        // Only none_zero desired p dot is considered.
+        if(node_desired_p_dot.norm() < zero_thrshold)
+        {
+            double node_p_dot_error = (node_predicted_p_dot - node_desired_p_dot).norm();
+            sum_of_error += node_p_dot_error;
+        }
     }
 
     return sum_of_error;
