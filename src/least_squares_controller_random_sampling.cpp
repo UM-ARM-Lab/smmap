@@ -88,7 +88,9 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
     const WorldState& current_world_state = input_data.world_current_state_;
 
     const Eigen::VectorXd& desired_object_p_dot =
-            input_data.task_desired_object_delta_fn_(current_world_state).delta;
+            input_data.task_desired_object_delta_fn_(current_world_state).delta;    
+    const Eigen::VectorXd& desired_p_dot_weight =
+            input_data.task_desired_object_delta_fn_(current_world_state).weight;
 
     const ssize_t num_grippers = current_world_state.all_grippers_single_pose_.size();
     const ssize_t num_nodes = current_world_state.object_configuration_.cols();
@@ -202,7 +204,9 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
                         input_data,
                         grippers_motion_sample);
 
-            double sample_error = errorOfControlByPrediction(predicted_object_p_dot, desired_object_p_dot);
+            double sample_error = errorOfControlByPrediction(predicted_object_p_dot,
+                                                             desired_object_p_dot,
+                                                             desired_p_dot_weight);
 
             // Compare if the sample grippers motion is better than the best to now
             if (sample_error < current_thread_optimal.second)
@@ -357,11 +361,12 @@ AllGrippersSinglePoseDelta LeastSquaresControllerRandomSampling::setAllGripperPo
 
 double LeastSquaresControllerRandomSampling::errorOfControlByPrediction(
         const ObjectPointSet predicted_object_p_dot,
-        const Eigen::VectorXd& desired_object_p_dot) const
+        const Eigen::VectorXd& desired_object_p_dot,
+        const Eigen::VectorXd& desired_p_dot_weight) const
 {
     ssize_t num_nodes = predicted_object_p_dot.cols();
     double sum_of_error = 0;
-    double zero_thrshold = 0.0000000001;
+    const double zero_thrshold = 0.000001;
 
     for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
     {
@@ -369,7 +374,7 @@ double LeastSquaresControllerRandomSampling::errorOfControlByPrediction(
         Eigen::Vector3d node_desired_p_dot = desired_object_p_dot.segment<3>(node_ind*3);
 
         // Only none_zero desired p dot is considered.
-        if(node_desired_p_dot.norm() < zero_thrshold)
+        if(desired_p_dot_weight(node_ind * 3) > 0)
         {
             double node_p_dot_error = (node_predicted_p_dot - node_desired_p_dot).norm();
             sum_of_error += node_p_dot_error;

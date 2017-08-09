@@ -61,7 +61,8 @@ namespace smmap
             AllGrippersSinglePoseDelta setAllGripperPoseDeltaZero(const ssize_t num_grippers);
 
             double errorOfControlByPrediction(const ObjectPointSet predicted_object_p_dot,
-                                              const Eigen::VectorXd &desired_object_p_dot) const;
+                                              const Eigen::VectorXd &desired_object_p_dot,
+                                              const Eigen::VectorXd &desired_p_dot_weight) const;
 
             void visualize_stretching_vector(const ObjectPointSet& object_configuration);
 
