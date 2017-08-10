@@ -565,7 +565,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
         vis_.visualizeObjectDelta(
                     PREDICTED_DELTA_NS,
                     world_state.object_configuration_,
-                    world_state.object_configuration_ + 250.0 * object_delta,
+                    world_state.object_configuration_ + 80.0 * object_delta,
                     Visualizer::Blue());
 
     }

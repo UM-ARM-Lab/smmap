@@ -33,9 +33,19 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , max_stretch_factor_(GetMaxStretchFactor(ph))
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
-    , sample_count_(0)
+    , sample_count_(-1)
     , over_stretch_(false)
 {
+  //  grippers_stretching_helper_(grippers_data_.size());
+    for (int gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
+    {
+        grippers_stretching_helper_.push_back(
+                    std::unique_ptr<GripperStretchingInfo>(
+                        new GripperStretchingInfo(
+                            GetClothXSize(nh),
+                            GetClothYSize(nh),
+                            grippers_data_.at(gripper_ind))));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -188,11 +198,10 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
                     current_world_state.all_grippers_single_pose_,
                     grippers_motion_sample);
 
-//        const bool stretching_violation = false;
-        const bool stretching_violation = stretchingDetection(
+        bool stretching_violation = over_stretch_
+                && stretchingDetection(
                     input_data,
                     grippers_motion_sample);
-
 
         // If no constraint violation
         if (!collision_violation && !stretching_violation)
@@ -215,11 +224,13 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
                 current_thread_optimal.second = sample_error;
             }
 
+            /* // Visualization helper for debugging
             vis_.visualizeObjectDelta(
                         "prediction p dot for sampling",
                         input_data.world_current_state_.object_configuration_,
                         input_data.world_current_state_.object_configuration_ + 250.0 * predicted_object_p_dot,
                         Visualizer::Silver());
+            */
         }
     }
 
@@ -587,6 +598,7 @@ bool LeastSquaresControllerRandomSampling::stretchingDetection(
             return false;
             break;
     }
+    return false;
 }
 
 
