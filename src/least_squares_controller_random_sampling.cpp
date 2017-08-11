@@ -33,7 +33,7 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , max_stretch_factor_(GetMaxStretchFactor(ph))
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
-    , sample_count_(-1)
+    , sample_count_(0)
     , over_stretch_(false)
 {
   //  grippers_stretching_helper_(grippers_data_.size());
@@ -198,8 +198,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
                     current_world_state.all_grippers_single_pose_,
                     grippers_motion_sample);
 
-        bool stretching_violation = over_stretch_
-                && stretchingDetection(
+        bool stretching_violation = stretchingDetection(
                     input_data,
                     grippers_motion_sample);
 
@@ -587,16 +586,22 @@ bool LeastSquaresControllerRandomSampling::stretchingDetection(
     switch (deformable_type_)
     {
         case ROPE:
+        {
             return ropeTwoGrippersStretchingDetection(input_data, test_gripper_motion);
+        }
 
         // should get revised later
         case CLOTH:
+        {
+            return clothTwoGrippersStretchingDetection(input_data, test_gripper_motion);
             break;
+        }
           //  assert(false && "Not written yet");
-
         default:
-            return false;
-            break;
+        {
+            assert(false && "stretching detection for neither cloth nor rope");
+            return false;            
+        }
     }
     return false;
 }
@@ -667,18 +672,35 @@ bool LeastSquaresControllerRandomSampling::ropeTwoGrippersStretchingDetection(
         const auto grippers_test_poses = kinematics::applyTwist(current_gripper_pose, test_gripper_motion);
         double sum_resulting_motion_norm = 0.0;
 
-        for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
+        // sample_count_ > -1 means only sample one gripper each time
+        if(sample_count_ > -1)
         {
-            Eigen::Vector3d resulting_gripper_motion = grippers_test_poses.at(gripper_ind).translation()
-                    - current_gripper_pose.at(gripper_ind).translation();
-//            Eigen::Vector3d resulting_gripper_motion = test_gripper_motion.at(gripper_ind).segment<3>(0);
-            streching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind));
-            sum_resulting_motion_norm += resulting_gripper_motion.norm();
+            for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
+            {
+                Eigen::Vector3d resulting_gripper_motion = grippers_test_poses.at(gripper_ind).translation()
+                        - current_gripper_pose.at(gripper_ind).translation();
+    //            Eigen::Vector3d resulting_gripper_motion = test_gripper_motion.at(gripper_ind).segment<3>(0);
+                streching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind));
+                sum_resulting_motion_norm += resulting_gripper_motion.norm();
+            }
+            if(streching_sum <= stretching_cosine_threshold_ * sum_resulting_motion_norm)
+            {
+                motion_induced_streching = true;
+            }
         }
-        if(streching_sum <= stretching_cosine_threshold_ * sum_resulting_motion_norm)
+        else
         {
-//            over_strech = false;
-            motion_induced_streching = true;
+            for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
+            {
+                Eigen::Vector3d resulting_gripper_motion = grippers_test_poses.at(gripper_ind).translation()
+                        - current_gripper_pose.at(gripper_ind).translation();
+                streching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind))
+                        / resulting_gripper_motion.norm();
+            }
+            if(streching_sum / current_gripper_pose.size() <= stretching_cosine_threshold_)
+            {
+                motion_induced_streching = true;
+            }
         }
     }
 
@@ -699,8 +721,94 @@ bool LeastSquaresControllerRandomSampling::ropeTwoGrippersStretchingDetection(
     }
     */
 
-
     return motion_induced_streching;
 
 }
 
+bool LeastSquaresControllerRandomSampling::clothTwoGrippersStretchingDetection(
+        const DeformableModel::DeformableModelInputData& input_data,
+        const AllGrippersSinglePoseDelta& test_gripper_motion)
+{
+    const ObjectPointSet& object_configuration = input_data.world_current_state_.object_configuration_;
+    const AllGrippersSinglePose& current_gripper_pose = input_data.world_current_state_.all_grippers_single_pose_;
+    const ssize_t num_nodes = object_configuration.cols();
+
+    bool motion_induced_streching = false;
+    double streching_sum = 0.0;
+
+    if(!over_stretch_)
+    {
+        return false;
+    }
+
+    // Assume knowing there are two grippers.
+    assert(grippers_data_.size()==2 || "grippers size is not 2, stretching vector visualization not developed");
+
+    const StretchingVectorInfo& first_stretching_vector_info = grippers_data_.at(0).stretching_vector_info_;
+    const std::vector<long>& first_from_nodes = first_stretching_vector_info.from_nodes_;
+    const std::vector<long>& first_to_nodes = first_stretching_vector_info.to_nodes_;
+    const std::vector<double>& first_contribution = first_stretching_vector_info.node_contribution_;
+
+    const StretchingVectorInfo& second_stretching_vector_info = grippers_data_.at(1).stretching_vector_info_;
+    const std::vector<long>& second_from_nodes = second_stretching_vector_info.from_nodes_;
+    const std::vector<long>& second_to_nodes = second_stretching_vector_info.to_nodes_;
+    const std::vector<double>& second_contribution = second_stretching_vector_info.node_contribution_;
+
+    Eigen::Vector3d first_correction_vector = Eigen::MatrixXd::Zero(3,1);
+    for (int stretching_ind = 0; stretching_ind < first_from_nodes.size(); stretching_ind++)
+    {
+        first_correction_vector +=
+                first_contribution.at(stretching_ind) *
+                (object_configuration.block<3, 1>(0, first_to_nodes.at(stretching_ind))
+                 - object_configuration.block<3, 1>(0, first_from_nodes.at(stretching_ind)));
+    }
+
+    Eigen::Vector3d second_correction_vector = Eigen::MatrixXd::Zero(3,1);
+    for (int stretching_ind = 0; stretching_ind < second_from_nodes.size(); stretching_ind++)
+    {
+        second_correction_vector +=
+                second_contribution.at(stretching_ind) *
+                (object_configuration.block<3, 1>(0, second_to_nodes.at(stretching_ind))
+                 - object_configuration.block<3, 1>(0, second_from_nodes.at(stretching_ind)));
+    }
+
+    const auto grippers_test_poses = kinematics::applyTwist(current_gripper_pose, test_gripper_motion);
+    double sum_resulting_motion_norm = 0.0;
+
+    EigenHelpers::VectorVector3d stretching_correction_vector;
+    stretching_correction_vector.push_back(first_correction_vector);
+    stretching_correction_vector.push_back(second_correction_vector);
+
+    // sample_count_ > -1 means only sample one gripper each time
+    if(sample_count_ > -1)
+    {
+        for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
+        {
+            Eigen::Vector3d resulting_gripper_motion = grippers_test_poses.at(gripper_ind).translation()
+                    - current_gripper_pose.at(gripper_ind).translation();
+//            Eigen::Vector3d resulting_gripper_motion = test_gripper_motion.at(gripper_ind).segment<3>(0);
+            streching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind));
+            sum_resulting_motion_norm += resulting_gripper_motion.norm();
+        }
+        if(streching_sum <= stretching_cosine_threshold_ * sum_resulting_motion_norm)
+        {
+            motion_induced_streching = true;
+        }
+    }
+    else
+    {
+        for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
+        {
+            Eigen::Vector3d resulting_gripper_motion = grippers_test_poses.at(gripper_ind).translation()
+                    - current_gripper_pose.at(gripper_ind).translation();
+            streching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind))
+                    / resulting_gripper_motion.norm();
+        }
+        if(streching_sum / current_gripper_pose.size() <= stretching_cosine_threshold_)
+        {
+            motion_induced_streching = true;
+        }
+    }
+
+    return motion_induced_streching;
+}

@@ -179,6 +179,10 @@ namespace smmap
                     const DeformableModel::DeformableModelInputData& input_data,
                     const AllGrippersSinglePoseDelta& test_gripper_motion);
 
+            bool clothTwoGrippersStretchingDetection(
+                    const DeformableModel::DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+
         private:
             const Eigen::MatrixXd object_initial_node_distance_;
             GripperCollisionChecker gripper_collision_checker_;

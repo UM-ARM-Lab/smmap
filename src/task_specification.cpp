@@ -420,7 +420,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
             const bool visualize_stretching_lines = false;
             ObjectDeltaAndWeight no_stretching_correction(num_nodes_ * 3);
             first_step_stretching_correction_ = no_stretching_correction;
-        //    first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, visualize_stretching_lines);
+         //   first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, visualize_stretching_lines);
             ROS_INFO_STREAM_NAMED("task_specification", "Found stretching correction delta in " << GlobalStopwatch(READ) << " seconds");
 
             GlobalStopwatch(RESET);

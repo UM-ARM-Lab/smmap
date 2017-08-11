@@ -311,7 +311,7 @@ WorldState Planner::sendNextCommand(
         bool planning_needed = false;
 
         // This bool variable here forces some tasks to utilize only local controller --- Added by Mengyao
-        const bool can_use_global_planner = canUseGlobalPlanner();
+        // const bool can_use_global_planner = canUseGlobalPlanner();
 
         // Check if the global plan has 'hooked' the deformable object on something
         if (executing_global_gripper_trajectory_)
@@ -319,7 +319,7 @@ WorldState Planner::sendNextCommand(
 
         }
         // Check if the local controller will be stuck
-        else if(can_use_global_planner)
+        else
         {
             Stopwatch stopwatch;
             arc_helpers::DoNotOptimize(world_state);
@@ -343,12 +343,6 @@ WorldState Planner::sendNextCommand(
 
                 ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
             }
-        }
-        else
-        {
-            Stopwatch stopwatch;
-            arc_helpers::DoNotOptimize(world_state);
-            ROS_INFO_STREAM_NAMED("planner", "Determined if global planner needed in " << stopwatch(READ) << " seconds");
         }
 
         // If we need to (re)plan due to the local controller getting stuck, or the gobal plan failing, then do so
@@ -623,6 +617,7 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
 
 // Helper function to force some task type use only local controller
 // --- Added by Mengyao
+/*
 bool Planner::canUseGlobalPlanner()
 {
     switch (GetDeformableType(nh_))
@@ -647,6 +642,7 @@ bool Planner::canUseGlobalPlanner()
         }
     }
 }
+*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constraint violation detection
