@@ -116,6 +116,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
     // Checking the stretching status for current object configuration for once
     over_stretch_ = false;
 
+
     for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
     {
         for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
@@ -134,6 +135,35 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
         }
     }
 
+
+    /*
+    EigenHelpers::VectorVector3d line_starts;
+    EigenHelpers::VectorVector3d line_ends;
+
+    for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
+    {
+        for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
+        {
+            const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
+            if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
+            {
+                over_stretch_ = true;
+                visualize_stretching_vector(current_world_state.object_configuration_);
+
+                line_starts.push_back(current_world_state.object_configuration_.block<3,1>(0, first_node));
+                line_ends.push_back(current_world_state.object_configuration_.block<3,1>(0, second_node));
+            }
+        }
+    }
+
+    if(over_stretch_)
+    {
+        vis_.visualizeLines("All_gripper overstretch motion",
+                            line_starts,
+                            line_ends,
+                            Visualizer::Silver());
+    }
+    */
 
 //    #pragma omp parallel for
     for (int64_t ind_count = 0; ind_count < max_count_; ind_count++)
