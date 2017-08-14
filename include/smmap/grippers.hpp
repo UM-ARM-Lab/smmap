@@ -35,6 +35,10 @@ namespace smmap
     struct StretchingVectorInfo
     {
         StretchingVectorInfo()
+            : to_gripper_name_(NULL)
+            , from_nodes_(NULL)
+            , to_nodes_(NULL)
+            , node_contribution_(NULL)
         {}
 
         StretchingVectorInfo(
@@ -74,6 +78,7 @@ namespace smmap
                                       to_nodes,
                                       node_contribution)
         {}
+
 
         /// The name associated with this gripper
         std::string name_;

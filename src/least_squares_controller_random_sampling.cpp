@@ -33,7 +33,7 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , max_stretch_factor_(GetMaxStretchFactor(ph))
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
-    , sample_count_(0)
+    , sample_count_(1)
     , over_stretch_(false)
 {
   //  grippers_stretching_helper_(grippers_data_.size());
@@ -577,10 +577,9 @@ bool LeastSquaresControllerRandomSampling::gripperCollisionCheckResult(
 //        const bool collision = enviroment_sdf_.Get3d(grippers_test_poses[gripper_idx].translation()) < 0.023;
         const auto collision_result = enviroment_sdf_.EstimateDistance3d(grippers_test_poses[gripper_idx].translation());
 
-     //   bool collision = false;
+    //    if(collision_result.first < 0.023)
         if(collision_result.first < 0.023)
         {
-    //        collision = true;
             collision_violation = true;
             break;
         }
@@ -827,9 +826,11 @@ bool LeastSquaresControllerRandomSampling::clothTwoGrippersStretchingDetection(
                     - current_gripper_pose.at(gripper_ind).translation();
 //            Eigen::Vector3d resulting_gripper_motion = test_gripper_motion.at(gripper_ind).segment<3>(0);
             streching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind));
+            /*
             std::cout << "resulting gripper_motion_norm is :"
                       << resulting_gripper_motion.norm()
                       << std::endl;
+            */
             sum_resulting_motion_norm += resulting_gripper_motion.norm();
         }
         if(streching_sum <= stretching_cosine_threshold_ * sum_resulting_motion_norm)
