@@ -174,19 +174,21 @@ namespace smmap
             const bool visualize_predicted_motion_;
 
         public:
-            const static std::string DESIRED_DELTA_NS;
-            const static std::string PREDICTED_DELTA_NS;
-            const static std::string PROJECTED_GRIPPER_NS;
-            const static std::string PROJECTED_BAND_NS;
-            const static std::string PROJECTED_POINT_PATH_NS;
-            const static std::string PROJECTED_POINT_PATH_LINES_NS;
+            // Topic names used for publishing visualization data
+            static constexpr auto DESIRED_DELTA_NS                         = "desired delta";
+            static constexpr auto PREDICTED_DELTA_NS                       = "predicted_delta";
 
-            const static std::string CONSTRAINT_VIOLATION_VERSION1_NS;
+            static constexpr auto PROJECTED_GRIPPER_NS                     = "projected_grippers";
+            static constexpr auto PROJECTED_BAND_NS                        = "projected_band";
+            static constexpr auto PROJECTED_POINT_PATH_NS                  = "projected_point_paths";
+            static constexpr auto PROJECTED_POINT_PATH_LINES_NS            = "projected_point_path_lines";
 
-            const static std::string CLUSTERING_TARGETS_NS;
-            const static std::string CLUSTERING_RESULTS_PRE_PROJECT_NS;
-            const static std::string CLUSTERING_RESULTS_POST_PROJECT_NS;
-            const static std::string CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS;
+            static constexpr auto CONSTRAINT_VIOLATION_VERSION1_NS         = "constraint_violation_version1";
+
+            static constexpr auto CLUSTERING_TARGETS_NS                    = "clustering_targets";
+            static constexpr auto CLUSTERING_RESULTS_PRE_PROJECT_NS        = "clustering_pre_project";
+            static constexpr auto CLUSTERING_RESULTS_POST_PROJECT_NS       = "clustering_post_project";
+            static constexpr auto CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS   = "clustering_assigned_centers";
     };
 }
 

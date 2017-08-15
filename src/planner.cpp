@@ -29,22 +29,6 @@ using namespace EigenHelpersConversions;
 #pragma message "Magic number - reward scaling factor starting value"
 #define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
 
-const std::string Planner::DESIRED_DELTA_NS                         = "desired delta";
-const std::string Planner::PREDICTED_DELTA_NS                       = "predicted_delta";
-
-const std::string Planner::PROJECTED_GRIPPER_NS                     = "projected_grippers";
-const std::string Planner::PROJECTED_BAND_NS                        = "projected_band";
-const std::string Planner::PROJECTED_POINT_PATH_NS                  = "projected_point_paths";
-const std::string Planner::PROJECTED_POINT_PATH_LINES_NS            = "projected_point_path_lines";
-
-const std::string Planner::CONSTRAINT_VIOLATION_VERSION1_NS         = "constraint_violation_version1";
-
-const std::string Planner::CLUSTERING_TARGETS_NS                    = "clustering_targets";
-const std::string Planner::CLUSTERING_RESULTS_PRE_PROJECT_NS        = "clustering_pre_project";
-const std::string Planner::CLUSTERING_RESULTS_POST_PROJECT_NS       = "clustering_post_project";
-const std::string Planner::CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS   = "clustering_assigned_centers";
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal helpers
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -224,12 +208,8 @@ void Planner::execute()
                         dijkstras_task_->environment_sdf_,
                         vis_,
                         generator_,
-                        GetRRTPlanningXMin(ph_),
-                        GetRRTPlanningXMax(ph_),
-                        GetRRTPlanningYMin(ph_),
-                        GetRRTPlanningYMax(ph_),
-                        GetRRTPlanningZMin(ph_),
-                        GetRRTPlanningZMax(ph_),
+                        Eigen::Vector3d(GetRRTPlanningXMin(ph_), GetRRTPlanningYMin(ph_), GetRRTPlanningZMin(ph_)),
+                        Eigen::Vector3d(GetRRTPlanningXMax(ph_), GetRRTPlanningYMax(ph_), GetRRTPlanningZMax(ph_)),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
                         GetRRTGoalBias(ph_),
                         dijkstras_task_->work_space_grid_.minStepDimension(),

@@ -62,33 +62,32 @@ namespace smmap
     class RRTHelper
     {
         public:
-            static const std::string RRT_BLACKLISTED_GOAL_BANDS_NS;
-            static const std::string RRT_GOAL_TESTING_NS;
+            static constexpr double NN_BLACKLIST_DISTANCE = (std::numeric_limits<double>::max() - 1e10);
 
-            static const std::string RRT_TREE_GRIPPER_A_NS;
-            static const std::string RRT_TREE_GRIPPER_B_NS;
+            // Topic names used for publishing visualization data
+            static constexpr auto RRT_BLACKLISTED_GOAL_BANDS_NS  = "rrt_blacklisted_goal_bands";
+            static constexpr auto RRT_GOAL_TESTING_NS            = "rrt_goal_testing";
 
-            static const std::string RRT_SAMPLE_NS;
-            static const std::string RRT_FORWARD_PROP_START_NS;
-            static const std::string RRT_FORWARD_PROP_STEPS_NS;
+            static constexpr auto RRT_TREE_GRIPPER_A_NS          = "rrt_tree_gripper_a";
+            static constexpr auto RRT_TREE_GRIPPER_B_NS          = "rrt_tree_gripper_b";
 
-            static const std::string RRT_SOLUTION_GRIPPER_A_NS;
-            static const std::string RRT_SOLUTION_GRIPPER_B_NS;
-            static const std::string RRT_SOLUTION_RUBBER_BAND_NS;
+            static constexpr auto RRT_SAMPLE_NS                  = "rrt_sample";
+            static constexpr auto RRT_FORWARD_PROP_START_NS      = "rrt_forward_prop_start";
+            static constexpr auto RRT_FORWARD_PROP_STEPS_NS      = "rrt_forward_prop_steps";
 
-            static const std::string RRT_SHORTCUT_FIRST_GRIPPER_NS;
-            static const std::string RRT_SHORTCUT_SECOND_GRIPPER_NS;
+            static constexpr auto RRT_SOLUTION_GRIPPER_A_NS      = "rrt_solution_gripper_a";
+            static constexpr auto RRT_SOLUTION_GRIPPER_B_NS      = "rrt_solution_gripper_b";
+            static constexpr auto RRT_SOLUTION_RUBBER_BAND_NS    = "rrt_solution_rubber_band";
+
+            static constexpr auto RRT_SHORTCUT_FIRST_GRIPPER_NS  = "rrt_shortcut_first_gripper";
+            static constexpr auto RRT_SHORTCUT_SECOND_GRIPPER_NS = "rrt_shortcut_second_gripper";
 
             RRTHelper(
                     const sdf_tools::SignedDistanceField& environment_sdf,
                     const Visualizer& vis,
                     std::mt19937_64& generator,
-                    const double x_limits_lower,
-                    const double x_limits_upper,
-                    const double y_limits_lower,
-                    const double y_limits_upper,
-                    const double z_limits_lower,
-                    const double z_limits_upper,
+                    const Eigen::Vector3d planning_world_lower_limits,
+                    const Eigen::Vector3d planning_world_upper_limits,
                     const double max_step_size,
                     const double goal_bias,
                     const double goal_reach_radius,
@@ -96,7 +95,8 @@ namespace smmap
                     const double homotopy_distance_penalty,
                     const int64_t max_shortcut_index_distance,
                     const uint32_t max_smoothing_iterations,
-                    const uint32_t max_failed_smoothing_iterations, const bool visualization_enabled);
+                    const uint32_t max_failed_smoothing_iterations,
+                    const bool visualization_enabled);
 
             std::vector<RRTConfig, RRTAllocator> rrtPlan(
                     const RRTConfig& start,
@@ -162,9 +162,8 @@ namespace smmap
 
 
         private:
-            const std::pair<double, double> x_limits_;
-            const std::pair<double, double> y_limits_;
-            const std::pair<double, double> z_limits_;
+            const Eigen::Vector3d planning_world_lower_limits_;
+            const Eigen::Vector3d planning_world_upper_limits_;
             const double max_step_size_;
             const double goal_bias_;
             const double goal_reach_radius_;

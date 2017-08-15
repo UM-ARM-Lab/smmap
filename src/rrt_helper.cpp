@@ -6,26 +6,6 @@
 
 using namespace smmap;
 
-#define NN_BLACKLIST_DISTANCE (std::numeric_limits<double>::max() - 1e10)
-
-const std::string RRTHelper::RRT_BLACKLISTED_GOAL_BANDS_NS  = "rrt_blacklisted_goal_bands";
-const std::string RRTHelper::RRT_GOAL_TESTING_NS            = "rrt_goal_testing";
-
-const std::string RRTHelper::RRT_TREE_GRIPPER_A_NS          = "rrt_tree_gripper_a";
-const std::string RRTHelper::RRT_TREE_GRIPPER_B_NS          = "rrt_tree_gripper_b";
-
-const std::string RRTHelper::RRT_SAMPLE_NS                  = "rrt_sample";
-const std::string RRTHelper::RRT_FORWARD_PROP_START_NS      = "rrt_forward_prop_start";
-const std::string RRTHelper::RRT_FORWARD_PROP_STEPS_NS      = "rrt_forward_prop_steps";
-
-const std::string RRTHelper::RRT_SOLUTION_GRIPPER_A_NS      = "rrt_solution_gripper_a";
-const std::string RRTHelper::RRT_SOLUTION_GRIPPER_B_NS      = "rrt_solution_gripper_b";
-const std::string RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS    = "rrt_solution_rubber_band";
-
-const std::string RRTHelper::RRT_SHORTCUT_FIRST_GRIPPER_NS  = "rrt_shortcut_first_gripper";
-const std::string RRTHelper::RRT_SHORTCUT_SECOND_GRIPPER_NS = "rrt_shortcut_second_gripper";
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper function for assertion testing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -168,12 +148,8 @@ RRTHelper::RRTHelper(
         const sdf_tools::SignedDistanceField& environment_sdf,
         const Visualizer& vis,
         std::mt19937_64& generator,
-        const double x_limits_lower,
-        const double x_limits_upper,
-        const double y_limits_lower,
-        const double y_limits_upper,
-        const double z_limits_lower,
-        const double z_limits_upper,
+        const Eigen::Vector3d planning_world_lower_limits,
+        const Eigen::Vector3d planning_world_upper_limits,
         const double max_step_size,
         const double goal_bias,
         const double goal_reach_radius,
@@ -183,9 +159,8 @@ RRTHelper::RRTHelper(
         const uint32_t max_smoothing_iterations,
         const uint32_t max_failed_smoothing_iterations,
         const bool visualization_enabled)
-    : x_limits_(x_limits_lower,x_limits_upper)
-    , y_limits_(y_limits_lower,y_limits_upper)
-    , z_limits_(z_limits_lower,z_limits_upper)
+    : planning_world_lower_limits_(planning_world_lower_limits)
+    , planning_world_upper_limits_(planning_world_upper_limits)
     , max_step_size_(max_step_size)
     , goal_bias_(goal_bias)
     , goal_reach_radius_(goal_reach_radius)
@@ -207,6 +182,9 @@ RRTHelper::RRTHelper(
     , total_band_forward_propogation_time_(NAN)
     , total_first_order_vis_propogation_time_(NAN)
 {
+    assert(planning_world_lower_limits_.x() <= planning_world_upper_limits_.x());
+    assert(planning_world_lower_limits_.y() <= planning_world_upper_limits_.y());
+    assert(planning_world_lower_limits_.z() <= planning_world_upper_limits_.z());
     assert(max_step_size_ > 0.0);
     assert(goal_reach_radius_ > 0.0);
     assert(homotopy_distance_penalty_ >= 0.0);
@@ -284,28 +262,50 @@ RRTGrippersRepresentation RRTHelper::posPairSampling()
     }
     else
     {
-        const double x1 = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_distribution_(generator_));
-        const double y1 = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_distribution_(generator_));
-        const double z1 = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_distribution_(generator_));
+        const double x1 = EigenHelpers::Interpolate(planning_world_lower_limits_.x(), planning_world_upper_limits_.x(), uniform_unit_distribution_(generator_));
+        const double y1 = EigenHelpers::Interpolate(planning_world_lower_limits_.y(), planning_world_upper_limits_.y(), uniform_unit_distribution_(generator_));
+        const double z1 = EigenHelpers::Interpolate(planning_world_lower_limits_.z(), planning_world_upper_limits_.z(), uniform_unit_distribution_(generator_));
+        rand_sample.first = Eigen::Vector3d(x1, y1, z1);
+
+        // We want to only sample within a radius max_grippers_distance_, and within the world extents; to do so
+        // uniformly, we sample from an axis aligned box limited by R and the world extents, rejecting samples that lie
+        // outside a radius max_grippers_distance_
+        const double x2_min = std::max(planning_world_lower_limits_.x(), x1 - max_grippers_distance_);
+        const double x2_max = std::min(planning_world_upper_limits_.x(), x1 + max_grippers_distance_);
+        const double y2_min = std::max(planning_world_lower_limits_.y(), y1 - max_grippers_distance_);
+        const double y2_max = std::min(planning_world_upper_limits_.y(), y1 + max_grippers_distance_);
+        const double z2_min = std::max(planning_world_lower_limits_.z(), z1 - max_grippers_distance_);
+        const double z2_max = std::min(planning_world_upper_limits_.z(), z1 + max_grippers_distance_);
+
+        bool valid = false;
+        do
+        {
+            const double x2 = EigenHelpers::Interpolate(x2_min, x2_max, uniform_unit_distribution_(generator_));
+            const double y2 = EigenHelpers::Interpolate(y2_min, y2_max, uniform_unit_distribution_(generator_));
+            const double z2 = EigenHelpers::Interpolate(z2_min, z2_max, uniform_unit_distribution_(generator_));
+            rand_sample.second = Eigen::Vector3d(x2, y2, z2);
+            valid = (rand_sample.first - rand_sample.second).norm() <= max_grippers_distance_;
+        }
+        while (!valid);
+
 
         // Pick a second point within band_max_length of the first point
         // Math taken from here:
         // http://mathworld.wolfram.com/SpherePointPicking.html
         // https://math.stackexchange.com/questions/87230/picking-random-points-in-the-volume-of-sphere-with-uniform-probability
 
-        const double u = uniform_unit_distribution_(generator_);
-        const double v = uniform_unit_distribution_(generator_);
-        const double theta = 2.0 * M_PI * u;
-        const double phi = std::acos(2.0 * v - 1);
-        const double radial_distance = uniform_unit_distribution_(generator_);
-        const double r = max_grippers_distance_ * std::pow(radial_distance, 1.0 / 3.0);
+//        const double u = uniform_unit_distribution_(generator_);
+//        const double v = uniform_unit_distribution_(generator_);
+//        const double theta = 2.0 * M_PI * u;
+//        const double phi = std::acos(2.0 * v - 1);
+//        const double radial_distance = uniform_unit_distribution_(generator_);
+//        const double r = max_grippers_distance_ * std::pow(radial_distance, 1.0 / 3.0);
 
-        const double x2_delta = r * std::cos(theta) * std::sin(phi);
-        const double y2_delta = r * std::sin(theta) * std::sin(phi);
-        const double z2_delta = r * std::cos(phi);
+//        const double x2_delta = r * std::cos(theta) * std::sin(phi);
+//        const double y2_delta = r * std::sin(theta) * std::sin(phi);
+//        const double z2_delta = r * std::cos(phi);
 
-        rand_sample.first = Eigen::Vector3d(x1, y1, z1);
-        rand_sample.second = Eigen::Vector3d(x1 + x2_delta, y1 + y2_delta, z1 + z2_delta);
+//        rand_sample.second = Eigen::Vector3d(x1 + x2_delta, y1 + y2_delta, z1 + z2_delta);
     }
 
     return rand_sample;
