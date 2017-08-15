@@ -33,7 +33,7 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , max_stretch_factor_(GetMaxStretchFactor(ph))
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
-    , sample_count_(1)
+    , sample_count_(-1)
     , over_stretch_(false)
 {
   //  grippers_stretching_helper_(grippers_data_.size());

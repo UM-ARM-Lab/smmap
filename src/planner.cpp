@@ -411,7 +411,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
-    assert(model_to_use == 0);
+    //assert(model_to_use == 0);
 
 
     const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
