@@ -206,6 +206,7 @@ namespace smmap
 
             const int64_t max_count_;
             int sample_count_;
+            bool previous_over_stretch_state_;
             bool over_stretch_;
 
             // cloth node inde conversion helper

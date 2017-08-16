@@ -33,7 +33,8 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , max_stretch_factor_(GetMaxStretchFactor(ph))
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
-    , sample_count_(-1)
+    , sample_count_(0)
+    , previous_over_stretch_state_(false)
     , over_stretch_(false)
 {
   //  grippers_stretching_helper_(grippers_data_.size());
@@ -116,22 +117,32 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
     // Checking the stretching status for current object configuration for once
     over_stretch_ = false;
 
-
-    for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
+    // If sampling one gripper motion each time, always correct it twice
+    if (previous_over_stretch_state_ && (sample_count_ >= 0))
     {
-        for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
+        over_stretch_ = true;
+        visualize_stretching_vector(current_world_state.object_configuration_);
+        previous_over_stretch_state_ = false;
+    }
+    else
+    {
+        for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
         {
-            const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
-            if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
+            for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
             {
-                over_stretch_ = true;
-                visualize_stretching_vector(current_world_state.object_configuration_);
+                const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
+                if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
+                {
+                    over_stretch_ = true;
+                    visualize_stretching_vector(current_world_state.object_configuration_);
+                    break;
+                }
+            }
+            if(over_stretch_)
+            {
+                previous_over_stretch_state_ = over_stretch_;
                 break;
             }
-        }
-        if(over_stretch_)
-        {
-            break;
         }
     }
 
@@ -324,9 +335,16 @@ kinematics::Vector6d LeastSquaresControllerRandomSampling::singleGripperPoseDelt
     const double y_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
     const double z_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
 
+
+    const double x_rot = EigenHelpers::Interpolate(-max_delta * M_PI, max_delta * M_PI, uniform_unit_distribution_(generator_));
+    const double y_rot = EigenHelpers::Interpolate(-max_delta * M_PI, max_delta * M_PI, uniform_unit_distribution_(generator_));
+    const double z_rot = EigenHelpers::Interpolate(-max_delta * M_PI, max_delta * M_PI, uniform_unit_distribution_(generator_));
+
+    /*
     const double x_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
     const double y_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
     const double z_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
+    */
 
     kinematics::Vector6d random_sample;
 
@@ -346,9 +364,16 @@ kinematics::Vector6d LeastSquaresControllerRandomSampling::singleGripperPoseDelt
         random_sample(2) = z_trans;
     }
 
+    /*
+    random_sample(3) = 0.0;
+    random_sample(4) = 0.0;
+    random_sample(5) = 0.0;
+    */
+
     random_sample(3) = x_rot;
     random_sample(4) = y_rot;
     random_sample(5) = z_rot;
+
 
     return ClampGripperPoseDeltas(random_sample, max_delta);
 }
@@ -820,20 +845,13 @@ bool LeastSquaresControllerRandomSampling::clothTwoGrippersStretchingDetection(
     // sample_count_ > -1 means only sample one gripper each time
     if(sample_count_ > -1)
     {
-        for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
-        {
-            Eigen::Vector3d resulting_gripper_motion = grippers_test_poses.at(gripper_ind).translation()
-                    - current_gripper_pose.at(gripper_ind).translation();
+        Eigen::Vector3d resulting_gripper_motion = grippers_test_poses.at(sample_count_).translation()
+                - current_gripper_pose.at(sample_count_).translation();
 //            Eigen::Vector3d resulting_gripper_motion = test_gripper_motion.at(gripper_ind).segment<3>(0);
-            streching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind));
-            /*
-            std::cout << "resulting gripper_motion_norm is :"
-                      << resulting_gripper_motion.norm()
-                      << std::endl;
-            */
-            sum_resulting_motion_norm += resulting_gripper_motion.norm();
-        }
-        if(streching_sum <= stretching_cosine_threshold_ * sum_resulting_motion_norm)
+        streching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(sample_count_));
+
+        sum_resulting_motion_norm += resulting_gripper_motion.norm();
+        if((streching_sum / sum_resulting_motion_norm) <= stretching_cosine_threshold_)
         {
             motion_induced_streching = true;
         }

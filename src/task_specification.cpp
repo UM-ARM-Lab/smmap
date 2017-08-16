@@ -419,7 +419,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
             GlobalStopwatch(RESET);
             bool visualize_stretching_lines = false;
 
-            if(!GetStretchingCorrectionFromTask(nh_))
+            if(!GetStretchingCorrectionFromTask(ph_))
             {
                 ObjectDeltaAndWeight no_stretching_correction(num_nodes_ * 3);
                 first_step_stretching_correction_ = no_stretching_correction;
