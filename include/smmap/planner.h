@@ -72,10 +72,11 @@ namespace smmap
                     const WorldState& current_world_state,
                     const bool visualization_enabled = true);
 
-            bool globalPlannerNeededDueToOverstretch(
-                    const WorldState& current_world_state);
+            bool globalPlannerNeededDueToOverstretch(const WorldState& current_world_state);
 
             bool globalPlannerNeededDueToLackOfProgress();
+
+            bool predictStuckForGlobalPlannerResults(const bool visualization_enabled = true);
 
             ////////////////////////////////////////////////////////////////////
             // Global gripper planner functions
