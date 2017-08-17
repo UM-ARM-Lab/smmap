@@ -304,7 +304,7 @@ void VirtualRubberBand::shortcutSmoothBand(const bool verbose)
 
         if (first_ind != second_ind)
         {
-            band_ = shortcut_smoothing::ShortcutSmooth(band_, first_ind, second_ind, max_distance_between_rubber_band_points_, sdf_collision_fn);
+            band_ = shortcut_smoothing::InterpolateWithCollisionCheck(band_, first_ind, second_ind, max_distance_between_rubber_band_points_, sdf_collision_fn);
         }
 
         if (verbose)
