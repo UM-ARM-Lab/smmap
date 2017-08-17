@@ -335,16 +335,16 @@ kinematics::Vector6d LeastSquaresControllerRandomSampling::singleGripperPoseDelt
     const double y_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
     const double z_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
 
-
+    /*
     const double x_rot = EigenHelpers::Interpolate(-max_delta * M_PI, max_delta * M_PI, uniform_unit_distribution_(generator_));
     const double y_rot = EigenHelpers::Interpolate(-max_delta * M_PI, max_delta * M_PI, uniform_unit_distribution_(generator_));
     const double z_rot = EigenHelpers::Interpolate(-max_delta * M_PI, max_delta * M_PI, uniform_unit_distribution_(generator_));
+    */
 
-    /*
     const double x_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
     const double y_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
     const double z_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
-    */
+
 
     kinematics::Vector6d random_sample;
 
