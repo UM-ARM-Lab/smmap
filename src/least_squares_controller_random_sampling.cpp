@@ -809,6 +809,9 @@ bool LeastSquaresControllerRandomSampling::clothTwoGrippersStretchingDetection(
     const std::vector<long>& second_to_nodes = second_stretching_vector_info.to_nodes_;
     const std::vector<double>& second_contribution = second_stretching_vector_info.node_contribution_;
 
+    Eigen::Vector3d point_on_first_gripper = Eigen::MatrixXd::Zero(3,1);
+    Eigen::Vector3d point_on_second_gripper = Eigen::MatrixXd::Zero(3,1);
+
     Eigen::Vector3d first_correction_vector = Eigen::MatrixXd::Zero(3,1);
     for (int stretching_ind = 0; stretching_ind < first_from_nodes.size(); stretching_ind++)
     {
@@ -816,11 +819,16 @@ bool LeastSquaresControllerRandomSampling::clothTwoGrippersStretchingDetection(
                 first_contribution.at(stretching_ind) *
                 (object_configuration.block<3, 1>(0, first_to_nodes.at(stretching_ind))
                  - object_configuration.block<3, 1>(0, first_from_nodes.at(stretching_ind)));
+
+        point_on_first_gripper +=
+                first_contribution.at(stretching_ind) *
+                object_configuration.block<3, 1>(0, first_from_nodes.at(stretching_ind));
     }
     if(first_correction_vector.norm() > 0)
     {
         first_correction_vector = first_correction_vector / first_correction_vector.norm();
     }
+    point_on_first_gripper = point_on_first_gripper - current_gripper_pose.at(0).translation();
 
     Eigen::Vector3d second_correction_vector = Eigen::MatrixXd::Zero(3,1);
     for (int stretching_ind = 0; stretching_ind < second_from_nodes.size(); stretching_ind++)
@@ -829,13 +837,37 @@ bool LeastSquaresControllerRandomSampling::clothTwoGrippersStretchingDetection(
                 second_contribution.at(stretching_ind) *
                 (object_configuration.block<3, 1>(0, second_to_nodes.at(stretching_ind))
                  - object_configuration.block<3, 1>(0, second_from_nodes.at(stretching_ind)));
+
+        point_on_second_gripper +=
+                second_contribution.at(stretching_ind) *
+                object_configuration.block<3, 1>(0, second_from_nodes.at(stretching_ind));
+
     }
     if(second_correction_vector.norm() > 0)
     {
         second_correction_vector = second_correction_vector / second_correction_vector.norm();
     }
+    point_on_second_gripper = point_on_second_gripper - current_gripper_pose.at(1).translation();
 
     const auto grippers_test_poses = kinematics::applyTwist(current_gripper_pose, test_gripper_motion);
+
+    // Get track the point on edge of the gripper; stretching offset by geometric shape
+    Eigen::Vector3d point_in_gripper_tm_first = current_gripper_pose.at(0).linear().inverse()
+            * point_on_first_gripper;
+
+    Eigen::Vector3d point_in_gripper_tm_second = current_gripper_pose.at(1).linear().inverse()
+            * point_on_second_gripper;
+
+    Eigen::Vector3d point_on_first_gripper_after = grippers_test_poses.at(0).linear()
+            * point_in_gripper_tm_first;
+
+    Eigen::Vector3d point_on_second_gripper_after = grippers_test_poses.at(1).linear()
+            * point_in_gripper_tm_second;
+
+    std::vector<Eigen::Vector3d> points_moving;
+    points_moving.push_back(point_on_first_gripper_after - point_on_first_gripper);
+    points_moving.push_back(point_on_second_gripper_after - point_on_second_gripper);
+
     double sum_resulting_motion_norm = 0.0;
 
     EigenHelpers::VectorVector3d stretching_correction_vector;
@@ -845,9 +877,11 @@ bool LeastSquaresControllerRandomSampling::clothTwoGrippersStretchingDetection(
     // sample_count_ > -1 means only sample one gripper each time
     if(sample_count_ > -1)
     {
+        /*
         Eigen::Vector3d resulting_gripper_motion = grippers_test_poses.at(sample_count_).translation()
                 - current_gripper_pose.at(sample_count_).translation();
-//            Eigen::Vector3d resulting_gripper_motion = test_gripper_motion.at(gripper_ind).segment<3>(0);
+        */
+        Eigen::Vector3d resulting_gripper_motion = points_moving.at(sample_count_);
         streching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(sample_count_));
 
         sum_resulting_motion_norm += resulting_gripper_motion.norm();
