@@ -865,8 +865,14 @@ bool LeastSquaresControllerRandomSampling::clothTwoGrippersStretchingDetection(
             * point_in_gripper_tm_second;
 
     std::vector<Eigen::Vector3d> points_moving;
-    points_moving.push_back(point_on_first_gripper_after - point_on_first_gripper);
-    points_moving.push_back(point_on_second_gripper_after - point_on_second_gripper);
+    points_moving.push_back((grippers_test_poses.at(0).translation()
+                             + point_on_first_gripper_after)
+                             - (current_gripper_pose.at(0).translation()
+                                +point_on_first_gripper));
+    points_moving.push_back((grippers_test_poses.at(1).translation()
+                             + point_on_second_gripper_after)
+                             - (current_gripper_pose.at(1).translation()
+                                +point_on_second_gripper));
 
     double sum_resulting_motion_norm = 0.0;
 
@@ -885,6 +891,10 @@ bool LeastSquaresControllerRandomSampling::clothTwoGrippersStretchingDetection(
         streching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(sample_count_));
 
         sum_resulting_motion_norm += resulting_gripper_motion.norm();
+        if(sum_resulting_motion_norm < 0.000000001)
+        {
+            return false;
+        }
         if((streching_sum / sum_resulting_motion_norm) <= stretching_cosine_threshold_)
         {
             motion_induced_streching = true;
