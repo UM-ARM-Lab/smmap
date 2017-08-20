@@ -43,8 +43,8 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
         grippers_stretching_helper_.push_back(
                     std::unique_ptr<GripperStretchingInfo>(
                         new GripperStretchingInfo(
-                            GetClothXSize(nh),
-                            GetClothYSize(nh),
+                            GetClothNumControlPointsX(nh),
+                            GetClothNumControlPointsY(nh),
                             grippers_data_.at(gripper_ind))));
     }
 }
@@ -118,14 +118,16 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
     over_stretch_ = false;
 
     // If sampling one gripper motion each time, always correct it twice
+    /*
     if (previous_over_stretch_state_ && (sample_count_ >= 0))
     {
         over_stretch_ = true;
         visualize_stretching_vector(current_world_state.object_configuration_);
         previous_over_stretch_state_ = false;
     }
-    else
-    {
+    */
+//    else
+//    {
         for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
         {
             for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
@@ -144,7 +146,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
                 break;
             }
         }
-    }
+//    }
 
 
     /*
