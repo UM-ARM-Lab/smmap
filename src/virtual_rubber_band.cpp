@@ -250,10 +250,20 @@ void VirtualRubberBand::resampleBand(const bool verbose)
 
     // Continue to smooth with projected points until the result stabilizes
     EigenHelpers::VectorVector3d smoothing_result = shortcut_smoothing::ResamplePath(band_, max_distance_between_rubber_band_points_, state_distance_fn, state_interpolation_fn);
+
+    int smoothing_count = 0;
+    // TODO: This can cause an infinite loop
+    // https://github.com/UM-ARM-Lab/smmap/issues/6
     while (smoothing_result != band_)
     {
+        if (smoothing_count == 10000)
+        {
+            ROS_WARN("Rubber Band Smoothing is probably caught in an infinite loop");
+        }
+        
         band_ = smoothing_result;
         smoothing_result = shortcut_smoothing::ResamplePath(band_, max_distance_between_rubber_band_points_, state_distance_fn, state_interpolation_fn);
+        smoothing_count++;
     }
 
     // Double check the results; this is here to catch cases where the projection may be creating points that are too far apart
@@ -294,7 +304,7 @@ void VirtualRubberBand::shortcutSmoothBand(const bool verbose)
 
         if (first_ind != second_ind)
         {
-            band_ = shortcut_smoothing::ShortcutSmooth(band_, first_ind, second_ind, max_distance_between_rubber_band_points_, sdf_collision_fn);
+            band_ = shortcut_smoothing::InterpolateWithCollisionCheck(band_, first_ind, second_ind, max_distance_between_rubber_band_points_, sdf_collision_fn);
         }
 
         if (verbose)
