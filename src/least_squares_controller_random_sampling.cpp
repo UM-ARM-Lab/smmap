@@ -136,13 +136,14 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
                 if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
                 {
                     over_stretch_ = true;
+                    stretching_violation_count_ ++;
+                    previous_over_stretch_state_ = over_stretch_;
                     visualize_stretching_vector(current_world_state.object_configuration_);
                     break;
                 }
             }
             if(over_stretch_)
             {
-                previous_over_stretch_state_ = over_stretch_;
                 break;
             }
         }

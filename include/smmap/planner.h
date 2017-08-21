@@ -171,6 +171,8 @@ namespace smmap
 
             void initializeLogging();
 
+            void initializeControllerLogging();
+
             void logData(
                     const WorldState& current_world_state,
                     const Eigen::VectorXd& model_utility_mean,
@@ -178,8 +180,16 @@ namespace smmap
                     const ssize_t model_used,
                     const std::vector<double>& rewards_for_all_models);
 
+            // Contoller logger.  --- Added by Mengyao
+            void controllerLogData(const WorldState& current_world_state,
+                    double ave_contol_error,
+                    long num_stretching_violation);
+
             const bool logging_enabled_;
+            const bool controller_logging_enabled_;
             std::unordered_map<std::string, Log::Log> loggers_;
+            std::unordered_map<std::string, Log::Log> controller_loggers_;
+
             Visualizer& vis_;
             const bool visualize_desired_motion_;
             const bool visualize_predicted_motion_;

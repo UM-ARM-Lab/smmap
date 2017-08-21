@@ -2,6 +2,8 @@
 #include "smmap/gurobi_solvers.h"
 #include "smmap/jacobian_model.h"
 
+#include "smmap/ros_communication_helpers.hpp"
+
 using namespace smmap;
 using namespace Eigen;
 using namespace EigenHelpers;
@@ -11,10 +13,14 @@ using namespace EigenHelpers;
 #define LEAST_SQUARES_DAMPING_VALUE     (1e-3)
 
 LeastSquaresControllerWithObjectAvoidance::LeastSquaresControllerWithObjectAvoidance(
+        ros::NodeHandle& nh,
+        ros::NodeHandle& ph,
         const DeformableModel::Ptr& model,
         const double obstacle_avoidance_scale,
         const bool optimize)
-    : model_(model)
+    : object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
+    , max_stretch_factor_(GetMaxStretchFactor(ph))
+    , model_(model)
     , obstacle_avoidance_scale_(obstacle_avoidance_scale)
     , optimize_(optimize)
 {
@@ -31,6 +37,12 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerWith
     const double max_step_size = max_gripper_velocity * input_data.dt_;
     const size_t num_grippers = grippers_data.size();
     const ssize_t num_nodes = input_data.world_current_state_.object_configuration_.cols();
+
+    // Check object current stretching status; only for evaluation of controller performance --- Added by Mengyao
+    if (stretchingViolation(input_data.world_current_state_.object_configuration_))
+    {
+        stretching_violation_count_++;
+    }
 
     ////////////////////////////////////////////////////////////////////////
     // Find the velocities of each part of the algorithm
@@ -90,3 +102,4 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerWith
 
     return suggested_grippers_command;
 }
+

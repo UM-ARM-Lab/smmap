@@ -193,12 +193,14 @@ Planner::Planner(
     , rrt_helper_(nullptr)
 
     , logging_enabled_(GetLoggingEnabled(nh_))
+    , controller_logging_enabled_(true)
     , vis_(vis)
     , visualize_desired_motion_(GetVisualizeObjectDesiredMotion(ph_))
     , visualize_predicted_motion_(GetVisualizeObjectPredictedMotion(ph_))
 {
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
     initializeLogging();
+    initializeControllerLogging();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -564,10 +566,36 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
     }
 
+    // Calculation for controller log.   --- Added by Mengyao
+    ObjectPointSet real_p_dot = world_feedback.object_configuration_ - world_state.object_configuration_;
+    Eigen::VectorXd desired_p_dot = task_desired_motion.delta;
+    Eigen::VectorXd desired_p_dot_weight = task_desired_motion.weight;
+
+    // desired_p_dot.resizeLike(real_p_dot);
+    // desired_p_dot_weight.resizeLike(real_p_dot);
+
+    // calculate controller error (real p dot - desired p dot)
+    double ave_control_error = 0.0;
+    int point_count = 0;
+    for (ssize_t node_ind = 0; node_ind < real_p_dot.cols(); node_ind++)
+    {
+        const Eigen::Vector3d& point_real_p_dot = real_p_dot.col(node_ind);
+        const Eigen::Vector3d& point_desired_p_dot = desired_p_dot.segment<3>(node_ind * 3);
+        const double point_weight = desired_p_dot_weight(node_ind * 3);
+
+        if (point_weight > 0)
+        {
+            point_count ++;
+            ave_control_error = ave_control_error + (point_real_p_dot - point_desired_p_dot).norm();
+        }
+    }
+
     ROS_INFO_NAMED("planner", "Updating models and logging data");
     updateModels(world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
 
     logData(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use, individual_rewards);
+
+    controllerLogData(world_feedback, ave_control_error, controller_list_[model_to_use]->getStretchingViolationCount());
 
     const double controller_time = function_wide_stopwatch(READ) - robot_execution_time;
     ROS_INFO_STREAM_NAMED("planner", "Total local controller time                     " << controller_time << " seconds");
@@ -1392,6 +1420,8 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                   rotational_deformability));
 
         controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                       nh_,
+                                       ph_,
                                        model_list_.back(),
                                        task_specification_->collisionScalingFactor(),
                                        optimization_enabled));
@@ -1416,6 +1446,8 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                           rot_deform));
 
                 controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                               nh_,
+                                               ph_,
                                                model_list_.back(),
                                                task_specification_->collisionScalingFactor(),
                                                optimization_enabled));
@@ -1446,6 +1478,8 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                           learning_rate));
 
                 controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                               nh_,
+                                               ph_,
                                                model_list_.back(),
                                                task_specification_->collisionScalingFactor(),
                                                optimization_enabled));
@@ -1466,6 +1500,8 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                   GetAdaptiveModelLearningRate(ph_)));
 
         controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                       nh_,
+                                       ph_,
                                        model_list_.back(),
                                        task_specification_->collisionScalingFactor(),
                                        optimization_enabled));
@@ -1805,6 +1841,31 @@ void Planner::initializeLogging()
     }
 }
 
+void Planner::initializeControllerLogging()
+{
+    if(controller_logging_enabled_)
+    {
+        const std::string log_folder = GetLogFolder(nh_);
+        ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
+
+        Log::Log seed_log(log_folder + "seed.txt", false);
+        LOG_STREAM(seed_log, std::hex << seed_);
+
+        // Loggers for controller performance.  --- Added by Mengyao
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "control_time",
+                                       Log::Log(log_folder + "control_time.txt", false)));
+
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "control_error_realtime",
+                                       Log::Log(log_folder + "control_error_realtime.txt", false)));
+
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "count_stretching_violation",
+                                       Log::Log(log_folder + "count_stretching_violation.txt", false)));
+    }
+}
+
 void Planner::logData(
         const WorldState& current_world_state,
         const Eigen::VectorXd& model_utility_mean,
@@ -1838,3 +1899,31 @@ void Planner::logData(
             PrettyPrint::PrettyPrint(rewards_for_all_models, false, " "));
     }
 }
+
+// Contoller logger.  --- Added by Mengyao
+void Planner::controllerLogData(
+        const WorldState& current_world_state,
+        double ave_contol_error,
+        long num_stretching_violation)
+{
+    if(controller_logging_enabled_)
+    {
+        const static Eigen::IOFormat single_line(
+                    Eigen::StreamPrecision,
+                    Eigen::DontAlignCols,
+                    " ", " ", "", "");
+
+        LOG(controller_loggers_.at("control_time"),
+            current_world_state.sim_time_);
+
+        LOG(controller_loggers_.at("control_error_realtime"),
+            ave_contol_error);
+
+        LOG(controller_loggers_.at("count_stretching_violation"),
+            num_stretching_violation);
+
+    }
+}
+
+
+

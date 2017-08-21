@@ -115,6 +115,8 @@ namespace smmap
 
             void setGripperControllerType(GripperControllerType gripper_controller_type);
 
+            long getStretchingViolationCount();
+
 
         private:
             /////////////////////////////////////////////////////////////////////////////////////////
@@ -211,6 +213,7 @@ namespace smmap
 
             // cloth node inde conversion helper
             std::vector<std::unique_ptr<GripperStretchingInfo>> grippers_stretching_helper_;
+            long stretching_violation_count_;
 
     };
 
