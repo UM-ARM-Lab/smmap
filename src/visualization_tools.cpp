@@ -245,7 +245,8 @@ void Visualizer::visualizePoints(
         const std::string& marker_name,
         const EigenHelpers::VectorVector3d& points,
         const std_msgs::ColorRGBA& color,
-        const int32_t id, const double scale) const
+        const int32_t id,
+        const double scale) const
 {
     if (!disable_all_visualizations_)
     {
