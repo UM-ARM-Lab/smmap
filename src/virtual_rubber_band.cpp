@@ -245,26 +245,39 @@ void VirtualRubberBand::resampleBand(const bool verbose)
     };
     const std::function<Eigen::Vector3d(const Eigen::Vector3d&, const Eigen::Vector3d&, const double)> state_interpolation_fn = [&] (const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, const double ratio)
     {
-        return sdf_.ProjectOutOfCollision3d(EigenHelpers::Interpolate(prev, curr, ratio));
+        vis_.visualizePoints("band_test_resample_prev", {prev}, {Visualizer::Red()}, 1, 0.005);
+        vis_.visualizePoints("band_test_resample_curr", {curr}, {Visualizer::Blue()}, 1, 0.005);
+        const auto pre_project = EigenHelpers::Interpolate(prev, curr, ratio);
+        vis_.visualizePoints("band_test_resample_inerp", {pre_project}, {Visualizer::Cyan()}, 1, 0.004);
+        const auto projected = sdf_.ProjectOutOfCollision3d(pre_project);
+        vis_.visualizePoints("band_test_resample_result", {projected}, {Visualizer::Green()}, 1, 0.004);
+        return projected;
     };
 
     // Continue to smooth with projected points until the result stabilizes
-    EigenHelpers::VectorVector3d smoothing_result = shortcut_smoothing::ResamplePath(band_, max_distance_between_rubber_band_points_, state_distance_fn, state_interpolation_fn);
+    EigenHelpers::VectorVector3d resample_result = shortcut_smoothing::ResamplePath(band_, max_distance_between_rubber_band_points_, state_distance_fn, state_interpolation_fn);
 
-    int smoothing_count = 0;
+    int resample_count = 0;
     // TODO: This can cause an infinite loop
     // https://github.com/UM-ARM-Lab/smmap/issues/6
-    while (smoothing_result != band_)
+    while (resample_result != band_)
     {
-        if (smoothing_count == 10000)
+        if (resample_count == 5)
         {
-            ROS_WARN("Rubber Band Smoothing is probably caught in an infinite loop");
+            ROS_WARN("Rubber Band Smoothing is probably caught in an infinite loop while resampling");
+        }
+        if (resample_count >= 5)
+        {
+            visualize("band_test_resample", Visualizer::Red(), Visualizer::Red(), resample_count, true);
+            std::cout << PrettyPrint::PrettyPrint(EigenHelpers::CalculateIndividualDistances(band_), false, "\n") << std::flush;
+            std::cout << std::endl << std::endl;
         }
         
-        band_ = smoothing_result;
-        smoothing_result = shortcut_smoothing::ResamplePath(band_, max_distance_between_rubber_band_points_, state_distance_fn, state_interpolation_fn);
-        smoothing_count++;
+        band_ = resample_result;
+        resample_result = shortcut_smoothing::ResamplePath(band_, max_distance_between_rubber_band_points_, state_distance_fn, state_interpolation_fn);
+        resample_count++;
     }
+    std::cout << "resample count: " << resample_count << std::endl;
 
     // Double check the results; this is here to catch cases where the projection may be creating points that are too far apart
     for (size_t idx = 0; idx < band_.size() - 1; ++idx)
