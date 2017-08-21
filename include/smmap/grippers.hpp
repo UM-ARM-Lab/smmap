@@ -24,7 +24,7 @@ namespace smmap
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
 
-    typedef EigenHelpers::VectorAffine3d AllGrippersSinglePose;
+    typedef EigenHelpers::VectorIsometry3d AllGrippersSinglePose;
     typedef std::vector<AllGrippersSinglePose> AllGrippersPoseTrajectory;
 
     // VectorVector6d is a 6xn vector of 6d vectors, n cols
@@ -271,7 +271,7 @@ namespace smmap
             {
                 grippers_pose_trajectory[time_ind+1][gripper_ind] =
                         grippers_pose_trajectory[time_ind][gripper_ind] *
-                        kinematics::expTwistAffine3d(grippers_pose_deltas[time_ind][gripper_ind], 1);
+                        kinematics::expTwistIsometry3d(grippers_pose_deltas[time_ind][gripper_ind], 1);
             }
         }
 
@@ -308,7 +308,7 @@ namespace smmap
 
                 grippers_pose_trajectory[time_ind+1][gripper_ind] =
                         grippers_pose_trajectory[time_ind][gripper_ind] *
-                        kinematics::expTwistAffine3d(gripper_delta, 1);
+                        kinematics::expTwistIsometry3d(gripper_delta, 1);
             }
         }
 
@@ -476,7 +476,7 @@ namespace smmap
             {
                 deformable_manipulation_msgs::GetGripperCollisionReport collision_report_ros;
                 collision_report_ros.request.pose =
-                        EigenHelpersConversions::VectorAffine3dToVectorGeometryPose(gripper_poses);
+                        EigenHelpersConversions::VectorIsometry3dToVectorGeometryPose(gripper_poses);
 
                 if (!collision_checker_client_.call(collision_report_ros))
                 {
@@ -512,7 +512,7 @@ namespace smmap
      */
     inline Eigen::Matrix<double, 3, 6> ComputeCollisionToGripperJacobian(
             const Eigen::Vector3d& point_on_gripper,
-            const Eigen::Affine3d& gripper_pose)
+            const Eigen::Isometry3d& gripper_pose)
     {
 
         Eigen::Matrix<double, 3, 6> J_collision;
@@ -541,7 +541,7 @@ namespace smmap
      */
     inline CollisionAvoidanceResult ComputeGripperObjectAvoidance(
             const CollisionData& collision_data,
-            const Eigen::Affine3d& gripper_pose,
+            const Eigen::Isometry3d& gripper_pose,
             double max_step_size)
     {
         CollisionAvoidanceResult collision_avoidance_result;
@@ -576,7 +576,7 @@ namespace smmap
 
     inline std::vector<CollisionAvoidanceResult> ComputeGripperObjectAvoidance(
             const std::vector<CollisionData>& collision_data,
-            const EigenHelpers::VectorAffine3d& gripper_pose,
+            const EigenHelpers::VectorIsometry3d& gripper_pose,
             double max_step_size)
     {
         std::vector<CollisionAvoidanceResult> collision_avoidance_results;
@@ -636,7 +636,7 @@ namespace smmap
 
     inline uint64_t SerializeAllGrippersSinglePose(const AllGrippersSinglePose& poses, std::vector<uint8_t>& buffer)
     {
-        const std::function<uint64_t(const Eigen::Affine3d&, std::vector<uint8_t>&)> item_serializer = [] (const Eigen::Affine3d& pose, std::vector<uint8_t>& buffer)
+        const std::function<uint64_t(const Eigen::Isometry3d&, std::vector<uint8_t>&)> item_serializer = [] (const Eigen::Isometry3d& pose, std::vector<uint8_t>& buffer)
         {
             const uint64_t start_buffer_size = buffer.size();
 
@@ -664,7 +664,7 @@ namespace smmap
 
     inline std::pair<AllGrippersSinglePose, uint64_t> DeserializeAllGrippersSinglePose(const std::vector<uint8_t>& buffer, const uint64_t current)
     {
-        const std::function<std::pair<Eigen::Affine3d, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> item_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
+        const std::function<std::pair<Eigen::Isometry3d, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> item_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
         {
             // Make sure there is enough data left
             const uint64_t datalength = 16 * sizeof(double);
@@ -672,13 +672,13 @@ namespace smmap
             assert((current + datalength) <= buffer.size());
 
             // Memcopy the data into the eigen matrix
-            Eigen::Affine3d result;
+            Eigen::Isometry3d result;
             memcpy(result.data(), &buffer[current], datalength);
 
             // Return the result and the total amount of buffer "consumed"
             return std::make_pair(result, datalength);
         };
-        return arc_helpers::DeserializeVector<Eigen::Affine3d, Eigen::aligned_allocator<Eigen::Affine3d>>(buffer, current, item_deserializer);
+        return arc_helpers::DeserializeVector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d>>(buffer, current, item_deserializer);
     }
 
     inline uint64_t SerializeAllGrippersPoseTrajectory(const AllGrippersPoseTrajectory& traj, std::vector<uint8_t>& buffer)

@@ -53,7 +53,7 @@ namespace smmap
                     feedback_ros.object_configuration);
 
         feedback_eigen.all_grippers_single_pose_ =
-                EigenHelpersConversions::VectorGeometryPoseToVectorAffine3d(
+                EigenHelpersConversions::VectorGeometryPoseToVectorIsometry3d(
                     feedback_ros.gripper_poses);
 
         // TODO: modify the feedback to change this data ordering

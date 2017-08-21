@@ -318,7 +318,7 @@ namespace smmap
                     const std::vector<std::vector<ssize_t>>& correspondences);
 
             std::vector<double> averageDijkstrasDistanceBetweenGrippersAndClusters(
-                    const Eigen::Affine3d& gripper_pose,
+                    const Eigen::Isometry3d& gripper_pose,
                     const std::vector<ssize_t>& cover_indices,
                     const std::vector<uint32_t>& cluster_labels,
                     const uint32_t num_clusters) const;
