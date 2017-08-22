@@ -30,6 +30,7 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , task_type_(GetTaskType(nh))
     , model_(deformable_model)
     , distance_to_obstacle_threshold_(distance_to_obstacle_threshold)
+    , max_grippers_distance_(GetClothYSize(nh) - 0.015)
     , max_stretch_factor_(GetMaxStretchFactor(ph))
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
@@ -116,6 +117,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
 
     // Checking the stretching status for current object configuration for once
     over_stretch_ = false;
+    double max_stretching = 0.0;
 
     // If sampling one gripper motion each time, always correct it twice
     /*
@@ -132,20 +134,37 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
         {
             for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
             {
+                double this_stretching_factor = std::sqrt(node_squared_distance(first_node, second_node))
+                        / object_initial_node_distance_(first_node, second_node);
+                if (this_stretching_factor > max_stretching)
+                {
+                    max_stretching = this_stretching_factor;
+                }
+
                 const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
                 if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
                 {
                     over_stretch_ = true;
-                    stretching_violation_count_ ++;
-                    previous_over_stretch_state_ = over_stretch_;
-                    visualize_stretching_vector(current_world_state.object_configuration_);
-                    break;
                 }
             }
-            if(over_stretch_)
+        }
+        if (grippers_data_.size() == 2)
+        {
+            double this_stretching_factor = (current_world_state.all_grippers_single_pose_.at(0).translation()
+                    - current_world_state.all_grippers_single_pose_.at(1).translation()).norm()
+                    / max_grippers_distance_;
+            if (this_stretching_factor > max_stretching)
             {
-                break;
+                max_stretching = this_stretching_factor;
             }
+        }
+        current_stretching_factor_ = max_stretching;
+
+        if(over_stretch_)
+        {
+            stretching_violation_count_ ++;
+            previous_over_stretch_state_ = over_stretch_;
+            visualize_stretching_vector(current_world_state.object_configuration_);
         }
 //    }
 
@@ -367,16 +386,16 @@ kinematics::Vector6d LeastSquaresControllerRandomSampling::singleGripperPoseDelt
         random_sample(2) = z_trans;
     }
 
-    /*
+
     random_sample(3) = 0.0;
     random_sample(4) = 0.0;
     random_sample(5) = 0.0;
-    */
 
+    /*
     random_sample(3) = x_rot;
     random_sample(4) = y_rot;
     random_sample(5) = z_rot;
-
+    */
 
     return ClampGripperPoseDeltas(random_sample, max_delta);
 }

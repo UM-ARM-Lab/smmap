@@ -10,6 +10,7 @@ namespace smmap
         public:
             DeformableController()
                 : stretching_violation_count_(0)
+                , current_stretching_factor_(0.0)
             {}
 
             typedef std::shared_ptr<DeformableController> Ptr;
@@ -24,6 +25,11 @@ namespace smmap
             long getStretchingViolationCount()
             {
                 return stretching_violation_count_;
+            }
+
+            double getCurrentStretchingFactor()
+            {
+                return current_stretching_factor_;
             }
 
         protected:
@@ -43,6 +49,7 @@ namespace smmap
         protected:
 
             long stretching_violation_count_;
+            double current_stretching_factor_;
     };
 }
 

@@ -589,13 +589,20 @@ WorldState Planner::sendNextCommandUsingLocalController(
             ave_control_error = ave_control_error + (point_real_p_dot - point_desired_p_dot).norm();
         }
     }
+    if(point_count > 0)
+    {
+        ave_control_error = ave_control_error / point_count;
+    }
+
+    const long stretching_count = controller_list_[model_to_use]->getStretchingViolationCount();
+    const double current_stretching_factor = controller_list_[model_to_use]->getCurrentStretchingFactor();
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
     updateModels(world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
 
     logData(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use, individual_rewards);
 
-    controllerLogData(world_feedback, ave_control_error, controller_list_[model_to_use]->getStretchingViolationCount());
+    controllerLogData(world_feedback, ave_control_error, current_stretching_factor, stretching_count);
 
     const double controller_time = function_wide_stopwatch(READ) - robot_execution_time;
     ROS_INFO_STREAM_NAMED("planner", "Total local controller time                     " << controller_time << " seconds");
@@ -1861,6 +1868,10 @@ void Planner::initializeControllerLogging()
                                        Log::Log(log_folder + "control_error_realtime.txt", false)));
 
         controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "realtime_stretching_factor",
+                                       Log::Log(log_folder + "realtime_stretching_factor.txt", false)));
+
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
                                        "count_stretching_violation",
                                        Log::Log(log_folder + "count_stretching_violation.txt", false)));
     }
@@ -1904,6 +1915,7 @@ void Planner::logData(
 void Planner::controllerLogData(
         const WorldState& current_world_state,
         double ave_contol_error,
+        double current_stretching_factor,
         long num_stretching_violation)
 {
     if(controller_logging_enabled_)
@@ -1918,6 +1930,9 @@ void Planner::controllerLogData(
 
         LOG(controller_loggers_.at("control_error_realtime"),
             ave_contol_error);
+
+        LOG(controller_loggers_.at("realtime_stretching_factor"),
+            current_stretching_factor);
 
         LOG(controller_loggers_.at("count_stretching_violation"),
             num_stretching_violation);

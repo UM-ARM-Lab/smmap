@@ -203,6 +203,7 @@ namespace smmap
             const DeformableModel::Ptr model_;
 
             const double distance_to_obstacle_threshold_;
+            const double max_grippers_distance_;
             double max_stretch_factor_;
             double stretching_cosine_threshold_;
 
@@ -213,7 +214,6 @@ namespace smmap
 
             // cloth node inde conversion helper
             std::vector<std::unique_ptr<GripperStretchingInfo>> grippers_stretching_helper_;
-            long stretching_violation_count_;
 
     };
 
