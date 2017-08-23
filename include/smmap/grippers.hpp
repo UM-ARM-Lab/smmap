@@ -35,10 +35,6 @@ namespace smmap
     struct StretchingVectorInfo
     {
         StretchingVectorInfo()
-            : to_gripper_name_(NULL)
-            , from_nodes_(NULL)
-            , to_nodes_(NULL)
-            , node_contribution_(NULL)
         {}
 
         StretchingVectorInfo(

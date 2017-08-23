@@ -1736,20 +1736,22 @@ void Planner::visualizeDesiredMotion(
             colors[node_ind].b = 0.0f;
             colors[node_ind].a = desired_motion.weight((ssize_t)node_ind * 3) > 0 ? 1.0f : 0.0f;
         }
+        /*
         task_specification_->visualizeDeformableObject(
                 vis_,
                 DESIRED_DELTA_NS,
                 AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
                 colors);
+        */
 
-        if (task_specification_->deformable_type_ == DeformableType::CLOTH)
-        {
+      //  if (task_specification_->deformable_type_ == DeformableType::CLOTH)
+      //  {
             vis_.visualizeObjectDelta(
                         DESIRED_DELTA_NS,
                         current_world_state.object_configuration_,
                         AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
                         Visualizer::Green());
-        }
+      //  }
     }
 }
 

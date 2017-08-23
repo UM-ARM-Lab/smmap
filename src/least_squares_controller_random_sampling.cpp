@@ -386,16 +386,16 @@ kinematics::Vector6d LeastSquaresControllerRandomSampling::singleGripperPoseDelt
         random_sample(2) = z_trans;
     }
 
-
+    /*
     random_sample(3) = 0.0;
     random_sample(4) = 0.0;
     random_sample(5) = 0.0;
+    */
 
-    /*
     random_sample(3) = x_rot;
     random_sample(4) = y_rot;
     random_sample(5) = z_rot;
-    */
+
 
     return ClampGripperPoseDeltas(random_sample, max_delta);
 }
