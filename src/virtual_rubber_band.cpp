@@ -214,7 +214,7 @@ void VirtualRubberBand::resampleBand(const bool verbose)
             std::cout << std::endl;
 
             #warning "Band resample needs refinement to avoid this crash"
-            assert(false && "After resampling, the maximum distance between points is still violated");
+            assert(false && "After resampling, the maximum distance between points is still violated. Please collect all log files from this execution and file a bug report.");
         }
     }
 }

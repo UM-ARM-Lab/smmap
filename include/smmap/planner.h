@@ -13,6 +13,7 @@
 #include "smmap/ucb_multiarm_bandit.hpp"
 #include "smmap/virtual_rubber_band.h"
 #include "smmap/rrt_helper.h"
+#include "smmap/prm_helper.h"
 
 namespace smmap
 {
@@ -149,6 +150,7 @@ namespace smmap
             size_t global_plan_current_timestep_;
             AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
             std::unique_ptr<RRTHelper> rrt_helper_;
+            std::unique_ptr<PRMHelper> prm_helper_;
 
             ////////////////////////////////////////////////////////////////////
             // Logging and visualization functionality
