@@ -157,23 +157,23 @@ void VirtualRubberBand::resampleBand(const bool verbose)
         const auto projected = sdf_.ProjectOutOfCollision3d(interpolated);
         return projected;
     };    
-//    const auto verbose_state_interpolation_fn = [&] (const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, const double ratio)
-//    {
-//        const auto interpolated = EigenHelpers::Interpolate(prev, curr, ratio);
-//        const auto interp4d = Eigen::Vector4d(interpolated.x(), interpolated.y(), interpolated.z(), 1.0);
-//        const auto projected = sdf_.ProjectOutOfCollisionToMinimumDistance4dVerbose(interp4d, 0.0).head<3>();
+/*    const auto verbose_state_interpolation_fn = [&] (const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, const double ratio)
+    {
+        const auto interpolated = EigenHelpers::Interpolate(prev, curr, ratio);
+        const auto interp4d = Eigen::Vector4d(interpolated.x(), interpolated.y(), interpolated.z(), 1.0);
+        const auto projected = sdf_.ProjectOutOfCollisionToMinimumDistance4dVerbose(interp4d, 0.0).head<3>();
 
-//        std::cerr << "ratio " << ratio << std::endl;
-//        std::cerr << "Prev:      " << prev.transpose() << std::endl;
-//        std::cerr << "Interp:    " << interpolated.transpose() << std::endl;
-//        std::cerr << "Projected: " << projected.transpose() << std::endl;
-//        std::cerr << "Next:      " << curr.transpose() << std::endl;
-//        vis_.visualizePoints("band_test_resample_prev", {prev}, {Visualizer::Red()}, 1, 0.005);
-//        vis_.visualizePoints("band_test_resample_curr", {curr}, {Visualizer::Blue()}, 1, 0.005);
-//        vis_.visualizePoints("band_test_resample_interp", {interpolated}, {Visualizer::Cyan()}, 1, 0.004);
-//        vis_.visualizePoints("band_test_resample_result", {projected}, {Visualizer::Green()}, 1, 0.004);
-//        return projected;
-//    };
+        std::cerr << "ratio " << ratio << std::endl;
+        std::cerr << "Prev:      " << prev.transpose() << std::endl;
+        std::cerr << "Interp:    " << interpolated.transpose() << std::endl;
+        std::cerr << "Projected: " << projected.transpose() << std::endl;
+        std::cerr << "Next:      " << curr.transpose() << std::endl;
+        vis_.visualizePoints("band_test_resample_prev", {prev}, {Visualizer::Red()}, 1, 0.005);
+        vis_.visualizePoints("band_test_resample_curr", {curr}, {Visualizer::Blue()}, 1, 0.005);
+        vis_.visualizePoints("band_test_resample_interp", {interpolated}, {Visualizer::Cyan()}, 1, 0.004);
+        vis_.visualizePoints("band_test_resample_result", {projected}, {Visualizer::Green()}, 1, 0.004);
+        return projected;
+    };*/
 
     // Continue to smooth with projected points until the result stabilizes
     auto resample_result = shortcut_smoothing::ResamplePath(
@@ -189,7 +189,7 @@ void VirtualRubberBand::resampleBand(const bool verbose)
 
         if (resample_count == 50)
         {
-            ROS_WARN("Rubber Band Smoothing is probably caught in an infinite loop while resampling. Please collect all log files from this execution and file a bug report.");
+            ROS_WARN("Rubber Band Smoothing is probably caught in an infinite loop while resampling. Please collect all log files and console output from this execution and file a bug report.");
         }
 
         resample_result = shortcut_smoothing::ResamplePath(
@@ -211,8 +211,7 @@ void VirtualRubberBand::resampleBand(const bool verbose)
             std::cerr << "Pre resample points: \n" << PrettyPrint::PrettyPrint(small_band, false, "    ") << std::endl;
             std::cerr << "Post resample points:\n" << PrettyPrint::PrettyPrint(resample_result_small, false, "    ") << std::endl;
 
-            #warning "Band resample needs refinement to avoid this crash"
-            assert(false && "After resampling, the maximum distance between points is still violated. Please collect all log files from this execution and file a bug report.");
+            assert(false && "After resampling, the maximum distance between points is still violated. Please collect all log files and console output from this execution and file a bug report.");
         }
     }
 }
