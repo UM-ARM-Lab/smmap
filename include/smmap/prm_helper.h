@@ -13,10 +13,11 @@ namespace smmap
     {
         public:
             // Topic names used for publishing visualization data
-            static constexpr auto PRM_NODES_NS  = "prm_nodes";
-            static constexpr auto PRM_EDGES_NS  = "prm_edges";
-            static constexpr auto PRM_QUERRY_NS = "prm_querry";
-            static constexpr auto RRM_SAMPLE_NS = "prm_sample";
+            static constexpr auto PRM_NODES_NS       = "prm_nodes";
+            static constexpr auto PRM_EDGES_NS       = "prm_edges";
+            static constexpr auto PRM_QUERRY_NS      = "prm_querry";
+            static constexpr auto RRM_SAMPLE_NS      = "prm_sample";
+            static constexpr auto PRM_RANDOM_PATH_NS = "prm_random_path";
 
 
             PRMHelper(
@@ -33,6 +34,8 @@ namespace smmap
             void initializeRoadmap();
 
             void visualize();
+
+            EigenHelpers::VectorVector3d getRandomPath(const Eigen::Vector3d& start, const Eigen::Vector3d& goal);
 
         private:
             const Eigen::Vector3d planning_world_lower_limits_;

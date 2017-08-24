@@ -88,6 +88,21 @@ void PRMHelper::visualize()
     }
 }
 
+EigenHelpers::VectorVector3d PRMHelper::getRandomPath(const Eigen::Vector3d& start, const Eigen::Vector3d& goal)
+{
+    const bool distance_is_symmetric = true;
+    const auto plan_result = simple_prm_planner::SimpleGeometricPrmPlanner::QueryPathAndAddNodesSingleStartSingleGoalRandomWalk<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+                start,
+                goal,
+                generator_,
+                roadmap_,
+                std::bind(&PRMHelper::validEdge, this, std::placeholders::_1, std::placeholders::_2),
+                &PRMHelper::distance,
+                num_neighbours_to_connect_,
+                distance_is_symmetric);
+    return plan_result.first;
+}
+
 //////// Passed using std::bind to various SimpleGeometricPrmPlanner functions /////////////////////////////////////////
 
 Eigen::Vector3d PRMHelper::sampleState()

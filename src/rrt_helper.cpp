@@ -3,7 +3,7 @@
 #include <thread>
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/first_order_deformation.h>
-
+#include <arc_utilities/simple_dtw.hpp>
 using namespace smmap;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -63,15 +63,20 @@ bool RRTConfig::isVisibleToBlacklist() const
 // Returned distance is the Euclidian distance of two grippers pos
 double RRTConfig::distance(const RRTConfig& other) const
 {
-    return RRTConfig::Distance(*this, other);
+    return RRTConfig::distance(*this, other);
 }
 
-double RRTConfig::Distance(const RRTConfig& c1, const RRTConfig& c2)
+double RRTConfig::distance(const RRTConfig& c1, const RRTConfig& c2)
 {
-    return RRTConfig::Distance(c1.getGrippers(), c2.getGrippers());
+    const auto distance_fn = [] (const Eigen::Vector3d p1, const Eigen::Vector3d p2)
+    {
+        return (p1 - p2).norm();
+    };
+    return simple_dtw::ComputeDTWDistance(c1.getBand().getVectorRepresentation(), c2.getBand().getVectorRepresentation(), distance_fn);
+//    return RRTConfig::Distance(c1.getGrippers(), c2.getGrippers());
 }
 
-double RRTConfig::Distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2)
+double RRTConfig::distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2)
 {
     const Eigen::Vector3d& c1_first_gripper     = c1.first;
     const Eigen::Vector3d& c1_second_gripper    = c1.second;
@@ -80,14 +85,14 @@ double RRTConfig::Distance(const RRTGrippersRepresentation& c1, const RRTGripper
     return std::sqrt((c1_first_gripper - c2_first_gripper).squaredNorm() + (c1_second_gripper - c2_second_gripper).squaredNorm());
 }
 
-double RRTConfig::PathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index)
+double RRTConfig::pathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index)
 {
     assert(start_index < end_index);
     assert(end_index < path.size());
     double distance = 0;
     for (size_t idx = start_index; idx < end_index; ++idx)
     {
-        distance += Distance(path[idx], path[idx + 1]);
+        distance += distance(path[idx], path[idx + 1]);
     }
     return distance;
 }
@@ -148,6 +153,7 @@ RRTHelper::RRTHelper(
         const sdf_tools::SignedDistanceField& environment_sdf,
         const Visualizer& vis,
         std::mt19937_64& generator,
+        const std::shared_ptr<PRMHelper>& prm_helper,
         const Eigen::Vector3d planning_world_lower_limits,
         const Eigen::Vector3d planning_world_upper_limits,
         const double max_step_size,
@@ -170,6 +176,7 @@ RRTHelper::RRTHelper(
     , max_failed_smoothing_iterations_(max_failed_smoothing_iterations)
     , uniform_unit_distribution_(0.0, 1.0)
     , uniform_shortcut_smoothing_int_distribution_(1, 4)
+    , prm_helper_(prm_helper)
     , generator_(generator)
     , environment_sdf_(environment_sdf)
     , vis_(vis)
@@ -207,7 +214,7 @@ int64_t RRTHelper::nearestNeighbour(
             const ExternalRRTState& rrt_state,
             const RRTConfig& rrt_config)
     {
-        return RRTConfig::Distance(rrt_state.GetValueImmutable(), rrt_config);
+        return RRTConfig::distance(rrt_state.GetValueImmutable(), rrt_config);
     };
 
     // If we sampled the goal, then distance is also a function of "homotopy class"
@@ -215,7 +222,7 @@ int64_t RRTHelper::nearestNeighbour(
             const ExternalRRTState& rrt_state,
             const RRTConfig& rrt_config)
     {
-        const double basic_distance = RRTConfig::Distance(rrt_state.GetValueImmutable(), rrt_config);
+        const double basic_distance = RRTConfig::distance(rrt_state.GetValueImmutable(), rrt_config);
 
         const auto blacklist_itr = goal_expansion_nn_blacklist_.find(rrt_state.GetValueImmutable());
         const bool goal_blacklisted = (blacklist_itr != goal_expansion_nn_blacklist_.end());
@@ -262,20 +269,24 @@ RRTGrippersRepresentation RRTHelper::posPairSampling()
     }
     else
     {
-        const double x1 = EigenHelpers::Interpolate(planning_world_lower_limits_.x(), planning_world_upper_limits_.x(), uniform_unit_distribution_(generator_));
-        const double y1 = EigenHelpers::Interpolate(planning_world_lower_limits_.y(), planning_world_upper_limits_.y(), uniform_unit_distribution_(generator_));
-        const double z1 = EigenHelpers::Interpolate(planning_world_lower_limits_.z(), planning_world_upper_limits_.z(), uniform_unit_distribution_(generator_));
-        rand_sample.first = Eigen::Vector3d(x1, y1, z1);
+        do
+        {
+            const double x1 = EigenHelpers::Interpolate(planning_world_lower_limits_.x(), planning_world_upper_limits_.x(), uniform_unit_distribution_(generator_));
+            const double y1 = EigenHelpers::Interpolate(planning_world_lower_limits_.y(), planning_world_upper_limits_.y(), uniform_unit_distribution_(generator_));
+            const double z1 = EigenHelpers::Interpolate(planning_world_lower_limits_.z(), planning_world_upper_limits_.z(), uniform_unit_distribution_(generator_));
+            rand_sample.first = Eigen::Vector3d(x1, y1, z1);
+        }
+        while (environment_sdf_.EstimateDistance3d(rand_sample.first).first < gripper_min_distance_to_obstacles_);
 
         // We want to only sample within a radius max_grippers_distance_, and within the world extents; to do so
         // uniformly, we sample from an axis aligned box limited by R and the world extents, rejecting samples that lie
         // outside a radius max_grippers_distance_
-        const double x2_min = std::max(planning_world_lower_limits_.x(), x1 - max_grippers_distance_);
-        const double x2_max = std::min(planning_world_upper_limits_.x(), x1 + max_grippers_distance_);
-        const double y2_min = std::max(planning_world_lower_limits_.y(), y1 - max_grippers_distance_);
-        const double y2_max = std::min(planning_world_upper_limits_.y(), y1 + max_grippers_distance_);
-        const double z2_min = std::max(planning_world_lower_limits_.z(), z1 - max_grippers_distance_);
-        const double z2_max = std::min(planning_world_upper_limits_.z(), z1 + max_grippers_distance_);
+        const double x2_min = std::max(planning_world_lower_limits_.x(), rand_sample.first.x() - max_grippers_distance_);
+        const double x2_max = std::min(planning_world_upper_limits_.x(), rand_sample.first.x() + max_grippers_distance_);
+        const double y2_min = std::max(planning_world_lower_limits_.y(), rand_sample.first.y() - max_grippers_distance_);
+        const double y2_max = std::min(planning_world_upper_limits_.y(), rand_sample.first.y() + max_grippers_distance_);
+        const double z2_min = std::max(planning_world_lower_limits_.z(), rand_sample.first.z() - max_grippers_distance_);
+        const double z2_max = std::min(planning_world_upper_limits_.z(), rand_sample.first.z() + max_grippers_distance_);
 
         bool valid = false;
         do
@@ -286,34 +297,27 @@ RRTGrippersRepresentation RRTHelper::posPairSampling()
             rand_sample.second = Eigen::Vector3d(x2, y2, z2);
             valid = (rand_sample.first - rand_sample.second).norm() <= max_grippers_distance_;
         }
-        while (!valid);
-
-
-        // Pick a second point within band_max_length of the first point
-        // Math taken from here:
-        // http://mathworld.wolfram.com/SpherePointPicking.html
-        // https://math.stackexchange.com/questions/87230/picking-random-points-in-the-volume-of-sphere-with-uniform-probability
-
-//        const double u = uniform_unit_distribution_(generator_);
-//        const double v = uniform_unit_distribution_(generator_);
-//        const double theta = 2.0 * M_PI * u;
-//        const double phi = std::acos(2.0 * v - 1);
-//        const double radial_distance = uniform_unit_distribution_(generator_);
-//        const double r = max_grippers_distance_ * std::pow(radial_distance, 1.0 / 3.0);
-
-//        const double x2_delta = r * std::cos(theta) * std::sin(phi);
-//        const double y2_delta = r * std::sin(theta) * std::sin(phi);
-//        const double z2_delta = r * std::cos(phi);
-
-//        rand_sample.second = Eigen::Vector3d(x1 + x2_delta, y1 + y2_delta, z1 + z2_delta);
+        while (!valid || environment_sdf_.EstimateDistance3d(rand_sample.second).first < gripper_min_distance_to_obstacles_);
     }
 
     return rand_sample;
 }
 
+RRTConfig RRTHelper::configSampling()
+{
+    RRTGrippersRepresentation rand_grippers_sample = posPairSampling();
+
+    const auto band_path = prm_helper_->getRandomPath(rand_grippers_sample.first, rand_grippers_sample.second);
+    VirtualRubberBand band(*starting_band_);
+    band.setPointsAndSmooth(band_path);
+    band.visualize(PRMHelper::PRM_RANDOM_PATH_NS, Visualizer::Orange(), Visualizer::Orange(), 1, visualization_enabled_globally_);
+
+    return RRTConfig(rand_grippers_sample, band, false);
+}
+
 bool RRTHelper::goalReached(const RRTConfig& node)
 {
-    if (RRTConfig::Distance(node.getGrippers(), grippers_goal_position_) < goal_reach_radius_)
+    if (RRTConfig::distance(node.getGrippers(), grippers_goal_position_) < goal_reach_radius_)
     {
         if (visualization_enabled_globally_)
         {
@@ -363,7 +367,7 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
     const RRTGrippersRepresentation& starting_grippers_position = nearest_neighbor.getGrippers();
     const RRTGrippersRepresentation& target_grippers_position = random_target.getGrippers();
 
-    const double target_is_goal_config = RRTConfig::Distance(random_target.getGrippers(), grippers_goal_position_) < goal_reach_radius_;
+    const double target_is_goal_config = RRTConfig::distance(random_target.getGrippers(), grippers_goal_position_) < goal_reach_radius_;
 
     if (visualization_enabled_globally_ && visualization_enabled_locally && target_is_goal_config && false)
     {
@@ -405,7 +409,7 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
 
     // Allocate space for potential children
     std::vector<std::pair<RRTConfig, int64_t>> propagated_states;
-    const double total_distance = RRTConfig::Distance(nearest_neighbor, random_target);
+    const double total_distance = RRTConfig::distance(nearest_neighbor.getGrippers(), random_target.getGrippers());
     const uint32_t max_total_steps = (uint32_t)ceil(total_distance / max_step_size_);
     propagated_states.reserve(max_total_steps);
 
@@ -543,6 +547,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
 {
     grippers_goal_position_ = grippers_goal;
     max_grippers_distance_ = start.getBand().maxSafeLength();
+    starting_band_.reset(new VirtualRubberBand(start.getBand()));
 
     if (visualization_enabled_globally_)
     {
@@ -569,19 +574,21 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
 
     const std::function<RRTConfig(void)> sampling_fn = [&] ()
     {
-        const RRTConfig sample_config(posPairSampling(), start.getBand(), false);
-        return sample_config;
+//        const RRTConfig sample_config(posPairSampling(), start.getBand(), false);
+//        return sample_config;
+
+        return configSampling();
     };
 
     const std::function<int64_t(const std::vector<ExternalRRTState>&, const RRTConfig&)> nearest_neighbor_fn = [&] (
-            const std::vector<ExternalRRTState>& nodes, const RRTConfig& config )
+            const std::vector<ExternalRRTState>& nodes, const RRTConfig& config)
     {
         const int64_t neighbour_idx = nearestNeighbour(nodes, config);
         return neighbour_idx;
     };
 
     const std::function<std::vector<std::pair<RRTConfig, int64_t>>(const RRTConfig&, const RRTConfig&)> forward_propagation_fn = [&] (
-            const RRTConfig& nearest_neighbor, const RRTConfig& random_target )
+            const RRTConfig& nearest_neighbor, const RRTConfig& random_target)
     {
         const bool local_visualization_enabled = true;
         const bool calculate_first_order_vis = false;
@@ -997,8 +1004,8 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         if (smoothing_type == 1 || smoothing_type == 2)
         {
             // Check if the edge possibly can be smoothed
-            const double minimum_distance = RRTConfig::Distance(smoothing_start_config, smoothing_target_end_config);
-            const double path_distance = RRTConfig::PathDistance(path, smoothing_start_index, smoothing_end_index);
+            const double minimum_distance = RRTConfig::distance(smoothing_start_config, smoothing_target_end_config);
+            const double path_distance = RRTConfig::pathDistance(path, smoothing_start_index, smoothing_end_index);
             // Essentially this checks if there is a kink in the path
             if (EigenHelpers::IsApprox(path_distance, minimum_distance, 1e-6))
             {

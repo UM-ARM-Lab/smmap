@@ -9,6 +9,7 @@
 
 #include "smmap/visualization_tools.h"
 #include "smmap/virtual_rubber_band.h"
+#include "smmap/prm_helper.h"
 
 namespace smmap
 {
@@ -46,9 +47,9 @@ namespace smmap
 
             // returned distance is the Euclidian distance of two grippers pos
             double distance(const RRTConfig& other) const;
-            static double Distance(const RRTConfig& c1, const RRTConfig& c2);
-            static double Distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
-            static double PathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index);
+            static double distance(const RRTConfig& c1, const RRTConfig& c2);
+            static double distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
+            static double pathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index);
 
             bool operator==(const RRTConfig& other) const;
 
@@ -86,6 +87,7 @@ namespace smmap
                     const sdf_tools::SignedDistanceField& environment_sdf,
                     const Visualizer& vis,
                     std::mt19937_64& generator,
+                    const std::shared_ptr<PRMHelper>& prm_helper,
                     const Eigen::Vector3d planning_world_lower_limits,
                     const Eigen::Vector3d planning_world_upper_limits,
                     const double max_step_size,
@@ -128,6 +130,8 @@ namespace smmap
                     const RRTConfig& config);
 
             RRTGrippersRepresentation posPairSampling();
+
+            RRTConfig configSampling();
 
             bool goalReached(const RRTConfig& node);
 
@@ -174,6 +178,7 @@ namespace smmap
             const uint32_t max_failed_smoothing_iterations_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
             std::uniform_int_distribution<int> uniform_shortcut_smoothing_int_distribution_;
+            std::shared_ptr<PRMHelper> prm_helper_;
 
             std::mt19937_64& generator_;
             const sdf_tools::SignedDistanceField& environment_sdf_;
@@ -182,6 +187,7 @@ namespace smmap
             const std_msgs::ColorRGBA band_safe_color_;
             const std_msgs::ColorRGBA band_overstretched_color_;
 
+            std::unique_ptr<VirtualRubberBand> starting_band_;
             RRTGrippersRepresentation grippers_goal_position_;
             double max_grippers_distance_;
             std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;

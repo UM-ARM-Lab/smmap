@@ -227,19 +227,18 @@ void Planner::execute()
                     vis_,
                     generator_);
 
-        prm_helper_ = std::unique_ptr<PRMHelper>(
-                    new PRMHelper(
-                        dijkstras_task_->environment_sdf_,
-                        vis_,
-                        generator_,
-                        Vector3d(GetRRTPlanningXMin(ph_), GetRRTPlanningYMin(ph_), GetRRTPlanningZMin(ph_)),
-                        Vector3d(GetRRTPlanningXMax(ph_), GetRRTPlanningYMax(ph_), GetRRTPlanningZMax(ph_)),
-                        !GetDisableAllVisualizations(ph_),
-                        5,
-                        1000,
-                        dijkstras_task_->work_space_grid_.minStepDimension()));
+        prm_helper_ = std::make_shared<PRMHelper>(
+                    dijkstras_task_->environment_sdf_,
+                    vis_,
+                    generator_,
+                    Vector3d(GetRRTPlanningXMin(ph_), GetRRTPlanningYMin(ph_), GetRRTPlanningZMin(ph_)),
+                    Vector3d(GetRRTPlanningXMax(ph_), GetRRTPlanningYMax(ph_), GetRRTPlanningZMax(ph_)),
+                    !GetDisableAllVisualizations(ph_),
+                    5,
+                    1000,
+                    dijkstras_task_->work_space_grid_.minStepDimension());
         prm_helper_->initializeRoadmap();
-        prm_helper_->visualize();
+//        prm_helper_->visualize();
 
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         rrt_helper_ = std::unique_ptr<RRTHelper>(
@@ -247,6 +246,7 @@ void Planner::execute()
                         dijkstras_task_->environment_sdf_,
                         vis_,
                         generator_,
+                        prm_helper_,
                         Vector3d(GetRRTPlanningXMin(ph_), GetRRTPlanningYMin(ph_), GetRRTPlanningZMin(ph_)),
                         Vector3d(GetRRTPlanningXMax(ph_), GetRRTPlanningYMax(ph_), GetRRTPlanningZMax(ph_)),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
@@ -320,7 +320,7 @@ WorldState Planner::sendNextCommand(
         {
             Stopwatch stopwatch;
             const bool global_plan_will_overstretch = predictStuckForGlobalPlannerResults();
-            ROS_INFO_STREAM_NAMED("planner", "Determined if global planner needed in " << stopwatch(READ) << " seconds");
+            ROS_INFO_STREAM_NAMED("planner", "Determined if global planner needed in          " << stopwatch(READ) << " seconds");
 
             if (global_plan_will_overstretch)
             {
