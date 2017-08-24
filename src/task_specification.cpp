@@ -63,6 +63,9 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::ROPE_MAZE:
             return std::make_shared<RopeMaze>(nh, ph);
 
+        case TaskType::ROPE_ZIG_MATCH:
+            return std::make_shared<RopeMaze>(nh, ph);
+
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
             return nullptr;

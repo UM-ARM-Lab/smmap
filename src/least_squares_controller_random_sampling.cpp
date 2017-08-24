@@ -498,8 +498,10 @@ void LeastSquaresControllerRandomSampling::visualize_rope_stretching_vector(
         const ObjectPointSet& object_configuration)
 {
     const ssize_t num_nodes = object_configuration.cols();
-    const ssize_t start_node = 0;
-    const ssize_t end_node = num_nodes - 1;
+   // const ssize_t start_node = 0;
+   // const ssize_t end_node = num_nodes - 1;
+    const ssize_t start_node = 1;
+    const ssize_t end_node = num_nodes - 2;
 
     Eigen::Vector3d first_correction_vector =
             (object_configuration.block<3, 1>(0, start_node + 1)
@@ -706,8 +708,10 @@ bool LeastSquaresControllerRandomSampling::ropeTwoGrippersStretchingDetection(
 
     double streching_sum = 0.0;
 
-    const ssize_t start_node = 0;
-    const ssize_t end_node = num_nodes - 1;
+   // const ssize_t start_node = 0;
+   // const ssize_t end_node = num_nodes - 1;
+    const ssize_t start_node = 1;
+    const ssize_t end_node = num_nodes - 2;
 
     Eigen::Vector3d first_correction_vector =
             (object_configuration.block<3, 1>(0, start_node + 1)
