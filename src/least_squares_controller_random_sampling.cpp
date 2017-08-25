@@ -34,7 +34,7 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , max_stretch_factor_(GetMaxStretchFactor(ph))
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
-    , sample_count_(0)
+    , sample_count_(-1)
     , previous_over_stretch_state_(false)
     , over_stretch_(false)
 {
