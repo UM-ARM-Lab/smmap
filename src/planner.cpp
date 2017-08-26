@@ -440,9 +440,13 @@ WorldState Planner::sendNextCommandUsingLocalController(
     // Calculate regret if we need to
     std::vector<double> individual_rewards(num_models_, std::numeric_limits<double>::infinity());
 
-    // Calculate control error, stretching severity
-    std::vector<double> individual_control_errors(num_models_, std::numeric_limits<double>::infinity());
-    std::vector<double> individual_stretching_factors(num_models_, std::numeric_limits<double>::infinity());
+    // Calculate control error, stretching severity    --- Added by Mengyao
+    std::vector<double> ave_control_error(num_models_, 0.0);
+    std::vector<long> stretching_count(num_models_, 0);
+    std::vector<double> current_stretching_factor(num_models_, 0.0);
+    const Eigen::VectorXd desired_p_dot = task_desired_motion.delta;
+    const Eigen::VectorXd desired_p_dot_weight = task_desired_motion.weight;
+    const ObjectPointSet current_object_configuration = world_state.object_configuration_;
 
     if (calculate_regret_ && num_models_ > 1)
     {
@@ -451,19 +455,41 @@ WorldState Planner::sendNextCommandUsingLocalController(
         const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
         {
             individual_rewards[model_ind] = prev_error - task_specification_->calculateError(world_state);
+
+            // TODO: Double check with Dale the implementation here
+            // Get control errors for different model-controller sets. --- Added by Mengyao
+            ObjectPointSet real_p_dot = world_state.object_configuration_ - current_object_configuration;
+
+            int point_count = 0;
+            for (ssize_t node_ind = 0; node_ind < real_p_dot.cols(); node_ind++)
+            {
+                const Eigen::Vector3d& point_real_p_dot = real_p_dot.col(node_ind);
+                const Eigen::Vector3d& point_desired_p_dot = desired_p_dot.segment<3>(node_ind * 3);
+                const double point_weight = desired_p_dot_weight(node_ind * 3);
+
+                if (point_weight > 0)
+                {
+                    point_count ++;
+                    ave_control_error[model_ind] = ave_control_error[model_ind] + (point_real_p_dot - point_desired_p_dot).norm();
+                }
+            }
+            if(point_count > 0)
+            {
+                ave_control_error[model_ind] = ave_control_error[model_ind] / point_count;
+            }
         };
 
-        // TODO: Double check with Dale the implementation here
-        // Get control errors for different model-controller sets. --- Added by Mengyao
-        const auto control_error_fn = [&] (const size_t model_ind, const WorldState& feed_back_world_state)
-        {
-
-        };
+        // const auto control_error_fn = [&] (const size_t model_ind, const WorldState& feed_back_world_state)
+        // { };
 
         std::vector<AllGrippersSinglePose> poses_to_test(num_models_);
         for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
         {
             poses_to_test[model_ind] = kinematics::applyTwist(world_state.all_grippers_single_pose_, suggested_robot_commands[model_ind].first);
+
+            stretching_count[model_ind] = controller_list_[model_to_use]->getStretchingViolationCount();
+            current_stretching_factor[model_ind] = controller_list_[model_to_use]->getCurrentStretchingFactor();
+
         }
         robot_.testGrippersPoses(poses_to_test, test_feedback_fn);
 
@@ -578,36 +604,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
     }
 
-    // Calculation for controller log.   --- Added by Mengyao
-    ObjectPointSet real_p_dot = world_feedback.object_configuration_ - world_state.object_configuration_;
-    Eigen::VectorXd desired_p_dot = task_desired_motion.delta;
-    Eigen::VectorXd desired_p_dot_weight = task_desired_motion.weight;
-
     // desired_p_dot.resizeLike(real_p_dot);
     // desired_p_dot_weight.resizeLike(real_p_dot);
-
-    // calculate controller error (real p dot - desired p dot)
-    double ave_control_error = 0.0;
-    int point_count = 0;
-    for (ssize_t node_ind = 0; node_ind < real_p_dot.cols(); node_ind++)
-    {
-        const Eigen::Vector3d& point_real_p_dot = real_p_dot.col(node_ind);
-        const Eigen::Vector3d& point_desired_p_dot = desired_p_dot.segment<3>(node_ind * 3);
-        const double point_weight = desired_p_dot_weight(node_ind * 3);
-
-        if (point_weight > 0)
-        {
-            point_count ++;
-            ave_control_error = ave_control_error + (point_real_p_dot - point_desired_p_dot).norm();
-        }
-    }
-    if(point_count > 0)
-    {
-        ave_control_error = ave_control_error / point_count;
-    }
-
-    const long stretching_count = controller_list_[model_to_use]->getStretchingViolationCount();
-    const double current_stretching_factor = controller_list_[model_to_use]->getCurrentStretchingFactor();
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
     updateModels(world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
@@ -2030,9 +2028,9 @@ void Planner::logData(
 // Contoller logger.  --- Added by Mengyao
 void Planner::controllerLogData(
         const WorldState& current_world_state,
-        double ave_contol_error,
-        double current_stretching_factor,
-        long num_stretching_violation)
+        const std::vector<double> &ave_contol_error,
+        const std::vector<double> current_stretching_factor,
+        const std::vector<long> num_stretching_violation)
 {
     if(controller_logging_enabled_)
     {
@@ -2045,14 +2043,13 @@ void Planner::controllerLogData(
             current_world_state.sim_time_);
 
         LOG(controller_loggers_.at("control_error_realtime"),
-            ave_contol_error);
+            PrettyPrint::PrettyPrint(ave_contol_error, false, " "));
 
         LOG(controller_loggers_.at("realtime_stretching_factor"),
-            current_stretching_factor);
+            PrettyPrint::PrettyPrint(current_stretching_factor, false, " "));
 
         LOG(controller_loggers_.at("count_stretching_violation"),
-            num_stretching_violation);
-
+            PrettyPrint::PrettyPrint(num_stretching_violation, false, " "));
     }
 }
 
