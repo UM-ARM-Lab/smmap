@@ -191,6 +191,8 @@ Planner::Planner(
     , global_plan_current_timestep_(-1)
     , global_plan_gripper_trajectory_(0)
     , rrt_helper_(nullptr)
+    , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
+    , controller_count_(0)
 
     , logging_enabled_(GetLoggingEnabled(nh_))
     , controller_logging_enabled_(true)
@@ -201,6 +203,7 @@ Planner::Planner(
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
     initializeLogging();
     initializeControllerLogging();
+    initializeGrippersMaxDistance();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -403,13 +406,55 @@ WorldState Planner::sendNextCommandUsingLocalController(
     {
         return task_specification_->calculateDesiredDirection(world_state);
     };
-    const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, world_state, robot_.dt_);
-    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(world_state);
+    DeformableModel::DeformableModelInputData model_input_data(
+                task_desired_direction_fn,
+                world_state,
+                robot_.dt_);
+  //  ObjectDeltaAndWeight& task_desired_motion = model_input_data.desired_object_motion_;
+    const ObjectPointSet current_object_configuration = world_state.object_configuration_;
 
     if (visualize_desired_motion_)
     {
-        visualizeDesiredMotion(world_state, task_desired_motion);
+        visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_);
     }
+
+    // Use a model-controller to get a valid object motion from testGrippersPoses first. --- Added by Mengyao
+    /*
+    if (calculate_regret_ && num_models_ > 1)
+    {
+        controller_count_ = controller_count_ - controller_count_ / num_models_ * num_models_;
+        std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> helper_robot_command;
+        helper_robot_command =
+            controller_list_[controller_count_]->getGripperMotion(
+                    model_input_data,
+                    robot_.max_gripper_velocity_);
+
+        controller_count_ ++;
+
+        // Helper Lambda to get a valid p_dot
+        const auto valid_motion_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
+        {
+            ObjectPointSet desired_delta = world_state.object_configuration_ - current_object_configuration;
+            for (ssize_t node_ind = 0; node_ind < desired_delta.cols(); node_ind++)
+            {
+                model_input_data.desired_object_motion_.delta.segment(node_ind * 3, 3) = desired_delta.col(node_ind);
+            //    model_input_data.desired_object_motion_.weight.segment(node_ind * 3, 3) = Eigen::MatrixXd::Ones(3,1);
+            }
+        };
+
+        std::vector<AllGrippersSinglePose> helper_grippers_poses(1);
+        helper_grippers_poses[0] = kinematics::applyTwist(world_state.all_grippers_single_pose_, helper_robot_command.first);
+        robot_.testGrippersPoses(helper_grippers_poses, valid_motion_feedback_fn);
+    }
+    */
+
+    /*
+    const auto valid_desired_direction_fn = [&] (const WorldState& world_state)
+    {
+        return task_desired_motion;
+    };
+    const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, world_state, robot_.dt_);
+    */
 
     // Pick an arm to use
     //const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
@@ -423,6 +468,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
     // Querry each model for it's best gripper delta
     stopwatch(RESET);
+
     std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>> suggested_robot_commands(num_models_);
     #pragma omp parallel for
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
@@ -446,13 +492,16 @@ WorldState Planner::sendNextCommandUsingLocalController(
     std::vector<double> ave_control_error(num_models_, 0.0);
     std::vector<long> stretching_count(num_models_, 0);
     std::vector<double> current_stretching_factor(num_models_, 0.0);
+
+    ObjectDeltaAndWeight& task_desired_motion = model_input_data.desired_object_motion_;
     const Eigen::VectorXd desired_p_dot = task_desired_motion.delta;
     const Eigen::VectorXd desired_p_dot_weight = task_desired_motion.weight;
-    const ObjectPointSet current_object_configuration = world_state.object_configuration_;
+    const int num_grippers = GetGrippersData(nh_).size();
 
     if (calculate_regret_ && num_models_ > 1)
     {
         stopwatch(RESET);
+
         const double prev_error = task_specification_->calculateError(world_state);
         const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
         {
@@ -461,10 +510,16 @@ WorldState Planner::sendNextCommandUsingLocalController(
             // TODO: Double check with Dale the implementation here
             // Get control errors for different model-controller sets. --- Added by Mengyao
             ObjectPointSet real_p_dot = world_state.object_configuration_ - current_object_configuration;
+            ssize_t num_nodes = real_p_dot.cols();
 
             int point_count = 0;
-            for (ssize_t node_ind = 0; node_ind < real_p_dot.cols(); node_ind++)
+            bool over_stretch = false;
+            const double max_stretch_factor = GetMaxStretchFactor(ph_);
+            double max_stretching = 0.0;
+
+            for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
             {
+                //  Calculate p_dot error
                 const Eigen::Vector3d& point_real_p_dot = real_p_dot.col(node_ind);
                 const Eigen::Vector3d& point_desired_p_dot = desired_p_dot.segment<3>(node_ind * 3);
                 const double point_weight = desired_p_dot_weight(node_ind * 3);
@@ -474,11 +529,44 @@ WorldState Planner::sendNextCommandUsingLocalController(
                     point_count ++;
                     ave_control_error[model_ind] = ave_control_error[model_ind] + (point_real_p_dot - point_desired_p_dot).norm();
                 }
+
+                // Calculate stretching factor
+                const Eigen::MatrixXd node_squared_distance =
+                        CalculateSquaredDistanceMatrix(world_state.object_configuration_);
+
+                ssize_t first_node = node_ind;
+
+                for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
+                {
+                    double this_stretching_factor = std::sqrt(node_squared_distance(first_node, second_node))
+                            / object_initial_node_distance_(first_node, second_node);
+                    if (this_stretching_factor > max_stretching)
+                    {
+                        max_stretching = this_stretching_factor;
+                    }
+
+                    const double max_distance = max_stretch_factor * object_initial_node_distance_(first_node, second_node);
+                    if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
+                    {
+                        over_stretch = true;
+                    }
+                }
             }
             if(point_count > 0)
             {
                 ave_control_error[model_ind] = ave_control_error[model_ind] / point_count;
             }
+            if (num_grippers == 2)
+            {
+                double this_stretching_factor = (world_state.all_grippers_single_pose_.at(0).translation()
+                        - world_state.all_grippers_single_pose_.at(1).translation()).norm()
+                        / max_grippers_distance_;
+                if (this_stretching_factor > max_stretching)
+                {
+                    max_stretching = this_stretching_factor;
+                }
+            }
+            current_stretching_factor[model_ind] = max_stretching;
         };
 
         // const auto control_error_fn = [&] (const size_t model_ind, const WorldState& feed_back_world_state)
@@ -489,8 +577,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
         {
             poses_to_test[model_ind] = kinematics::applyTwist(world_state.all_grippers_single_pose_, suggested_robot_commands[model_ind].first);
 
-            stretching_count[model_ind] = controller_list_[model_to_use]->getStretchingViolationCount();
-            current_stretching_factor[model_ind] = controller_list_[model_to_use]->getCurrentStretchingFactor();
+        //    stretching_count[model_ind] = controller_list_[model_to_use]->getStretchingViolationCount();
+        //    current_stretching_factor[model_ind] = controller_list_[model_to_use]->getCurrentStretchingFactor();
 
         }
         robot_.testGrippersPoses(poses_to_test, test_feedback_fn);
@@ -1723,6 +1811,22 @@ void Planner::createBandits()
 #endif
 }
 
+// Initialize max grippers distance  --- Added by Mengyao
+void Planner::initializeGrippersMaxDistance()
+{
+    if (GetGrippersData(nh_).size())
+    {
+        if (GetDeformableType(nh_) == CLOTH)
+        {
+            max_grippers_distance_ = GetClothYSize(nh_) - 0.015;
+        }
+        else if (GetDeformableType(nh_) == ROPE)
+        {
+            max_grippers_distance_ = GetRopeSegmentLength(nh_) * GetRopeNumLinks(nh_);
+        }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Model utility functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1877,8 +1981,9 @@ void Planner::visualizeTotalForceOnGripper(
     if(visualization_enabled)
     {
         const AllGrippersSinglePose gripper_poses = current_world_state.all_grippers_single_pose_;
-        const AllGrippersWrench gripper_wrenchs = current_world_state.gripper_wrench_;
 
+        /*
+        const AllGrippersWrench gripper_wrenchs = current_world_state.gripper_wrench_;
         {
             int gripper_ind = 0;
             std::cout << "Friction data on :" << gripper_ind << "th gripper :" << std::endl;
@@ -1913,9 +2018,8 @@ void Planner::visualizeTotalForceOnGripper(
                         + 0.1 * gripper_wrenchs.at(gripper_ind).bottom_clamp.force,
                         Visualizer::Yellow());
             std::cout << "Force magnitude on the bottom clamp is " << gripper_wrenchs.at(gripper_ind).bottom_clamp.force.norm() << std::endl;
-
-
         }
+        */
     }
 }
 

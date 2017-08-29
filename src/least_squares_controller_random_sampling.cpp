@@ -30,7 +30,7 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , task_type_(GetTaskType(nh))
     , model_(deformable_model)
     , distance_to_obstacle_threshold_(distance_to_obstacle_threshold)
-    , max_grippers_distance_(GetClothYSize(nh) - 0.015)
+//    , max_grippers_distance_(GetClothYSize(nh) - 0.015)
     , max_stretch_factor_(GetMaxStretchFactor(ph))
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
@@ -38,6 +38,15 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , previous_over_stretch_state_(false)
     , over_stretch_(false)
 {
+    if (deformable_type_ == CLOTH)
+    {
+        max_grippers_distance_ = GetClothYSize(nh) - 0.015;
+    }
+    else if (deformable_type_ == ROPE)
+    {
+        max_grippers_distance_ = GetRopeSegmentLength(nh) * GetRopeNumLinks(nh);
+    }
+
   //  grippers_stretching_helper_(grippers_data_.size());
     for (int gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
     {
@@ -100,9 +109,11 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
     const WorldState& current_world_state = input_data.world_current_state_;
 
     const Eigen::VectorXd& desired_object_p_dot =
-            input_data.task_desired_object_delta_fn_(current_world_state).delta;    
+            input_data.desired_object_motion_.delta;
+          //  input_data.task_desired_object_delta_fn_(current_world_state).delta;
     const Eigen::VectorXd& desired_p_dot_weight =
-            input_data.task_desired_object_delta_fn_(current_world_state).weight;
+            input_data.desired_object_motion_.weight;
+          //  input_data.task_desired_object_delta_fn_(current_world_state).weight;
 
     const ssize_t num_grippers = current_world_state.all_grippers_single_pose_.size();
     const ssize_t num_nodes = current_world_state.object_configuration_.cols();
@@ -134,20 +145,28 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
         {
             for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
             {
+                /*
                 double this_stretching_factor = std::sqrt(node_squared_distance(first_node, second_node))
                         / object_initial_node_distance_(first_node, second_node);
                 if (this_stretching_factor > max_stretching)
                 {
                     max_stretching = this_stretching_factor;
                 }
+                */
 
                 const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
                 if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
                 {
                     over_stretch_ = true;
+                    break;
                 }
             }
+            if (over_stretch_)
+            {
+                break;
+            }
         }
+        /*
         if (grippers_data_.size() == 2)
         {
             double this_stretching_factor = (current_world_state.all_grippers_single_pose_.at(0).translation()
@@ -159,6 +178,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
             }
         }
         current_stretching_factor_ = max_stretching;
+        */
 
         if(over_stretch_)
         {

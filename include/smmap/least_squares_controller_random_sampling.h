@@ -185,8 +185,11 @@ namespace smmap
                     const DeformableModel::DeformableModelInputData& input_data,
                     const AllGrippersSinglePoseDelta& test_gripper_motion);
 
-        private:
+        public:
             const Eigen::MatrixXd object_initial_node_distance_;
+            double max_grippers_distance_;
+
+        private:
             GripperCollisionChecker gripper_collision_checker_;
 
             const std::vector<GripperData> grippers_data_;
@@ -203,7 +206,6 @@ namespace smmap
             const DeformableModel::Ptr model_;
 
             const double distance_to_obstacle_threshold_;
-            const double max_grippers_distance_;
             double max_stretch_factor_;
             double stretching_cosine_threshold_;
 
@@ -214,6 +216,7 @@ namespace smmap
 
             // cloth node inde conversion helper
             std::vector<std::unique_ptr<GripperStretchingInfo>> grippers_stretching_helper_;
+
 
     };
 

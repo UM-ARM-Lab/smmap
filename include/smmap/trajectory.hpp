@@ -268,12 +268,15 @@ namespace smmap
                     feedback_ros.object_configuration);
 
         // Read wrench information --- Added by Mengyao
+        /*
         feedback_eigen.object_wrench_.object_force.clear();
         feedback_eigen.object_wrench_.object_torque.clear();
+
 
         feedback_eigen.object_wrench_.SetObjectWrench(
                     EigenHelpersConversions::GeometryWrenchToEigenPairVector(
                         feedback_ros.object_wrenches));
+        */
 
         feedback_eigen.all_grippers_single_pose_ =
                 EigenHelpersConversions::VectorGeometryPoseToVectorAffine3d(
@@ -292,12 +295,14 @@ namespace smmap
                                 feedback_ros.obstacle_surface_normal[gripper_ind]),
                             feedback_ros.gripper_distance_to_obstacle[gripper_ind]));
             // Read wrench information --- Added by Mengyao
+            /*
             feedback_eigen.gripper_wrench_.push_back(
                         SingleGripperWrench(
                             Wrench(EigenHelpersConversions::GeometryWrenchToEigenPair(
                                        feedback_ros.gripper_wrenches[gripper_ind * 2])),
                             Wrench(EigenHelpersConversions::GeometryWrenchToEigenPair(
                                        feedback_ros.gripper_wrenches[gripper_ind * 2 + 1]))));
+            */
 
         }
 
