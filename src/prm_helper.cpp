@@ -55,14 +55,31 @@ void PRMHelper::initializeRoadmap()
                 num_neighbours_to_connect_,
                 distance_is_symmetric);
 
+    auto connected_components = roadmap_.GetConnectedComponentsUndirected();
+    while (connected_components.second != 1)
+    {
+        ROS_WARN_STREAM_NAMED("prm_helper", "PRM is not connected, num components: " << connected_components.second);
+        ROS_WARN_STREAM_NAMED("prm_helper", "Extending PRM by " << num_samples_to_try_ << " samples");
+        simple_prm_planner::SimpleGeometricPrmPlanner::ExtendRoadMap<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+                    roadmap_,
+                    std::bind(&PRMHelper::sampleState, this),
+                    &PRMHelper::distance,
+                    std::bind(&PRMHelper::validState, this, std::placeholders::_1),
+                    std::bind(&PRMHelper::validEdge, this, std::placeholders::_1, std::placeholders::_2),
+                    termination_check_fn,
+                    num_neighbours_to_connect_,
+                    distance_is_symmetric);
+        connected_components = roadmap_.GetConnectedComponentsUndirected();
+    }
+
     ROS_INFO_NAMED("prm_helper", "PRM Initialized");
 
     roadmap_initialized_ = true;
 }
 
-void PRMHelper::visualize()
+void PRMHelper::visualize(const bool visualization_enabled)
 {
-    if (visualization_enabled_globally_)
+    if (visualization_enabled_globally_ && visualization_enabled)
     {
         EigenHelpers::VectorVector3d node_points;
         EigenHelpers::VectorVector3d line_start_points;

@@ -4,11 +4,6 @@
 
 using namespace smmap;
 
-const std::string VirtualRubberBand::BAND_POST_FORWARD_STEP_NS          = "band_post_forward_step";
-const std::string VirtualRubberBand::BAND_POST_SUBDIVIDE_STEP_NS        = "band_post_subdivide_step";
-const std::string VirtualRubberBand::BAND_POST_SHORTCUT_SMOOTHING_NS    = "band_post_shortcut_smoothing";
-const std::string VirtualRubberBand::BAND_BADNESS_NS                    = "band_badness";
-
 #pragma message "Magic number for smoothing distance here"
 #define MIN_BAND_SMOOTHING_INDEX_DISTANCE (10)
 
@@ -61,6 +56,11 @@ smmap::VirtualRubberBand& VirtualRubberBand::operator=(const smmap::VirtualRubbe
     band_ = other.band_;
 
     return *this;
+}
+
+void VirtualRubberBand::setPointsWithoutSmoothing(const EigenHelpers::VectorVector3d& points)
+{
+    band_ = points;
 }
 
 void VirtualRubberBand::setPointsAndSmooth(const EigenHelpers::VectorVector3d& points)

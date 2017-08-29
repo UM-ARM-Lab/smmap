@@ -129,9 +129,19 @@ namespace smmap
                     const std::vector<ExternalRRTState>& nodes,
                     const RRTConfig& config);
 
+            // Used for timing purposes
+            // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
+            int64_t nearestNeighbour_internal(
+                    const std::vector<ExternalRRTState>& nodes,
+                    const RRTConfig& config);
+
             RRTGrippersRepresentation posPairSampling();
 
             RRTConfig configSampling();
+
+            // Used for timing purposes
+            // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
+            RRTConfig configSampling_internal();
 
             bool goalReached(const RRTConfig& node);
 
@@ -196,6 +206,7 @@ namespace smmap
 
             // Planning and Smoothing statistics
             std::map<std::string, double> statistics_;
+            double total_sampling_time_;
             double total_nearest_neighbour_time_;
             double total_everything_included_forward_propogation_time_;
             double total_band_forward_propogation_time_;

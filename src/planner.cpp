@@ -40,7 +40,7 @@ using namespace EigenHelpersConversions;
  * @param neighour_fn
  * @return The index of the nodes between the grippers, following the shortest path through the object
  */
-static std::vector<ssize_t> GetShortestPathBetweenGrippersThroughObject(
+static std::vector<ssize_t> getShortestPathBetweenGrippersThroughObject(
         const std::vector<GripperData>& grippers_data,
         const ObjectPointSet& object,
         const std::function<std::vector<ssize_t>(const ssize_t& node)> neighbour_fn)
@@ -71,7 +71,7 @@ static std::vector<ssize_t> GetShortestPathBetweenGrippersThroughObject(
     return plan;
 }
 
-static EigenHelpers::VectorVector3d GetPathBetweenGrippersThroughObject(
+static EigenHelpers::VectorVector3d getPathBetweenGrippersThroughObject(
         const WorldState& world_state,
         const std::vector<ssize_t>& object_node_idxs_between_grippers)
 {
@@ -90,7 +90,8 @@ static EigenHelpers::VectorVector3d GetPathBetweenGrippersThroughObject(
     return nodes;
 }
 
-static size_t SizeOfLargestVector(const std::vector<VectorVector3d>& vectors)
+template <typename T, typename Alloc = std::allocator<T>>
+static size_t sizeOfLargestVector(const std::vector<T, Alloc>& vectors)
 {
     size_t largest_vector = 0;
 
@@ -102,7 +103,7 @@ static size_t SizeOfLargestVector(const std::vector<VectorVector3d>& vectors)
     return largest_vector;
 }
 
-std::vector<uint32_t> NumberOfPointsInEachCluster(
+std::vector<uint32_t> numberOfPointsInEachCluster(
         const std::vector<uint32_t>& cluster_labels,
         const uint32_t num_clusters,
         const std::vector<long>& grapsed_points,
@@ -176,6 +177,7 @@ Planner::Planner(
     , global_plan_current_timestep_(-1)
     , global_plan_gripper_trajectory_(0)
     , rrt_helper_(nullptr)
+    , prm_helper_(nullptr)
     // Logging and visualization parameters
     , logging_enabled_(GetLoggingEnabled(nh_))
     , vis_(vis)
@@ -214,11 +216,11 @@ void Planner::execute()
         {
             return dijkstras_task_->getNodeNeighbours(node);
         };
-        path_between_grippers_through_object_ = GetShortestPathBetweenGrippersThroughObject(
+        path_between_grippers_through_object_ = getShortestPathBetweenGrippersThroughObject(
                     robot_.getGrippersData(), GetObjectInitialConfiguration(nh_), neighbour_fn);
 
         // Create the initial rubber band
-        const auto starting_band_points = GetPathBetweenGrippersThroughObject(
+        const auto starting_band_points = getPathBetweenGrippersThroughObject(
                     world_feedback, path_between_grippers_through_object_);
         virtual_rubber_band_between_grippers_ = std::make_shared<VirtualRubberBand>(
                     starting_band_points,
@@ -234,11 +236,11 @@ void Planner::execute()
                     Vector3d(GetRRTPlanningXMin(ph_), GetRRTPlanningYMin(ph_), GetRRTPlanningZMin(ph_)),
                     Vector3d(GetRRTPlanningXMax(ph_), GetRRTPlanningYMax(ph_), GetRRTPlanningZMax(ph_)),
                     !GetDisableAllVisualizations(ph_),
-                    5,
-                    1000,
+                    GetPRMNumNearest(ph_),
+                    GetPRMNumSamples(ph_),
                     dijkstras_task_->work_space_grid_.minStepDimension());
         prm_helper_->initializeRoadmap();
-//        prm_helper_->visualize();
+        prm_helper_->visualize(GetVisualizePRM(ph_));
 
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         rrt_helper_ = std::unique_ptr<RRTHelper>(
@@ -378,7 +380,7 @@ WorldState Planner::sendNextCommand(
         }
 
         // Update the band with the new position of the deformable object
-        const auto band_points = GetPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
+        const auto band_points = getPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
         virtual_rubber_band_between_grippers_->setPointsAndSmooth(band_points);
 
         // Keep the last N grippers positions recorded to detect if the grippers are stuck
@@ -654,7 +656,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     stopwatch(RESET);
     const std::vector<VectorVector3d> projected_deformable_point_paths = dijkstras_task_->findPathFromObjectToTarget(current_world_state, max_lookahead_steps_);
 
-    const size_t actual_lookahead_steps = SizeOfLargestVector(projected_deformable_point_paths) - 1;
+    const size_t actual_lookahead_steps = sizeOfLargestVector(projected_deformable_point_paths) - 1;
     // sizeOfLargest(...) should be at least 2, so this assert should always be true
     assert(actual_lookahead_steps <= max_lookahead_steps_);
 
@@ -916,8 +918,8 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
     const auto& gripper0_grapsed_points = dijkstras_task_->getGripperAttachedNodesIndices(0);
     const auto& gripper1_grapsed_points = dijkstras_task_->getGripperAttachedNodesIndices(1);
 
-    const auto gripper0_cluster_counts = NumberOfPointsInEachCluster(cluster_labels, num_clusters, gripper0_grapsed_points, correspondences);
-    const auto gripper1_cluster_counts = NumberOfPointsInEachCluster(cluster_labels, num_clusters, gripper1_grapsed_points, correspondences);
+    const auto gripper0_cluster_counts = numberOfPointsInEachCluster(cluster_labels, num_clusters, gripper0_grapsed_points, correspondences);
+    const auto gripper1_cluster_counts = numberOfPointsInEachCluster(cluster_labels, num_clusters, gripper1_grapsed_points, correspondences);
 
     // Set some values so that the logic used in the if-else chain makes sense to read
     const bool gripper0_no_match_to_cluster0    = gripper0_cluster_counts[0] == 0;

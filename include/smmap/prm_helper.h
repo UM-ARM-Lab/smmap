@@ -33,7 +33,7 @@ namespace smmap
 
             void initializeRoadmap();
 
-            void visualize();
+            void visualize(const bool visualization_enabled = true);
 
             EigenHelpers::VectorVector3d getRandomPath(const Eigen::Vector3d& start, const Eigen::Vector3d& goal);
 

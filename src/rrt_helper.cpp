@@ -73,7 +73,7 @@ double RRTConfig::distance(const RRTConfig& c1, const RRTConfig& c2)
         return (p1 - p2).norm();
     };
     return simple_dtw::ComputeDTWDistance(c1.getBand().getVectorRepresentation(), c2.getBand().getVectorRepresentation(), distance_fn);
-//    return RRTConfig::Distance(c1.getGrippers(), c2.getGrippers());
+//    return RRTConfig::distance(c1.getGrippers(), c2.getGrippers());
 }
 
 double RRTConfig::distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2)
@@ -85,16 +85,17 @@ double RRTConfig::distance(const RRTGrippersRepresentation& c1, const RRTGripper
     return std::sqrt((c1_first_gripper - c2_first_gripper).squaredNorm() + (c1_second_gripper - c2_second_gripper).squaredNorm());
 }
 
+// Only calculates the distance travelled by the grippers, not the entire band
 double RRTConfig::pathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index)
 {
     assert(start_index < end_index);
     assert(end_index < path.size());
-    double distance = 0;
+    double path_distance = 0;
     for (size_t idx = start_index; idx < end_index; ++idx)
     {
-        distance += distance(path[idx], path[idx + 1]);
+        path_distance += RRTConfig::distance(path[idx].getGrippers(), path[idx + 1].getGrippers());
     }
-    return distance;
+    return path_distance;
 }
 
 bool RRTConfig::operator==(const RRTConfig& other) const
@@ -184,6 +185,7 @@ RRTHelper::RRTHelper(
     , band_safe_color_(Visualizer::Black())
     , band_overstretched_color_(Visualizer::Cyan())
     , gripper_min_distance_to_obstacles_(gripper_min_distance_to_obstacles)
+    , total_sampling_time_(NAN)
     , total_nearest_neighbour_time_(NAN)
     , total_everything_included_forward_propogation_time_(NAN)
     , total_band_forward_propogation_time_(NAN)
@@ -208,32 +210,45 @@ int64_t RRTHelper::nearestNeighbour(
         const RRTConfig& config)
 {
     Stopwatch stopwatch;
+
+    arc_helpers::DoNotOptimize(nodes);
+    int64_t nn_idx = nearestNeighbour_internal(nodes, config);
+    arc_helpers::DoNotOptimize(nn_idx);
+
+    const double nn_time = stopwatch(READ);
+    total_nearest_neighbour_time_ += nn_time;
+
+    return nn_idx;
+}
+
+int64_t RRTHelper::nearestNeighbour_internal(
+        const std::vector<ExternalRRTState>& nodes,
+        const RRTConfig& config)
+{
     assert(nodes.size() >= 1);
 
+    // If we did not sample the goal, then just use the normal distance metric
+    // We cannot use "auto" here because of the ternary later that choses between these 2 function types
     const std::function<double(const ExternalRRTState&, const RRTConfig&)> basic_distance_fn = [&] (
-            const ExternalRRTState& rrt_state,
-            const RRTConfig& rrt_config)
+            const ExternalRRTState& rrt_state, const RRTConfig& rrt_config)
     {
         return RRTConfig::distance(rrt_state.GetValueImmutable(), rrt_config);
     };
-
     // If we sampled the goal, then distance is also a function of "homotopy class"
+    // We cannot use "auto" here because of the ternary later that choses between these 2 function types
     const std::function<double(const ExternalRRTState&, const RRTConfig&)> goal_sampled_distance_fn = [&] (
-            const ExternalRRTState& rrt_state,
-            const RRTConfig& rrt_config)
+            const ExternalRRTState& rrt_state, const RRTConfig& rrt_config)
     {
-        const double basic_distance = RRTConfig::distance(rrt_state.GetValueImmutable(), rrt_config);
+        const double basic_distance = basic_distance_fn(rrt_state.GetValueImmutable(), rrt_config);
 
         const auto blacklist_itr = goal_expansion_nn_blacklist_.find(rrt_state.GetValueImmutable());
-        const bool goal_blacklisted = (blacklist_itr != goal_expansion_nn_blacklist_.end());
-        if (goal_blacklisted)
+        const bool state_blacklisted = (blacklist_itr != goal_expansion_nn_blacklist_.end());
+        if (state_blacklisted)
         {
             return NN_BLACKLIST_DISTANCE + basic_distance;
         }
         else
         {
-//            const double homotopy_penalty = rrt_state.GetValueImmutable().isVisibleToBlacklist() ? homotopy_distance_penalty_ : 0.0;
-//            return basic_distance + homotopy_penalty;
             return basic_distance;
         }
     };
@@ -253,8 +268,6 @@ int64_t RRTHelper::nearestNeighbour(
         goal_expansion_nn_blacklist_.insert(nodes[nn_idx].GetValueImmutable());
     }
 
-    const double nn_time = stopwatch(READ);
-    total_nearest_neighbour_time_ += nn_time;
     return nn_idx;
 }
 
@@ -305,11 +318,33 @@ RRTGrippersRepresentation RRTHelper::posPairSampling()
 
 RRTConfig RRTHelper::configSampling()
 {
-    RRTGrippersRepresentation rand_grippers_sample = posPairSampling();
+    Stopwatch stopwatch;
 
-    const auto band_path = prm_helper_->getRandomPath(rand_grippers_sample.first, rand_grippers_sample.second);
+    arc_helpers::DoNotOptimize(grippers_goal_position_);
+    RRTConfig sample = configSampling_internal();
+    arc_helpers::DoNotOptimize(sample.getGrippers());
+
+    const double sampling_time = stopwatch(READ);
+    total_sampling_time_ += sampling_time;
+
+    return sample;
+}
+
+RRTConfig RRTHelper::configSampling_internal()
+{
+    const RRTGrippersRepresentation rand_grippers_sample = posPairSampling();
+    const bool goal_is_target_config = gripperPositionsAreApproximatelyEqual(grippers_goal_position_, rand_grippers_sample);
+
+    // If we've sampled the goal, then keep sampling until the result is not visible to the blacklist
+    EigenHelpers::VectorVector3d band_path;
+    do
+    {
+        band_path = prm_helper_->getRandomPath(rand_grippers_sample.first, rand_grippers_sample.second);
+    }
+    while (goal_is_target_config && isBandFirstOrderVisibileToBlacklist(band_path));
+
     VirtualRubberBand band(*starting_band_);
-    band.setPointsAndSmooth(band_path);
+    band.setPointsWithoutSmoothing(band_path);
     band.visualize(PRMHelper::PRM_RANDOM_PATH_NS, Visualizer::Orange(), Visualizer::Orange(), 1, visualization_enabled_globally_);
 
     return RRTConfig(rand_grippers_sample, band, false);
@@ -327,7 +362,6 @@ bool RRTHelper::goalReached(const RRTConfig& node)
         }
 
         // Only accept paths that are different from those on the blacklist
-//        if (!node.isVisibleToBlacklist())
         if (!isBandFirstOrderVisibileToBlacklist(node.getBand()))
         {
             return true;
@@ -566,29 +600,21 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     }
 
     // Build the functions that are needed by SimpleHybridRRTPlanner
-    const std::function<bool(const RRTConfig&)> goal_reached_fn = [&] (const RRTConfig& node)
+    const auto goal_reached_fn = [&] (const RRTConfig& node)
     {
         const bool goal_reached = goalReached(node);
         return goal_reached;
     };
-
-    const std::function<RRTConfig(void)> sampling_fn = [&] ()
+    const auto sampling_fn = [&] ()
     {
-//        const RRTConfig sample_config(posPairSampling(), start.getBand(), false);
-//        return sample_config;
-
         return configSampling();
     };
-
-    const std::function<int64_t(const std::vector<ExternalRRTState>&, const RRTConfig&)> nearest_neighbor_fn = [&] (
-            const std::vector<ExternalRRTState>& nodes, const RRTConfig& config)
+    const auto nearest_neighbor_fn = [&] (const std::vector<ExternalRRTState>& nodes, const RRTConfig& config)
     {
         const int64_t neighbour_idx = nearestNeighbour(nodes, config);
         return neighbour_idx;
     };
-
-    const std::function<std::vector<std::pair<RRTConfig, int64_t>>(const RRTConfig&, const RRTConfig&)> forward_propagation_fn = [&] (
-            const RRTConfig& nearest_neighbor, const RRTConfig& random_target)
+    const auto forward_propagation_fn = [&] (const RRTConfig& nearest_neighbor, const RRTConfig& random_target)
     {
         const bool local_visualization_enabled = true;
         const bool calculate_first_order_vis = false;
@@ -597,6 +623,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
         return propogation_results;
     };
 
+    total_sampling_time_ = 0.0;
     total_nearest_neighbour_time_ = 0.0;
     total_everything_included_forward_propogation_time_ = 0.0;
     total_band_forward_propogation_time_ = 0.0;
@@ -605,7 +632,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     ROS_INFO_NAMED("rrt", "Starting SimpleHybridRRTPlanner");
 
     // Call the actual planner
-    const auto rrt_results = simple_rrt_planner::SimpleHybridRRTPlanner::Plan(
+    const auto rrt_results = simple_rrt_planner::SimpleHybridRRTPlanner::Plan<RRTConfig, RRTAllocator>(
                 start, nearest_neighbor_fn, goal_reached_fn, sampling_fn, forward_propagation_fn, time_limit);
 
     if (visualization_enabled_globally_)
@@ -613,10 +640,12 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
         vis_.clearVisualizationsBullet();
     }
 
-    statistics_["planning0_nearest_neighbour_time                        "] = total_nearest_neighbour_time_;
-    statistics_["planning1_forward_propogation_band_sim_time             "] = total_band_forward_propogation_time_;
-    statistics_["planning2_forward_propogation_first_order_vis_time      "] = total_first_order_vis_propogation_time_;
-    statistics_["planning3_forward_propogation_everything_included_time  "] = total_everything_included_forward_propogation_time_;
+    statistics_["planning0_sampling_time                                 "] = total_sampling_time_;
+    statistics_["planning1_nearest_neighbour_time                        "] = total_nearest_neighbour_time_;
+    statistics_["planning2_forward_propogation_band_sim_time             "] = total_band_forward_propogation_time_;
+    statistics_["planning3_forward_propogation_first_order_vis_time      "] = total_first_order_vis_propogation_time_;
+    statistics_["planning4_forward_propogation_everything_included_time  "] = total_everything_included_forward_propogation_time_;
+    statistics_["planning5_total_time                                    "] = rrt_results.second.at("planning_time");
 
     std::cout << "\nSimpleRRT Statistics:\n" << PrettyPrint::PrettyPrint(rrt_results.second, false, "\n") << std::endl << std::endl;
     ROS_INFO_NAMED("rrt", "Starting Shortcut Smoothing");
@@ -725,11 +754,14 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VirtualRubberBand& tes
 {
     Stopwatch stopwatch;
     auto vector_representation = test_band.getVectorRepresentation();
+
     arc_helpers::DoNotOptimize(vector_representation);
     const bool is_first_order_visible = isBandFirstOrderVisibileToBlacklist(vector_representation);
     arc_helpers::DoNotOptimize(is_first_order_visible);
+
     const double first_order_vis_time = stopwatch(READ);
     total_first_order_vis_propogation_time_ += first_order_vis_time;
+
     return is_first_order_visible;
 }
 
@@ -1004,7 +1036,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         if (smoothing_type == 1 || smoothing_type == 2)
         {
             // Check if the edge possibly can be smoothed
-            const double minimum_distance = RRTConfig::distance(smoothing_start_config, smoothing_target_end_config);
+            const double minimum_distance = RRTConfig::distance(smoothing_start_config.getGrippers(), smoothing_target_end_config.getGrippers());
             const double path_distance = RRTConfig::pathDistance(path, smoothing_start_index, smoothing_end_index);
             // Essentially this checks if there is a kink in the path
             if (EigenHelpers::IsApprox(path_distance, minimum_distance, 1e-6))
@@ -1220,11 +1252,11 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
     const double smoothing_time = function_wide_stopwatch(READ);
 
     statistics_["smoothing0_failed_iterations                            "] = (double)failed_iterations;
-    statistics_["smoothing0_iterations                                   "] = (double)num_iterations;
-    statistics_["smoothing1_forward_propogation_band_sim_time            "] = total_band_forward_propogation_time_;
-    statistics_["smoothing2_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
-    statistics_["smoothing3_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
-    statistics_["smoothing4_total_time                                   "] = smoothing_time;
+    statistics_["smoothing1_iterations                                   "] = (double)num_iterations;
+    statistics_["smoothing2_forward_propogation_band_sim_time            "] = total_band_forward_propogation_time_;
+    statistics_["smoothing3_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
+    statistics_["smoothing4_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
+    statistics_["smoothing5_total_time                                   "] = smoothing_time;
 
     return path;
 }
