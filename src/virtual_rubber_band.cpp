@@ -33,7 +33,8 @@ VirtualRubberBand::VirtualRubberBand(
     , vis_(vis)
     , max_integration_step_size_(sdf_.GetResolution() / 10.0)
     , max_distance_between_rubber_band_points_(task_->work_space_grid_.minStepDimension() / 2.0)
-    , num_smoothing_ittrs_per_band_point_(3)
+    , num_smoothing_iters_per_band_point_(5)
+    , min_smoothing_iters_(200)
     , min_object_radius_(0.04)
     , max_total_band_distance_(max_total_band_distance)
     , generator_(generator)
@@ -50,7 +51,7 @@ smmap::VirtualRubberBand& VirtualRubberBand::operator=(const smmap::VirtualRubbe
 
     assert(max_integration_step_size_ == other.max_integration_step_size_);
     assert(max_distance_between_rubber_band_points_ == other.max_distance_between_rubber_band_points_);
-    assert(num_smoothing_ittrs_per_band_point_ == other.num_smoothing_ittrs_per_band_point_);
+    assert(num_smoothing_iters_per_band_point_ == other.num_smoothing_iters_per_band_point_);
     assert(min_object_radius_ == other.min_object_radius_);
     assert(max_total_band_distance_ == other.max_total_band_distance_);
 
@@ -219,7 +220,7 @@ void VirtualRubberBand::resampleBand(const bool verbose)
 
 void VirtualRubberBand::shortcutSmoothBand(const bool verbose)
 {
-    const int num_smooting_ittrs = num_smoothing_ittrs_per_band_point_ * (int)band_.size();
+    const int num_smooting_ittrs = std::max(min_smoothing_iters_, num_smoothing_iters_per_band_point_ * (int)band_.size());
     const auto sdf_collision_fn = [&] (const Eigen::Vector3d& location)
     {
         return sdf_.EstimateDistance3d(location).first <= 0.0;

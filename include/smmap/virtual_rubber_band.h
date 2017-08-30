@@ -65,7 +65,8 @@ namespace smmap
         public:
             const double max_integration_step_size_;
             const double max_distance_between_rubber_band_points_;
-            const int num_smoothing_ittrs_per_band_point_;
+            const int num_smoothing_iters_per_band_point_;
+            const int min_smoothing_iters_;
             const double min_object_radius_;
             const double max_total_band_distance_;
 
