@@ -5,7 +5,8 @@
 using namespace smmap;
 
 #pragma message "Magic number for smoothing distance here"
-#define MIN_BAND_SMOOTHING_INDEX_DISTANCE (10)
+static constexpr int MIN_BAND_SMOOTHING_INDEX_DISTANCE = 10;
+static constexpr double IS_APPROX_PRECISION = 1e-8;
 
 #pragma message "Magic number - virtual rubber band constructor parameters"
 VirtualRubberBand::VirtualRubberBand(
@@ -229,7 +230,7 @@ void VirtualRubberBand::shortcutSmoothBand(const bool verbose)
     double endpoint_distance = (band_.front() - band_.back()).norm();
 
     int smoothing_iter = 0;
-    while (smoothing_iter < num_smooting_ittrs && !EigenHelpers::IsApprox(endpoint_distance, cummulative_distances.back(), 1e-8))
+    while (smoothing_iter < num_smooting_ittrs && !EigenHelpers::IsApprox(endpoint_distance, cummulative_distances.back(), IS_APPROX_PRECISION))
     {
         std::uniform_int_distribution<ssize_t> first_distribution(0, band_.size() - 1);
         const size_t first_ind = first_distribution(generator_);
@@ -246,7 +247,7 @@ void VirtualRubberBand::shortcutSmoothBand(const bool verbose)
             // Only attempt a shortcut if there is potential improvements to be made
             const double path_distance = cummulative_distances[second_ind] - cummulative_distances[first_ind];
             const double straightline_distance = (band_[first_ind] - band_[second_ind]).norm();
-            if (!EigenHelpers::IsApprox(path_distance, straightline_distance, 1e-8))
+            if (!EigenHelpers::IsApprox(path_distance, straightline_distance, IS_APPROX_PRECISION))
             {
                 band_ = shortcut_smoothing::InterpolateWithCollisionCheck(band_, first_ind, second_ind, max_distance_between_rubber_band_points_, sdf_collision_fn);
 
