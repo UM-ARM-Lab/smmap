@@ -524,11 +524,11 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 const Eigen::Vector3d& point_desired_p_dot = desired_p_dot.segment<3>(node_ind * 3);
                 const double point_weight = desired_p_dot_weight(node_ind * 3);
 
-                if (point_weight > 0)
-                {
+              //  if (point_weight > 0)
+              //  {
                     point_count ++;
                     ave_control_error[model_ind] = ave_control_error[model_ind] + (point_real_p_dot - point_desired_p_dot).norm();
-                }
+              //  }
 
                 // Calculate stretching factor
                 const Eigen::MatrixXd node_squared_distance =
@@ -1818,7 +1818,7 @@ void Planner::initializeGrippersMaxDistance()
     {
         if (GetDeformableType(nh_) == CLOTH)
         {
-            max_grippers_distance_ = GetClothYSize(nh_) - 0.015;
+            max_grippers_distance_ = GetClothYSize(nh_) - 0.03;
         }
         else if (GetDeformableType(nh_) == ROPE)
         {
