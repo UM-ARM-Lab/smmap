@@ -341,17 +341,26 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
         }
     }
 
+
     if(suggested_grippers_command.first.size() > 0)
     {
-        visualize_gripper_motion(current_world_state.all_grippers_single_pose_, suggested_grippers_command.first);
+    //    visualize_gripper_motion(current_world_state.all_grippers_single_pose_, suggested_grippers_command.first);
     }
     else
     {
         suggested_grippers_command.first = setAllGripperPoseDeltaZero(num_grippers);
     }
+
     suggested_grippers_command.second = model_->getObjectDelta(
                 input_data,
                 suggested_grippers_command.first);
+
+
+    /*
+    std::cout << "in random sampling controller, first gripper motion norm : "
+              << suggested_grippers_command.first.at(0).norm()
+              << std::endl;
+    */
     return suggested_grippers_command;
 }
 
@@ -629,7 +638,7 @@ void LeastSquaresControllerRandomSampling::visualize_gripper_motion(
     vis_.visualizeLines("gripper motion",
                         line_starts,
                         line_ends,
-                        Visualizer::Black());
+                        Visualizer::Olive());
 }
 
 

@@ -473,13 +473,17 @@ WorldState Planner::sendNextCommandUsingLocalController(
     #pragma omp parallel for
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
     {
-        if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
-        {
+//        if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
+//        {
             suggested_robot_commands[model_ind] =
                 controller_list_[model_ind]->getGripperMotion(
                         model_input_data,
                         robot_.max_gripper_velocity_);
-        }
+
+            visualize_gripper_motion( world_state.all_grippers_single_pose_,
+                                      suggested_robot_commands[model_ind].first,
+                                      model_ind);
+//        }
     }
 
     // Measure the time it took to pick a model
@@ -524,11 +528,11 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 const Eigen::Vector3d& point_desired_p_dot = desired_p_dot.segment<3>(node_ind * 3);
                 const double point_weight = desired_p_dot_weight(node_ind * 3);
 
-              //  if (point_weight > 0)
-              //  {
+                if (point_weight > 0)
+                {
                     point_count ++;
                     ave_control_error[model_ind] = ave_control_error[model_ind] + (point_real_p_dot - point_desired_p_dot).norm();
-              //  }
+                }
 
                 // Calculate stretching factor
                 const Eigen::MatrixXd node_squared_distance =
@@ -1981,7 +1985,7 @@ void Planner::visualizeTotalForceOnGripper(
     if(visualization_enabled)
     {
         const AllGrippersSinglePose gripper_poses = current_world_state.all_grippers_single_pose_;
-
+        assert(false && "Not yet implemented");
         /*
         const AllGrippersWrench gripper_wrenchs = current_world_state.gripper_wrench_;
         {
@@ -2020,6 +2024,66 @@ void Planner::visualizeTotalForceOnGripper(
             std::cout << "Force magnitude on the bottom clamp is " << gripper_wrenchs.at(gripper_ind).bottom_clamp.force.norm() << std::endl;
         }
         */
+    }
+}
+
+
+void Planner::visualize_gripper_motion(
+        const AllGrippersSinglePose& current_gripper_pose,
+        const AllGrippersSinglePoseDelta& gripper_motion,
+        const ssize_t model_ind)
+{
+    const auto grippers_test_poses = kinematics::applyTwist(current_gripper_pose, gripper_motion);
+    EigenHelpers::VectorVector3d line_starts;
+    EigenHelpers::VectorVector3d line_ends;
+
+    for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
+    {
+        line_starts.push_back(current_gripper_pose[gripper_ind].translation());
+        line_ends.push_back(current_gripper_pose[gripper_ind].translation() + 100 * (grippers_test_poses[gripper_ind].translation() - current_gripper_pose[gripper_ind].translation()));
+    }
+
+    switch (model_ind)
+    {
+        case 0:
+    {
+        vis_.visualizeLines("MM grippers motion",
+                            line_starts,
+                            line_ends,
+                            Visualizer::Black());
+        std::cout << "0 first gripper motion norm: "
+                  << gripper_motion.at(0).norm()
+                  << std::endl;
+        break;
+    }
+        case 1:
+    {
+        vis_.visualizeLines("DM grippers motion",
+                            line_starts,
+                            line_ends,
+                            Visualizer::Silver());
+        std::cout << "1 first gripper motion norm: "
+                  << gripper_motion.at(0).norm()
+                  << std::endl;
+        break;
+    }
+        case 2:
+    {
+//        break;
+        vis_.visualizeLines("DD grippers motion",
+                            line_starts,
+                            line_ends,
+                            Visualizer::Yellow());
+        std::cout << "2 first gripper motion norm: "
+                  << gripper_motion.at(0).norm()
+                  << std::endl;
+        break;
+    }
+        default:
+        {
+            assert(false && "grippers_motion color not assigned for this index");
+            break;
+        }
     }
 }
 

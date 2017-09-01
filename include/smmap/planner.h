@@ -175,6 +175,10 @@ namespace smmap
                     const WorldState& current_world_state,
                     const bool visualization_enabled = true) const;
 
+            void visualize_gripper_motion(
+                    const AllGrippersSinglePose& current_gripper_pose,
+                    const AllGrippersSinglePoseDelta& gripper_motion,
+                    const ssize_t model_ind);
 
             void initializeLogging();
 
