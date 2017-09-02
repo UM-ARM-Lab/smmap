@@ -480,11 +480,11 @@ WorldState Planner::sendNextCommandUsingLocalController(
                         model_input_data,
                         robot_.max_gripper_velocity_);
 
-            /*
+
             visualize_gripper_motion( world_state.all_grippers_single_pose_,
                                       suggested_robot_commands[model_ind].first,
                                       model_ind);
-            */
+
         }
     }
 
@@ -1626,7 +1626,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
         ROS_INFO_NAMED("planner", "Using multiple model-controller sets");
 
         // Constraint Model with New Controller. (MM)
-        if (true) // using a range of params
+        if (false) // using a range of params
         {
             const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
 

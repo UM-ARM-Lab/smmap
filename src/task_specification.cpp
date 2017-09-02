@@ -440,6 +440,11 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
 
             first_step_last_simtime_calced_ = world_state.sim_time_;
             first_step_calculated_.store(true);
+
+            // Try to scaled down size of desired motion
+
+            first_step_desired_motion_.delta = first_step_desired_motion_.delta / 400.0;
+
             return first_step_desired_motion_;
         }
     }
