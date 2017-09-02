@@ -473,17 +473,19 @@ WorldState Planner::sendNextCommandUsingLocalController(
     #pragma omp parallel for
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
     {
-//        if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
-//        {
+        if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
+        {
             suggested_robot_commands[model_ind] =
                 controller_list_[model_ind]->getGripperMotion(
                         model_input_data,
                         robot_.max_gripper_velocity_);
 
+            /*
             visualize_gripper_motion( world_state.all_grippers_single_pose_,
                                       suggested_robot_commands[model_ind].first,
                                       model_ind);
-//        }
+            */
+        }
     }
 
     // Measure the time it took to pick a model
@@ -1624,12 +1626,119 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
         ROS_INFO_NAMED("planner", "Using multiple model-controller sets");
 
         // Constraint Model with New Controller. (MM)
+        if (true) // using a range of params
         {
+            const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+            /*
             const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
             const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
             const double rotation_deformability = GetConstraintRotational(ph_);
+            */
 
+            const double rotation_deformability = GetConstraintRotational(ph_);
+
+            for (double translation_dis_deformability = 10; translation_dis_deformability < 26; translation_dis_deformability += 5)
+            {
+                double translation_dir_deformability = 20;
+
+                // ind 0, 4, 8, 12:  trans_dir: 20
+                {
+                    model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                          translation_dir_deformability,
+                                          translation_dis_deformability,
+                                          rotation_deformability,
+                                          environment_sdf));
+
+                    controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                                   nh_,
+                                                   ph_,
+                                                   robot_,
+                                                   environment_sdf,
+                                                   generator_,
+                                                   vis_,
+                                                   GetGripperControllerType(ph_),
+                                                   model_list_.back(),
+                                                   GetMaxSamplingCounts(ph_),
+                                                   GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                }
+
+                translation_dir_deformability = 30;
+                // ind 1, 5, 9, 13:  trans_dir: 30
+                {
+                    model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                          translation_dir_deformability,
+                                          translation_dis_deformability,
+                                          rotation_deformability,
+                                          environment_sdf));
+
+                    controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                                   nh_,
+                                                   ph_,
+                                                   robot_,
+                                                   environment_sdf,
+                                                   generator_,
+                                                   vis_,
+                                                   GetGripperControllerType(ph_),
+                                                   model_list_.back(),
+                                                   GetMaxSamplingCounts(ph_),
+                                                   GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                }
+
+                translation_dir_deformability = 60;
+                // ind 2, 6, 10, 14:  trans_dir: 60
+                {
+                    model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                          translation_dir_deformability,
+                                          translation_dis_deformability,
+                                          rotation_deformability,
+                                          environment_sdf));
+
+                    controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                                   nh_,
+                                                   ph_,
+                                                   robot_,
+                                                   environment_sdf,
+                                                   generator_,
+                                                   vis_,
+                                                   GetGripperControllerType(ph_),
+                                                   model_list_.back(),
+                                                   GetMaxSamplingCounts(ph_),
+                                                   GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                }
+
+                translation_dir_deformability = 200;
+                // ind 3, 7, 11, 15:  trans_dir: 100
+                {
+                    model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                          translation_dir_deformability,
+                                          translation_dis_deformability,
+                                          rotation_deformability,
+                                          environment_sdf));
+
+                    controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                                   nh_,
+                                                   ph_,
+                                                   robot_,
+                                                   environment_sdf,
+                                                   generator_,
+                                                   vis_,
+                                                   GetGripperControllerType(ph_),
+                                                   model_list_.back(),
+                                                   GetMaxSamplingCounts(ph_),
+                                                   GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                }
+
+            }
+
+        }
+        else
+        {
             const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+            const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
+            const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
+            const double rotation_deformability = GetConstraintRotational(ph_);
 
             model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
                                   translation_dir_deformability,
