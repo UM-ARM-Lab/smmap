@@ -35,6 +35,7 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
     , sample_count_(-1)
+    , fix_step_(GetFixStepSize(ph))
     , previous_over_stretch_state_(false)
     , over_stretch_(false)
 {
@@ -402,17 +403,32 @@ kinematics::Vector6d LeastSquaresControllerRandomSampling::singleGripperPoseDelt
     // Q: how to set the fix step? only to translational motion?
     double raw_norm = std::sqrt(std::pow(x_trans,2) + std::pow(y_trans,2) + std::pow(z_trans,2));
 
-    if (raw_norm > 0.000001)
+    // double raw_norm = std::sqrt(std::pow(x_trans,2) + std::pow(y_trans,2) + std::pow(z_trans,2)
+    //                            + (std::pow(x_rot,2) + std::pow(x_rot,2) + std::pow(x_rot,2))/20.0);
+
+
+    if ( raw_norm > 0.000001 && (fix_step_ || raw_norm > max_delta))
     {
         random_sample(0) = x_trans/raw_norm * max_delta;
         random_sample(1) = y_trans/raw_norm * max_delta;
         random_sample(2) = z_trans/raw_norm * max_delta;
+        /*
+        random_sample(3) = x_rot/raw_norm * max_delta;
+        random_sample(4) = y_rot/raw_norm * max_delta;
+        random_sample(5) = z_rot/raw_norm * max_delta;
+        */
     }
     else
     {
         random_sample(0) = x_trans;
         random_sample(1) = y_trans;
         random_sample(2) = z_trans;
+
+        /*
+        random_sample(3) = x_rot;
+        random_sample(4) = y_rot;
+        random_sample(5) = z_rot;
+        */
     }
 
     /*
@@ -424,7 +440,6 @@ kinematics::Vector6d LeastSquaresControllerRandomSampling::singleGripperPoseDelt
     random_sample(3) = x_rot;
     random_sample(4) = y_rot;
     random_sample(5) = z_rot;
-
 
     return ClampGripperPoseDeltas(random_sample, max_delta);
 }

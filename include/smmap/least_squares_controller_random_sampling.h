@@ -211,6 +211,8 @@ namespace smmap
 
             const int64_t max_count_;
             int sample_count_;
+
+            bool fix_step_;
             bool previous_over_stretch_state_;
             bool over_stretch_;
 

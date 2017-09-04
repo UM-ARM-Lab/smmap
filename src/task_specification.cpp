@@ -442,8 +442,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
             first_step_calculated_.store(true);
 
             // Try to scaled down size of desired motion
-
-            first_step_desired_motion_.delta = first_step_desired_motion_.delta / 400.0;
+            first_step_desired_motion_.delta = first_step_desired_motion_.delta / GetDesiredDownScale(ph_);
 
             return first_step_desired_motion_;
         }
