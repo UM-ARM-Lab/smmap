@@ -591,6 +591,68 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
         ROS_INFO_STREAM_NAMED("planner", "Collected data to calculate regret in " << stopwatch(READ) << " seconds");
     }
+    else if (num_models_ == 1)
+    {
+        ssize_t model_ind = 0;
+        ObjectPointSet real_p_dot = world_state.object_configuration_ - current_object_configuration;
+        ssize_t num_nodes = real_p_dot.cols();
+
+        int point_count = 0;
+        bool over_stretch = false;
+        const double max_stretch_factor = GetMaxStretchFactor(ph_);
+        double max_stretching = 0.0;
+
+        for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
+        {
+            //  Calculate p_dot error
+            const Eigen::Vector3d& point_real_p_dot = real_p_dot.col(node_ind);
+            const Eigen::Vector3d& point_desired_p_dot = desired_p_dot.segment<3>(node_ind * 3);
+            const double point_weight = desired_p_dot_weight(node_ind * 3);
+
+            if (point_weight > 0)
+            {
+                point_count ++;
+                ave_control_error[model_ind] = ave_control_error[model_ind] + (point_real_p_dot - point_desired_p_dot).norm();
+            }
+
+            // Calculate stretching factor
+            const Eigen::MatrixXd node_squared_distance =
+                    CalculateSquaredDistanceMatrix(world_state.object_configuration_);
+
+            ssize_t first_node = node_ind;
+
+            for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
+            {
+                double this_stretching_factor = std::sqrt(node_squared_distance(first_node, second_node))
+                        / object_initial_node_distance_(first_node, second_node);
+                if (this_stretching_factor > max_stretching)
+                {
+                    max_stretching = this_stretching_factor;
+                }
+
+                const double max_distance = max_stretch_factor * object_initial_node_distance_(first_node, second_node);
+                if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
+                {
+                    over_stretch = true;
+                }
+            }
+        }
+        if(point_count > 0)
+        {
+            ave_control_error[model_ind] = ave_control_error[model_ind] / point_count;
+        }
+        if (num_grippers == 2)
+        {
+            double this_stretching_factor = (world_state.all_grippers_single_pose_.at(0).translation()
+                    - world_state.all_grippers_single_pose_.at(1).translation()).norm()
+                    / max_grippers_distance_;
+            if (this_stretching_factor > max_stretching)
+            {
+                max_stretching = this_stretching_factor;
+            }
+        }
+        current_stretching_factor[model_ind] = max_stretching;
+    }
 
 
     // Execute the command
