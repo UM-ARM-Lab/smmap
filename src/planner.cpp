@@ -366,6 +366,9 @@ WorldState Planner::sendNextCommand(
         {
             rrt_helper_->addBandToBlacklist(virtual_rubber_band_between_grippers_->getVectorRepresentation());
             planGlobalGripperTrajectory(world_state);
+
+            ROS_FATAL("Closing proccess now that planning has finished once for pure planner time tests");
+            exit(-1);
         }
 
         // Execute a single step in the global plan, or use the local controller if we have no plan to follow
