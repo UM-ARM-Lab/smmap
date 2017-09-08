@@ -508,7 +508,7 @@ double LeastSquaresControllerRandomSampling::errorOfControlByPrediction(
         if(desired_p_dot_weight(node_ind * 3) > 0)
         {
             double node_p_dot_error = (node_predicted_p_dot - node_desired_p_dot).norm();
-            sum_of_error += node_p_dot_error;
+            sum_of_error += node_p_dot_error * desired_p_dot_weight(node_ind *3);
         }
     }
 

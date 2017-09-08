@@ -522,6 +522,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
             bool over_stretch = false;
             const double max_stretch_factor = GetMaxStretchFactor(ph_);
             double max_stretching = 0.0;
+            double desired_p_dot_ave_norm = 0.0;
+            double desired_p_dot_max = 0.0;
 
             for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
             {
@@ -534,6 +536,12 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 {
                     point_count ++;
                     ave_control_error[model_ind] = ave_control_error[model_ind] + (point_real_p_dot - point_desired_p_dot).norm();
+
+                    desired_p_dot_ave_norm += point_desired_p_dot.norm();
+                    if (point_desired_p_dot.norm() > desired_p_dot_max)
+                    {
+                        desired_p_dot_max = point_desired_p_dot.norm();
+                    }
                 }
 
                 // Calculate stretching factor
@@ -561,6 +569,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
             if(point_count > 0)
             {
                 ave_control_error[model_ind] = ave_control_error[model_ind] / point_count;
+                desired_p_dot_ave_norm /= point_count;
             }
             if (num_grippers == 2)
             {
@@ -573,6 +582,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 }
             }
             current_stretching_factor[model_ind] = max_stretching;
+            ROS_INFO_STREAM_NAMED("planner", "average desired p dot is" << desired_p_dot_ave_norm);
+            ROS_INFO_STREAM_NAMED("planner", "max pointwise desired p dot is" << desired_p_dot_max);
         };
 
         // const auto control_error_fn = [&] (const size_t model_ind, const WorldState& feed_back_world_state)
@@ -601,6 +612,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
         bool over_stretch = false;
         const double max_stretch_factor = GetMaxStretchFactor(ph_);
         double max_stretching = 0.0;
+        double desired_p_dot_ave_norm = 0.0;
+        double desired_p_dot_max = 0.0;
 
         for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
         {
@@ -613,6 +626,12 @@ WorldState Planner::sendNextCommandUsingLocalController(
             {
                 point_count ++;
                 ave_control_error[model_ind] = ave_control_error[model_ind] + (point_real_p_dot - point_desired_p_dot).norm();
+
+                desired_p_dot_ave_norm += point_desired_p_dot.norm();
+                if (point_desired_p_dot.norm() > desired_p_dot_max)
+                {
+                    desired_p_dot_max = point_desired_p_dot.norm();
+                }
             }
 
             // Calculate stretching factor
@@ -640,6 +659,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
         if(point_count > 0)
         {
             ave_control_error[model_ind] = ave_control_error[model_ind] / point_count;
+            desired_p_dot_ave_norm /= point_count;
         }
         if (num_grippers == 2)
         {
@@ -652,8 +672,10 @@ WorldState Planner::sendNextCommandUsingLocalController(
             }
         }
         current_stretching_factor[model_ind] = max_stretching;
-    }
 
+        ROS_INFO_STREAM_NAMED("planner", "average desired p dot is  " << desired_p_dot_ave_norm);
+        ROS_INFO_STREAM_NAMED("planner", "max pointwise desired p dot is  " << desired_p_dot_max);
+    }
 
     // Execute the command
     const AllGrippersSinglePoseDelta& selected_command = suggested_robot_commands[(size_t)model_to_use].first;
@@ -2142,7 +2164,7 @@ void Planner::visualizeDesiredMotion(
             vis_.visualizeObjectDelta(
                         DESIRED_DELTA_NS,
                         current_world_state.object_configuration_,
-                        AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
+                        AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta * 100),
                         Visualizer::Green());
       //  }
     }
