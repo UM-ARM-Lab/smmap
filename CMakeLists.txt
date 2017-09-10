@@ -24,6 +24,8 @@ set(Eigen3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 find_package(PythonLibs 2.7 REQUIRED)
 find_package(GUROBI REQUIRED)
 
+find_package(NOMAD REQUIRED)
+
 ################################################
 ## Declare ROS messages, services and actions ##
 ################################################
@@ -40,6 +42,7 @@ catkin_package(
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
     DEPENDS         Eigen3
                     GUROBI
+                    NOMAD
 )
 
 ###########
@@ -55,6 +58,7 @@ include_directories(include
     ${catkin_INCLUDE_DIRS}
     ${PYTHON_INCLUDE_DIRS}
     ${GUROBI_INCLUDE_DIRS}
+    ${NOMAD_INCLUDE_DIRS}
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -flto -O3 -g -Wall -Wextra -Wpedantic -Wconversion")
