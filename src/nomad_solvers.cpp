@@ -40,6 +40,7 @@ GripperMotionNomadEvaluator::GripperMotionNomadEvaluator(
         const ssize_t num_grippers,
         const double gripper_radius,
         const double stretching_threshold,
+        const double max_step_size,
         const std::function<double(const AllGrippersSinglePoseDelta& test_gripper_motion)>& eval_error_cost_fn,
         const std::function<double(const AllGrippersSinglePoseDelta& test_gripper_motion)>& collision_constraint_fn,
         const std::function<double(const AllGrippersSinglePoseDelta& test_gripper_motion)>& stretching_constraint_fn,
@@ -49,6 +50,7 @@ GripperMotionNomadEvaluator::GripperMotionNomadEvaluator(
     , num_grippers_(num_grippers)
     , gripper_radius_(gripper_radius)
     , stretching_threshold_(stretching_threshold)
+    , max_step_size_(max_step_size)
     , eval_error_cost_fn_(eval_error_cost_fn)
     , collision_constraint_fn_(collision_constraint_fn)
     , stretching_constraint_fn_(stretching_constraint_fn)
@@ -78,21 +80,22 @@ bool GripperMotionNomadEvaluator::eval_x (NOMAD::Eval_Point& x,
     // if object is not stretched at the moment, output of the c3_stre... above is 1 or greater (> c3_lower)
     c3_stretching_constraint = stretching_threshold_ - c3_stretching_constraint;
 
-
+    c4_gripper_motion_constraint = c4_gripper_motion_constraint - max_step_size_;
     // objective value
     x.set_bb_output(0, c1_error_cost);
 
     // constraints
     x.set_bb_output(1, c2_collision_constraint);
     x.set_bb_output(2, c3_stretching_constraint);
+    x.set_bb_output(3, c4_gripper_motion_constraint);
 
     if (fix_step_size_)
     {
-        if(x.get_bb_outputs().size()<4)
+        if(x.get_bb_outputs().size()<5)
         {
             assert(false && "size of x not match due to the fix step size constraint");
         }
-        x.set_bb_output(3, c4_gripper_motion_constraint);
+        x.set_bb_output(4, -c4_gripper_motion_constraint);
     }
 
     return count_eval;

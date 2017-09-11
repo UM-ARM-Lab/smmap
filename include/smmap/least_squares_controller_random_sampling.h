@@ -166,6 +166,10 @@ namespace smmap
             // Collision constraint related function
             /////////////////////////////////////////////////////////////////////////////////////////
 
+            const double gripperCollisionCheckHelper(
+                    const AllGrippersSinglePose& current_gripper_pose,
+                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+
             bool gripperCollisionCheckResult(
                     const AllGrippersSinglePose& current_gripper_pose,
                     const AllGrippersSinglePoseDelta &test_gripper_motion);
@@ -178,7 +182,15 @@ namespace smmap
                     const DeformableModel::DeformableModelInputData& input_data,
                     const AllGrippersSinglePoseDelta& test_gripper_motion);
 
+            double ropeTwoGripperStretchingHelper(
+                    const DeformableModel::DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+
             bool ropeTwoGrippersStretchingDetection(
+                    const DeformableModel::DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+
+            double clothTwoGripperStretchingHelper(
                     const DeformableModel::DeformableModelInputData& input_data,
                     const AllGrippersSinglePoseDelta& test_gripper_motion);
 
