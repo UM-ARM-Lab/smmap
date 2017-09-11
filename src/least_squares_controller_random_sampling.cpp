@@ -5,6 +5,9 @@
 #include "smmap/least_squares_controller_random_sampling.h"
 #include "smmap/ros_communication_helpers.hpp"
 
+#include "smmap/grippers.hpp"
+#include <kinematics_toolbox/kinematics.h>
+
 using namespace smmap;
 
 LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
@@ -85,8 +88,8 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
                         max_gripper_velocity);
             break;
 
-        case GripperControllerType::UNIFORM_SAMPLING:
-            return solvedByDiscretization(
+        case GripperControllerType::NOMAD_OPTIMIZATION:
+            return solvedByNomad(
                         input_data,
                         max_gripper_velocity);
             break;
@@ -366,14 +369,142 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
 }
 
 
-std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRandomSampling::solvedByDiscretization(
+std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRandomSampling::solvedByNomad(
         const DeformableModel::DeformableModelInputData &input_data,
         const double max_gripper_velocity)
 {
-    UNUSED(input_data);
-    UNUSED(max_gripper_velocity);
+    const double max_step_size = max_gripper_velocity * input_data.dt_;
+    const WorldState& current_world_state = input_data.world_current_state_;
 
-    assert(false && "This function is not written");
+    const Eigen::VectorXd& desired_object_p_dot =
+            input_data.desired_object_motion_.delta;
+          //  input_data.task_desired_object_delta_fn_(current_world_state).delta;
+    const Eigen::VectorXd& desired_p_dot_weight =
+            input_data.desired_object_motion_.weight;
+          //  input_data.task_desired_object_delta_fn_(current_world_state).weight;
+
+    const ssize_t num_grippers = current_world_state.all_grippers_single_pose_.size();
+    const ssize_t num_nodes = current_world_state.object_configuration_.cols();
+
+    const Eigen::MatrixXd node_squared_distance =
+            CalculateSquaredDistanceMatrix(current_world_state.object_configuration_);
+
+    AllGrippersSinglePoseDelta optimal_gripper_command;
+
+    const std::function<double(const AllGrippersSinglePoseDelta&)> eval_error_cost_fn = [&] (
+            const AllGrippersSinglePoseDelta& test_gripper_motion)
+    {
+        return 0.0;
+    };
+
+    const std::function<double(const AllGrippersSinglePoseDelta&)> collision_constraint_fn = [&] (
+            const AllGrippersSinglePoseDelta& test_gripper_motion)
+    {
+        return 0.0;
+    };
+    const std::function<double(const AllGrippersSinglePoseDelta&)> stretching_constraint_fn = [&] (
+            const AllGrippersSinglePoseDelta& test_gripper_motion)
+    {
+        return 0.0;
+    };
+
+    const std::function<double(const AllGrippersSinglePoseDelta&)> gripper_motion_constraint_fn = [&] (
+            const AllGrippersSinglePoseDelta& test_gripper_motion)
+    {
+        return 0.0;
+    };
+
+    NOMAD::Display out ( std::cout );
+    out.precision ( NOMAD::DISPLAY_PRECISION_STD );
+
+    try
+    {
+        // NOMAD initializations:
+        NOMAD::begin(0, nullptr);
+
+        // parameters creation:
+        NOMAD::Parameters p ( out );
+        p.set_DIMENSION (6 * num_grippers);             // number of variables
+
+        vector<NOMAD::bb_output_type> bbot (3); // definition of
+        bbot[0] = NOMAD::OBJ;                   // output types
+        // TODO: might need to decide which kind of constraint to use
+        bbot[1] = NOMAD::EB;
+        bbot[2] = NOMAD::PB;
+        bbot[3] = NOMAD::EB;
+
+        if (fix_step_)
+        {
+            bbot.push_back(NOMAD::EB);
+        }
+
+        p.set_BB_OUTPUT_TYPE(bbot);
+
+        p.set_X0 (NOMAD::Point(6 * num_grippers, 0.0) );  // starting point
+
+        p.set_LOWER_BOUND(NOMAD::Point(6 * num_grippers, -max_step_size)); // all var. >= -6
+        p.set_UPPER_BOUND(NOMAD::Point(6 * num_grippers, max_step_size)); // all var. >= -6
+
+        p.set_MAX_BB_EVAL (100);     // the algorithm terminates after
+                                     // 100 black-box evaluations
+        p.set_DISPLAY_DEGREE(2);
+        p.set_SOLUTION_FILE("sol.txt");
+
+        // parameters validation:
+        p.check();
+
+        const double gripper_radius = 0.023;
+        // custom evaluator creation:
+        GripperMotionNomadEvaluator ev(p,
+                                       num_grippers,
+                                       gripper_radius,
+                                       stretching_cosine_threshold_,
+                                       eval_error_cost_fn,
+                                       collision_constraint_fn,
+                                       stretching_constraint_fn,
+                                       gripper_motion_constraint_fn,
+                                       fix_step_);
+
+        // algorithm creation and execution:
+        NOMAD::Mads mads ( p , &ev );
+        mads.run();
+
+        const NOMAD::Eval_Point* best_x = mads.get_best_feasible();
+
+        optimal_gripper_command = ev.evalPointToGripperPoseDelta(*best_x);
+    }
+    catch (exception& e)
+    {
+        cerr << "\nNOMAD has been interrupted (" << e.what() << ")\n\n";
+    }
+
+    NOMAD::Slave::stop_slaves ( out );
+    NOMAD::end();
+
+    std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> suggested_grippers_command(
+                optimal_gripper_command,
+                ObjectPointSet::Zero(3, num_nodes));
+
+    if(suggested_grippers_command.first.size() > 0)
+    {
+    //    visualize_gripper_motion(current_world_state.all_grippers_single_pose_, suggested_grippers_command.first);
+    }
+    else
+    {
+        suggested_grippers_command.first = setAllGripperPoseDeltaZero(num_grippers);
+    }
+
+    suggested_grippers_command.second = model_->getObjectDelta(
+                input_data,
+                suggested_grippers_command.first);
+
+    /*
+    std::cout << "in random sampling controller, first gripper motion norm : "
+              << suggested_grippers_command.first.at(0).norm()
+              << std::endl;
+    */
+    return suggested_grippers_command;
+
 }
 
 

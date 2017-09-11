@@ -6,6 +6,7 @@
 #include "smmap/deformable_controller.hpp"
 #include "smmap/grippers.hpp"
 #include "smmap/robot_interface.hpp"
+#include "smmap/nomad_solvers.h"
 
 namespace smmap
 {
@@ -131,7 +132,7 @@ namespace smmap
                     const DeformableModel::DeformableModelInputData& input_data,
                     const double max_gripper_velocity);
 
-            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByDiscretization(
+            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByNomad(
                     const DeformableModel::DeformableModelInputData& input_data,
                     const double max_gripper_velocity);
 

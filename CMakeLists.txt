@@ -101,7 +101,7 @@ FILE(GLOB cpp_SRC "src/*.cpp")
 
 add_executable(planner_test_node_UCB nodes/planner_test_node.cpp ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 add_dependencies(planner_test_node_UCB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(planner_test_node_UCB ${catkin_LIBRARIES} ${GUROBI_LIBRARIES})
+target_link_libraries(planner_test_node_UCB ${catkin_LIBRARIES} ${GUROBI_LIBRARIES} ${NOMAD_LIBRARIES})
 set_target_properties(planner_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT -DENABLE_PARALLEL_K_NEAREST_NEIGHBORS")
 
 ## Synthethic trials
