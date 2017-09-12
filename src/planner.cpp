@@ -401,6 +401,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
 {
     Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
+    Stopwatch controller_stopwatch;
 
     const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
     {
@@ -475,6 +476,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
     {
         if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
         {
+            controller_stopwatch(RESET);
+
             suggested_robot_commands[model_ind] =
                 controller_list_[model_ind]->getGripperMotion(
                         model_input_data,
@@ -485,6 +488,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
                                       suggested_robot_commands[model_ind].first,
                                       model_ind);
 
+            // Measure the time it took to pick a model
+            ROS_INFO_STREAM_NAMED("planner", model_ind << "th Controller get suggested motion in" << controller_stopwatch(READ) << " seconds");
         }
     }
 

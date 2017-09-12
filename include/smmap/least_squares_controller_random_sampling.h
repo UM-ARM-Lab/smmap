@@ -228,6 +228,7 @@ namespace smmap
             bool fix_step_;
             bool previous_over_stretch_state_;
             bool over_stretch_;
+            const std::string log_file_path_;
 
             // cloth node inde conversion helper
             std::vector<std::unique_ptr<GripperStretchingInfo>> grippers_stretching_helper_;

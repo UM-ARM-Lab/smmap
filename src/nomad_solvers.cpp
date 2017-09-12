@@ -11,9 +11,19 @@ AllGrippersSinglePoseDelta GripperMotionNomadEvaluator::evalPointToGripperPoseDe
 {
     AllGrippersSinglePoseDelta grippers_motion;
     const int single_gripper_dimension = 6;
+    if(&x == NULL)
+    {
+        kinematics::Vector6d single_gripper_delta = kinematics::Vector6d::Zero();
+        for(int gripper_ind = 0; gripper_ind < num_grippers_; gripper_ind++)
+        {
+            grippers_motion.push_back(single_gripper_delta);
+        }
+        return grippers_motion;
+    }
+
     if (x.size() != num_grippers_ * single_gripper_dimension)
     {
-        assert(false && "grippers data and eval_point x have different size");
+//        assert(false && "grippers data and eval_point x have different size");
     }
 
     for (int gripper_ind = 0; gripper_ind < num_grippers_; gripper_ind ++)

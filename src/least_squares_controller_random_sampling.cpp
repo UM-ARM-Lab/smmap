@@ -43,6 +43,7 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , fix_step_(GetFixStepSize(ph))
     , previous_over_stretch_state_(false)
     , over_stretch_(false)
+    , log_file_path_(GetLogFolder(nh))
 {
     if (deformable_type_ == CLOTH)
     {
@@ -502,7 +503,8 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
 
     };
 
-    NOMAD::Display out ( std::cout );
+    ofstream out(log_file_path_.c_str(), ios::out);
+    // NOMAD::Display out ( std::cout );
     out.precision ( NOMAD::DISPLAY_PRECISION_STD );
 
     try
@@ -512,14 +514,15 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
 
         // parameters creation:
         NOMAD::Parameters p ( out );
+//        NOMAD::Parameters p;
         p.set_DIMENSION (6 * num_grippers);             // number of variables
 
         vector<NOMAD::bb_output_type> bbot (4); // definition of
         bbot[0] = NOMAD::OBJ;                   // output types
         // TODO: might need to decide which kind of constraint to use
-        bbot[1] = NOMAD::EB;
+        bbot[1] = NOMAD::PB;
         bbot[2] = NOMAD::PB;
-        bbot[3] = NOMAD::EB;
+        bbot[3] = NOMAD::PB;
 
         if (fix_step_)
         {
@@ -529,13 +532,16 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
         p.set_BB_OUTPUT_TYPE(bbot);
 
         p.set_X0 (NOMAD::Point(6 * num_grippers, 0.0) );  // starting point
+        p.set_X0 (NOMAD::Point(6 * num_grippers, max_step_size / 6.0) );  // starting point
+        p.set_X0 (NOMAD::Point(6 * num_grippers, -max_step_size / 6.0) );  // starting point
 
         p.set_LOWER_BOUND(NOMAD::Point(6 * num_grippers, -max_step_size)); // all var. >= -6
         p.set_UPPER_BOUND(NOMAD::Point(6 * num_grippers, max_step_size)); // all var. >= -6
 
-        p.set_MAX_BB_EVAL (1000);     // the algorithm terminates after
+        p.set_MAX_BB_EVAL (max_count_);     // the algorithm terminates after
                                      // 100 black-box evaluations
         p.set_DISPLAY_DEGREE(2);
+        //p.set_SGTELIB_MODEL_DISPLAY("");
         p.set_SOLUTION_FILE("sol.txt");
 
         // parameters validation:
