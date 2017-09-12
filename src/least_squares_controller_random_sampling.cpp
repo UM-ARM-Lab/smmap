@@ -531,9 +531,42 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
 
         p.set_BB_OUTPUT_TYPE(bbot);
 
-        p.set_X0 (NOMAD::Point(6 * num_grippers, 0.0) );  // starting point
-        p.set_X0 (NOMAD::Point(6 * num_grippers, max_step_size / 6.0) );  // starting point
-        p.set_X0 (NOMAD::Point(6 * num_grippers, -max_step_size / 6.0) );  // starting point
+        const int x_dim = 6 * num_grippers;
+
+        // Set a list of initial points
+        {
+            NOMAD::Point x0 = NOMAD::Point(x_dim, 0.0);
+            NOMAD::Point x1 = NOMAD::Point(x_dim, 0.0);
+            NOMAD::Point x2 = NOMAD::Point(x_dim, 0.0);
+            NOMAD::Point x3 = NOMAD::Point(x_dim, 0.0);
+            NOMAD::Point x4 = NOMAD::Point(x_dim, 0.0);
+            NOMAD::Point x5 = NOMAD::Point(x_dim, 0.0);
+            NOMAD::Point x6 = NOMAD::Point(x_dim, 0.0);
+            NOMAD::Point x7 = NOMAD::Point(x_dim, 0.0);
+
+            x1.reset(x_dim, max_step_size / 6.0);
+            x2.set_coord(0, max_step_size / 3.0);
+            x3.set_coord(x_dim / 2, max_step_size / 3.0);
+            x4.set_coord(1, max_step_size/3.0);
+            x5.set_coord(x_dim / 2 + 1, max_step_size/3.0);
+            x6.set_coord(2, max_step_size/3.0);
+            x7.set_coord(x_dim / 2 + 2, max_step_size/3.0);
+
+            p.set_X0 (x0);  // starting point
+            p.set_X0 (x1);  // starting point
+            p.set_X0 (-x1);  // starting point
+            p.set_X0(-x2-x3);
+            p.set_X0(-x4 - x5);
+            p.set_X0(-x6 - x7);
+            p.set_X0(x2 + x3);
+            p.set_X0(x4 + x5);
+            p.set_X0(-x6 - x7);
+            p.set_X0(x0 + x2 + x4 + x6);
+            p.set_X0(x0 + x1 + x3 + x5);
+            p.set_X0(x0 - x2 - x4 - x6);
+            p.set_X0(x0 - x1 - x3 - x5);
+
+        }
 
         p.set_LOWER_BOUND(NOMAD::Point(6 * num_grippers, -max_step_size)); // all var. >= -6
         p.set_UPPER_BOUND(NOMAD::Point(6 * num_grippers, max_step_size)); // all var. >= -6
