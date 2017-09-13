@@ -532,8 +532,9 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
         p.set_BB_OUTPUT_TYPE(bbot);
 
         const int x_dim = 6 * num_grippers;
-
+        const int size_of_initial_batch = 10;
         // Set a list of initial points
+        /*
         {
             NOMAD::Point x0 = NOMAD::Point(x_dim, 0.0);
             NOMAD::Point x1 = NOMAD::Point(x_dim, 0.0);
@@ -567,6 +568,19 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
             p.set_X0(x0 - x1 - x3 - x5);
 
         }
+        */
+        {
+            for (int sample_ind = 0; sample_ind < size_of_initial_batch; sample_ind++)
+            {
+                NOMAD::Point x0 = NOMAD::Point(x_dim, 0.0);
+                for (int coord_ind = 0; coord_ind < x_dim; coord_ind++)
+                {
+                    x0.set_coord(coord_ind, EigenHelpers::Interpolate(-max_step_size, max_step_size, uniform_unit_distribution_(generator_)));
+                }
+                p.set_X0(x0);
+            }
+        }
+
 
         p.set_LOWER_BOUND(NOMAD::Point(6 * num_grippers, -max_step_size)); // all var. >= -6
         p.set_UPPER_BOUND(NOMAD::Point(6 * num_grippers, max_step_size)); // all var. >= -6
