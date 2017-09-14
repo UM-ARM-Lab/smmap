@@ -532,7 +532,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
         p.set_BB_OUTPUT_TYPE(bbot);
 
         const int x_dim = 6 * num_grippers;
-        const int size_of_initial_batch = 10;
+        const int size_of_initial_batch = 5;
         // Set a list of initial points
         /*
         {
