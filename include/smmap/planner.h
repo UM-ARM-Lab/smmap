@@ -192,11 +192,10 @@ namespace smmap
                     const std::vector<double>& rewards_for_all_models);
 
             // Contoller logger.  --- Added by Mengyao
-            void controllerLogData(
-                    const WorldState& current_world_state,
+            void controllerLogData(const WorldState& current_world_state,
                     const std::vector<double>& ave_contol_error,
                     const std::vector<double> current_stretching_factor,
-                    const std::vector<long> num_stretching_violation);
+                    const std::vector<double> num_stretching_violation);
 
             const bool logging_enabled_;
             const bool controller_logging_enabled_;

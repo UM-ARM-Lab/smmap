@@ -471,6 +471,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     stopwatch(RESET);
 
     std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>> suggested_robot_commands(num_models_);
+    std::vector<double> time_used(num_models_, 0.0);
     #pragma omp parallel for
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
     {
@@ -487,6 +488,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
             visualize_gripper_motion( world_state.all_grippers_single_pose_,
                                       suggested_robot_commands[model_ind].first,
                                       model_ind);
+
+            time_used[model_ind] = controller_stopwatch(READ);
 
             // Measure the time it took to pick a model
             ROS_INFO_STREAM_NAMED("planner", model_ind << "th Controller get suggested motion in" << controller_stopwatch(READ) << " seconds");
@@ -797,7 +800,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
     logData(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use, individual_rewards);
 
-    controllerLogData(world_feedback, ave_control_error, current_stretching_factor, stretching_count);
+    controllerLogData(world_feedback, ave_control_error, current_stretching_factor, time_used);
 
     const double controller_time = function_wide_stopwatch(READ) - robot_execution_time;
     ROS_INFO_STREAM_NAMED("planner", "Total local controller time                     " << controller_time << " seconds");
@@ -2398,7 +2401,7 @@ void Planner::controllerLogData(
         const WorldState& current_world_state,
         const std::vector<double> &ave_contol_error,
         const std::vector<double> current_stretching_factor,
-        const std::vector<long> num_stretching_violation)
+        const std::vector<double> num_stretching_violation)
 {
     if(controller_logging_enabled_)
     {
