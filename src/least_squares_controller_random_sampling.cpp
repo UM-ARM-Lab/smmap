@@ -728,7 +728,7 @@ AllGrippersSinglePoseDelta LeastSquaresControllerRandomSampling::allGripperPoseD
     {
         for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
         {
-            // Eigen::Affine3d single_gripper_motion_sample = EigenHelpers::ExpTwist(singleGripperPoseDeltaSampler(), 1.0);
+            // Eigen::Isometry3d single_gripper_motion_sample = EigenHelpers::ExpTwist(singleGripperPoseDeltaSampler(), 1.0);
             grippers_motion_sample.push_back(singleGripperPoseDeltaSampler(max_delta));
         }
         return grippers_motion_sample;

@@ -73,7 +73,7 @@ const AllGrippersSinglePose RobotInterface::getGrippersPose()
         }
 
         grippers_pose[gripper_ind] =
-                EigenHelpersConversions::GeometryPoseToEigenAffine3d(pose_srv_data.response.pose);
+                EigenHelpersConversions::GeometryPoseToEigenIsometry3d(pose_srv_data.response.pose);
     }
 
     return grippers_pose;
@@ -130,7 +130,7 @@ deformable_manipulation_msgs::ExecuteGripperMovementRequest RobotInterface::toRo
 {
     deformable_manipulation_msgs::ExecuteGripperMovementRequest movement_request;
     movement_request.grippers_names = GetGripperNames(grippers_data_);
-    movement_request.gripper_poses = EigenHelpersConversions::VectorAffine3dToVectorGeometryPose(grippers_pose);
+    movement_request.gripper_poses = EigenHelpersConversions::VectorIsometry3dToVectorGeometryPose(grippers_pose);
     return movement_request;
 }
 
@@ -144,7 +144,7 @@ deformable_manipulation_msgs::TestGrippersPosesGoal RobotInterface::toRosTestPos
     for (size_t pose_ind = 0; pose_ind < grippers_poses.size(); pose_ind++)
     {
         goal.poses_to_test[pose_ind].pose =
-                EigenHelpersConversions::VectorAffine3dToVectorGeometryPose(grippers_poses[pose_ind]);
+                EigenHelpersConversions::VectorIsometry3dToVectorGeometryPose(grippers_poses[pose_ind]);
     }
 
     return goal;

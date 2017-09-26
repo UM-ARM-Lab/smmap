@@ -776,7 +776,7 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateErrorCorrectionDeltaFixedCo
 }
 
 std::vector<double> DijkstrasCoverageTask::averageDijkstrasDistanceBetweenGrippersAndClusters(
-        const Eigen::Affine3d& gripper_pose,
+        const Eigen::Isometry3d& gripper_pose,
         const std::vector<ssize_t>& cover_indices,
         const std::vector<uint32_t>& cluster_labels,
         const uint32_t num_clusters) const

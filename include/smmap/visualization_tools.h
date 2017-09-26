@@ -89,19 +89,19 @@ namespace smmap
 
             visualization_msgs::MarkerArray::_markers_type createGripperMarker(
                     const std::string& marker_name,
-                    const Eigen::Affine3d& eigen_pose,
+                    const Eigen::Isometry3d& eigen_pose,
                     const std_msgs::ColorRGBA& color,
                     const int32_t id = 1) const;
 
             void visualizeGripper(
                     const std::string& marker_name,
-                    const Eigen::Affine3d& eigen_pose,
+                    const Eigen::Isometry3d& eigen_pose,
                     const std_msgs::ColorRGBA& color,
                     const int32_t id = 1) const;
 
             void visualizeGrippers(
                     const std::string& marker_name,
-                    const EigenHelpers::VectorAffine3d eigen_poses,
+                    const EigenHelpers::VectorIsometry3d eigen_poses,
                     const std_msgs::ColorRGBA& color,
                     const int32_t id = 1) const;
 
@@ -138,8 +138,8 @@ namespace smmap
 
             void visualizeTranslation(
                     const std::string& marker_name,
-                    const Eigen::Affine3d &start,
-                    const Eigen::Affine3d &end,
+                    const Eigen::Isometry3d &start,
+                    const Eigen::Isometry3d &end,
                     const std_msgs::ColorRGBA& color,
                     const int32_t id = 3) const;
 

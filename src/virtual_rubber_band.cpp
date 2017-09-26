@@ -79,114 +79,25 @@ void VirtualRubberBand::setPointsAndSmooth(const EigenHelpers::VectorVector3d& p
     shortcutSmoothBand(false);
 }
 
+/**
+ * @brief VirtualRubberBand::forwardSimulateVirtualRubberBandToEndpointTargets This function assumes that the endpoints
+ * that are passed are collision free, and the path between them can be resampled without any issues. We may have to
+ * project the resampled points out of collision, but it should be feasible to do so.
+ * @param first_endpoint_target
+ * @param second_endpoint_target
+ * @param verbose
+ * @return
+ */
 const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRubberBandToEndpointTargets(
         const Eigen::Vector3d first_endpoint_target,
         const Eigen::Vector3d second_endpoint_target,
         bool verbose)
 {
-    vis_.deleteObjects(BAND_POST_FORWARD_STEP_NS, 1, 30);
-    vis_.deleteObjects(BAND_POST_SUBDIVIDE_STEP_NS, 1, 30);
-    vis_.deleteObjects(BAND_POST_SHORTCUT_SMOOTHING_NS, 1, 500);
-
-    int32_t first_step_failure = -1;
-
-    double distance_to_first_target = (first_endpoint_target - band_.front()).norm();
-    double distance_to_second_target = (second_endpoint_target - band_.back()).norm();
-    int32_t integration_step_ind = 1;
-
-    while (distance_to_first_target > 0.0 || distance_to_second_target > 0.0)
-    {
-        // Collect data for later use
-        const std::vector<double> cummulative_distances_along_band = EigenHelpers::CalculateCumulativeDistances(band_);
-        const double total_band_length = cummulative_distances_along_band.back();
-        const Eigen::Vector3d first_endpoint_at_start_of_loop = band_.front();
-        const Eigen::Vector3d second_endpoint_at_start_of_loop = band_.back();
-
-        // Interpolate then project the endpoints
-        {
-            // First endpoint
-//            {
-                Eigen::Vector3d first_endpoint_interm_pos = first_endpoint_target;
-                if (distance_to_first_target > max_integration_step_size_)
-                {
-                    first_endpoint_interm_pos = EigenHelpers::Interpolate(band_.front(), first_endpoint_target, max_integration_step_size_ / distance_to_first_target);
-                }
-                band_.front() = sdf_.ProjectOutOfCollision3d(first_endpoint_interm_pos);
-//            }
-            // Second endpoint
-//            {
-                Eigen::Vector3d second_endpoint_interm_pos = second_endpoint_target;
-                if (distance_to_second_target > max_integration_step_size_)
-                {
-                    second_endpoint_interm_pos = EigenHelpers::Interpolate(band_.back(), second_endpoint_target, max_integration_step_size_ / distance_to_second_target);
-                }
-                band_.back() = sdf_.ProjectOutOfCollision3d(second_endpoint_interm_pos);
-//            }
-
-
-            // Ensure that we are making forward progress
-            if ((distance_to_first_target  > 0.0 && (first_endpoint_target  - band_.front()).norm() >= distance_to_first_target) ||
-                (distance_to_second_target > 0.0 && (second_endpoint_target - band_.back() ).norm() >= distance_to_second_target))
-            {
-                if (first_step_failure == -1)
-                {
-                    first_step_failure = integration_step_ind;
-                }
-
-                std::cerr << "Rubber band forward simulation stuck - endpoints not moving forward\n";
-
-                std::cerr << "First endpoint target:       " << PrettyPrint::PrettyPrint(first_endpoint_target) << " SDF Distance: " << sdf_.Get3d(first_endpoint_target) << std::endl;
-                std::cerr << "First endpoint at start:     " << PrettyPrint::PrettyPrint(first_endpoint_at_start_of_loop) << std::endl;
-                std::cerr << "First target pre projection: " << PrettyPrint::PrettyPrint(first_endpoint_interm_pos) << std::endl;
-                std::cerr << "First endpoint after delta:  " << PrettyPrint::PrettyPrint(band_.front()) << std::endl;
-                std::cerr << "First distance at start: " << distance_to_first_target << std::endl;
-                std::cerr << "First distance at end:   " << (first_endpoint_target  - band_.front()).norm() << std::endl;
-
-                std::cerr << "Second endpoint target:       " << PrettyPrint::PrettyPrint(first_endpoint_target) << " SDF Distance: " << sdf_.Get3d(second_endpoint_target) << std::endl;
-                std::cerr << "Second endpoint at start:     " << PrettyPrint::PrettyPrint(second_endpoint_at_start_of_loop) << std::endl;
-                std::cerr << "Second target pre projection: " << PrettyPrint::PrettyPrint(second_endpoint_interm_pos) << std::endl;
-                std::cerr << "Second endpoint after delta:  " << PrettyPrint::PrettyPrint(band_.back()) << std::endl;
-                std::cerr << "Second distance at start: " << distance_to_second_target << std::endl;
-                std::cerr << "Second distance at end:   " << (second_endpoint_target  - band_.back()).norm() << std::endl;
-
-                if (first_step_failure != -1 && integration_step_ind > first_step_failure + 10)
-                {
-                    return band_;
-                }
-            }
-        }
-
-        // Determine how far each endpoint moved - used to decide the motion of the rest of the band
-        const Eigen::Vector3d first_endpoint_delta = band_.front() - first_endpoint_at_start_of_loop;
-        const Eigen::Vector3d second_endpoint_delta = band_.back() - second_endpoint_at_start_of_loop;
-
-        // First move each node forward, projecting out of collision as needed
-        for (size_t rubber_band_node_ind = 1; rubber_band_node_ind < band_.size() - 1; ++rubber_band_node_ind)
-        {
-            const Eigen::Vector3d& current_pos = band_[rubber_band_node_ind];
-            const double distance_to_first_endpoint = cummulative_distances_along_band[rubber_band_node_ind];
-            const double ratio = distance_to_first_endpoint / total_band_length;
-            const Eigen::Vector3d delta = EigenHelpers::Interpolate(first_endpoint_delta, second_endpoint_delta, ratio);
-            const Eigen::Vector3d new_pos_post_project = sdf_.ProjectOutOfCollision3d(current_pos + delta);
-            band_[rubber_band_node_ind] = new_pos_post_project;
-        }
-        visualize(BAND_POST_FORWARD_STEP_NS, Visualizer::Green(), Visualizer::Green(), integration_step_ind, verbose);
-
-        // Next subdivide the band if needed
-        resampleBand(verbose);
-        visualize(BAND_POST_SUBDIVIDE_STEP_NS, Visualizer::Magenta(), Visualizer::Magenta(), integration_step_ind, verbose);
-
-        // Update distances for loop check
-        distance_to_first_target = (first_endpoint_target - band_.front()).norm();
-        distance_to_second_target = (second_endpoint_target - band_.back()).norm();
-        ++integration_step_ind;
-    }
-
-    visualize(BAND_POST_SUBDIVIDE_STEP_NS, Visualizer::Magenta(), Visualizer::Magenta(), integration_step_ind, verbose);
-
-    // Then finally shortcut smooth
+    // Add the new endpoints, then let the resample and smooth process handle the propogation
+    band_.insert(band_.begin(), first_endpoint_target);
+    band_.push_back(second_endpoint_target);
+    resampleBand(verbose);
     shortcutSmoothBand(verbose);
-
     return band_;
 }
 
@@ -239,32 +150,54 @@ void VirtualRubberBand::resampleBand(const bool verbose)
 {
     (void)verbose;
 
-    const std::function<double(const Eigen::Vector3d&, const Eigen::Vector3d&)> state_distance_fn = [] (const Eigen::Vector3d& p1, const Eigen::Vector3d& p2)
+    const auto state_distance_fn = [] (const Eigen::Vector3d& p1, const Eigen::Vector3d& p2)
     {
         return (p1 - p2).norm();
     };
-    const std::function<Eigen::Vector3d(const Eigen::Vector3d&, const Eigen::Vector3d&, const double)> state_interpolation_fn = [&] (const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, const double ratio)
+    const auto state_interpolation_fn = [&] (const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, const double ratio)
     {
-        return sdf_.ProjectOutOfCollision3d(EigenHelpers::Interpolate(prev, curr, ratio));
+//        vis_.visualizePoints("band_test_resample_prev", {prev}, {Visualizer::Red()}, 1, 0.005);
+//        vis_.visualizePoints("band_test_resample_curr", {curr}, {Visualizer::Blue()}, 1, 0.005);
+        const auto pre_project = EigenHelpers::Interpolate(prev, curr, ratio);
+//        vis_.visualizePoints("band_test_resample_inerp", {pre_project}, {Visualizer::Cyan()}, 1, 0.004);
+        const auto projected = sdf_.ProjectOutOfCollision3d(pre_project);
+//        vis_.visualizePoints("band_test_resample_result", {projected}, {Visualizer::Green()}, 1, 0.004);
+        return projected;
     };
 
     // Continue to smooth with projected points until the result stabilizes
-    EigenHelpers::VectorVector3d smoothing_result = shortcut_smoothing::ResamplePath(band_, max_distance_between_rubber_band_points_, state_distance_fn, state_interpolation_fn);
+    auto resample_result = shortcut_smoothing::ResamplePath(
+                band_, max_distance_between_rubber_band_points_, state_distance_fn, state_interpolation_fn);
+    int resample_count = 0;
 
-    int smoothing_count = 0;
     // TODO: This can cause an infinite loop
     // https://github.com/UM-ARM-Lab/smmap/issues/6
-    while (smoothing_result != band_)
+    while (resample_result != band_)
     {
-        if (smoothing_count == 10000)
+//        if (resample_count >= 1)
+//        {
+//            visualize("band_test_resample_pre_resample", Visualizer::Red(), Visualizer::Red(), 1, true);
+//            std::cout << "Pre-resample: " << std::endl;
+//            std::cout << PrettyPrint::PrettyPrint(band_, false, "\n") << std::endl << std::endl;
+
+//            visualize("band_test_post_resample", Visualizer::Red(), Visualizer::Red(), 1, true);
+//            std::cout << "Post-resample: " << std::endl;
+//            std::cout << PrettyPrint::PrettyPrint(resample_result, false, "\n") << std::endl << std::endl;
+//        }
+
+        // Accept the previous resample as it was useful
+        band_ = resample_result;
+        resample_count++;
+
+        if (resample_count == 10)
         {
-            ROS_WARN("Rubber Band Smoothing is probably caught in an infinite loop");
+            ROS_WARN("Rubber Band Smoothing is probably caught in an infinite loop while resampling");
         }
-        
-        band_ = smoothing_result;
-        smoothing_result = shortcut_smoothing::ResamplePath(band_, max_distance_between_rubber_band_points_, state_distance_fn, state_interpolation_fn);
-        smoothing_count++;
+
+        resample_result = shortcut_smoothing::ResamplePath<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+                    band_, max_distance_between_rubber_band_points_, state_distance_fn, state_interpolation_fn);
     }
+//    std::cout << "resample count: " << resample_count << std::endl;
 
     // Double check the results; this is here to catch cases where the projection may be creating points that are too far apart
     for (size_t idx = 0; idx < band_.size() - 1; ++idx)
@@ -290,14 +223,14 @@ void VirtualRubberBand::shortcutSmoothBand(const bool verbose)
 {
     const auto sdf_collision_fn = [&] (const Eigen::Vector3d& location)
     {
-        return sdf_.Get3d(location) < 0.0;
+        return sdf_.EstimateDistance3d(location).first < 0.0;
     };
     for (int smoothing_ittr = 0; smoothing_ittr < num_smoothing_ittrs_; ++smoothing_ittr)
     {
         std::uniform_int_distribution<ssize_t> first_distribution(0, band_.size() - 1);
         const size_t first_ind = first_distribution(generator_);
 
-        const ssize_t max_smooth_distance = std::max((ssize_t)MIN_BAND_SMOOTHING_INDEX_DISTANCE, (ssize_t)std::floor(sdf_.Get3d(band_[first_ind]) / max_distance_between_rubber_band_points_));
+        const ssize_t max_smooth_distance = std::max((ssize_t)MIN_BAND_SMOOTHING_INDEX_DISTANCE, (ssize_t)std::floor(sdf_.EstimateDistance3d(band_[first_ind]).first / max_distance_between_rubber_band_points_));
         std::uniform_int_distribution<ssize_t> second_distribution(-max_smooth_distance, max_smooth_distance);
         const ssize_t second_offset = second_distribution(generator_);
         const size_t second_ind = (size_t)arc_helpers::ClampValue<ssize_t>(first_ind + second_offset, 0, (ssize_t)band_.size() - 1);

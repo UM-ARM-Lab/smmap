@@ -245,7 +245,8 @@ void Visualizer::visualizePoints(
         const std::string& marker_name,
         const EigenHelpers::VectorVector3d& points,
         const std_msgs::ColorRGBA& color,
-        const int32_t id, const double scale) const
+        const int32_t id,
+        const double scale) const
 {
     if (!disable_all_visualizations_)
     {
@@ -390,7 +391,7 @@ void Visualizer::visualizeCloth(
 
 visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
         const std::string& marker_name,
-        const Eigen::Affine3d& eigen_pose,
+        const Eigen::Isometry3d& eigen_pose,
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
@@ -406,7 +407,7 @@ visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
     markers[0].scale.x = 0.01;
     markers[0].scale.y = 0.03;
     markers[0].scale.z = 0.01;
-    markers[0].pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(eigen_pose * Eigen::Translation3d(0.0, 0.0, gripper_apperture_));
+    markers[0].pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(eigen_pose * Eigen::Translation3d(0.0, 0.0, gripper_apperture_));
     markers[0].color = color;
 
     markers[1].header.frame_id = world_frame_name_;
@@ -418,7 +419,7 @@ visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
     markers[0].scale.x = 0.01;
     markers[1].scale.y = 0.03;
     markers[1].scale.z = 0.01;
-    markers[1].pose = EigenHelpersConversions::EigenAffine3dToGeometryPose(eigen_pose * Eigen::Translation3d(0.0, 0.0, -gripper_apperture_));
+    markers[1].pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(eigen_pose * Eigen::Translation3d(0.0, 0.0, -gripper_apperture_));
     markers[1].color = color;
 
     markers[0].header.stamp = ros::Time::now();
@@ -428,7 +429,7 @@ visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
 
 void Visualizer::visualizeGripper(
         const std::string& marker_name,
-        const Eigen::Affine3d& eigen_pose,
+        const Eigen::Isometry3d& eigen_pose,
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
@@ -443,7 +444,7 @@ void Visualizer::visualizeGripper(
 
 void Visualizer::visualizeGrippers(
         const std::string& marker_name,
-        const EigenHelpers::VectorAffine3d eigen_poses,
+        const EigenHelpers::VectorIsometry3d eigen_poses,
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
@@ -572,8 +573,8 @@ void Visualizer::visualizeTranslation(
 
 void Visualizer::visualizeTranslation(
         const std::string& marker_name,
-        const Eigen::Affine3d &start,
-        const Eigen::Affine3d &end,
+        const Eigen::Isometry3d &start,
+        const Eigen::Isometry3d &end,
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
