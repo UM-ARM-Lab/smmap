@@ -109,6 +109,8 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
     const MatrixXd J = computeGrippersToDeformableObjectJacobian(input_data, grippers_pose_delta);
     const ObjectPointSet &current_configuration = input_data.world_current_state_.object_configuration_;
 
+    const ssize_t num_current_visible_nodes = current_configuration.cols();
+
 //    ROS_INFO_STREAM_NAMED("constraint_model", "Calculate Mask for p_dot in  " << stopwatch(READ) << " seconds");
 
     MatrixXd delta = MatrixXd::Zero(input_data.world_current_state_.object_configuration_.cols() * 3, 1);
@@ -120,7 +122,7 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
         delta += J.block(0, 6 * (ssize_t)gripper_ind, J.rows(), 6) * grippers_pose_delta[gripper_ind];
     }
 
-    for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
+    for (ssize_t node_ind = 0; node_ind < num_current_visible_nodes; node_ind++)
     {
         if (environment_sdf_.EstimateDistance3d(current_configuration.col(node_ind)).first > obstacle_threshold_)
         {
@@ -269,13 +271,15 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
     const AllGrippersSinglePose& grippers_current_poses = world_state.all_grippers_single_pose_;
     const ObjectPointSet& current_configuration = world_state.object_configuration_;
 
+    const ssize_t num_current_visible_nodes = current_configuration.cols();
+
     const kinematics::VectorIsometry3d grippers_next_poses = kinematics::applyTwist(
                 grippers_current_poses,
                 grippers_pose_delta);
 
     const ssize_t num_grippers = (ssize_t)grippers_current_poses.size();
     const ssize_t num_Jcols = num_grippers * 6;
-    const ssize_t num_Jrows = num_nodes_ * 3;
+    const ssize_t num_Jrows = num_current_visible_nodes * 3;
 
     MatrixXd J(num_Jrows, num_Jcols);
 
@@ -296,7 +300,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
         const Vector3d& node_v = grippers_next_poses.at(gripper_ind).translation()
                 - grippers_current_poses.at(gripper_ind).translation();
 
-        for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
+        for (ssize_t node_ind = 0; node_ind < num_current_visible_nodes; node_ind++)
         {
             const std::pair<double, long> nearest_node_on_gripper =
                     GetMinimumDistanceIndexToGripper(
@@ -418,14 +422,15 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
     Stopwatch stopwatch;
     stopwatch(RESET);
 
-    const ssize_t num_lines = num_nodes_ * 3;
+    const ssize_t num_current_visible_nodes = current_configuration.cols();
+
+    const ssize_t num_lines = num_current_visible_nodes * 3;
     MatrixXd M(num_lines, num_lines);
     M.setIdentity(num_lines,num_lines);
     Matrix3d I3 = Matrix3d::Identity(3,3);
 //    MatrixXd v_mask = MatrixXd::Zero(num_lines,1);
 
-
-    for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
+    for (ssize_t node_ind = 0; node_ind < num_current_visible_nodes; node_ind++)
     {
         // if is far from obstacle
         if (environment_sdf_.EstimateDistance3d(current_configuration.col(node_ind)).first > obstacle_threshold_)

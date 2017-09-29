@@ -266,16 +266,18 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyC
         const ObjectPointSet& object_configuration,
         bool visualize) const
 {
-    ObjectDeltaAndWeight stretching_correction(num_nodes_ * 3);
+    const ssize_t num_current_visible_nodes = object_configuration.cols();
+
+    ObjectDeltaAndWeight stretching_correction(num_current_visible_nodes * 3);
     const double max_stretch_factor = maxStretchFactor();
     const Eigen::MatrixXd object_current_node_distance = CalculateDistanceMatrix(object_configuration);
 
     EigenHelpers::VectorVector3d vis_start_points;
     EigenHelpers::VectorVector3d vis_end_points;
 
-    for (ssize_t first_node = 0; first_node < num_nodes_; ++first_node)
+    for (ssize_t first_node = 0; first_node < num_current_visible_nodes; ++first_node)
     {
-        for (ssize_t second_node = first_node + 1; second_node < num_nodes_; ++second_node)
+        for (ssize_t second_node = first_node + 1; second_node < num_current_visible_nodes; ++second_node)
         {
             const double max_dist = object_initial_node_distance_(first_node, second_node) * max_stretch_factor;
             const double dist = object_current_node_distance(first_node, second_node);
@@ -310,13 +312,15 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaPairwi
         const ObjectPointSet& object_configuration,
         bool visualize) const
 {
-    ObjectDeltaAndWeight stretching_correction(num_nodes_ * 3);
+    const ssize_t num_current_visible_nodes = object_configuration.cols();
+
+    ObjectDeltaAndWeight stretching_correction(num_current_visible_nodes * 3);
     const double max_stretch_factor = maxStretchFactor();
 
     EigenHelpers::VectorVector3d vis_start_points;
     EigenHelpers::VectorVector3d vis_end_points;
 
-    for (ssize_t first_node = 0; first_node < num_nodes_; ++first_node)
+    for (ssize_t first_node = 0; first_node < num_current_visible_nodes; ++first_node)
     {
         for (ssize_t second_node : getNodeNeighbours(first_node))
         {
@@ -372,9 +376,11 @@ ObjectDeltaAndWeight TaskSpecification::combineErrorCorrectionAndStretchingCorre
         const ObjectDeltaAndWeight& error_correction,
         const ObjectDeltaAndWeight& stretching_correction) const
 {
-    ObjectDeltaAndWeight combined(num_nodes_ * 3);
+    const ssize_t num_current_visible_nodes = stretching_correction.delta.rows()/3;
 
-    for (ssize_t node_ind = 0; node_ind < num_nodes_ * 3; node_ind += 3)
+    ObjectDeltaAndWeight combined(num_current_visible_nodes * 3);
+
+    for (ssize_t node_ind = 0; node_ind < num_current_visible_nodes * 3; node_ind += 3)
     {
         const Eigen::Vector3d error_correction_perpendicular =
                 EigenHelpers::VectorRejection(stretching_correction.delta.segment<3>(node_ind),
@@ -397,6 +403,8 @@ ObjectDeltaAndWeight TaskSpecification::combineErrorCorrectionAndStretchingCorre
 
 ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldState& world_state)
 {
+    const ssize_t num_current_visible_nodes = world_state.object_configuration_.cols();
+
     if (first_step_last_simtime_calced_ != world_state.sim_time_)
     {
         first_step_calculated_.store(false);
@@ -424,7 +432,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
 
             if(!GetStretchingCorrectionFromTask(ph_))
             {
-                ObjectDeltaAndWeight no_stretching_correction(num_nodes_ * 3);
+                ObjectDeltaAndWeight no_stretching_correction(num_current_visible_nodes * 3);
                 first_step_stretching_correction_ = no_stretching_correction;
             }
             else
@@ -516,6 +524,8 @@ double DirectCoverageTask::calculateError_impl(const WorldState& world_state)
     #warning "Direct coverage task - error thesholds not updated to use combined measure - distance to/along normal"
     const double minimum_threshold = error_threshold_distance_to_normal_;
 
+    const ssize_t num_current_visible_nodes = object_configuration.cols();
+
     Eigen::VectorXd error(cover_points_.cols());
 
     // for every cover point, find the nearest deformable object point
@@ -526,7 +536,7 @@ double DirectCoverageTask::calculateError_impl(const WorldState& world_state)
 
         // find the closest deformable object point
         double min_dist_squared = std::numeric_limits<double>::infinity();
-        for (ssize_t deformable_ind = 0; deformable_ind < num_nodes_; ++deformable_ind)
+        for (ssize_t deformable_ind = 0; deformable_ind < num_current_visible_nodes; ++deformable_ind)
         {
             const Eigen::Vector3d& deformable_point = object_configuration.col(deformable_ind);
             const double new_dist_squared = (target_point - deformable_point).squaredNorm();
@@ -553,7 +563,9 @@ ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_imp
     #warning "Direct coverage task - error thesholds not updated to use combined measure - distance to/along normal"
     const double minimum_threshold = error_threshold_distance_to_normal_;
 
-    ObjectDeltaAndWeight desired_object_delta(num_nodes_ * 3);
+    const ssize_t num_current_visible_nodes = object_configuration.cols();
+
+    ObjectDeltaAndWeight desired_object_delta(num_current_visible_nodes * 3);
 
     // for every target point, find the nearest deformable object point
     for (ssize_t target_ind = 0; target_ind < cover_points_.cols(); ++target_ind)
@@ -563,7 +575,7 @@ ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_imp
         // find the closest deformable object point
         ssize_t min_ind = -1;
         double min_dist_squared = std::numeric_limits<double>::infinity();
-        for (ssize_t deformable_ind = 0; deformable_ind < num_nodes_; ++deformable_ind)
+        for (ssize_t deformable_ind = 0; deformable_ind < num_current_visible_nodes; ++deformable_ind)
         {
             const Eigen::Vector3d& deformable_point = object_configuration.col(deformable_ind);
             const double new_dist_squared = (target_point - deformable_point).squaredNorm();
@@ -632,12 +644,15 @@ DijkstrasCoverageTask::DijkstrasCoverageTask(
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Dijkstras Coverage Task - Virtual function wrappers
+// Dijkstras Coverage Task - Virtual function wrappers   ---- This task should be further revised for partially occluded task
+// Comments from Mengyao
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const DijkstrasCoverageTask::Correspondences& DijkstrasCoverageTask::getCoverPointCorrespondences(
         const WorldState& world_state)
 {
+    const ssize_t num_current_visible_nodes = world_state.object_configuration_.cols();
+
     if (current_correspondences_last_simtime_calced_ != world_state.sim_time_)
     {
         current_correspondences_calculated_.store(false);
@@ -661,13 +676,15 @@ const DijkstrasCoverageTask::Correspondences& DijkstrasCoverageTask::getCoverPoi
 
             assert(current_correspondences_.uncovered_target_points_idxs_.size() == current_correspondences_.uncovered_target_points_distances_.size());
 
-            assert((ssize_t)current_correspondences_.correspondences_.size() == num_nodes_);
-            assert((ssize_t)current_correspondences_.correspondences_next_step_.size() == num_nodes_);
-            assert((ssize_t)current_correspondences_.correspondences_distances_.size() == num_nodes_);
-            assert((ssize_t)current_correspondences_.correspondences_is_covered_.size() == num_nodes_);
+        //    assert((ssize_t)current_correspondences_.correspondences_.size() == num_nodes_);
+
+            assert((ssize_t)current_correspondences_.correspondences_.size() == num_current_visible_nodes);
+            assert((ssize_t)current_correspondences_.correspondences_next_step_.size() == num_current_visible_nodes);
+            assert((ssize_t)current_correspondences_.correspondences_distances_.size() == num_current_visible_nodes);
+            assert((ssize_t)current_correspondences_.correspondences_is_covered_.size() == num_current_visible_nodes);
 
             size_t total_correspondences = 0;
-            for (size_t deform_idx = 0; (ssize_t)deform_idx < num_nodes_; ++deform_idx)
+            for (size_t deform_idx = 0; (ssize_t)deform_idx < num_current_visible_nodes; ++deform_idx)
             {
                 const size_t current_num_correspondences = current_correspondences_.correspondences_[deform_idx].size();
 
@@ -677,7 +694,9 @@ const DijkstrasCoverageTask::Correspondences& DijkstrasCoverageTask::getCoverPoi
 
                 total_correspondences += current_num_correspondences;
             }
-            assert((ssize_t)total_correspondences == num_cover_points_);
+            // Revised by Mengyao for occluded usage
+        //    assert((ssize_t)total_correspondences == num_cover_points_);
+            assert((ssize_t)total_correspondences <= num_cover_points_);
 
             ROS_INFO_STREAM_NAMED("task_specification", "Calculated correspondences in        " << GlobalStopwatch(READ) << " seconds");
 
@@ -702,12 +721,15 @@ std::vector<EigenHelpers::VectorVector3d> DijkstrasCoverageTask::findPathFromObj
         const WorldState& world_state,
         const size_t max_steps)
 {
+    // Should revise the world state somewhere,    ----- Added by Mengyao
     const Correspondences& correspondences = getCoverPointCorrespondences(world_state);
     const ObjectPointSet& object_configuration = world_state.object_configuration_;
 
-    std::vector<EigenHelpers::VectorVector3d> dijkstras_paths(num_nodes_);
+    const ssize_t num_current_visible_nodes = object_configuration.cols();
+
+    std::vector<EigenHelpers::VectorVector3d> dijkstras_paths(num_current_visible_nodes);
     // Next, for each deformable point, follow the (combined) Dijkstras field
-    for (size_t deformable_ind = 0; (ssize_t)deformable_ind < num_nodes_; ++deformable_ind)
+    for (size_t deformable_ind = 0; (ssize_t)deformable_ind < num_current_visible_nodes; ++deformable_ind)
     {
         dijkstras_paths[deformable_ind] =
                 followCoverPointAssignments(
@@ -729,9 +751,11 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateErrorCorrectionDeltaFixedCo
         const WorldState& world_state,
         const std::vector<std::vector<ssize_t>>& correspondences)
 {
-    ObjectDeltaAndWeight desired_object_delta(num_nodes_ * 3);
+    const ssize_t num_current_visible_nodes = world_state.object_configuration_.cols();
 
-    for (ssize_t deform_idx = 0; deform_idx < num_nodes_; ++deform_idx)
+    ObjectDeltaAndWeight desired_object_delta(num_current_visible_nodes * 3);
+
+    for (ssize_t deform_idx = 0; deform_idx < num_current_visible_nodes; ++deform_idx)
     {
         const std::vector<ssize_t>& current_correspondences     = correspondences[deform_idx];
         const Eigen::Vector3d& deformable_point                 = world_state.object_configuration_.col(deform_idx);
@@ -821,9 +845,12 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateObjectErrorCorrectionDelta_
 {
     const Correspondences& correspondences = getCoverPointCorrespondences(world_state);
     const ObjectPointSet& object_configuration = world_state.object_configuration_;
-    ObjectDeltaAndWeight desired_object_delta(num_nodes_ * 3);
 
-    for (ssize_t deform_idx = 0; deform_idx < num_nodes_; ++deform_idx)
+    const ssize_t num_current_visible_nodes = object_configuration.cols();
+
+    ObjectDeltaAndWeight desired_object_delta(num_current_visible_nodes * 3);
+
+    for (ssize_t deform_idx = 0; deform_idx < num_current_visible_nodes; ++deform_idx)
     {
         // Extract the correct part of each data structure
         const Eigen::Vector3d& deformable_point = object_configuration.col(deform_idx);
@@ -1039,7 +1066,9 @@ DistanceBasedCorrespondencesTask::DistanceBasedCorrespondencesTask(
 DijkstrasCoverageTask::Correspondences DistanceBasedCorrespondencesTask::getCoverPointCorrespondences_impl(
         const WorldState& world_state) const
 {
-    Correspondences correspondences(num_nodes_);
+    const ssize_t num_current_visible_nodes = world_state.object_configuration_.cols();
+
+    Correspondences correspondences(num_current_visible_nodes);
 
     // For every cover point, figure out the correspondence
     for (ssize_t cover_idx = 0; cover_idx < num_cover_points_; ++cover_idx)
@@ -1088,7 +1117,9 @@ std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::fin
     ssize_t best_target_idx_in_free_space_graph = -1;
     bool covered = false;
 
-    for (ssize_t deformable_idx = 0; deformable_idx < num_nodes_; ++deformable_idx)
+    const ssize_t num_current_visible_nodes = world_state.object_configuration_.cols();
+
+    for (ssize_t deformable_idx = 0; deformable_idx < num_current_visible_nodes; ++deformable_idx)
     {
         const Eigen::Vector3d& deformable_point = world_state.object_configuration_.col((size_t)deformable_idx);
         const double straight_line_distance = (cover_point - deformable_point).norm();
@@ -1145,11 +1176,13 @@ FixedCorrespondencesTask::FixedCorrespondencesTask(
 DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCorrespondences_impl(
         const WorldState& world_state) const
 {
-    Correspondences correspondences_external(num_nodes_);
+    const ssize_t num_current_visible_nodes = world_state.object_configuration_.cols();
+
+    Correspondences correspondences_external(num_current_visible_nodes);
     correspondences_external.correspondences_ = correspondences_internal_fixed_;
 
     // For each node on the object, record the distance to the corresponding target points
-    for (size_t deform_idx = 0; (ssize_t)deform_idx < num_nodes_; ++deform_idx)
+    for (size_t deform_idx = 0; (ssize_t)deform_idx < num_current_visible_nodes; ++deform_idx)
     {
         // Extract the correct part of each data structure
         const std::vector<ssize_t>& current_correspondences             = correspondences_external.correspondences_[deform_idx];
