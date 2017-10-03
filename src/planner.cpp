@@ -407,6 +407,11 @@ WorldState Planner::sendNextCommandUsingLocalController(
     {
         return task_specification_->calculateDesiredDirection(world_state);
     };
+
+    // Make copies of the original worldState for occlusion  ---- Added by Mengyao
+    // Occluded function should be re-written later, should be some information contained in the world-feedback
+    const WorldState occluded_world_state = occludedWorldState(world_state);
+
     DeformableModel::DeformableModelInputData model_input_data(
                 task_desired_direction_fn,
                 world_state,
@@ -485,7 +490,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
                         robot_.max_gripper_velocity_);
 
 
-            visualize_gripper_motion( world_state.all_grippers_single_pose_,
+            visualizeGripperMotion( world_state.all_grippers_single_pose_,
                                       suggested_robot_commands[model_ind].first,
                                       model_ind);
 
@@ -2229,7 +2234,7 @@ void Planner::visualizeTotalForceOnGripper(
 }
 
 
-void Planner::visualize_gripper_motion(
+void Planner::visualizeGripperMotion(
         const AllGrippersSinglePose& current_gripper_pose,
         const AllGrippersSinglePoseDelta& gripper_motion,
         const ssize_t model_ind)
@@ -2422,6 +2427,56 @@ void Planner::controllerLogData(
         LOG(controller_loggers_.at("count_stretching_violation"),
             PrettyPrint::PrettyPrint(num_stretching_violation, false, " "));
     }
+}
+
+
+///////////////////////////////////////////////////////////////////////
+// World state modification / copy helper function. For occlusion ---- Added by Mengyao
+///////////////////////////////////////////////////////////////////////
+const WorldState Planner::occludedWorldState(const WorldState& world_state)
+{
+    WorldState occluded_world_state;
+    const ssize_t num_grippers = world_state.all_grippers_single_pose_.size();
+    const ssize_t num_all_nodes = world_state.object_configuration_.cols();
+    const ssize_t num_rows = 3;
+
+    occluded_world_state.object_configuration_ = world_state.object_configuration_;
+
+    for (ssize_t node_ind = 0; node_ind < num_all_nodes; node_ind++)
+    {
+        if(node_ind > num_all_nodes / num_rows && node_ind < num_all_nodes * 2 / num_rows)
+        {
+            ssize_t numCols = occluded_world_state.object_configuration_.cols()-1;
+
+            occluded_world_state.object_configuration_.block(0, node_ind, num_rows, numCols-node_ind)
+                    = occluded_world_state.object_configuration_.block(0,node_ind+1, num_rows, numCols-node_ind);
+            occluded_world_state.object_configuration_.conservativeResize(num_rows,numCols);
+        }
+    }
+
+
+    occluded_world_state.all_grippers_single_pose_ = world_state.all_grippers_single_pose_;
+
+    occluded_world_state.gripper_collision_data_.reserve(num_grippers);
+    for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+    {
+        occluded_world_state.gripper_collision_data_.push_back(world_state.gripper_collision_data_.at(gripper_ind));
+        // Read wrench information --- Added by Mengyao
+        /*
+        feedback_eigen.gripper_wrench_.push_back(
+                    SingleGripperWrench(
+                        Wrench(EigenHelpersConversions::GeometryWrenchToEigenPair(
+                                   feedback_ros.gripper_wrenches[gripper_ind * 2])),
+                        Wrench(EigenHelpersConversions::GeometryWrenchToEigenPair(
+                                   feedback_ros.gripper_wrenches[gripper_ind * 2 + 1]))));
+        */
+
+    }
+
+
+    occluded_world_state.sim_time_ = world_state.sim_time_;
+
+    return occluded_world_state;
 }
 
 

@@ -175,7 +175,7 @@ namespace smmap
                     const WorldState& current_world_state,
                     const bool visualization_enabled = true) const;
 
-            void visualize_gripper_motion(
+            void visualizeGripperMotion(
                     const AllGrippersSinglePose& current_gripper_pose,
                     const AllGrippersSinglePoseDelta& gripper_motion,
                     const ssize_t model_ind);
@@ -196,6 +196,12 @@ namespace smmap
                     const std::vector<double>& ave_contol_error,
                     const std::vector<double> current_stretching_factor,
                     const std::vector<double> num_stretching_violation);
+
+
+            ///////////////////////////////////////////////////////////////////////
+            // World state modification / copy helper function. For occlusion ---- Added by Mengyao
+            ///////////////////////////////////////////////////////////////////////
+            const WorldState occludedWorldState(const WorldState& world_state);
 
             const bool logging_enabled_;
             const bool controller_logging_enabled_;

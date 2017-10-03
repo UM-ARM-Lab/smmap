@@ -143,6 +143,7 @@ namespace smmap
     /// World state structure for a single time step
     struct WorldState
     {
+
         ObjectPointSet object_configuration_;
 
         // Force and torque data --- Added by Mengyao
