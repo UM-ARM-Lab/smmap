@@ -14,6 +14,117 @@ namespace smmap
     typedef std::vector<ObjectPointSet> ObjectTrajectory;
     typedef std::vector<ObjectTrajectory> VectorObjectTrajectory;
 
+    // structure for wrench  --- Added by Mengyao
+    struct Wrench
+    {
+        public:
+            Wrench()
+            {}
+
+            Wrench(std::pair<Eigen::Vector3d, Eigen::Vector3d> wrench)
+                : force(wrench.first)
+                , torque(wrench.second)
+            {}
+
+            Wrench(const Wrench& wrench)
+                : force(wrench.force)
+                , torque(wrench.torque)
+            {}
+
+            Eigen::Vector3d force;
+            Eigen::Vector3d torque;
+    };
+
+    struct ObjectWrench
+    {
+        public:
+            ObjectWrench()
+            { }
+
+            ObjectWrench(std::vector<Wrench> wrench_vector)
+            {
+                object_force.clear();
+                object_torque.clear();
+                for (size_t node_ind = 0; node_ind < wrench_vector.size(); node_ind++)
+                {
+                    object_force.push_back(wrench_vector.at(node_ind).force);
+                    object_torque.push_back(wrench_vector.at(node_ind).torque);
+                }
+            }
+
+            void SetObjectWrench(std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> wrench_pair_vector)
+            {
+                object_force.clear();
+                object_torque.clear();
+                for (size_t node_ind = 0; node_ind < wrench_pair_vector.size(); node_ind++)
+                {
+                    object_force.push_back(wrench_pair_vector.at(node_ind).first);
+                    object_torque.push_back(wrench_pair_vector.at(node_ind).second);
+                }
+
+            }
+
+            const std::vector<Eigen::Vector3d> MagnifiedForce(double scale) const
+            {
+                std::vector<Eigen::Vector3d> magnified_force;
+                for (size_t node_ind = 0; node_ind < object_force.size(); node_ind++)
+                {
+                    magnified_force.push_back(object_force.at(node_ind) * scale);
+                }
+                return magnified_force;
+            }
+            const std::vector<Eigen::Vector3d> MagnifiedTorque(double scale) const
+            {
+                std::vector<Eigen::Vector3d> magnified_torque;
+                for (size_t node_ind = 0; node_ind < object_force.size(); node_ind++)
+                {
+                    magnified_torque.push_back(object_torque.at(node_ind) * scale);
+                }
+                return magnified_torque;
+            }
+
+            const std::pair<Eigen::Vector3d, Eigen::Vector3d> GetRopeEndsForce() const
+            {
+                std::pair<Eigen::Vector3d, Eigen::Vector3d> ends_force;
+                if (object_force.size() > 1)
+                {
+                    ends_force = std::make_pair(object_force.at(0), object_force.at(object_force.size()-1));
+
+                }
+                else
+                {
+                    std::cout << "size of force data < 2"
+                              << std::endl;
+                }
+                return ends_force;
+            }
+
+            std::vector<Eigen::Vector3d> object_force;
+            std::vector<Eigen::Vector3d> object_torque;
+    };
+
+    struct SingleGripperWrench
+    {
+        public:
+            SingleGripperWrench()
+            {}
+
+            SingleGripperWrench(const Wrench& top_data, const Wrench& bottom_data)
+                : top_clamp(top_data)
+                , bottom_clamp(bottom_data)
+            {}
+
+            SingleGripperWrench(const SingleGripperWrench& single_gripper_wrench)
+                : top_clamp(single_gripper_wrench.top_clamp)
+                , bottom_clamp(single_gripper_wrench.bottom_clamp)
+            {}
+
+            Wrench top_clamp;
+            Wrench bottom_clamp;
+    };
+    typedef std::vector<SingleGripperWrench> AllGrippersWrench;
+
+
     struct ObjectDeltaAndWeight
     {
         public:
@@ -32,10 +143,115 @@ namespace smmap
     /// World state structure for a single time step
     struct WorldState
     {
+
         ObjectPointSet object_configuration_;
+
+        // Force and torque data --- Added by Mengyao
+        ObjectWrench object_wrench_;
+
         AllGrippersSinglePose all_grippers_single_pose_;
         std::vector<CollisionData> gripper_collision_data_;
+
+        // Force and torque data --- Added by Mengyao
+        AllGrippersWrench gripper_wrench_;
+
         double sim_time_;
+    };
+
+    // Helper structure to convert between x ind, y ind, and node ind for cloth;
+    // TODO: Should I put this struct here or else where?    --- Added by Mengyao
+    struct NodeXYInd
+    {
+        NodeXYInd()
+        {}
+
+        NodeXYInd(ssize_t x_num, ssize_t y_num)
+            : num_x_steps_(x_num)
+            , num_y_steps_(y_num)
+            , num_nodes_(x_num * y_num)
+        {}
+
+        void SetNodeXYInd(ssize_t x_num, ssize_t y_num)
+        {
+            num_x_steps_ = x_num;
+            num_y_steps_ = y_num;
+            num_nodes_ = x_num * y_num;
+        }
+
+        ssize_t GetNodeInd(ssize_t x_ind, ssize_t y_ind)
+        {
+            assert(NodeInBound(x_ind, y_ind)||"xy_ind out of bound");
+            return y_ind * num_x_steps_ + x_ind;
+        }
+
+        // first element is x ind, second is y ind
+        std::pair<ssize_t, ssize_t> GetXYInd(ssize_t node_ind)
+        {
+            assert(NodeInBound(node_ind)||"node_ind out of bound");
+            std::pair<ssize_t, ssize_t> xy_ind;
+            xy_ind.second = node_ind / num_x_steps_;
+            xy_ind.first = node_ind - xy_ind.second * num_x_steps_;
+            return xy_ind;
+        }
+
+        // the size of vector is always 8, value is -1 if out of bound.
+        /* Layout :
+         *   3  2  1
+         *   4  X  0
+         *   5  6  7
+        */
+        std::vector<ssize_t> Neighbor8Ind(ssize_t node_ind)
+        {
+            const int num_neighbor = 8;
+            std::vector<ssize_t> nearest_8_neighbor(num_neighbor, -1);
+
+            if (NodeInBound(node_ind + 1))
+            { nearest_8_neighbor.at(0) = node_ind + 1;}
+
+            if (NodeInBound(node_ind + 1 + num_x_steps_))
+            { nearest_8_neighbor.at(1) = node_ind + 1 + num_x_steps_;}
+
+            if (NodeInBound(node_ind + num_x_steps_))
+            { nearest_8_neighbor.at(2) = node_ind + num_x_steps_;}
+
+            if (NodeInBound(node_ind - 1 + num_x_steps_))
+            { nearest_8_neighbor.at(3) = node_ind - 1 + num_x_steps_;}
+
+            if (NodeInBound(node_ind - 1))
+            { nearest_8_neighbor.at(4) = node_ind - 1;}
+
+            if (NodeInBound(node_ind - 1 - num_x_steps_))
+            { nearest_8_neighbor.at(5) = node_ind - 1 - num_x_steps_;}
+
+            if (NodeInBound(node_ind - num_x_steps_))
+            { nearest_8_neighbor.at(6) = node_ind - num_x_steps_;}
+
+            if (NodeInBound(node_ind + 1 - num_x_steps_))
+            { nearest_8_neighbor.at(7) = node_ind + 1 - num_x_steps_;}
+
+            return nearest_8_neighbor;
+        }
+
+        bool NodeInBound(ssize_t node_ind)
+        {
+            if ((node_ind >=0) && (node_ind < num_nodes_))
+                return true;
+            return false;
+        }
+
+        bool NodeInBound(ssize_t x_ind, ssize_t y_ind)
+        {
+            if ((x_ind >=0) && (x_ind < num_x_steps_))
+            {
+                if (((y_ind >=0) && (y_ind < num_y_steps_)))
+                    return true;
+            }
+            return false;
+        }
+
+        ssize_t num_x_steps_;
+        ssize_t num_y_steps_;
+        ssize_t num_nodes_;
     };
 
     /**
@@ -51,6 +267,17 @@ namespace smmap
         feedback_eigen.object_configuration_ =
                 EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(
                     feedback_ros.object_configuration);
+
+        // Read wrench information --- Added by Mengyao
+        /*
+        feedback_eigen.object_wrench_.object_force.clear();
+        feedback_eigen.object_wrench_.object_torque.clear();
+
+
+        feedback_eigen.object_wrench_.SetObjectWrench(
+                    EigenHelpersConversions::GeometryWrenchToEigenPairVector(
+                        feedback_ros.object_wrenches));
+        */
 
         feedback_eigen.all_grippers_single_pose_ =
                 EigenHelpersConversions::VectorGeometryPoseToVectorIsometry3d(
@@ -68,6 +295,16 @@ namespace smmap
                             EigenHelpersConversions::GeometryVector3ToEigenVector3d(
                                 feedback_ros.obstacle_surface_normal[gripper_ind]),
                             feedback_ros.gripper_distance_to_obstacle[gripper_ind]));
+            // Read wrench information --- Added by Mengyao
+            /*
+            feedback_eigen.gripper_wrench_.push_back(
+                        SingleGripperWrench(
+                            Wrench(EigenHelpersConversions::GeometryWrenchToEigenPair(
+                                       feedback_ros.gripper_wrenches[gripper_ind * 2])),
+                            Wrench(EigenHelpersConversions::GeometryWrenchToEigenPair(
+                                       feedback_ros.gripper_wrenches[gripper_ind * 2 + 1]))));
+            */
+
         }
 
         feedback_eigen.sim_time_ = feedback_ros.sim_time;
@@ -178,6 +415,9 @@ namespace smmap
         squared_dist.minCoeff(&min_ind);
         return min_ind;
     }
+
+
+
 }
 
 #endif // TRAJECTORY_HPP

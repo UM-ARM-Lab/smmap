@@ -32,6 +32,29 @@ namespace smmap
     typedef kinematics::VectorVector6d AllGrippersSinglePoseDelta;
     typedef std::vector<AllGrippersSinglePoseDelta> AllGrippersPoseDeltaTrajectory;
 
+    // Stretching tracking vector information --- Added by Mengyao
+    struct StretchingVectorInfo
+    {
+        StretchingVectorInfo()
+        {}
+
+        StretchingVectorInfo(
+                const std::string& to_gripper_name,
+                const std::vector<long>& from_nodes,
+                const std::vector<long>& to_nodes,
+                const std::vector<double>& node_contribution)
+            : to_gripper_name_(to_gripper_name)
+            , from_nodes_(from_nodes)
+            , to_nodes_(to_nodes)
+            , node_contribution_(node_contribution)
+        {}
+
+        std::string to_gripper_name_;
+        std::vector<long> from_nodes_;
+        std::vector<long> to_nodes_;
+        std::vector<double> node_contribution_;
+    };
+
     struct GripperData
     {
         GripperData(const std::string& name, const std::vector<long>& node_indices)
@@ -39,11 +62,31 @@ namespace smmap
             , node_indices_(node_indices)
         {}
 
+        GripperData(const std::string& name,
+                    const std::vector<long>& node_indices,
+                    const std::string& to_gripper_name,
+                    const std::vector<long>& from_nodes,
+                    const std::vector<long>& to_nodes,
+                    const std::vector<double>& node_contribution)
+            : name_(name)
+            , node_indices_(node_indices)
+            , stretching_vector_info_(to_gripper_name,
+                                      from_nodes,
+                                      to_nodes,
+                                      node_contribution)
+        {}
+
+
         /// The name associated with this gripper
         std::string name_;
 
         /// Vector of the indices of the nodes that are grasped by the gripper
         std::vector<long> node_indices_;
+
+        // Stretching tracking vector information --- Added by Mengyao
+    //    std::vector<Eigen::Vector3d> stretching_offset;
+    //    std::vector<std::string> stretching_gripepr_list;
+        StretchingVectorInfo stretching_vector_info_;
 
         /**
          * @brief operator <<

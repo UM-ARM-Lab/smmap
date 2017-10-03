@@ -1,4 +1,5 @@
 #include "smmap/constraint_jacobian_model.h"
+#include "smmap/timing.hpp"
 
 #include <cmath>
 #include <arc_utilities/arc_exceptions.hpp>
@@ -62,7 +63,7 @@ ConstraintJacobianModel::ConstraintJacobianModel(
     , trans_dir_type_(trans_dir_fn)
     , trans_dis_type_(trans_dis_fn)
     , environment_sdf_(environment_sdf)
-    , obstacle_threshold_(0.03)
+    , obstacle_threshold_(0.0)
 {
     // Set obstacle distance threshold, to be modified later
     // Should check with Dale, whether it counts as #grids
@@ -102,22 +103,70 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
         const DeformableModelInputData& input_data,
         const AllGrippersSinglePoseDelta& grippers_pose_delta) const
 {
+ //   Stopwatch stopwatch;
+ //   stopwatch(RESET);
+
     const MatrixXd J = computeGrippersToDeformableObjectJacobian(input_data, grippers_pose_delta);
+    const ObjectPointSet &current_configuration = input_data.world_current_state_.object_configuration_;
+
+    const ssize_t num_current_visible_nodes = current_configuration.cols();
+
+//    ROS_INFO_STREAM_NAMED("constraint_model", "Calculate Mask for p_dot in  " << stopwatch(READ) << " seconds");
 
     MatrixXd delta = MatrixXd::Zero(input_data.world_current_state_.object_configuration_.cols() * 3, 1);
 
     // Move the object based on the movement of each gripper
-    for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
-    {
+    for (ssize_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
+    {        
         // Assume that our Jacobian is correct, and predict where we will end up
         delta += J.block(0, 6 * (ssize_t)gripper_ind, J.rows(), 6) * grippers_pose_delta[gripper_ind];
     }
 
+    for (ssize_t node_ind = 0; node_ind < num_current_visible_nodes; node_ind++)
+    {
+        if (environment_sdf_.EstimateDistance3d(current_configuration.col(node_ind)).first > obstacle_threshold_)
+        {
+            continue;
+        }
+        else
+        {            
+            Vector3d node_p_dot = delta.block(node_ind*3, 0, 3, 1);
+//            Vector3d node_p_dot = Vector3d::Map(node_p_dot_in_matrix, node_p_dot_in_matrix.size());
+            std::vector<double> sur_n
+                    = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
+            if(sur_n.size()>1)
+            {
+                Vector3d surface_normal= Vector3d::Map(sur_n.data(),sur_n.size());
+            //    double surface_vector_norm = std::sqrt(std::pow(surface_normal(0),2)+std::pow(surface_normal(1),2)+std::pow(surface_normal(2),2));
+            //    surface_normal = surface_normal/surface_vector_norm;
+                surface_normal = surface_normal/surface_normal.norm();
+
+                // if node is moving outward from obstacle, unmask.
+            //    double dot_result = 100*node_p_dot(0)*surface_normal(0)+100*node_p_dot(1)*surface_normal(1)+100*node_p_dot(2)*surface_normal(2);
+                double dot_result = node_p_dot.dot(surface_normal);
+                if (dot_result<0.0)
+                {
+                    MatrixXd projected_node_p_dot = node_p_dot - dot_result * surface_normal;
+                //    const Matrix<double, 1, 3> surface_normal_inv = surface_normal.adjoint();
+                //    M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
+                    delta.block(node_ind*3, 0, 3, 1) = projected_node_p_dot;
+                }
+            }
+
+        }
+    }
+
     // This delta is a stacked vector
-    Eigen::MatrixXd delta_with_mask = computeObjectVelocityMask(input_data.world_current_state_.object_configuration_, delta) * delta;
+ //   Eigen::MatrixXd mask = computeObjectVelocityMask(input_data.world_current_state_.object_configuration_, delta);
+
+ //   stopwatch(RESET);
+ //   Eigen::MatrixXd delta_with_mask = mask * delta;
+    Eigen::MatrixXd delta_with_mask = delta;
+ //   ROS_INFO_STREAM_NAMED("constraint_model", "Calculate projected p_dot in  " << stopwatch(READ) << " seconds");
 
     // this delta is a 3xn vector
     delta_with_mask.resizeLike(input_data.world_current_state_.object_configuration_);
+
     return delta_with_mask;
 }
 
@@ -222,13 +271,15 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
     const AllGrippersSinglePose& grippers_current_poses = world_state.all_grippers_single_pose_;
     const ObjectPointSet& current_configuration = world_state.object_configuration_;
 
+    const ssize_t num_current_visible_nodes = current_configuration.cols();
+
     const kinematics::VectorIsometry3d grippers_next_poses = kinematics::applyTwist(
                 grippers_current_poses,
                 grippers_pose_delta);
 
     const ssize_t num_grippers = (ssize_t)grippers_current_poses.size();
     const ssize_t num_Jcols = num_grippers * 6;
-    const ssize_t num_Jrows = num_nodes_ * 3;
+    const ssize_t num_Jrows = num_current_visible_nodes * 3;
 
     MatrixXd J(num_Jrows, num_Jcols);
 
@@ -249,7 +300,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
         const Vector3d& node_v = grippers_next_poses.at(gripper_ind).translation()
                 - grippers_current_poses.at(gripper_ind).translation();
 
-        for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
+        for (ssize_t node_ind = 0; node_ind < num_current_visible_nodes; node_ind++)
         {
             const std::pair<double, long> nearest_node_on_gripper =
                     GetMinimumDistanceIndexToGripper(
@@ -368,16 +419,19 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
         const ObjectPointSet &current_configuration,
         const MatrixXd &object_p_dot) const
 {
-    const ssize_t num_lines = num_nodes_ * 3;
+    Stopwatch stopwatch;
+    stopwatch(RESET);
+
+    const ssize_t num_current_visible_nodes = current_configuration.cols();
+
+    const ssize_t num_lines = num_current_visible_nodes * 3;
     MatrixXd M(num_lines, num_lines);
     M.setIdentity(num_lines,num_lines);
     Matrix3d I3 = Matrix3d::Identity(3,3);
 //    MatrixXd v_mask = MatrixXd::Zero(num_lines,1);
 
-
-    for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
+    for (ssize_t node_ind = 0; node_ind < num_current_visible_nodes; node_ind++)
     {
-
         // if is far from obstacle
         if (environment_sdf_.EstimateDistance3d(current_configuration.col(node_ind)).first > obstacle_threshold_)
         {
@@ -410,9 +464,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
                 }
             }
         }
-
     }
-
 
     return M;
 }

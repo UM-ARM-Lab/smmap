@@ -282,6 +282,7 @@ namespace smmap
 
             const LineNeighbours neighbours_;
     };
+
 }
 
 #endif // TASK_SPECIFICATION_IMPLEMENTIONS_H

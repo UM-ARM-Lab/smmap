@@ -56,6 +56,11 @@ namespace smmap
             WorldState sendNextCommandUsingGlobalGripperPlannerResults(
                     const WorldState& current_world_state);
 
+            // Helper function to force some task type use only local controller
+            // --- Added by Mengyao
+            bool canUseGlobalPlanner();
+
+
             ////////////////////////////////////////////////////////////////////
             // Constraint violation detection
             ////////////////////////////////////////////////////////////////////
@@ -98,6 +103,9 @@ namespace smmap
             void initializeModelAndControllerSet(const WorldState& initial_world_state);
             void addModel(DeformableModel::Ptr model);
             void createBandits();
+
+            // Added by Mengyao. --- Initialize Max Grippers Distance, for 2 grippers only
+            void initializeGrippersMaxDistance();
 
             const bool calculate_regret_;
             ssize_t num_models_;
@@ -149,6 +157,10 @@ namespace smmap
             AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
             std::unique_ptr<RRTHelper> rrt_helper_;
 
+            const Eigen::MatrixXd object_initial_node_distance_;
+            double max_grippers_distance_;
+            int controller_count_;
+
             ////////////////////////////////////////////////////////////////////
             // Logging and visualization functionality
             ////////////////////////////////////////////////////////////////////
@@ -158,7 +170,19 @@ namespace smmap
                     const ObjectDeltaAndWeight& desired_motion,
                     const bool visualization_enabled = true) const;
 
+            // Visulize Force on Gripper  --- Added by Mengyao
+            void visualizeTotalForceOnGripper(
+                    const WorldState& current_world_state,
+                    const bool visualization_enabled = true) const;
+
+            void visualizeGripperMotion(
+                    const AllGrippersSinglePose& current_gripper_pose,
+                    const AllGrippersSinglePoseDelta& gripper_motion,
+                    const ssize_t model_ind);
+
             void initializeLogging();
+
+            void initializeControllerLogging();
 
             void logData(
                     const WorldState& current_world_state,
@@ -167,8 +191,23 @@ namespace smmap
                     const ssize_t model_used,
                     const std::vector<double>& rewards_for_all_models);
 
+            // Contoller logger.  --- Added by Mengyao
+            void controllerLogData(const WorldState& current_world_state,
+                    const std::vector<double>& ave_contol_error,
+                    const std::vector<double> current_stretching_factor,
+                    const std::vector<double> num_stretching_violation);
+
+
+            ///////////////////////////////////////////////////////////////////////
+            // World state modification / copy helper function. For occlusion ---- Added by Mengyao
+            ///////////////////////////////////////////////////////////////////////
+            const WorldState occludedWorldState(const WorldState& world_state);
+
             const bool logging_enabled_;
+            const bool controller_logging_enabled_;
             std::unordered_map<std::string, Log::Log> loggers_;
+            std::unordered_map<std::string, Log::Log> controller_loggers_;
+
             Visualizer& vis_;
             const bool visualize_desired_motion_;
             const bool visualize_predicted_motion_;

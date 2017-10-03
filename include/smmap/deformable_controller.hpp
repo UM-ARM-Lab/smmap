@@ -8,6 +8,11 @@ namespace smmap
     class DeformableController
     {
         public:
+            DeformableController()
+                : stretching_violation_count_(0)
+                , current_stretching_factor_(0.0)
+            {}
+
             typedef std::shared_ptr<DeformableController> Ptr;
 
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getGripperMotion(
@@ -15,6 +20,16 @@ namespace smmap
                     const double max_gripper_velocity)
             {
                 return getGripperMotion_impl(input_data, max_gripper_velocity);
+            }
+
+            long getStretchingViolationCount()
+            {
+                return stretching_violation_count_;
+            }
+
+            double getCurrentStretchingFactor()
+            {
+                return current_stretching_factor_;
             }
 
         protected:
@@ -30,6 +45,11 @@ namespace smmap
             virtual std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getGripperMotion_impl(
                     const DeformableModel::DeformableModelInputData& input_data,
                     const double max_gripper_velocity) = 0;
+
+        protected:
+
+            long stretching_violation_count_;
+            double current_stretching_factor_;
     };
 }
 

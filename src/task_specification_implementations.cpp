@@ -278,6 +278,10 @@ std::vector<ssize_t> ClothWAFR::getNodeNeighbours_impl(const ssize_t node) const
 bool ClothWAFR::taskDone_impl(
         const WorldState& world_state)
 {
+    // Just make it run, should revise WAFR later --- Added by Mengyao
+    ROS_WARN_NAMED("task_specification_implementation", "wafr task needs to be revised");
+    return calculateError(world_state) < error_threshold_task_done_;
+
     assert(false && "This task needs to some revisions before it is used.");
     (void)world_state;
     return false;
@@ -446,3 +450,6 @@ bool RopeMaze::taskDone_impl(
 {
     return calculateError(world_state) < error_threshold_task_done_;
 }
+
+
+

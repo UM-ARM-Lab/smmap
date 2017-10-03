@@ -6,9 +6,95 @@
 #include "smmap/deformable_controller.hpp"
 #include "smmap/grippers.hpp"
 #include "smmap/robot_interface.hpp"
+#include "smmap/nomad_solvers.h"
 
 namespace smmap
 {
+    struct GripperStretchingInfo
+    {
+        GripperStretchingInfo()
+        {}
+        GripperStretchingInfo(ssize_t num_x_steps, ssize_t num_y_steps)
+            : node_xy_ind(num_x_steps, num_y_steps)
+        {}
+        GripperStretchingInfo(
+                ssize_t num_x_steps,
+                ssize_t num_y_steps,
+                const GripperData& gripper_data)
+            : node_xy_ind(num_x_steps, num_y_steps)
+            , attatched_nodes_(gripper_data.node_indices_)
+        {
+            setEdgeNodes();
+        }
+
+        void setEdgeNodes()
+        {
+            from_nodes_.clear();
+            to_nodes_.clear();
+
+            for(int attatched_ind = 0; attatched_ind < attatched_nodes_.size(); attatched_ind++)
+            {
+                bool is_cloth_edge = false;
+                bool is_boundary_attatched = false;
+                std::vector<ssize_t> node_neighbor = node_xy_ind.Neighbor8Ind(attatched_nodes_.at(attatched_ind));
+
+                // if out of cloth, assign -1; if on cloth && attatched, assign -2
+                for (int neighbor_ind = 0; neighbor_ind < node_neighbor.size(); neighbor_ind++)
+                {
+                    if(node_neighbor.at(neighbor_ind) == -1)
+                    {
+                        is_cloth_edge == true;
+                    }
+                    if(!isAttached(node_neighbor.at(neighbor_ind)))
+                    {
+                        is_boundary_attatched == true;
+                    }
+                    else
+                    {
+                        node_neighbor.at(neighbor_ind) = -2;
+                    }
+                }
+
+                if(is_boundary_attatched)
+                {
+                    from_nodes_.push_back(attatched_nodes_.at(attatched_ind));
+                    to_nodes_.push_back(node_neighbor);
+                }
+            }
+        }
+
+        void setGripperStretchingInfo(
+                ssize_t num_x_steps,
+                ssize_t num_y_steps,
+                const GripperData& gripper_data)
+        {
+            node_xy_ind.SetNodeXYInd(num_x_steps, num_y_steps);
+            attatched_nodes_ = gripper_data.node_indices_;
+            setEdgeNodes();
+        }
+
+        bool isAttached(ssize_t node_ind)
+        {
+            for(int attatched_ind = 0; attatched_ind < attatched_nodes_.size(); attatched_ind++)
+            {
+                if (node_ind == attatched_nodes_.at(attatched_ind))
+                    return true;
+            }
+            return false;
+        }
+
+        NodeXYInd node_xy_ind;
+        std::vector<long> attatched_nodes_;
+        std::vector<ssize_t> from_nodes_;
+        // each sub-vector is of size 8; -1 out of bound, -2 attached
+        /* Layout :
+         *   3  2  1
+         *   4  X  0
+         *   5  6  7
+        */
+        std::vector<std::vector<ssize_t>> to_nodes_;
+    };
+
     class LeastSquaresControllerRandomSampling : public DeformableController
     {
         public:
@@ -30,6 +116,8 @@ namespace smmap
 
             void setGripperControllerType(GripperControllerType gripper_controller_type);
 
+            long getStretchingViolationCount();
+
 
         private:
             /////////////////////////////////////////////////////////////////////////////////////////
@@ -44,7 +132,7 @@ namespace smmap
                     const DeformableModel::DeformableModelInputData& input_data,
                     const double max_gripper_velocity);
 
-            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByDiscretization(
+            std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> solvedByNomad(
                     const DeformableModel::DeformableModelInputData& input_data,
                     const double max_gripper_velocity);
 
@@ -61,9 +149,14 @@ namespace smmap
             AllGrippersSinglePoseDelta setAllGripperPoseDeltaZero(const ssize_t num_grippers);
 
             double errorOfControlByPrediction(const ObjectPointSet predicted_object_p_dot,
-                                              const Eigen::VectorXd &desired_object_p_dot) const;
+                                              const Eigen::VectorXd &desired_object_p_dot,
+                                              const Eigen::VectorXd &desired_p_dot_weight) const;
 
             void visualize_stretching_vector(const ObjectPointSet& object_configuration);
+
+            void visualize_rope_stretching_vector(const ObjectPointSet& object_configuration);
+
+            void visualize_cloth_stretching_vector(const ObjectPointSet& object_configuration);
 
             void visualize_gripper_motion(
                     const AllGrippersSinglePose& current_gripper_pose,
@@ -72,6 +165,10 @@ namespace smmap
             /////////////////////////////////////////////////////////////////////////////////////////
             // Collision constraint related function
             /////////////////////////////////////////////////////////////////////////////////////////
+
+            const double gripperCollisionCheckHelper(
+                    const AllGrippersSinglePose& current_gripper_pose,
+                    const AllGrippersSinglePoseDelta& test_gripper_motion);
 
             bool gripperCollisionCheckResult(
                     const AllGrippersSinglePose& current_gripper_pose,
@@ -85,12 +182,27 @@ namespace smmap
                     const DeformableModel::DeformableModelInputData& input_data,
                     const AllGrippersSinglePoseDelta& test_gripper_motion);
 
+            double ropeTwoGripperStretchingHelper(
+                    const DeformableModel::DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+
             bool ropeTwoGrippersStretchingDetection(
                     const DeformableModel::DeformableModelInputData& input_data,
                     const AllGrippersSinglePoseDelta& test_gripper_motion);
 
-        private:
+            double clothTwoGripperStretchingHelper(
+                    const DeformableModel::DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+
+            bool clothTwoGrippersStretchingDetection(
+                    const DeformableModel::DeformableModelInputData& input_data,
+                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+
+        public:
             const Eigen::MatrixXd object_initial_node_distance_;
+            double max_grippers_distance_;
+
+        private:
             GripperCollisionChecker gripper_collision_checker_;
 
             const std::vector<GripperData> grippers_data_;
@@ -112,9 +224,17 @@ namespace smmap
 
             const int64_t max_count_;
             int sample_count_;
-            bool over_stretch_;
-   };
 
+            bool fix_step_;
+            bool previous_over_stretch_state_;
+            bool over_stretch_;
+            const std::string log_file_path_;
+
+            // cloth node inde conversion helper
+            std::vector<std::unique_ptr<GripperStretchingInfo>> grippers_stretching_helper_;
+
+
+    };
 
 }
 

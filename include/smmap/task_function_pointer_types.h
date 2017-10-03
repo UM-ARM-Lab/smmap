@@ -23,6 +23,28 @@ namespace smmap
             const WorldState& resulting_world_state
             )>
     TestGrippersPosesFeedbackCallbackFunctionType;
+
+    // function type for nomad solver
+    typedef std::function<double(
+        const AllGrippersSinglePoseDelta& test_gripper_motion
+        )>
+    CostOfTestGrippersMotionFunctionType;
+
+    typedef std::function<double(
+        const AllGrippersSinglePoseDelta& test_gripper_motion
+        )>
+    AllGrippersCollisionConstraintFunctionType;
+
+    typedef std::function<double(
+        const AllGrippersSinglePoseDelta& test_gripper_motion
+        )>
+    AllGrippersStretchingConstraintFunctionType;
+
+    typedef std::function<double(
+        const AllGrippersSinglePoseDelta& test_gripper_motion
+        )>
+    AllGrippersMotionSizeConstraintFunctionType;
+
 }
 
 #endif // TASK_FUNCTION_POINTER_TYPES_H
