@@ -1,4 +1,5 @@
 #ifndef GRIPPERS_HPP
+
 #define GRIPPERS_HPP
 
 #include <limits>
@@ -8,7 +9,7 @@
 
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
-#include <arc_utilities/arc_helpers.hpp>
+#include <arc_utilities/serialization.hpp>
 #include <arc_utilities/pretty_print.hpp>
 #include <kinematics_toolbox/kinematics.h>
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
@@ -659,7 +660,7 @@ namespace smmap
             assert(bytes_written == datalength);
             return bytes_written;
         };
-        return arc_helpers::SerializeVector(poses, buffer, item_serializer);
+        return arc_utilities::SerializeVector(poses, buffer, item_serializer);
     }
 
     inline std::pair<AllGrippersSinglePose, uint64_t> DeserializeAllGrippersSinglePose(const std::vector<uint8_t>& buffer, const uint64_t current)
@@ -678,7 +679,7 @@ namespace smmap
             // Return the result and the total amount of buffer "consumed"
             return std::make_pair(result, datalength);
         };
-        return arc_helpers::DeserializeVector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d>>(buffer, current, item_deserializer);
+        return arc_utilities::DeserializeVector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d>>(buffer, current, item_deserializer);
     }
 
     inline uint64_t SerializeAllGrippersPoseTrajectory(const AllGrippersPoseTrajectory& traj, std::vector<uint8_t>& buffer)
@@ -687,7 +688,7 @@ namespace smmap
         {
             return SerializeAllGrippersSinglePose(grippers_pose, buffer);
         };
-        return arc_helpers::SerializeVector(traj, buffer, item_serializer);
+        return arc_utilities::SerializeVector(traj, buffer, item_serializer);
     }
 
     inline std::pair<AllGrippersPoseTrajectory, uint64_t> DeserializeAllGrippersPoseTrajectory(const std::vector<uint8_t>& buffer, const uint64_t current)
@@ -696,7 +697,7 @@ namespace smmap
         {
             return DeserializeAllGrippersSinglePose(buffer, current);
         };
-        return arc_helpers::DeserializeVector(buffer, current, item_deserializer);
+        return arc_utilities::DeserializeVector(buffer, current, item_deserializer);
     }
 }
 

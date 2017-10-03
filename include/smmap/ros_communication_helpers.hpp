@@ -135,11 +135,11 @@ namespace smmap
                 uint64_t current_position = current;
 
                 // Deserialze 3 floats, converting into doubles afterwards
-                std::pair<float, uint64_t> x = arc_helpers::DeserializeFixedSizePOD<float>(buffer, current_position);
+                std::pair<float, uint64_t> x = arc_utilities::DeserializeFixedSizePOD<float>(buffer, current_position);
                 current_position += x.second;
-                std::pair<float, uint64_t> y = arc_helpers::DeserializeFixedSizePOD<float>(buffer, current_position);
+                std::pair<float, uint64_t> y = arc_utilities::DeserializeFixedSizePOD<float>(buffer, current_position);
                 current_position += y.second;
-                std::pair<float, uint64_t> z = arc_helpers::DeserializeFixedSizePOD<float>(buffer, current_position);
+                std::pair<float, uint64_t> z = arc_utilities::DeserializeFixedSizePOD<float>(buffer, current_position);
                 current_position += z.second;
 
                 const Eigen::Vector3d deserialized(x.first, y.first, z.first);
