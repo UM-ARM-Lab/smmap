@@ -14,116 +14,6 @@ namespace smmap
     typedef std::vector<ObjectPointSet> ObjectTrajectory;
     typedef std::vector<ObjectTrajectory> VectorObjectTrajectory;
 
-    // structure for wrench  --- Added by Mengyao
-    struct Wrench
-    {
-        public:
-            Wrench()
-            {}
-
-            Wrench(std::pair<Eigen::Vector3d, Eigen::Vector3d> wrench)
-                : force(wrench.first)
-                , torque(wrench.second)
-            {}
-
-            Wrench(const Wrench& wrench)
-                : force(wrench.force)
-                , torque(wrench.torque)
-            {}
-
-            Eigen::Vector3d force;
-            Eigen::Vector3d torque;
-    };
-
-    struct ObjectWrench
-    {
-        public:
-            ObjectWrench()
-            { }
-
-            ObjectWrench(std::vector<Wrench> wrench_vector)
-            {
-                object_force.clear();
-                object_torque.clear();
-                for (size_t node_ind = 0; node_ind < wrench_vector.size(); node_ind++)
-                {
-                    object_force.push_back(wrench_vector.at(node_ind).force);
-                    object_torque.push_back(wrench_vector.at(node_ind).torque);
-                }
-            }
-
-            void SetObjectWrench(std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> wrench_pair_vector)
-            {
-                object_force.clear();
-                object_torque.clear();
-                for (size_t node_ind = 0; node_ind < wrench_pair_vector.size(); node_ind++)
-                {
-                    object_force.push_back(wrench_pair_vector.at(node_ind).first);
-                    object_torque.push_back(wrench_pair_vector.at(node_ind).second);
-                }
-
-            }
-
-            const std::vector<Eigen::Vector3d> MagnifiedForce(double scale) const
-            {
-                std::vector<Eigen::Vector3d> magnified_force;
-                for (size_t node_ind = 0; node_ind < object_force.size(); node_ind++)
-                {
-                    magnified_force.push_back(object_force.at(node_ind) * scale);
-                }
-                return magnified_force;
-            }
-            const std::vector<Eigen::Vector3d> MagnifiedTorque(double scale) const
-            {
-                std::vector<Eigen::Vector3d> magnified_torque;
-                for (size_t node_ind = 0; node_ind < object_force.size(); node_ind++)
-                {
-                    magnified_torque.push_back(object_torque.at(node_ind) * scale);
-                }
-                return magnified_torque;
-            }
-
-            const std::pair<Eigen::Vector3d, Eigen::Vector3d> GetRopeEndsForce() const
-            {
-                std::pair<Eigen::Vector3d, Eigen::Vector3d> ends_force;
-                if (object_force.size() > 1)
-                {
-                    ends_force = std::make_pair(object_force.at(0), object_force.at(object_force.size()-1));
-
-                }
-                else
-                {
-                    std::cout << "size of force data < 2"
-                              << std::endl;
-                }
-                return ends_force;
-            }
-
-            std::vector<Eigen::Vector3d> object_force;
-            std::vector<Eigen::Vector3d> object_torque;
-    };
-
-    struct SingleGripperWrench
-    {
-        public:
-            SingleGripperWrench()
-            {}
-
-            SingleGripperWrench(const Wrench& top_data, const Wrench& bottom_data)
-                : top_clamp(top_data)
-                , bottom_clamp(bottom_data)
-            {}
-
-            SingleGripperWrench(const SingleGripperWrench& single_gripper_wrench)
-                : top_clamp(single_gripper_wrench.top_clamp)
-                , bottom_clamp(single_gripper_wrench.bottom_clamp)
-            {}
-
-            Wrench top_clamp;
-            Wrench bottom_clamp;
-    };
-    typedef std::vector<SingleGripperWrench> AllGrippersWrench;
-
 
     struct ObjectDeltaAndWeight
     {
@@ -146,13 +36,13 @@ namespace smmap
         ObjectPointSet object_configuration_;
 
         // Force and torque data --- Added by Mengyao
-        ObjectWrench object_wrench_;
+        //ObjectWrench object_wrench_;
 
         AllGrippersSinglePose all_grippers_single_pose_;
         std::vector<CollisionData> gripper_collision_data_;
 
         // Force and torque data --- Added by Mengyao
-        AllGrippersWrench gripper_wrench_;
+        //AllGrippersWrench gripper_wrench_;
 
         double sim_time_;
     };

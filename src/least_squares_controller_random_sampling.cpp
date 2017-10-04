@@ -40,7 +40,7 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
     , sample_count_(-1)
-    , fix_step_(GetFixStepSize(ph))
+    , fix_step_(GetGrippersMotionSampleSize(ph))
     , previous_over_stretch_state_(false)
     , over_stretch_(false)
     , log_file_path_(GetLogFolder(nh))
