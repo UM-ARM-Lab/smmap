@@ -222,7 +222,7 @@ void Planner::execute()
         // Create the initial rubber band
         const auto starting_band_points = getPathBetweenGrippersThroughObject(
                     world_feedback, path_between_grippers_through_object_);
-        virtual_rubber_band_between_grippers_ = std::make_shared<VirtualRubberBand>(
+        rubber_band_between_grippers_ = std::make_shared<RubberBand>(
                     starting_band_points,
                     max_band_distance,
                     dijkstras_task_,
@@ -364,7 +364,7 @@ WorldState Planner::sendNextCommand(
         // If we need to (re)plan due to the local controller getting stuck, or the gobal plan failing, then do so
         if (planning_needed)
         {
-            rrt_helper_->addBandToBlacklist(virtual_rubber_band_between_grippers_->getVectorRepresentation());
+            rrt_helper_->addBandToBlacklist(rubber_band_between_grippers_->getVectorRepresentation());
             planGlobalGripperTrajectory(world_state);
         }
 
@@ -381,7 +381,7 @@ WorldState Planner::sendNextCommand(
 
         // Update the band with the new position of the deformable object
         const auto band_points = getPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
-        virtual_rubber_band_between_grippers_->setPointsAndSmooth(band_points);
+        rubber_band_between_grippers_->setPointsAndSmooth(band_points);
 
         // Keep the last N grippers positions recorded to detect if the grippers are stuck
         grippers_pose_history_.push_back(world_feedback.all_grippers_single_pose_);
@@ -627,7 +627,7 @@ bool Planner::checkForClothStretchingViolations(
     return violations_exist;
 }
 
-std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::detectFutureConstraintViolations(
+std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectFutureConstraintViolations(
         const WorldState& current_world_state,
         const bool visualization_enabled)
 {
@@ -635,7 +635,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     Stopwatch function_wide_stopwatch;
 
     assert(task_specification_->is_dijkstras_type_task_ && current_world_state.all_grippers_single_pose_.size() == 2);
-    std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> projected_deformable_point_paths_and_projected_virtual_rubber_bands;
+    std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 
     // TODO: Move to class wide location, currently in 2 locations in this file
     const static std_msgs::ColorRGBA gripper_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
@@ -677,7 +677,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     };
 
 
-    virtual_rubber_band_between_grippers_->visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
+    rubber_band_between_grippers_->visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
 
 
 
@@ -691,7 +691,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     WorldState world_state_copy = current_world_state;
-    VirtualRubberBand virtual_rubber_band_between_grippers_copy = *virtual_rubber_band_between_grippers_.get();
+    RubberBand rubber_band_between_grippers_copy = *rubber_band_between_grippers_.get();
     const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, world_state_copy, robot_.dt_);
 
     projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.reserve(actual_lookahead_steps);
@@ -724,14 +724,14 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
         }
 
         // Move the virtual rubber band to follow the grippers, projecting out of collision as needed
-        virtual_rubber_band_between_grippers_copy.forwardSimulateVirtualRubberBandToEndpointTargets(
+        rubber_band_between_grippers_copy.forwardPropagateRubberBandToEndpointTargets(
                     current_grippers_pose[0].translation(),
                     current_grippers_pose[1].translation(),
                     band_verbose);
-        projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.push_back(virtual_rubber_band_between_grippers_copy);
+        projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.push_back(rubber_band_between_grippers_copy);
 
         // Visualize
-        virtual_rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
+        rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
         vis_.visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color, (int32_t)(4 * t) + 1);
 
         // Finish collecting the gripper collision data
@@ -759,7 +759,7 @@ bool Planner::globalPlannerNeededDueToOverstretch(
 
     for (size_t t = 0; t < projected_rubber_bands.size(); ++t)
     {
-        const VirtualRubberBand& band = projected_rubber_bands[t];
+        const RubberBand& band = projected_rubber_bands[t];
         const double band_length = band.totalLength();
         const std::pair<Eigen::Vector3d, Eigen::Vector3d> endpoints = band.getEndpoints();
         const double distance_between_endpoints = (endpoints.first - endpoints.second).norm();
@@ -836,7 +836,7 @@ bool Planner::predictStuckForGlobalPlannerResults(const bool visualization_enabl
     const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
     constexpr bool band_verbose = false;
 
-    VirtualRubberBand virtual_rubber_band_between_grippers_copy = *virtual_rubber_band_between_grippers_.get();
+    RubberBand rubber_band_between_grippers_copy = *rubber_band_between_grippers_;
 
     bool overstretch_predicted = false;
     const size_t traj_waypoints_per_large_step = (size_t)std::floor(dijkstras_task_->work_space_grid_.minStepDimension() / robot_.dt_ / robot_.max_gripper_velocity_);
@@ -845,14 +845,14 @@ bool Planner::predictStuckForGlobalPlannerResults(const bool visualization_enabl
     {
         // Forward project the band and check for overstretch
         const auto& grippers_pose = global_plan_gripper_trajectory_[global_plan_current_timestep_ + t * traj_waypoints_per_large_step];
-        virtual_rubber_band_between_grippers_copy.forwardSimulateVirtualRubberBandToEndpointTargets(
+        rubber_band_between_grippers_copy.forwardPropagateRubberBandToEndpointTargets(
                     grippers_pose[0].translation(),
                     grippers_pose[1].translation(),
                     band_verbose);
-        overstretch_predicted |= virtual_rubber_band_between_grippers_copy.isOverstretched();
+        overstretch_predicted |= rubber_band_between_grippers_copy.isOverstretched();
 
         // Visualize
-        virtual_rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
+        rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
         vis_.visualizeGrippers(PROJECTED_GRIPPER_NS, grippers_pose, gripper_color, (int32_t)(4 * t) + 1);
     }
 
@@ -1180,7 +1180,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
                     std::pair<Vector3d, Vector3d>(
                                 world_state.all_grippers_single_pose_[0].translation(),
                                 world_state.all_grippers_single_pose_[1].translation()),
-                    *virtual_rubber_band_between_grippers_,
+                    *rubber_band_between_grippers_,
                     true);
 
         // Note that the rubber band part of the target is ignored at the present time

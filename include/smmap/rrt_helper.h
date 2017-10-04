@@ -8,7 +8,7 @@
 #include <arc_utilities/simple_rrt_planner.hpp>
 
 #include "smmap/visualization_tools.h"
-#include "smmap/virtual_rubber_band.h"
+#include "smmap/rubber_band.hpp"
 #include "smmap/prm_helper.h"
 
 namespace smmap
@@ -38,11 +38,11 @@ namespace smmap
 
             RRTConfig(
                     const RRTGrippersRepresentation& grippers_position,
-                    const VirtualRubberBand& band,
+                    const RubberBand& band,
                     const bool is_visible_to_blacklist);
 
             const RRTGrippersRepresentation& getGrippers() const;
-            const VirtualRubberBand& getBand() const;
+            const RubberBand& getBand() const;
             bool isVisibleToBlacklist() const;
 
             // returned distance is the Euclidian distance of two grippers pos
@@ -56,7 +56,7 @@ namespace smmap
         private:
 
             RRTGrippersRepresentation grippers_position_;
-            VirtualRubberBand band_;
+            RubberBand band_;
             bool is_visible_to_blacklist_;
     };
 
@@ -108,7 +108,7 @@ namespace smmap
             void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
 
             bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const;
-            bool isBandFirstOrderVisibileToBlacklist(const VirtualRubberBand& test_band);
+            bool isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band);
 
             ///////////////////////////////////////////////////////////////////////////////////////
             // Visualization and other debugging tools
@@ -168,7 +168,7 @@ namespace smmap
             std::pair<bool, std::vector<RRTConfig, RRTAllocator>> forwardSimulateGrippersPath(
                     const std::vector<RRTConfig, RRTAllocator>& path,
                     const size_t start_index,
-                    VirtualRubberBand rubber_band);
+                    RubberBand rubber_band);
 
             std::vector<RRTConfig, RRTAllocator> rrtShortcutSmooth(
                     std::vector<RRTConfig, RRTAllocator> path,
@@ -197,7 +197,7 @@ namespace smmap
             const std_msgs::ColorRGBA band_safe_color_;
             const std_msgs::ColorRGBA band_overstretched_color_;
 
-            std::unique_ptr<VirtualRubberBand> starting_band_;
+            std::unique_ptr<RubberBand> starting_band_;
             RRTGrippersRepresentation grippers_goal_position_;
             double max_grippers_distance_;
             std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;

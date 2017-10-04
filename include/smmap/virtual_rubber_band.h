@@ -28,7 +28,7 @@ namespace smmap
                     const Visualizer& vis,
                     std::mt19937_64& generator);
 
-            smmap::VirtualRubberBand& operator=(const smmap::VirtualRubberBand& other);
+            VirtualRubberBand& operator=(const VirtualRubberBand& other);
 
             void setPointsWithoutSmoothing(const EigenHelpers::VectorVector3d& points);
 

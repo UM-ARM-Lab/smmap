@@ -4,6 +4,8 @@
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/first_order_deformation.h>
 #include <arc_utilities/simple_dtw.hpp>
+#include "smmap/timing.hpp"
+
 using namespace smmap;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -26,7 +28,7 @@ static bool gripperPositionsAreApproximatelyEqual(
 }
 
 static bool bandEndpointsMatchGripperPositions(
-        const VirtualRubberBand& band,
+        const RubberBand& band,
         const RRTGrippersRepresentation& grippers)
 {
     return gripperPositionsAreApproximatelyEqual(grippers, band.getEndpoints());
@@ -38,7 +40,7 @@ static bool bandEndpointsMatchGripperPositions(
 
 RRTConfig::RRTConfig(
         const RRTGrippersRepresentation& grippers_position,
-        const VirtualRubberBand& band,
+        const RubberBand& band,
         const bool is_visible_to_blacklist)
     : grippers_position_(grippers_position)
     , band_(band)
@@ -50,7 +52,7 @@ const RRTGrippersRepresentation& RRTConfig::getGrippers() const
     return grippers_position_;
 }
 
-const VirtualRubberBand& RRTConfig::getBand() const
+const RubberBand& RRTConfig::getBand() const
 {
     return band_;
 }
@@ -343,7 +345,7 @@ RRTConfig RRTHelper::configSampling_internal()
     }
     while (goal_is_target_config && isBandFirstOrderVisibileToBlacklist(band_path));
 
-    VirtualRubberBand band(*starting_band_);
+    RubberBand band(*starting_band_);
     band.setPointsWithoutSmoothing(band_path);
     band.visualize(PRMHelper::PRM_RANDOM_PATH_NS, Visualizer::Orange(), Visualizer::Orange(), 1, visualization_enabled_globally_);
 
@@ -457,7 +459,7 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
         // Using ternary operator here so that we can avoid making copies, and still take advantage of const correctness
         const bool use_nearest_neighbour_as_prev = (parent_offset == -1);
         const RRTConfig& prev_node = (use_nearest_neighbour_as_prev ? nearest_neighbor : propagated_states[parent_offset].first);
-        const VirtualRubberBand& prev_band = prev_node.getBand();
+        const RubberBand& prev_band = prev_node.getBand();
 
         const double ratio = std::min(1.0, (double)(step_index + 1) * max_step_size_ / total_distance);
         const Eigen::Vector3d gripper_a_interpolated = EigenHelpers::Interpolate(starting_grippers_position.first, target_grippers_position.first, ratio);
@@ -478,8 +480,8 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
         }
 
         // Forward simulate the rubber band to test this transition
-        VirtualRubberBand next_band(prev_band);
-        next_band.forwardSimulateVirtualRubberBandToEndpointTargets(
+        RubberBand next_band(prev_band);
+        next_band.forwardPropagateRubberBandToEndpointTargets(
                     next_grippers_position.first,
                     next_grippers_position.second,
                     rubber_band_verbose);
@@ -581,7 +583,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
 {
     grippers_goal_position_ = grippers_goal;
     max_grippers_distance_ = start.getBand().maxSafeLength();
-    starting_band_.reset(new VirtualRubberBand(start.getBand()));
+    starting_band_.reset(new RubberBand(start.getBand()));
 
     if (visualization_enabled_globally_)
     {
@@ -750,7 +752,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVe
     return false;
 }
 
-bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VirtualRubberBand& test_band)
+bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band)
 {
     Stopwatch stopwatch;
     auto vector_representation = test_band.getVectorRepresentation();
@@ -891,7 +893,7 @@ static EigenHelpers::VectorVector3d createOtherGripperWaypoints(
 std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulateGrippersPath(
         const std::vector<RRTConfig, RRTAllocator>& path,
         const size_t start_index,
-        VirtualRubberBand rubber_band)
+        RubberBand rubber_band)
 {
     Stopwatch function_wide_stopwatch;
     Stopwatch stopwatch;
@@ -930,7 +932,7 @@ std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulate
         // Forward simulate the band
         stopwatch(RESET);
         const auto& ending_grippers_pos = path[path_idx].getGrippers();
-        rubber_band.forwardSimulateVirtualRubberBandToEndpointTargets(
+        rubber_band.forwardPropagateRubberBandToEndpointTargets(
                     ending_grippers_pos.first,
                     ending_grippers_pos.second,
                     rubber_band_verbose);
@@ -1281,7 +1283,7 @@ void RRTHelper::visualizePath(const std::vector<RRTConfig, RRTAllocator>& path) 
         {
             const RRTConfig& config = path[ind];
             const RRTGrippersRepresentation& gripper_positions = config.getGrippers();
-            const VirtualRubberBand& rubber_band = config.getBand();
+            const RubberBand& rubber_band = config.getBand();
 
             gripper_a_cubes.push_back(gripper_positions.first);
             gripper_b_cubes.push_back(gripper_positions.second);

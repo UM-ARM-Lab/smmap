@@ -11,7 +11,7 @@
 #include "smmap/deformable_controller.hpp"
 #include "smmap/kalman_filter_multiarm_bandit.hpp"
 #include "smmap/ucb_multiarm_bandit.hpp"
-#include "smmap/virtual_rubber_band.h"
+#include "smmap/rubber_band.hpp"
 #include "smmap/rrt_helper.h"
 #include "smmap/prm_helper.h"
 
@@ -69,7 +69,7 @@ namespace smmap
                     const std::vector<EigenHelpers::VectorVector3d>& projected_paths,
                     const bool visualization_enabled = true);
 
-            std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<VirtualRubberBand>> detectFutureConstraintViolations(
+            std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<RubberBand>> detectFutureConstraintViolations(
                     const WorldState& current_world_state,
                     const bool visualization_enabled = true);
 
@@ -139,7 +139,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             const bool enable_stuck_detection_;
-            std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_;
+            std::shared_ptr<RubberBand> rubber_band_between_grippers_;
             std::vector<ssize_t> path_between_grippers_through_object_;
             const size_t max_lookahead_steps_;
             const size_t max_grippers_pose_history_length_;

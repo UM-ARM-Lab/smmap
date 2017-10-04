@@ -42,7 +42,7 @@ VirtualRubberBand::VirtualRubberBand(
     setPointsAndSmooth(starting_points);
 }
 
-smmap::VirtualRubberBand& VirtualRubberBand::operator=(const smmap::VirtualRubberBand& other)
+VirtualRubberBand& VirtualRubberBand::operator=(const VirtualRubberBand& other)
 {
     assert(task_ == other.task_);
     assert(&sdf_ == &(other.sdf_));
@@ -107,7 +107,7 @@ const EigenHelpers::VectorVector3d& VirtualRubberBand::getVectorRepresentation()
 
 std::pair<Eigen::Vector3d, Eigen::Vector3d> VirtualRubberBand::getEndpoints() const
 {
-    return std::make_pair(band_.front(), band_.back());
+    return {band_.front(), band_.back()};
 }
 
 double VirtualRubberBand::maxSafeLength() const
