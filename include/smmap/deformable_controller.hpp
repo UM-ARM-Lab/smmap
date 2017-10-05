@@ -34,8 +34,6 @@ namespace smmap
                     const DeformableModel::DeformableModelInputData& input_data,
                     const double max_gripper_velocity) = 0;
 
-        protected:
-
     };
 }
 
