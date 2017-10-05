@@ -56,10 +56,6 @@ namespace smmap
             WorldState sendNextCommandUsingGlobalGripperPlannerResults(
                     const WorldState& current_world_state);
 
-            // Helper function to force some task type use only local controller
-            // --- Added by Mengyao
-            bool canUseGlobalPlanner();
-
 
             ////////////////////////////////////////////////////////////////////
             // Constraint violation detection
@@ -168,11 +164,6 @@ namespace smmap
             void visualizeDesiredMotion(
                     const WorldState& current_world_state,
                     const ObjectDeltaAndWeight& desired_motion,
-                    const bool visualization_enabled = true) const;
-
-            // Visulize Force on Gripper  --- Added by Mengyao
-            void visualizeTotalForceOnGripper(
-                    const WorldState& current_world_state,
                     const bool visualization_enabled = true) const;
 
             void visualize_gripper_motion(

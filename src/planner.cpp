@@ -419,47 +419,9 @@ WorldState Planner::sendNextCommandUsingLocalController(
         visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_);
     }
 
-    // Use a model-controller to get a valid object motion from testGrippersPoses first. --- Added by Mengyao
-    /*
-    if (calculate_regret_ && num_models_ > 1)
-    {
-        controller_count_ = controller_count_ - controller_count_ / num_models_ * num_models_;
-        std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> helper_robot_command;
-        helper_robot_command =
-            controller_list_[controller_count_]->getGripperMotion(
-                    model_input_data,
-                    robot_.max_gripper_velocity_);
-
-        controller_count_ ++;
-
-        // Helper Lambda to get a valid p_dot
-        const auto valid_motion_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
-        {
-            ObjectPointSet desired_delta = world_state.object_configuration_ - current_object_configuration;
-            for (ssize_t node_ind = 0; node_ind < desired_delta.cols(); node_ind++)
-            {
-                model_input_data.desired_object_motion_.delta.segment(node_ind * 3, 3) = desired_delta.col(node_ind);
-            //    model_input_data.desired_object_motion_.weight.segment(node_ind * 3, 3) = Eigen::MatrixXd::Ones(3,1);
-            }
-        };
-
-        std::vector<AllGrippersSinglePose> helper_grippers_poses(1);
-        helper_grippers_poses[0] = kinematics::applyTwist(world_state.all_grippers_single_pose_, helper_robot_command.first);
-        robot_.testGrippersPoses(helper_grippers_poses, valid_motion_feedback_fn);
-    }
-    */
-
-    /*
-    const auto valid_desired_direction_fn = [&] (const WorldState& world_state)
-    {
-        return task_desired_motion;
-    };
-    const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, world_state, robot_.dt_);
-    */
-
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
-    #pragma message "Foce model_to_use = 0"
+    #pragma message "allow model_to_use = 0"
     //const ssize_t model_to_use = 0;
     //assert(model_to_use == 0);
 
@@ -504,7 +466,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
     // Calculate control error, stretching severity    --- Added by Mengyao
     std::vector<double> ave_control_error(num_models_, 0.0);
-    std::vector<long> stretching_count(num_models_, 0);
     std::vector<double> current_stretching_factor(num_models_, 0.0);
 
     ObjectDeltaAndWeight& task_desired_motion = model_input_data.desired_object_motion_;
@@ -696,91 +657,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
 
-    // Visualize Force on object, should add new ros function for new flag. --- Added by Mengyao
-
-    /*
-    if (visualize_desired_motion_)
-    {
-    //    visualizeTotalForceOnGripper(world_state);
-
-        double force_scale = 0.1;
-        switch (GetDeformableType(nh_))
-        {
-            case ROPE:
-            {
-                const ObjectWrench& object_wrench = world_state.object_wrench_;
-                vis_.visualizeObjectForce(
-                            "ForceOnObject",
-                            world_state.object_configuration_,
-                            object_wrench.MagnifiedForce(force_scale),
-                            Visualizer::Cyan());
-
-                std::cout << "head force norm: "
-                          << object_wrench.GetRopeEndsForce().first.norm()
-                          << std::endl;
-                std::cout << "head force norm: "
-                          << object_wrench.GetRopeEndsForce().second.norm()
-                          << std::endl;
-                break;
-            }
-            case CLOTH:
-            {
-                const ObjectPointSet& object_configuration = world_state.object_configuration_;
-                const ObjectWrench& object_wrench = world_state.object_wrench_;
-                const std::vector<GripperData>& grippers_data = model_list_[model_to_use]->GetGrippersData();
-
-                // Assume knowing it is 2
-                const int num_grippers = grippers_data.size();
-                int num_total_attached_nodes = 0;
-                for (int gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
-                {
-                    num_total_attached_nodes += grippers_data.at(gripper_ind).node_indices_.size();
-                }
-
-                ObjectPointSet nodes_attached(3, num_total_attached_nodes);
-                std::vector<Eigen::Vector3d> forces_attached;
-
-                size_t node_ind = 0;
-
-                std::vector<double> total_force_per_gripper(2, 0.0);
-
-                for(int gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
-                {
-                    for (int node_gripper_ind = 0;
-                         node_gripper_ind < grippers_data.at(gripper_ind).node_indices_.size();
-                         node_gripper_ind++)
-                    {
-                        nodes_attached.col(node_ind)
-                                = object_configuration.col(
-                                    grippers_data.at(gripper_ind).node_indices_.at(node_gripper_ind));
-
-                        forces_attached.push_back(
-                                force_scale
-                                * object_wrench.object_force[grippers_data.at(gripper_ind).node_indices_.at(node_gripper_ind)]);
-
-                        total_force_per_gripper.at(gripper_ind) += forces_attached.at(node_ind).norm();
-
-                        node_ind++;
-                    }
-                    std::cout << "total force on " << gripper_ind << " is "
-                              << total_force_per_gripper.at(gripper_ind) << std::endl;
-                }
-
-                vis_.visualizeObjectForce(
-                            "ForceOnObjectGraspedNodes",
-                            nodes_attached,
-                            forces_attached,
-                            Visualizer::Cyan());
-                break;
-            }
-            default:
-                assert(false && "deformable type is neither rope nor cloth -- planner.cpp");
-                break;
-        }
-    }
-    */
-
-
     if (visualize_predicted_motion_)
     {
         const ObjectPointSet& object_delta = suggested_robot_commands[(size_t)model_to_use].second;
@@ -847,35 +723,6 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
 
     return world_feedback;
 }
-
-// Helper function to force some task type use only local controller
-// --- Added by Mengyao
-/*
-bool Planner::canUseGlobalPlanner()
-{
-    switch (GetDeformableType(nh_))
-    {
-        case ROPE:
-        {
-            return false;
-            break;
-        }
-        case CLOTH:
-        {
-            if (GetTaskType(nh_) == CLOTH_WAFR)
-            {
-                return false;
-            }
-            return true;
-        }
-        default:
-        {
-            assert(false && "deformabletype is neither cloth nor rope");
-            return true;
-        }
-    }
-}
-*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constraint violation detection
@@ -1625,8 +1472,6 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                   rotational_deformability));
 
         controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                       nh_,
-                                       ph_,
                                        model_list_.back(),
                                        task_specification_->collisionScalingFactor(),
                                        optimization_enabled));
@@ -1651,8 +1496,6 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                           rot_deform));
 
                 controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                               nh_,
-                                               ph_,
                                                model_list_.back(),
                                                task_specification_->collisionScalingFactor(),
                                                optimization_enabled));
@@ -1682,10 +1525,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                           DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
                                           learning_rate));
 
-                controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                               nh_,
-                                               ph_,
-                                               model_list_.back(),
+                controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(                                               model_list_.back(),
                                                task_specification_->collisionScalingFactor(),
                                                optimization_enabled));
         }
@@ -1705,8 +1545,6 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                   GetAdaptiveModelLearningRate(ph_)));
 
         controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                       nh_,
-                                       ph_,
                                        model_list_.back(),
                                        task_specification_->collisionScalingFactor(),
                                        optimization_enabled));
@@ -1911,8 +1749,6 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                       rotational_deformability));
 
             controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                           nh_,
-                                           ph_,
                                            model_list_.back(),
                                            task_specification_->collisionScalingFactor(),
                                            optimization_enabled));
@@ -2177,57 +2013,6 @@ void Planner::visualizeDesiredMotion(
       //  }
     }
 }
-
-// Visulize Force on Gripper  --- Added by Mengyao
-void Planner::visualizeTotalForceOnGripper(
-        const WorldState &current_world_state,
-        const bool visualization_enabled) const
-{
-    if(visualization_enabled)
-    {
-        const AllGrippersSinglePose gripper_poses = current_world_state.all_grippers_single_pose_;
-        assert(false && "Not yet implemented");
-        /*
-        const AllGrippersWrench gripper_wrenchs = current_world_state.gripper_wrench_;
-        {
-            int gripper_ind = 0;
-            std::cout << "Friction data on :" << gripper_ind << "th gripper :" << std::endl;
-            vis_.visualizeTranslation(
-                        "total_force_on_gripper_top_0",
-                        gripper_poses.at(gripper_ind).translation(),
-                        gripper_poses.at(gripper_ind).translation()
-                        + 0.1 * gripper_wrenchs.at(gripper_ind).top_clamp.force,
-                        Visualizer::Silver());
-            std::cout << "Force magnitude on the top clamp is " << gripper_wrenchs.at(gripper_ind).top_clamp.force.norm() << std::endl;
-            vis_.visualizeTranslation(
-                        "total_force_on_gripper_bottom_0",
-                        gripper_poses.at(gripper_ind).translation(),
-                        gripper_poses.at(gripper_ind).translation()
-                        + 0.1 * gripper_wrenchs.at(gripper_ind).bottom_clamp.force,
-                        Visualizer::Yellow());
-            std::cout << "Force magnitude on the bottom clamp is " << gripper_wrenchs.at(gripper_ind).bottom_clamp.force.norm() << std::endl;
-
-            gripper_ind = 1;
-            std::cout << "Friction data on :" << gripper_ind << "th gripper :" << std::endl;
-            vis_.visualizeTranslation(
-                        "total_force_on_gripper_top_1",
-                        gripper_poses.at(gripper_ind).translation(),
-                        gripper_poses.at(gripper_ind).translation()
-                        + 0.1 * gripper_wrenchs.at(gripper_ind).top_clamp.force,
-                        Visualizer::Silver());
-            std::cout << "Force magnitude on the top clamp is " << gripper_wrenchs.at(gripper_ind).top_clamp.force.norm() << std::endl;
-            vis_.visualizeTranslation(
-                        "total_force_on_gripper_bottom_1",
-                        gripper_poses.at(gripper_ind).translation(),
-                        gripper_poses.at(gripper_ind).translation()
-                        + 0.1 * gripper_wrenchs.at(gripper_ind).bottom_clamp.force,
-                        Visualizer::Yellow());
-            std::cout << "Force magnitude on the bottom clamp is " << gripper_wrenchs.at(gripper_ind).bottom_clamp.force.norm() << std::endl;
-        }
-        */
-    }
-}
-
 
 void Planner::visualize_gripper_motion(
         const AllGrippersSinglePose& current_gripper_pose,

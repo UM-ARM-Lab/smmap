@@ -13,30 +13,13 @@ using namespace EigenHelpers;
 #define LEAST_SQUARES_DAMPING_VALUE     (1e-3)
 
 LeastSquaresControllerWithObjectAvoidance::LeastSquaresControllerWithObjectAvoidance(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
         const DeformableModel::Ptr& model,
         const double obstacle_avoidance_scale,
         const bool optimize)
-    : object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
-    , max_stretch_factor_(GetMaxStretchFactor(ph))
-//    , max_grippers_distance_(GetClothYSize(nh) - 0.015)
-    , num_grippers_(GetGrippersData(nh).size())
-    , model_(model)
+    : model_(model)
     , obstacle_avoidance_scale_(obstacle_avoidance_scale)
     , optimize_(optimize)
-{
-    // TODO: Why can't I just put this cast inside the constructor and define model_ to be a JacobianModel::Ptr?
-    assert(std::dynamic_pointer_cast<JacobianModel>(model_) != nullptr && "Invalid model type passed to constructor");
-    if (GetDeformableType(nh) == CLOTH)
-    {
-        max_grippers_distance_ = GetClothYSize(nh) - 0.015;
-    }
-    else if (GetDeformableType(nh) == ROPE)
-    {
-        max_grippers_distance_ = GetRopeSegmentLength(nh) * GetRopeNumLinks(nh);
-    }
-}
+{}
 
 std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerWithObjectAvoidance::getGripperMotion_impl(
         const DeformableModel::DeformableModelInputData& input_data,
@@ -47,14 +30,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerWith
     const double max_step_size = max_gripper_velocity * input_data.dt_;
     const size_t num_grippers = grippers_data.size();
     const ssize_t num_nodes = input_data.world_current_state_.object_configuration_.cols();
-
-    // Check object current stretching status; only for evaluation of controller performance --- Added by Mengyao
-    /*
-    if (stretchingViolation(input_data.world_current_state_))
-    {
-        stretching_violation_count_++;
-    }
-    */
 
     ////////////////////////////////////////////////////////////////////////
     // Find the velocities of each part of the algorithm
@@ -116,57 +91,3 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerWith
 
     return suggested_grippers_command;
 }
-
-// stretching violation detection helper  --- Added by Mengyao
-bool LeastSquaresControllerWithObjectAvoidance::stretchingViolation(const WorldState& current_world_state)
-{
-    const ObjectPointSet& current_object_configuration = current_world_state.object_configuration_;
-    const AllGrippersSinglePose& current_grippers_poses = current_world_state.all_grippers_single_pose_;
-
-    bool over_stretch = false;
-    double max_stretching = 0.0;
-
-    const Eigen::MatrixXd node_squared_distance =
-            CalculateSquaredDistanceMatrix(current_object_configuration);
-    ssize_t num_nodes = current_object_configuration.cols();
-
-    for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
-    {
-        for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
-        {
-            /*
-            double this_stretching_factor = std::sqrt(node_squared_distance(first_node, second_node))
-                    / object_initial_node_distance_(first_node, second_node);
-            if (this_stretching_factor > max_stretching)
-            {
-                max_stretching = this_stretching_factor;
-            }
-            */
-            const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
-            if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
-            {
-                over_stretch = true;
-                break;
-            }
-        }
-        if (over_stretch)
-        {
-            break;
-        }
-    }
-    /*
-    if (num_grippers_ == 2)
-    {
-        double this_stretching_factor = (current_grippers_poses.at(0).translation()
-                - current_grippers_poses.at(1).translation()).norm()
-                / max_grippers_distance_;
-        if (this_stretching_factor > max_stretching)
-        {
-            max_stretching = this_stretching_factor;
-        }
-    }
-    current_stretching_factor_ = max_stretching;
-    */
-    return over_stretch;
-}
-

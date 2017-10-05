@@ -189,7 +189,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
 
         if(over_stretch_)
         {
-            stretching_violation_count_ ++;
             previous_over_stretch_state_ = over_stretch_;
             visualize_stretching_vector(current_world_state.object_configuration_);
         }
@@ -428,7 +427,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
 
         if(over_stretch_)
         {
-            stretching_violation_count_ ++;
             previous_over_stretch_state_ = over_stretch_;
             visualize_stretching_vector(current_world_state.object_configuration_);
         }

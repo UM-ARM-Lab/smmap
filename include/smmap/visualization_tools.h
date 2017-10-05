@@ -112,16 +112,6 @@ namespace smmap
                     const std_msgs::ColorRGBA& color,
                     const int32_t id = 2) const;
 
-
-            // Visualization tool for object wrench (1D rope). --- Added by Mengyao
-            // Q: What should be the right id?
-            void visualizeObjectForce(
-                    const std::string& marker_name,
-                    const ObjectPointSet& current,
-                    const std::vector<Eigen::Vector3d>& force,
-                    const std_msgs::ColorRGBA& color,
-                    const int32_t id = 4) const;
-
             void visualizeTranslation(
                     const std::string& marker_name,
                     const geometry_msgs::Point& start,

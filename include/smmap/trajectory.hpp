@@ -35,14 +35,8 @@ namespace smmap
     {
         ObjectPointSet object_configuration_;
 
-        // Force and torque data --- Added by Mengyao
-        //ObjectWrench object_wrench_;
-
         AllGrippersSinglePose all_grippers_single_pose_;
         std::vector<CollisionData> gripper_collision_data_;
-
-        // Force and torque data --- Added by Mengyao
-        //AllGrippersWrench gripper_wrench_;
 
         double sim_time_;
     };
@@ -157,17 +151,6 @@ namespace smmap
                 EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(
                     feedback_ros.object_configuration);
 
-        // Read wrench information --- Added by Mengyao
-        /*
-        feedback_eigen.object_wrench_.object_force.clear();
-        feedback_eigen.object_wrench_.object_torque.clear();
-
-
-        feedback_eigen.object_wrench_.SetObjectWrench(
-                    EigenHelpersConversions::GeometryWrenchToEigenPairVector(
-                        feedback_ros.object_wrenches));
-        */
-
         feedback_eigen.all_grippers_single_pose_ =
                 EigenHelpersConversions::VectorGeometryPoseToVectorIsometry3d(
                     feedback_ros.gripper_poses);
@@ -184,15 +167,6 @@ namespace smmap
                             EigenHelpersConversions::GeometryVector3ToEigenVector3d(
                                 feedback_ros.obstacle_surface_normal[gripper_ind]),
                             feedback_ros.gripper_distance_to_obstacle[gripper_ind]));
-            // Read wrench information --- Added by Mengyao
-            /*
-            feedback_eigen.gripper_wrench_.push_back(
-                        SingleGripperWrench(
-                            Wrench(EigenHelpersConversions::GeometryWrenchToEigenPair(
-                                       feedback_ros.gripper_wrenches[gripper_ind * 2])),
-                            Wrench(EigenHelpersConversions::GeometryWrenchToEigenPair(
-                                       feedback_ros.gripper_wrenches[gripper_ind * 2 + 1]))));
-            */
 
         }
 
