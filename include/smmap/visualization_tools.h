@@ -32,8 +32,9 @@ namespace smmap
             Visualizer(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    const std::string& marker_topic,
-                    const std::string& marker_array_topic);
+                    const std::string& marker_topic);
+
+            void publish(const visualization_msgs::Marker& marker) const;
 
             void clearVisualizationsBullet() const;
 
@@ -62,6 +63,12 @@ namespace smmap
                     const Eigen::Vector3d& scale,
                     const std_msgs::ColorRGBA& color,
                     const int32_t id = 1) const;
+
+            void visualizeSpheres(const std::string& marker_name,
+                    const EigenHelpers::VectorVector3d& points,
+                    const std::vector<double>& radiuses,
+                    const std::vector<std_msgs::ColorRGBA>& colors,
+                    const int32_t starting_id) const;
 
             void visualizeRope(
                     const std::string& marker_name,
@@ -156,8 +163,7 @@ namespace smmap
         private:
             const bool disable_all_visualizations_;
             mutable ros::ServiceClient clear_markers_srv_;
-            mutable ros::Publisher visualization_marker_pub_;
-            mutable ros::Publisher visualization_marker_vector_pub_;
+            ros::Publisher visualization_marker_pub_;
 
             // Data needed to properly create visualizations and markers
             const std::string world_frame_name_;

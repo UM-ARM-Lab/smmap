@@ -49,6 +49,13 @@ namespace smmap
                 const int32_t id,
                 const bool visualization_enabled) const;
 
+        void visualizeWithBubbles(
+                const std::string& marker_name,
+                const std_msgs::ColorRGBA& safe_color,
+                const std_msgs::ColorRGBA& overstretched_color,
+                const int32_t id,
+                const bool visualization_enabled) const;
+
     private:
         const std::shared_ptr<DijkstrasCoverageTask> task_;
         const sdf_tools::SignedDistanceField& sdf_;
@@ -59,9 +66,20 @@ namespace smmap
         const double max_total_band_distance_;
         const double min_overlap_distance_;
         const double min_distance_to_obstacle_;
+        const double node_removal_overlap_factor_;
+        const size_t smoothing_iterations_;
 
-        bool bandIsValid();
+        bool sufficientOverlap(
+                const double bubble_size_a,
+                const double bubble_size_b,
+                const double distance) const;
+        bool bandIsValid() const;
+        bool bandIsValidWithDebugging() const;
+        void interpolateBetweenPoints(
+                EigenHelpers::VectorVector3d& point_buffer,
+                const Eigen::Vector3d& target) const;
         void interpolateBandPoints();
+        void removeExtraBandPoints();
         void smoothBandPoints(const bool verbose);
     };
 }

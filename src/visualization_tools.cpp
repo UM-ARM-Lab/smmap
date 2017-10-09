@@ -170,15 +170,13 @@ Visualizer::Visualizer(
     : Visualizer(
           nh,
           ph,
-          GetVisualizationMarkerTopic(nh),
-          GetVisualizationMarkerArrayTopic(nh))
+          GetVisualizationMarkerTopic(nh))
 {}
 
 Visualizer::Visualizer(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        const std::string& marker_topic,
-        const std::string& marker_array_topic)
+        const std::string& marker_topic)
     : disable_all_visualizations_(GetDisableAllVisualizations(ph))
     , clear_markers_srv_(nh.serviceClient<std_srvs::Empty>(GetClearVisualizationsTopic(nh), true))
     , world_frame_name_(GetWorldFrameName())
@@ -189,11 +187,13 @@ Visualizer::Visualizer(
     if (!disable_all_visualizations_)
     {
         clear_markers_srv_.waitForExistence();
-
-        // Publish visualization request markers
-        visualization_marker_pub_        = nh.advertise<visualization_msgs::Marker>(marker_topic, 100);
-        visualization_marker_vector_pub_ = nh.advertise<visualization_msgs::MarkerArray>(marker_array_topic, 100);
+        visualization_marker_pub_        = nh.advertise<visualization_msgs::Marker>(marker_topic, 256);
     }
+}
+
+void Visualizer::publish(const visualization_msgs::Marker& marker) const
+{
+    visualization_marker_pub_.publish(marker);
 }
 
 void Visualizer::clearVisualizationsBullet() const
@@ -304,6 +304,43 @@ void Visualizer::visualizeCubes(
 
         marker.header.stamp = ros::Time::now();
         visualization_marker_pub_.publish(marker);
+    }
+}
+
+void Visualizer::visualizeSpheres(
+        const std::string& marker_name,
+        const EigenHelpers::VectorVector3d& points,
+        const std::vector<double>& radiuses,
+        const std::vector<std_msgs::ColorRGBA>& colors,
+        const int32_t starting_id) const
+{
+    if (!disable_all_visualizations_)
+    {
+        if (points.size() != radiuses.size())
+        {
+            ROS_ERROR_NAMED("visualizer", "Invalid sphere list, need number of points and radiuses to match");
+        }
+
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = world_frame_name_;
+        marker.header.stamp = ros::Time::now();
+
+        for (size_t idx = 0; idx < points.size(); ++idx)
+        {
+            marker.type = visualization_msgs::Marker::SPHERE;
+            marker.ns = marker_name;
+            marker.id = starting_id + (int32_t)idx;
+            marker.scale.x = radiuses[idx] * 2.0;
+            marker.scale.y = radiuses[idx] * 2.0;
+            marker.scale.z = radiuses[idx] * 2.0;
+            marker.pose.position = EigenHelpersConversions::EigenVector3dToGeometryPoint(points[idx]);
+            marker.pose.orientation.x = 0.0;
+            marker.pose.orientation.y = 0.0;
+            marker.pose.orientation.z = 0.0;
+            marker.pose.orientation.w = 1.0;
+            marker.color = colors[idx];
+            visualization_marker_pub_.publish(marker);
+        }
     }
 }
 
