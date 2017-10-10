@@ -83,8 +83,6 @@ namespace smmap
         std::vector<long> node_indices_;
 
         // Stretching tracking vector information --- Added by Mengyao
-    //    std::vector<Eigen::Vector3d> stretching_offset;
-    //    std::vector<std::string> stretching_gripepr_list;
         StretchingVectorInfo stretching_vector_info_;
 
         /**

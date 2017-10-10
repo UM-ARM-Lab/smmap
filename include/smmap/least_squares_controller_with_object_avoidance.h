@@ -18,8 +18,6 @@ namespace smmap
                     const DeformableModel::DeformableModelInputData& input_data,
                     const double max_gripper_velocity) override final;
 
-        protected:
-
             const DeformableModel::Ptr model_;
             const double obstacle_avoidance_scale_;
             const bool optimize_;

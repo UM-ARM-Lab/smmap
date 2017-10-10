@@ -14,7 +14,6 @@ namespace smmap
     typedef std::vector<ObjectPointSet> ObjectTrajectory;
     typedef std::vector<ObjectTrajectory> VectorObjectTrajectory;
 
-
     struct ObjectDeltaAndWeight
     {
         public:
@@ -34,10 +33,8 @@ namespace smmap
     struct WorldState
     {
         ObjectPointSet object_configuration_;
-
         AllGrippersSinglePose all_grippers_single_pose_;
         std::vector<CollisionData> gripper_collision_data_;
-
         double sim_time_;
     };
 
@@ -167,7 +164,6 @@ namespace smmap
                             EigenHelpersConversions::GeometryVector3ToEigenVector3d(
                                 feedback_ros.obstacle_surface_normal[gripper_ind]),
                             feedback_ros.gripper_distance_to_obstacle[gripper_ind]));
-
         }
 
         feedback_eigen.sim_time_ = feedback_ros.sim_time;
@@ -278,9 +274,6 @@ namespace smmap
         squared_dist.minCoeff(&min_ind);
         return min_ind;
     }
-
-
-
 }
 
 #endif // TRAJECTORY_HPP

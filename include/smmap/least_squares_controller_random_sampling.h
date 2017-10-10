@@ -10,6 +10,9 @@
 
 namespace smmap
 {
+
+    // This structure is currently not in use. The stretching information is now from ros.
+    // It might help later work, so leave it here.
     struct GripperStretchingInfo
     {
         GripperStretchingInfo()
@@ -116,8 +119,6 @@ namespace smmap
 
             void setGripperControllerType(GripperControllerType gripper_controller_type);
 
-            long getStretchingViolationCount();
-
 
         private:
             /////////////////////////////////////////////////////////////////////////////////////////
@@ -198,11 +199,8 @@ namespace smmap
                     const DeformableModel::DeformableModelInputData& input_data,
                     const AllGrippersSinglePoseDelta& test_gripper_motion);
 
-        public:
+        private:	    
             const Eigen::MatrixXd object_initial_node_distance_;
-            double max_grippers_distance_;
-
-        private:
             GripperCollisionChecker gripper_collision_checker_;
 
             const std::vector<GripperData> grippers_data_;
@@ -229,9 +227,6 @@ namespace smmap
             bool previous_over_stretch_state_;
             bool over_stretch_;
             const std::string log_file_path_;
-
-            // cloth node inde conversion helper
-            std::vector<std::unique_ptr<GripperStretchingInfo>> grippers_stretching_helper_;
 
 
     };

@@ -56,7 +56,6 @@ namespace smmap
             WorldState sendNextCommandUsingGlobalGripperPlannerResults(
                     const WorldState& current_world_state);
 
-
             ////////////////////////////////////////////////////////////////////
             // Constraint violation detection
             ////////////////////////////////////////////////////////////////////
@@ -155,7 +154,6 @@ namespace smmap
 
             const Eigen::MatrixXd object_initial_node_distance_;
             double max_grippers_distance_;
-            int controller_count_;
 
             ////////////////////////////////////////////////////////////////////
             // Logging and visualization functionality

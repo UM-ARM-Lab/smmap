@@ -63,6 +63,11 @@ namespace smmap
                                                             VectorAnytypeToVectorLong(stretching_vector_info_srv_data.response.neighbor_indices),
                                                             stretching_vector_info_srv_data.response.contributions));
                     }
+                    else if (gripper_node_indices_client.call(node_indices_srv_data))
+                    {
+                        grippers_data.push_back(GripperData(gripper_names[gripper_ind],
+                                                  VectorAnytypeToVectorLong(node_indices_srv_data.response.indices)));
+                    }
                     else
                     {
                         ROS_ERROR_STREAM_NAMED("ros_comms_helpers",
@@ -99,7 +104,6 @@ namespace smmap
                 break;
             }
         }
-
 
         return grippers_data;
     }

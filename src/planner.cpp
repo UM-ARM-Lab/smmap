@@ -192,7 +192,6 @@ Planner::Planner(
     , global_plan_gripper_trajectory_(0)
     , rrt_helper_(nullptr)
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
-    , controller_count_(0)
 
     , logging_enabled_(GetLoggingEnabled(nh_))
     , controller_logging_enabled_(true)
@@ -315,9 +314,6 @@ WorldState Planner::sendNextCommand(
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         bool planning_needed = false;
 
-        // This bool variable here forces some tasks to utilize only local controller --- Added by Mengyao
-        // const bool can_use_global_planner = canUseGlobalPlanner();
-
         // Check if the global plan has 'hooked' the deformable object on something
         if (executing_global_gripper_trajectory_)
         {
@@ -411,7 +407,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 task_desired_direction_fn,
                 world_state,
                 robot_.dt_);
-  //  ObjectDeltaAndWeight& task_desired_motion = model_input_data.desired_object_motion_;
     const ObjectPointSet current_object_configuration = world_state.object_configuration_;
 
     if (visualize_desired_motion_)
@@ -422,7 +417,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
     #pragma message "allow model_to_use = 0"
-    //const ssize_t model_to_use = 0;
     //assert(model_to_use == 0);
 
 
@@ -431,7 +425,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
     // Querry each model for it's best gripper delta
     stopwatch(RESET);
-
     std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>> suggested_robot_commands(num_models_);
     std::vector<double> time_used(num_models_, 0.0);
     #pragma omp parallel for
@@ -445,7 +438,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 controller_list_[model_ind]->getGripperMotion(
                         model_input_data,
                         robot_.max_gripper_velocity_);
-
 
             visualize_gripper_motion( world_state.all_grippers_single_pose_,
                                       suggested_robot_commands[model_ind].first,
@@ -476,13 +468,11 @@ WorldState Planner::sendNextCommandUsingLocalController(
     if (calculate_regret_ && num_models_ > 1)
     {
         stopwatch(RESET);
-
         const double prev_error = task_specification_->calculateError(world_state);
         const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
         {
             individual_rewards[model_ind] = prev_error - task_specification_->calculateError(world_state);
 
-            // TODO: Double check with Dale the implementation here
             // Get control errors for different model-controller sets. --- Added by Mengyao
             ObjectPointSet real_p_dot = world_state.object_configuration_ - current_object_configuration;
             ssize_t num_nodes = real_p_dot.cols();
@@ -555,17 +545,10 @@ WorldState Planner::sendNextCommandUsingLocalController(
             ROS_INFO_STREAM_NAMED("planner", "max pointwise desired p dot is" << desired_p_dot_max);
         };
 
-        // const auto control_error_fn = [&] (const size_t model_ind, const WorldState& feed_back_world_state)
-        // { };
-
         std::vector<AllGrippersSinglePose> poses_to_test(num_models_);
         for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
         {
             poses_to_test[model_ind] = kinematics::applyTwist(world_state.all_grippers_single_pose_, suggested_robot_commands[model_ind].first);
-
-        //    stretching_count[model_ind] = controller_list_[model_to_use]->getStretchingViolationCount();
-        //    current_stretching_factor[model_ind] = controller_list_[model_to_use]->getCurrentStretchingFactor();
-
         }
         robot_.testGrippersPoses(poses_to_test, test_feedback_fn);
 
@@ -665,11 +648,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
                     world_state.object_configuration_,
                     world_state.object_configuration_ + 80.0 * object_delta,
                     Visualizer::Blue());
-
     }
-
-    // desired_p_dot.resizeLike(real_p_dot);
-    // desired_p_dot_weight.resizeLike(real_p_dot);
 
     ROS_INFO_NAMED("planner", "Updating models and logging data");
     updateModels(world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
@@ -1525,7 +1504,8 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                           DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
                                           learning_rate));
 
-                controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(                                               model_list_.back(),
+                controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                               model_list_.back(),
                                                task_specification_->collisionScalingFactor(),
                                                optimization_enabled));
         }
@@ -1855,7 +1835,7 @@ void Planner::createBandits()
 // Initialize max grippers distance  --- Added by Mengyao
 void Planner::initializeGrippersMaxDistance()
 {
-    if (GetGrippersData(nh_).size())
+    if (GetGrippersData(nh_).size() == 2)
     {
         if (GetDeformableType(nh_) == CLOTH)
         {
@@ -1995,22 +1975,20 @@ void Planner::visualizeDesiredMotion(
             colors[node_ind].b = 0.0f;
             colors[node_ind].a = desired_motion.weight((ssize_t)node_ind * 3) > 0 ? 1.0f : 0.0f;
         }
-        /*
         task_specification_->visualizeDeformableObject(
                 vis_,
                 DESIRED_DELTA_NS,
                 AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
                 colors);
-        */
 
-      //  if (task_specification_->deformable_type_ == DeformableType::CLOTH)
-      //  {
+        if (task_specification_->deformable_type_ == DeformableType::CLOTH)
+        {
             vis_.visualizeObjectDelta(
                         DESIRED_DELTA_NS,
                         current_world_state.object_configuration_,
                         AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta * 100),
                         Visualizer::Green());
-      //  }
+        }
     }
 }
 
@@ -2072,7 +2050,6 @@ void Planner::visualize_gripper_motion(
         }
     }
 }
-
 
 void Planner::initializeLogging()
 {

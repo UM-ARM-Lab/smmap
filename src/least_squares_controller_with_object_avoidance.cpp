@@ -2,8 +2,6 @@
 #include "smmap/gurobi_solvers.h"
 #include "smmap/jacobian_model.h"
 
-#include "smmap/ros_communication_helpers.hpp"
-
 using namespace smmap;
 using namespace Eigen;
 using namespace EigenHelpers;
@@ -19,7 +17,10 @@ LeastSquaresControllerWithObjectAvoidance::LeastSquaresControllerWithObjectAvoid
     : model_(model)
     , obstacle_avoidance_scale_(obstacle_avoidance_scale)
     , optimize_(optimize)
-{}
+{
+    // TODO: Why can't I just put this cast inside the constructor and define model_ to be a JacobianModel::Ptr?
+    assert(std::dynamic_pointer_cast<JacobianModel>(model_) != nullptr && "Invalid model type passed to constructor");
+}
 
 std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerWithObjectAvoidance::getGripperMotion_impl(
         const DeformableModel::DeformableModelInputData& input_data,
@@ -36,8 +37,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerWith
     ////////////////////////////////////////////////////////////////////////
 
     // Retrieve the desired object velocity (p_dot)
-   // const ObjectDeltaAndWeight desired_object_velocity =
-   //         input_data.task_desired_object_delta_fn_(input_data.world_current_state_);
     const ObjectDeltaAndWeight desired_object_velocity =
             input_data.desired_object_motion_;
 

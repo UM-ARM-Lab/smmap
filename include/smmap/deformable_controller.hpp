@@ -8,9 +8,6 @@ namespace smmap
     class DeformableController
     {
         public:
-            DeformableController()
-            {}
-
             typedef std::shared_ptr<DeformableController> Ptr;
 
             std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getGripperMotion(
@@ -33,7 +30,6 @@ namespace smmap
             virtual std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> getGripperMotion_impl(
                     const DeformableModel::DeformableModelInputData& input_data,
                     const double max_gripper_velocity) = 0;
-
     };
 }
 

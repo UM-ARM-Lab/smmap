@@ -10,7 +10,6 @@
 
 using namespace smmap;
 
-// TODO: distance_to_obstacle_threshold_: should add min distance to obstacle or not?
 LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
@@ -33,9 +32,7 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , deformable_type_(GetDeformableType(nh))
     , task_type_(GetTaskType(nh))
     , model_(deformable_model)
-//    , distance_to_obstacle_threshold_(distance_to_obstacle_threshold)
     , distance_to_obstacle_threshold_(GetRobotGripperRadius())
-//    , max_grippers_distance_(GetClothYSize(nh) - 0.015)
     , max_stretch_factor_(GetMaxStretchFactor(ph))
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
@@ -44,27 +41,7 @@ LeastSquaresControllerRandomSampling::LeastSquaresControllerRandomSampling(
     , previous_over_stretch_state_(false)
     , over_stretch_(false)
     , log_file_path_(GetLogFolder(nh))
-{
-    if (deformable_type_ == CLOTH)
-    {
-        max_grippers_distance_ = GetClothYSize(nh) - 0.015;
-    }
-    else if (deformable_type_ == ROPE)
-    {
-        max_grippers_distance_ = GetRopeSegmentLength(nh) * GetRopeNumLinks(nh);
-    }
-
-  //  grippers_stretching_helper_(grippers_data_.size());
-    for (int gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
-    {
-        grippers_stretching_helper_.push_back(
-                    std::unique_ptr<GripperStretchingInfo>(
-                        new GripperStretchingInfo(
-                            GetClothNumControlPointsX(nh),
-                            GetClothNumControlPointsY(nh),
-                            grippers_data_.at(gripper_ind))));
-    }
-}
+{}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Functions that are used to initialize function pointers in the
@@ -137,62 +114,28 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
     over_stretch_ = false;
     double max_stretching = 0.0;
 
-    // If sampling one gripper motion each time, always correct it twice
-    /*
-    if (previous_over_stretch_state_ && (sample_count_ >= 0))
+    for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
     {
-        over_stretch_ = true;
-        visualize_stretching_vector(current_world_state.object_configuration_);
-        previous_over_stretch_state_ = false;
+        for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
+        {
+            const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
+	    if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
+	    {
+	        over_stretch_ = true;
+	        break;
+	    }
+	}
+        if (over_stretch_)
+        {
+            break;
+	}
     }
-    */
-//    else
-//    {
-        for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
-        {
-            for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
-            {
-                /*
-                double this_stretching_factor = std::sqrt(node_squared_distance(first_node, second_node))
-                        / object_initial_node_distance_(first_node, second_node);
-                if (this_stretching_factor > max_stretching)
-                {
-                    max_stretching = this_stretching_factor;
-                }
-                */
 
-                const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
-                if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
-                {
-                    over_stretch_ = true;
-                    break;
-                }
-            }
-            if (over_stretch_)
-            {
-                break;
-            }
-        }
-        /*
-        if (grippers_data_.size() == 2)
-        {
-            double this_stretching_factor = (current_world_state.all_grippers_single_pose_.at(0).translation()
-                    - current_world_state.all_grippers_single_pose_.at(1).translation()).norm()
-                    / max_grippers_distance_;
-            if (this_stretching_factor > max_stretching)
-            {
-                max_stretching = this_stretching_factor;
-            }
-        }
-        current_stretching_factor_ = max_stretching;
-        */
-
-        if(over_stretch_)
-        {
-            previous_over_stretch_state_ = over_stretch_;
-            visualize_stretching_vector(current_world_state.object_configuration_);
-        }
-//    }
+    if(over_stretch_)
+    {
+        previous_over_stretch_state_ = over_stretch_;
+        visualize_stretching_vector(current_world_state.object_configuration_);
+    }
 
 
     /*
@@ -346,8 +289,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
             sample_count_=0;
         }
     }
-
-
     if(suggested_grippers_command.first.size() > 0)
     {
     //    visualize_gripper_motion(current_world_state.all_grippers_single_pose_, suggested_grippers_command.first);
@@ -361,12 +302,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerRand
                 input_data,
                 suggested_grippers_command.first);
 
-
-    /*
-    std::cout << "in random sampling controller, first gripper motion norm : "
-              << suggested_grippers_command.first.at(0).norm()
-              << std::endl;
-    */
     return suggested_grippers_command;
 }
 
@@ -668,15 +603,10 @@ kinematics::Vector6d LeastSquaresControllerRandomSampling::singleGripperPoseDelt
     const double y_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
     const double z_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
 
-
     kinematics::Vector6d random_sample;
 
     // Q: how to set the fix step? only to translational motion?
     double raw_norm = std::sqrt(std::pow(x_trans,2) + std::pow(y_trans,2) + std::pow(z_trans,2));
-
-    // double raw_norm = std::sqrt(std::pow(x_trans,2) + std::pow(y_trans,2) + std::pow(z_trans,2)
-    //                            + (std::pow(x_rot,2) + std::pow(x_rot,2) + std::pow(x_rot,2))/20.0);
-
 
     if ( raw_norm > 0.000001 && (fix_step_ || raw_norm > max_delta))
     {
