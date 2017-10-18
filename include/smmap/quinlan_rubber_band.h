@@ -69,12 +69,13 @@ namespace smmap
         const double node_removal_overlap_factor_;
         const size_t smoothing_iterations_;
 
+        double getBubbleSize(const Eigen::Vector3d& location) const;
         bool sufficientOverlap(
                 const double bubble_size_a,
                 const double bubble_size_b,
                 const double distance) const;
         bool bandIsValid() const;
-        bool bandIsValidWithDebugging() const;
+        bool bandIsValidWithVisualization() const;
         void interpolateBetweenPoints(
                 EigenHelpers::VectorVector3d& point_buffer,
                 const Eigen::Vector3d& target) const;

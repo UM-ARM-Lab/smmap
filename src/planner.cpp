@@ -25,6 +25,7 @@ using namespace smmap;
 using namespace Eigen;
 using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
+using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
 #pragma message "Magic number - reward scaling factor starting value"
 #define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
@@ -638,7 +639,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectF
     std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 
     // TODO: Move to class wide location, currently in 2 locations in this file
-    const static std_msgs::ColorRGBA gripper_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
+    const static std_msgs::ColorRGBA gripper_color = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
     const static std_msgs::ColorRGBA rubber_band_safe_color = Visualizer::Black();
     const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
     constexpr bool band_verbose = false;
@@ -831,7 +832,7 @@ bool Planner::predictStuckForGlobalPlannerResults(const bool visualization_enabl
     assert(global_plan_current_timestep_ < global_plan_gripper_trajectory_.size());
 
     // TODO: Move to class wide location, currently in 2 positions in this file
-    const static std_msgs::ColorRGBA gripper_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
+    const static std_msgs::ColorRGBA gripper_color = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
     const static std_msgs::ColorRGBA rubber_band_safe_color = Visualizer::Black();
     const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
     constexpr bool band_verbose = false;

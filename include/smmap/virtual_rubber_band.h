@@ -34,7 +34,7 @@ namespace smmap
 
             void setPointsAndSmooth(const EigenHelpers::VectorVector3d& points);
 
-            const EigenHelpers::VectorVector3d& forwardSimulateVirtualRubberBandToEndpointTargets(
+            const EigenHelpers::VectorVector3d& forwardPropagateRubberBandToEndpointTargets(
                     const Eigen::Vector3d first_endpoint_target,
                     const Eigen::Vector3d second_endpoint_target,
                     bool verbose);

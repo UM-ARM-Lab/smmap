@@ -94,12 +94,6 @@ namespace smmap
                     const std::vector<std_msgs::ColorRGBA>& colors,
                     const int32_t id = 1) const;
 
-            visualization_msgs::MarkerArray::_markers_type createGripperMarker(
-                    const std::string& marker_name,
-                    const Eigen::Isometry3d& eigen_pose,
-                    const std_msgs::ColorRGBA& color,
-                    const int32_t id = 1) const;
-
             void visualizeGripper(
                     const std::string& marker_name,
                     const Eigen::Isometry3d& eigen_pose,

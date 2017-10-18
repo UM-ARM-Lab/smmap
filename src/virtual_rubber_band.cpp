@@ -85,7 +85,7 @@ void VirtualRubberBand::setPointsAndSmooth(const EigenHelpers::VectorVector3d& p
  * @param verbose
  * @return
  */
-const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardSimulateVirtualRubberBandToEndpointTargets(
+const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardPropagateRubberBandToEndpointTargets(
         const Eigen::Vector3d first_endpoint_target,
         const Eigen::Vector3d second_endpoint_target,
         bool verbose)
@@ -266,5 +266,5 @@ void VirtualRubberBand::shortcutSmoothBand(const bool verbose)
         ++smoothing_iter;
     }
 
-    std::cerr << "Smoothing max iters: " << num_smooting_ittrs << " num_iters: " << smoothing_iter << std::endl;
+//    std::cerr << "Smoothing max iters: " << num_smooting_ittrs << " num_iters: " << smoothing_iter << std::endl;
 }

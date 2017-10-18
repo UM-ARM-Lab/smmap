@@ -294,6 +294,7 @@ void Visualizer::visualizeCubes(
         visualization_msgs::Marker marker;
 
         marker.header.frame_id = world_frame_name_;
+        marker.pose.orientation.w = 1.0;
 
         marker.type = visualization_msgs::Marker::CUBE_LIST;
         marker.ns = marker_name;
@@ -426,44 +427,6 @@ void Visualizer::visualizeCloth(
     }
 }
 
-visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
-        const std::string& marker_name,
-        const Eigen::Isometry3d& eigen_pose,
-        const std_msgs::ColorRGBA& color,
-        const int32_t id) const
-{
-    visualization_msgs::MarkerArray::_markers_type markers;
-    markers.resize(2);
-
-    markers[0].header.frame_id = world_frame_name_;
-
-    markers[0].type = visualization_msgs::Marker::CUBE;
-    markers[0].ns = marker_name;
-    markers[0].id = id;
-    //markers[0].scale.x = 0.03;
-    markers[0].scale.x = 0.01;
-    markers[0].scale.y = 0.03;
-    markers[0].scale.z = 0.01;
-    markers[0].pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(eigen_pose * Eigen::Translation3d(0.0, 0.0, gripper_apperture_));
-    markers[0].color = color;
-
-    markers[1].header.frame_id = world_frame_name_;
-
-    markers[1].type = visualization_msgs::Marker::CUBE;
-    markers[1].ns = marker_name;
-    markers[1].id = id + 1;
-//    markers[1].scale.x = 0.03;
-    markers[0].scale.x = 0.01;
-    markers[1].scale.y = 0.03;
-    markers[1].scale.z = 0.01;
-    markers[1].pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(eigen_pose * Eigen::Translation3d(0.0, 0.0, -gripper_apperture_));
-    markers[1].color = color;
-
-    markers[0].header.stamp = ros::Time::now();
-    markers[1].header.stamp = markers[0].header.stamp;
-    return markers;
-}
-
 void Visualizer::visualizeGripper(
         const std::string& marker_name,
         const Eigen::Isometry3d& eigen_pose,
@@ -472,10 +435,29 @@ void Visualizer::visualizeGripper(
 {
     if (!disable_all_visualizations_)
     {
-        visualization_msgs::MarkerArray marker;
-        marker.markers = createGripperMarker(marker_name, eigen_pose, color, id);
-        visualization_marker_pub_.publish(marker.markers[0]);
-        visualization_marker_pub_.publish(marker.markers[1]);
+        visualization_msgs::Marker marker;
+
+        marker.header.frame_id = world_frame_name_;
+        marker.header.stamp = ros::Time::now();
+
+        marker.type = visualization_msgs::Marker::CUBE_LIST;
+        marker.ns = marker_name;
+        marker.id = id;
+        marker.scale.x = 0.03;
+        marker.scale.y = 0.03;
+        marker.scale.z = 0.01;
+        marker.pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(eigen_pose);
+        marker.colors = {color, color};
+
+        geometry_msgs::Point p;
+        p.x = 0.0;
+        p.y = 0.0;
+        p.z = gripper_apperture_;
+        marker.points.push_back(p);
+        p.z = -gripper_apperture_;
+        marker.points.push_back(p);
+
+        visualization_marker_pub_.publish(marker);
     }
 }
 
@@ -489,7 +471,7 @@ void Visualizer::visualizeGrippers(
     {
         for (size_t gripper_ind = 0; gripper_ind < eigen_poses.size(); ++gripper_ind)
         {
-            visualizeGripper(marker_name, eigen_poses[gripper_ind], color, id + (int32_t)(2*gripper_ind + 1));
+            visualizeGripper(marker_name, eigen_poses[gripper_ind], color, id + (int32_t)gripper_ind);
         }
     }
 }
