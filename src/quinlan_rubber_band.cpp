@@ -52,19 +52,10 @@ QuinlanRubberBand& QuinlanRubberBand::operator=(const QuinlanRubberBand& other)
 
 void QuinlanRubberBand::setPointsWithoutSmoothing(const EigenHelpers::VectorVector3d& points)
 {
-//    const Eigen::Vector3d min = sdf_.GetOriginTransform().translation();
-//    const Eigen::Vector3d max = min + Eigen::Vector3d(sdf_.GetXSize(), sdf_.GetYSize(), sdf_.GetZSize());
-
-//    std::cerr << "SDF limits: x, y, z\n"
-//              << "Max:            " << max.transpose() << std::endl
-//              << "Min:            " << min.transpose() << std::endl;
-
-
     band_ = points;
     for (auto& point: band_)
     {
-        point = sdf_.ProjectOutOfCollisionToMinimumDistance3d(point, min_distance_to_obstacle_);
-        point = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(point, min_distance_to_obstacle_);
+        point = projectToValidBubble(point);
         assert(getBubbleSize(point) >= min_distance_to_obstacle_ &&
                "Every point in the band must be inside the valid region of the SDF");
     }
@@ -188,6 +179,43 @@ void QuinlanRubberBand::visualizeWithBubbles(
     }
 }
 
+Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& location) const
+{
+    const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
+    const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);
+
+    const auto distance_to_boundary = sdf_.DistanceToBoundary3d(post_boundary_project);
+    const auto distance_to_obstacles = sdf_.EstimateDistance3d(post_boundary_project);
+
+    if (distance_to_boundary.first < min_distance_to_obstacle_ ||
+        distance_to_obstacles.first < min_distance_to_obstacle_)
+    {
+        constexpr int p = 20;
+        std::cerr << std::setprecision(p) << "location:                                                                 " << location.transpose() << std::endl;
+
+        const auto starting_distance_to_boundary = sdf_.DistanceToBoundary3d(location);
+        const auto starting_distance_to_obstacles = sdf_.EstimateDistance3d(location);
+
+        std::cerr << std::setprecision(p) << "Starting dist to obstacle: " << starting_distance_to_obstacles.first << std::endl;
+        std::cerr << std::setprecision(p) << "Starting dist to boundary: " << starting_distance_to_boundary.first << std::endl;
+
+        std::cerr << std::setprecision(p) << "Final dist to obstacle:    " << distance_to_obstacles.first << std::endl;
+        std::cerr << std::setprecision(p) << "Final dist to boundary:    " << distance_to_boundary.first << std::endl;
+
+        std::cerr << std::setprecision(p) << "collision - location:      " << (post_collision_project - location).norm() << std::endl;
+        std::cerr << std::setprecision(p) << "boundary - collision:      " << (post_boundary_project - post_collision_project).norm() << std::endl;
+
+        std::cerr << std::setprecision(p) << "Post boundary value:                                                      " << post_boundary_project.transpose() << std::endl;
+
+        const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
+        const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);
+    }
+
+
+    assert(getBubbleSize(post_boundary_project) >= min_distance_to_obstacle_);
+    return post_boundary_project;
+}
+
 double QuinlanRubberBand::getBubbleSize(const Eigen::Vector3d& location) const
 {
     const Eigen::Vector4d loc_4d(location.x(), location.y(), location.z(), 1.0);
@@ -272,18 +300,14 @@ void QuinlanRubberBand::interpolateBetweenPoints(
         // TODO: verify that this cannot get stuck in an infinite loop
         int inner_iteration_counter = 0;
         double interpolation_ratio = 0.5;
-        Eigen::Vector3d test_point = sdf_.ProjectOutOfCollisionToMinimumDistance3d(
-                    EigenHelpers::Interpolate(curr, target, interpolation_ratio),
-                    min_distance_to_obstacle_);
+        Eigen::Vector3d test_point = projectToValidBubble(EigenHelpers::Interpolate(curr, target, interpolation_ratio));
         double test_point_bubble_size = getBubbleSize(test_point);
         double distance_between_prev_and_test_point = (curr - test_point).norm();
 
         while (!sufficientOverlap(curr_bubble_size, test_point_bubble_size, distance_between_prev_and_test_point))
         {
             interpolation_ratio *= 0.5;
-            test_point = sdf_.ProjectOutOfCollisionToMinimumDistance3d(
-                        EigenHelpers::Interpolate(curr, target, interpolation_ratio),
-                        min_distance_to_obstacle_);
+            test_point = projectToValidBubble(EigenHelpers::Interpolate(curr, target, interpolation_ratio));
             test_point_bubble_size = getBubbleSize(test_point);
             distance_between_prev_and_test_point = (curr - test_point).norm();
 
@@ -485,7 +509,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 
 
             // Ensure that the resulting point is not in collision even with numerical rounding
-            const Eigen::Vector3d curr_prime_projected_to_distance = sdf_.ProjectOutOfCollisionToMinimumDistance3d(curr_prime, min_distance_to_obstacle_);
+            const Eigen::Vector3d curr_prime_projected_to_distance = projectToValidBubble(curr_prime);
             const double projected_bubble_size = getBubbleSize(curr_prime_projected_to_distance);
 
             // Check if the bubbles still overlap on each side

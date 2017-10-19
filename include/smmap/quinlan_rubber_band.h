@@ -69,6 +69,7 @@ namespace smmap
         const double node_removal_overlap_factor_;
         const size_t smoothing_iterations_;
 
+        Eigen::Vector3d projectToValidBubble(const Eigen::Vector3d& location) const;
         double getBubbleSize(const Eigen::Vector3d& location) const;
         bool sufficientOverlap(
                 const double bubble_size_a,
