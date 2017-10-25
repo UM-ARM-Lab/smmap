@@ -684,7 +684,8 @@ namespace smmap
 
     inline uint64_t SerializeAllGrippersPoseTrajectory(const AllGrippersPoseTrajectory& traj, std::vector<uint8_t>& buffer)
     {
-        const std::function<uint64_t(const AllGrippersSinglePose&, std::vector<uint8_t>&)> item_serializer = [] (const AllGrippersSinglePose& grippers_pose, std::vector<uint8_t>& buffer)
+        const std::function<uint64_t(const AllGrippersSinglePose&, std::vector<uint8_t>&)> item_serializer = []
+                (const AllGrippersSinglePose& grippers_pose, std::vector<uint8_t>& buffer)
         {
             return SerializeAllGrippersSinglePose(grippers_pose, buffer);
         };
@@ -693,7 +694,8 @@ namespace smmap
 
     inline std::pair<AllGrippersPoseTrajectory, uint64_t> DeserializeAllGrippersPoseTrajectory(const std::vector<uint8_t>& buffer, const uint64_t current)
     {
-        const std::function<std::pair<AllGrippersSinglePose, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> item_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
+        const std::function<std::pair<AllGrippersSinglePose, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> item_deserializer = []
+                (const std::vector<uint8_t>& buffer, const uint64_t current)
         {
             return DeserializeAllGrippersSinglePose(buffer, current);
         };

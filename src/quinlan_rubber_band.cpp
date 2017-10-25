@@ -1,3 +1,6 @@
+#include <arc_utilities/filesystem.hpp>
+#include <arc_utilities/zlib_helpers.hpp>
+#include <arc_utilities/serialization_eigen.hpp>
 #include "smmap/quinlan_rubber_band.h"
 
 using namespace smmap;
@@ -22,13 +25,16 @@ QuinlanRubberBand::QuinlanRubberBand(
         const std::shared_ptr<DijkstrasCoverageTask>& task,
         const Visualizer& vis,
         std::mt19937_64& generator)
-    : task_(task)
+    : ph_("~/band")
+    , task_(task)
     , sdf_(task_->environment_sdf_)
     , vis_(vis)
     , max_total_band_distance_(max_total_band_distance)
-    , min_overlap_distance_(sdf_.GetResolution() * 0.01)
+    , min_overlap_distance_(sdf_.GetResolution() * 0.05)
     , min_distance_to_obstacle_(min_overlap_distance_ * 2.0)
     , node_removal_overlap_factor_(1.2)
+    , backtrack_threshold_(1e-6)
+    , collision_margin_(sdf_.GetResolution() / std::sqrt(2.0))
     , smoothing_iterations_(50)
 {
     (void)generator;
@@ -45,6 +51,19 @@ QuinlanRubberBand& QuinlanRubberBand::operator=(const QuinlanRubberBand& other)
 
     band_ = other.band_;
 
+
+
+    if (useStoredBand())
+    {
+        loadStoredBand();
+    }
+    else
+    {
+        storeBand();
+    }
+
+
+
     assert(bandIsValid());
 
     return *this;
@@ -53,6 +72,16 @@ QuinlanRubberBand& QuinlanRubberBand::operator=(const QuinlanRubberBand& other)
 void QuinlanRubberBand::setPointsWithoutSmoothing(const EigenHelpers::VectorVector3d& points)
 {
     band_ = points;
+
+    if (useStoredBand())
+    {
+        loadStoredBand();
+    }
+    else
+    {
+        storeBand();
+    }
+
     for (auto& point: band_)
     {
         point = projectToValidBubble(point);
@@ -90,7 +119,22 @@ const EigenHelpers::VectorVector3d& QuinlanRubberBand::forwardPropagateRubberBan
     // Add the new endpoints, then let the interpolate and smooth process handle the propogation
     band_.insert(band_.begin(), first_endpoint_target);
     band_.push_back(second_endpoint_target);
+
+
+
+    if (useStoredBand())
+    {
+        loadStoredBand();
+    }
+    else
+    {
+        storeBand();
+    }
+
+
+
     interpolateBandPoints();
+    removeExtraBandPoints();
     smoothBandPoints(verbose);
     return band_;
 }
@@ -151,37 +195,37 @@ void QuinlanRubberBand::visualizeWithBubbles(
     {
         // Delete all markers, probably from just this publisher
         {
-            visualization_msgs::Marker marker;
-            marker.action = visualization_msgs::Marker::DELETEALL;
-            vis_.publish(marker);
+//            visualization_msgs::Marker marker;
+//            marker.action = visualization_msgs::Marker::DELETEALL;
+//            vis_.publish(marker);
+
+//            vis_.deleteObjects(marker_name + "_bubbles", 1, 305);
         }
 
         // Re-publish the new ones
         {
             visualize(marker_name, safe_color, overstretched_color, id, visualization_enabled);
-            std::vector<double> bubble_sizes(band_.size());
-            std::vector<std_msgs::ColorRGBA> colors(band_.size());
-            for (size_t idx = 0; idx < band_.size(); ++idx)
-            {
-                bubble_sizes[idx] = sdf_.EstimateDistance3d(band_[idx]).first;
-                colors[idx] = ColorBuilder::MakeFromFloatColors(
-                            (float)idx / (float)(band_.size() - 1),
-                            0.0f,
-                            (float)(band_.size() - 1 - idx) / (float)(band_.size() - 1),
-                            0.3f);
-            }
-            vis_.visualizeSpheres(marker_name + "_bubbles",
-                                  band_,
-                                  bubble_sizes,
-                                  colors,
-                                  id + 1);
+//            std::vector<double> bubble_sizes(band_.size());
+//            std::vector<std_msgs::ColorRGBA> colors(band_.size());
+//            for (size_t idx = 0; idx < band_.size(); ++idx)
+//            {
+//                bubble_sizes[idx] = sdf_.EstimateDistance3d(band_[idx]).first;
+//                colors[idx] = ColorBuilder::MakeFromFloatColors(
+//                            (float)idx / (float)(band_.size() - 1),
+//                            0.0f,
+//                            (float)(band_.size() - 1 - idx) / (float)(band_.size() - 1),
+//                            0.3f);
+//            }
+//            vis_.visualizeSpheres(marker_name + "_bubbles", band_, bubble_sizes, colors, id);
         }
     }
 }
 
+
+
 Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& location) const
 {
-    const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
+    const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_ + collision_margin_ * 1.00000000001);
     const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);
 
     const auto distance_to_boundary = sdf_.DistanceToBoundary3d(post_boundary_project);
@@ -208,7 +252,7 @@ Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& l
         std::cerr << std::setprecision(p) << "Post boundary value:                                                      " << post_boundary_project.transpose() << std::endl;
 
         const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
-        const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);
+        const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_ + collision_margin_ * 1.00000000001);
     }
 
 
@@ -220,9 +264,10 @@ double QuinlanRubberBand::getBubbleSize(const Eigen::Vector3d& location) const
 {
     const Eigen::Vector4d loc_4d(location.x(), location.y(), location.z(), 1.0);
     const auto distance_to_boundary = sdf_.DistanceToBoundary4d(loc_4d);
-    const auto distance_to_obstacles = sdf_.EstimateDistance4d(loc_4d);
+//    const auto distance_to_obstacles = sdf_.EstimateDistance4d(loc_4d);
+    const auto distance_to_obstacles = sdf_.GetSafe4d(loc_4d);
     assert(distance_to_boundary.second == distance_to_obstacles.second);
-    const auto distance = std::min(distance_to_boundary.first, distance_to_obstacles.first);
+    const auto distance = std::min(distance_to_boundary.first - collision_margin_, (double)distance_to_obstacles.first);
 //    std::cout << location.transpose() << " Estimate dist: " << distance_to_obstacles.first << " Boundary dist: " << distance_to_boundary.first << std::endl;
     assert(distance >= min_distance_to_obstacle_);
     return distance;
@@ -233,7 +278,7 @@ bool QuinlanRubberBand::sufficientOverlap(
         const double bubble_size_b,
         const double distance) const
 {
-    return bubble_size_a + bubble_size_b >= distance + min_overlap_distance_;
+    return (bubble_size_a + bubble_size_b) >= (distance + min_overlap_distance_);
 }
 
 bool QuinlanRubberBand::bandIsValid() const
@@ -395,9 +440,29 @@ void QuinlanRubberBand::removeExtraBandPoints()
             const bool next_bubble_overlaps_curr_center_by_minimum =
                     next_bubble_size >= curr_next_dist * node_removal_overlap_factor_ + min_overlap_distance_;
 
+            const double angle_defined_by_points = EigenHelpers::AngleDefinedByPoints(prev, curr, next);
+            assert(angle_defined_by_points >= 0.0);
+            const bool band_backtracks = angle_defined_by_points < backtrack_threshold_;
+
+//            if (band_backtracks)
+//            {
+//                std::cout << "Backtrack detected\n";
+
+//                vis_.visualizePoints("prev", {prev}, Visualizer::Blue(), 1, 0.01);
+//                vis_.visualizePoints("curr", {curr}, Visualizer::Magenta(), 1, 0.01);
+//                vis_.visualizePoints("next", {next}, Visualizer::Red(), 1, 0.01);
+
+//                std::cout << prev.transpose() << std::endl;
+//                std::cout << curr.transpose() << std::endl;
+//                std::cout << next.transpose() << std::endl;
+//                std::cout << angle_defined_by_points << std::endl;
+//                std::cout << std::endl;
+//            }
+
             // Only keep this point if there is not sufficient overlap for the neighbouring bubbles
             if (!(prev_bubble_overlaps_curr_center_by_minimum && next_bubble_overlaps_curr_center_by_minimum) &&
-                !curr_bubble_is_wholey_contained_in_prev)
+                !curr_bubble_is_wholey_contained_in_prev &&
+                !band_backtracks)
             {
                 forward_pass.push_back(curr);
             }
@@ -435,9 +500,29 @@ void QuinlanRubberBand::removeExtraBandPoints()
             const bool next_bubble_overlaps_curr_center_by_minimum =
                     next_bubble_size >= curr_next_dist * node_removal_overlap_factor_ + min_overlap_distance_;
 
+            const double angle_defined_by_points = EigenHelpers::AngleDefinedByPoints(prev, curr, next);
+            assert(angle_defined_by_points >= 0.0);
+            const bool band_backtracks = angle_defined_by_points < backtrack_threshold_;
+
+//            if (band_backtracks)
+//            {
+//                std::cout << "Backtrack detected\n";
+
+//                vis_.visualizePoints("prev", {prev}, Visualizer::Blue(), 1, 0.01);
+//                vis_.visualizePoints("curr", {curr}, Visualizer::Magenta(), 1, 0.01);
+//                vis_.visualizePoints("next", {next}, Visualizer::Red(), 1, 0.01);
+
+//                std::cout << prev.transpose() << std::endl;
+//                std::cout << curr.transpose() << std::endl;
+//                std::cout << next.transpose() << std::endl;
+//                std::cout << angle_defined_by_points << std::endl;
+//                std::cout << std::endl;
+//            }
+
             // Only keep this point if there is not sufficient overlap for the neighbouring bubbles
             if (!(prev_bubble_overlaps_curr_center_by_minimum && next_bubble_overlaps_curr_center_by_minimum) &&
-                !curr_bubble_is_wholly_contained_in_prev)
+                !curr_bubble_is_wholly_contained_in_prev &&
+                !band_backtracks)
             {
                 backward_pass.push_back(curr);
             }
@@ -454,7 +539,25 @@ void QuinlanRubberBand::removeExtraBandPoints()
 void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 {
     assert(bandIsValidWithVisualization());
-//    std::cout << PrettyPrint::PrettyPrint(band_, false, "\n") << std::endl << std::endl;
+
+//    const auto initial_band = band_;
+
+//    if (verbose)
+//    {
+//        std::cout << "Pre Point, bubble size, Angles:\n";
+//        for (size_t idx = 0; idx < band_.size(); ++idx)
+//        {
+//            std::cout << std::setprecision(12) << band_[idx].transpose();
+//            std::cout << std::setprecision(12) << "    " << getBubbleSize(band_[idx]);
+//            if (idx > 0 && idx + 1 < band_.size())
+//            {
+//                std::cout << std::setprecision(12) << "    " << EigenHelpers::AngleDefinedByPoints(band_[idx - 1], band_[idx], band_[idx + 1]);
+//            }
+//            std::cout << std::endl;
+//        }
+//        std::cout << std::endl;
+//    }
+
 
     for (size_t smoothing_iter = 0; smoothing_iter < smoothing_iterations_; ++smoothing_iter)
     {
@@ -525,11 +628,36 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
             }
             next_band.push_back(curr_prime_projected_to_distance);
 
+//            std::cout << "Original bubble size: " << getBubbleSize(curr)
+//                      << "     New bubble size: " << getBubbleSize(curr_prime_projected_to_distance)
+//                      << "              Change: " << getBubbleSize(curr_prime_projected_to_distance) - getBubbleSize(curr) << std::endl;
+
+//            if (getBubbleSize(curr_prime_projected_to_distance) - getBubbleSize(curr) < 0.0)
+//            {
+//                const auto curr_grid_indices = sdf_.LocationToGridIndex3d(curr);
+//                const auto curr_cell_center = sdf_.GridIndexToLocation(curr_grid_indices[0], curr_grid_indices[1], curr_grid_indices[2]);
+
+//                const auto new_grid_indices = sdf_.LocationToGridIndex3d(curr_prime_projected_to_distance);
+//                const auto new_cell_center = sdf_.GridIndexToLocation(new_grid_indices[0], new_grid_indices[1], new_grid_indices[2]);
+
+//                std::cout << std::setprecision(12)
+//                          << "Original Position: " << curr.transpose() << std::endl
+//                          << "New Position:      " << curr_prime_projected_to_distance.transpose() << std::endl
+//                          << "Orig Cell center:  " << curr_cell_center[0] << " " << curr_cell_center[1] << " " << curr_cell_center[2] << std::endl
+//                          << "New Cell center:   " << new_cell_center[0] << " " << new_cell_center[1] << " " << new_cell_center[2] << std::endl
+//                          << "Original SDF Dist: " << sdf_.Get3d(curr) << std::endl
+//                          << "New SDF Dist:      " << sdf_.Get3d(curr_prime_projected_to_distance) << std::endl
+//                          << "Original SDF EstD: " << sdf_.EstimateDistance3d(curr).first << std::endl
+//                          << "New SDF EstD:      " << sdf_.EstimateDistance3d(curr_prime_projected_to_distance).first << std::endl
+//                          << "SDF Gradient:      " << PrettyPrint::PrettyPrint(sdf_.GetGradient(curr_cell_center[0], curr_cell_center[1], curr_cell_center[2], true), false, " ") << std::endl;
+//            }
+
             if (!next_bubble_overlaps_curr)
             {
                 interpolateBetweenPoints(next_band, next);
             }
         }
+        std::cout << std::endl;
 
         // The end doesn't move, so push that point on at the end, then swap buffers
         next_band.push_back(band_.back());
@@ -540,5 +668,127 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 //        std::cout << PrettyPrint::PrettyPrint(band_, false, "\n") << std::endl << std::endl;
     }
 
+    //    if (verbose)
+//    {
+//        std::cout << PrettyPrint::PrettyPrint(band_, false, "\n") << std::endl << std::endl;
+//        std::cout << "Post Point, bubble size, Angles:\n";
+//        for (size_t idx = 0; idx < band_.size(); ++idx)
+//        {
+//            std::cout << std::setprecision(12) << band_[idx].transpose();
+//            std::cout << std::setprecision(12) << "    " << getBubbleSize(band_[idx]);
+//            if (idx > 0 && idx + 1 < band_.size())
+//            {
+//                std::cout << std::setprecision(12) << "    " << EigenHelpers::AngleDefinedByPoints(band_[idx - 1], band_[idx], band_[idx + 1]);
+//            }
+//            std::cout << std::endl;
+//        }
+//        std::cout << std::endl;
+//    }
+
     assert(bandIsValidWithVisualization());
 }
+
+
+
+
+void QuinlanRubberBand::storeBand() const
+{
+    try
+    {
+        const auto log_folder = ROSHelpers::GetParamRequired<std::string>(ph_, "log_folder", __func__);
+        if (!log_folder.Valid())
+        {
+            throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
+        }
+        arc_utilities::CreateDirectory(log_folder.GetImmutable());
+        const auto file_name_prefix = ROSHelpers::GetParamRequired<std::string>(ph_, "band_file_name_prefix", __func__);
+        if (!file_name_prefix.Valid())
+        {
+            throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_prefix from parameter server");
+        }
+
+        // Get a time string formated as YYYY-MM-DD__HH-MM-SS-milliseconds
+
+
+
+        // https://stackoverflow.com/questions/24686846/get-current-time-in-milliseconds-or-hhmmssmmm-format
+        using namespace std::chrono;
+
+        // get current time
+        const auto now = system_clock::now();
+
+        // get number of milliseconds for the current second
+        // (remainder after division into seconds)
+        const auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
+
+        // convert to std::time_t in order to convert to std::tm (broken time)
+        const auto timer = system_clock::to_time_t(now);
+
+        // convert to broken time
+        std::tm bt = *std::localtime(&timer);
+
+        std::ostringstream oss;
+        oss << std::put_time(&bt, "%Y-%m-%d__%H-%M-%S");
+        oss << '-' << std::setfill('0') << std::setw(3) << ms.count();
+        const std::string file_name_suffix = oss.str();
+
+
+
+
+        const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
+        const std::string full_path = log_folder.GetImmutable() + file_name;
+        ROS_INFO_STREAM("Saving band to " << full_path);
+
+        std::vector<uint8_t> buffer;
+        arc_utilities::SerializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+                    band_, buffer, &arc_utilities::SerializeEigenVector3d);
+        ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
+    }
+    catch (const std::exception& e)
+    {
+        ROS_ERROR_STREAM("Failed to store band: "  <<  e.what());
+    }
+}
+
+void QuinlanRubberBand::loadStoredBand()
+{
+    try
+    {
+        const auto log_folder = ROSHelpers::GetParamRequired<std::string>(ph_, "log_folder", __func__);
+        if (!log_folder.Valid())
+        {
+            throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
+        }
+        const auto file_name_prefix = ROSHelpers::GetParamRequired<std::string>(ph_, "band_file_name_prefix", __func__);
+        if (!file_name_prefix.Valid())
+        {
+            throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_prefix from parameter server");
+        }
+        const auto file_name_suffix = ROSHelpers::GetParamRequired<std::string>(ph_, "band_file_name_suffix_to_load", __func__);
+        if (!file_name_suffix.Valid())
+        {
+            throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_suffix_to_load from parameter server");
+        }
+
+        const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix.GetImmutable() + ".compressed";
+        const std::string full_path = log_folder.GetImmutable() + file_name;
+        ROS_INFO_STREAM("Loading band from " << full_path);
+
+        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(full_path);
+        const auto deserialized_results = arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+                    buffer, 0, &arc_utilities::DeserializeEigenVector3d);
+        band_ = deserialized_results.first;
+
+    }
+    catch (const std::exception& e)
+    {
+        ROS_ERROR_STREAM("Failed to load stored band: "  <<  e.what());
+    }
+}
+
+bool QuinlanRubberBand::useStoredBand() const
+{
+    return ROSHelpers::GetParam<bool>(ph_, "use_stored_band", false);
+}
+
+

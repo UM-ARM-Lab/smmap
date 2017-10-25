@@ -57,6 +57,7 @@ namespace smmap
                 const bool visualization_enabled) const;
 
     private:
+        ros::NodeHandle ph_;
         const std::shared_ptr<DijkstrasCoverageTask> task_;
         const sdf_tools::SignedDistanceField& sdf_;
         const Visualizer& vis_;
@@ -67,6 +68,8 @@ namespace smmap
         const double min_overlap_distance_;
         const double min_distance_to_obstacle_;
         const double node_removal_overlap_factor_;
+        const double backtrack_threshold_;
+        const double collision_margin_;
         const size_t smoothing_iterations_;
 
         Eigen::Vector3d projectToValidBubble(const Eigen::Vector3d& location) const;
@@ -83,6 +86,10 @@ namespace smmap
         void interpolateBandPoints();
         void removeExtraBandPoints();
         void smoothBandPoints(const bool verbose);
+
+        void storeBand() const;
+        void loadStoredBand();
+        bool useStoredBand() const;
     };
 }
 

@@ -341,6 +341,12 @@ void Visualizer::visualizeSpheres(
             marker.pose.orientation.w = 1.0;
             marker.color = colors[idx];
             visualization_marker_pub_.publish(marker);
+
+            if (idx % 100 == 0)
+            {
+                ros::spinOnce();
+                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+            }
         }
     }
 }
