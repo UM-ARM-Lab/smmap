@@ -70,12 +70,14 @@ double RRTConfig::distance(const RRTConfig& other) const
 
 double RRTConfig::distance(const RRTConfig& c1, const RRTConfig& c2)
 {
+#ifdef DTW_DISTANCE
     const auto distance_fn = [] (const Eigen::Vector3d p1, const Eigen::Vector3d p2)
     {
         return (p1 - p2).norm();
     };
     return simple_dtw::ComputeDTWDistance(c1.getBand().getVectorRepresentation(), c2.getBand().getVectorRepresentation(), distance_fn);
-//    return RRTConfig::distance(c1.getGrippers(), c2.getGrippers());
+#endif
+    return RRTConfig::distance(c1.getGrippers(), c2.getGrippers());
 }
 
 double RRTConfig::distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2)
@@ -609,7 +611,11 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     };
     const auto sampling_fn = [&] ()
     {
+#ifdef PRM_SAMPLING
         return configSampling();
+#endif
+        const RRTConfig sample_config(posPairSampling(), start.getBand(), false);
+        return sample_config;
     };
     const auto nearest_neighbor_fn = [&] (const std::vector<ExternalRRTState>& nodes, const RRTConfig& config)
     {

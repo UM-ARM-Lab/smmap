@@ -657,7 +657,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
                 interpolateBetweenPoints(next_band, next);
             }
         }
-        std::cout << std::endl;
+//        std::cout << std::endl;
 
         // The end doesn't move, so push that point on at the end, then swap buffers
         next_band.push_back(band_.back());
@@ -693,6 +693,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 
 void QuinlanRubberBand::storeBand() const
 {
+    return;
     try
     {
         const auto log_folder = ROSHelpers::GetParamRequired<std::string>(ph_, "log_folder", __func__);
@@ -788,6 +789,7 @@ void QuinlanRubberBand::loadStoredBand()
 
 bool QuinlanRubberBand::useStoredBand() const
 {
+    return false;
     return ROSHelpers::GetParam<bool>(ph_, "use_stored_band", false);
 }
 
