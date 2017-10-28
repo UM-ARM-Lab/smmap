@@ -84,8 +84,10 @@ namespace smmap
                 EigenHelpers::VectorVector3d& point_buffer,
                 const Eigen::Vector3d& target) const;
         void interpolateBandPoints();
-        void removeExtraBandPoints();
+        void removeExtraBandPoints(const bool verbose);
         void smoothBandPoints(const bool verbose);
+
+        void printBandData() const;
 
         void storeBand() const;
         void loadStoredBand();

@@ -275,7 +275,45 @@ int64_t RRTHelper::nearestNeighbour_internal(
     return nn_idx;
 }
 
-RRTGrippersRepresentation RRTHelper::posPairSampling()
+RRTConfig RRTHelper::configSampling()
+{
+    Stopwatch stopwatch;
+
+    arc_helpers::DoNotOptimize(grippers_goal_position_);
+#ifdef PRM_SAMPLING
+    const RRTConfig sample = prmBasedSampling_internal();
+#else
+    const RRTConfig sample(posPairSampling_internal(), *starting_band_, false);
+#endif
+    arc_helpers::DoNotOptimize(sample.getGrippers());
+
+    const double sampling_time = stopwatch(READ);
+    total_sampling_time_ += sampling_time;
+
+    return sample;
+}
+
+RRTConfig RRTHelper::prmBasedSampling_internal()
+{
+    const RRTGrippersRepresentation rand_grippers_sample = posPairSampling_internal();
+    const bool goal_is_target_config = gripperPositionsAreApproximatelyEqual(grippers_goal_position_, rand_grippers_sample);
+
+    // If we've sampled the goal, then keep sampling until the result is not visible to the blacklist
+    EigenHelpers::VectorVector3d band_path;
+    do
+    {
+        band_path = prm_helper_->getRandomPath(rand_grippers_sample.first, rand_grippers_sample.second);
+    }
+    while (goal_is_target_config && isBandFirstOrderVisibileToBlacklist(band_path));
+
+    RubberBand band(*starting_band_);
+    band.setPointsWithoutSmoothing(band_path);
+    band.visualize(PRMHelper::PRM_RANDOM_PATH_NS, Visualizer::Orange(), Visualizer::Orange(), 1, visualization_enabled_globally_);
+
+    return RRTConfig(rand_grippers_sample, band, false);
+}
+
+RRTGrippersRepresentation RRTHelper::posPairSampling_internal()
 {
     RRTGrippersRepresentation rand_sample;
     const bool sample_goal = uniform_unit_distribution_(generator_) < goal_bias_;
@@ -318,40 +356,6 @@ RRTGrippersRepresentation RRTHelper::posPairSampling()
     }
 
     return rand_sample;
-}
-
-RRTConfig RRTHelper::configSampling()
-{
-    Stopwatch stopwatch;
-
-    arc_helpers::DoNotOptimize(grippers_goal_position_);
-    RRTConfig sample = configSampling_internal();
-    arc_helpers::DoNotOptimize(sample.getGrippers());
-
-    const double sampling_time = stopwatch(READ);
-    total_sampling_time_ += sampling_time;
-
-    return sample;
-}
-
-RRTConfig RRTHelper::configSampling_internal()
-{
-    const RRTGrippersRepresentation rand_grippers_sample = posPairSampling();
-    const bool goal_is_target_config = gripperPositionsAreApproximatelyEqual(grippers_goal_position_, rand_grippers_sample);
-
-    // If we've sampled the goal, then keep sampling until the result is not visible to the blacklist
-    EigenHelpers::VectorVector3d band_path;
-    do
-    {
-        band_path = prm_helper_->getRandomPath(rand_grippers_sample.first, rand_grippers_sample.second);
-    }
-    while (goal_is_target_config && isBandFirstOrderVisibileToBlacklist(band_path));
-
-    RubberBand band(*starting_band_);
-    band.setPointsWithoutSmoothing(band_path);
-    band.visualize(PRMHelper::PRM_RANDOM_PATH_NS, Visualizer::Orange(), Visualizer::Orange(), 1, visualization_enabled_globally_);
-
-    return RRTConfig(rand_grippers_sample, band, false);
 }
 
 bool RRTHelper::goalReached(const RRTConfig& node)
@@ -470,7 +474,9 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
 
         // If the grippers enter collision, then return however far we were able to get
         if ((environment_sdf_.EstimateDistance3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
-            (environment_sdf_.EstimateDistance3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_))
+            (environment_sdf_.EstimateDistance3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_) ||
+            (environment_sdf_.DistanceToBoundary3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
+            (environment_sdf_.DistanceToBoundary3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_))
         {
 //            if (visualization_enabled_locally)
 //            {
@@ -611,11 +617,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     };
     const auto sampling_fn = [&] ()
     {
-#ifdef PRM_SAMPLING
         return configSampling();
-#endif
-        const RRTConfig sample_config(posPairSampling(), start.getBand(), false);
-        return sample_config;
     };
     const auto nearest_neighbor_fn = [&] (const std::vector<ExternalRRTState>& nodes, const RRTConfig& config)
     {

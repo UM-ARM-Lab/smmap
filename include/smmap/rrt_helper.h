@@ -135,13 +135,11 @@ namespace smmap
                     const std::vector<ExternalRRTState>& nodes,
                     const RRTConfig& config);
 
-            RRTGrippersRepresentation posPairSampling();
-
             RRTConfig configSampling();
-
             // Used for timing purposes
             // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
-            RRTConfig configSampling_internal();
+            RRTConfig prmBasedSampling_internal();
+            RRTGrippersRepresentation posPairSampling_internal();
 
             bool goalReached(const RRTConfig& node);
 

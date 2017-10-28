@@ -250,8 +250,7 @@ void Visualizer::visualizePoints(
 {
     if (!disable_all_visualizations_)
     {
-        std::vector<std_msgs::ColorRGBA> colors(points.size(), color);
-
+        const std::vector<std_msgs::ColorRGBA> colors(points.size(), color);
         visualizePoints(marker_name, points, colors, id, scale);
     }
 }
@@ -458,9 +457,9 @@ void Visualizer::visualizeGripper(
         geometry_msgs::Point p;
         p.x = 0.0;
         p.y = 0.0;
-        p.z = gripper_apperture_;
+        p.z = gripper_apperture_ * 0.5;
         marker.points.push_back(p);
-        p.z = -gripper_apperture_;
+        p.z = -gripper_apperture_ * 0.5;
         marker.points.push_back(p);
 
         visualization_marker_pub_.publish(marker);
