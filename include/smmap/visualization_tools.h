@@ -13,18 +13,18 @@ namespace smmap
     {
         public:
             static void InitializeStandardColors();
-            static std_msgs::ColorRGBA Red();
-            static std_msgs::ColorRGBA Green();
-            static std_msgs::ColorRGBA Blue();
-            static std_msgs::ColorRGBA Black();
-            static std_msgs::ColorRGBA Magenta();
-            static std_msgs::ColorRGBA Yellow();
-            static std_msgs::ColorRGBA Cyan();
-            static std_msgs::ColorRGBA White();
-            static std_msgs::ColorRGBA Silver();
-            static std_msgs::ColorRGBA Coral();
-            static std_msgs::ColorRGBA Olive();
-            static std_msgs::ColorRGBA Orange();
+            static std_msgs::ColorRGBA Red(const float alpha = 1.0f);
+            static std_msgs::ColorRGBA Green(const float alpha = 1.0f);
+            static std_msgs::ColorRGBA Blue(const float alpha = 1.0f);
+            static std_msgs::ColorRGBA Black(const float alpha = 1.0f);
+            static std_msgs::ColorRGBA Magenta(const float alpha = 1.0f);
+            static std_msgs::ColorRGBA Yellow(const float alpha = 1.0f);
+            static std_msgs::ColorRGBA Cyan(const float alpha = 1.0f);
+            static std_msgs::ColorRGBA White(const float alpha = 1.0f);
+            static std_msgs::ColorRGBA Silver(const float alpha = 1.0f);
+            static std_msgs::ColorRGBA Coral(const float alpha = 1.0f);
+            static std_msgs::ColorRGBA Olive(const float alpha = 1.0f);
+            static std_msgs::ColorRGBA Orange(const float alpha = 1.0f);
 
         public:
             Visualizer(ros::NodeHandle& nh, ros::NodeHandle& ph);
@@ -66,9 +66,21 @@ namespace smmap
 
             void visualizeSpheres(const std::string& marker_name,
                     const EigenHelpers::VectorVector3d& points,
-                    const std::vector<double>& radiuses,
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t starting_id,
+                    const double& radius) const;
+
+            void visualizeSpheres(const std::string& marker_name,
+                    const EigenHelpers::VectorVector3d& points,
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t starting_id,
+                    const std::vector<double>& radiuses) const;
+
+            void visualizeSpheres(const std::string& marker_name,
+                    const EigenHelpers::VectorVector3d& points,
                     const std::vector<std_msgs::ColorRGBA>& colors,
-                    const int32_t starting_id) const;
+                    const int32_t starting_id,
+                    const std::vector<double>& radiuses) const;
 
             void visualizeRope(
                     const std::string& marker_name,

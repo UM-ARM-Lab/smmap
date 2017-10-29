@@ -88,76 +88,100 @@ void Visualizer::InitializeStandardColors()
     standard_colors_initialized_ = true;
 }
 
-std_msgs::ColorRGBA Visualizer::Red()
+std_msgs::ColorRGBA Visualizer::Red(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return red_;
+    auto color = red_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Green()
+std_msgs::ColorRGBA Visualizer::Green(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return green_;
+    auto color = green_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Blue()
+std_msgs::ColorRGBA Visualizer::Blue(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return blue_;
+    auto color = blue_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Black()
+std_msgs::ColorRGBA Visualizer::Black(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return black_;
+    auto color = black_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Magenta()
+std_msgs::ColorRGBA Visualizer::Magenta(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return magenta_;
+    auto color = magenta_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Yellow()
+std_msgs::ColorRGBA Visualizer::Yellow(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return yellow_;
+    auto color = yellow_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Cyan()
+std_msgs::ColorRGBA Visualizer::Cyan(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return cyan_;
+    auto color = cyan_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::White()
+std_msgs::ColorRGBA Visualizer::White(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return white_;
+    auto color = white_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Silver()
+std_msgs::ColorRGBA Visualizer::Silver(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return silver_;
+    auto color = silver_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Coral()
+std_msgs::ColorRGBA Visualizer::Coral(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return coral_;
+    auto color = coral_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Olive()
+std_msgs::ColorRGBA Visualizer::Olive(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return olive_;
+    auto color = olive_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Orange()
+std_msgs::ColorRGBA Visualizer::Orange(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return orange_;
+    auto color = orange_;
+    color.a = alpha;
+    return color;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -307,12 +331,37 @@ void Visualizer::visualizeCubes(
     }
 }
 
+void Visualizer::visualizeSpheres(const std::string& marker_name,
+        const EigenHelpers::VectorVector3d& points,
+        const std_msgs::ColorRGBA& color,
+        const int32_t starting_id,
+        const double& radius) const
+{
+    const std::vector<std_msgs::ColorRGBA> colors(points.size(), color);
+    const std::vector<double> radiuses(points.size(), radius);
+    visualizeSpheres(marker_name, points, colors, starting_id, radiuses);
+}
+
 void Visualizer::visualizeSpheres(
         const std::string& marker_name,
         const EigenHelpers::VectorVector3d& points,
-        const std::vector<double>& radiuses,
+        const std_msgs::ColorRGBA& color,
+        const int32_t starting_id,
+        const std::vector<double>& radiuses) const
+{
+    if (!disable_all_visualizations_)
+    {
+        const std::vector<std_msgs::ColorRGBA> colors(points.size(), color);
+        visualizeSpheres(marker_name, points, colors, starting_id, radiuses);
+    }
+}
+
+void Visualizer::visualizeSpheres(
+        const std::string& marker_name,
+        const EigenHelpers::VectorVector3d& points,
         const std::vector<std_msgs::ColorRGBA>& colors,
-        const int32_t starting_id) const
+        const int32_t starting_id,
+        const std::vector<double>& radiuses) const
 {
     if (!disable_all_visualizations_)
     {
