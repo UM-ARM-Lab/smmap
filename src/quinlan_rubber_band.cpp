@@ -2,6 +2,7 @@
 #include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/serialization_eigen.hpp>
 #include "smmap/quinlan_rubber_band.h"
+#include <thread>
 
 using namespace smmap;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
@@ -31,14 +32,15 @@ QuinlanRubberBand::QuinlanRubberBand(
     , vis_(vis)
     , max_total_band_distance_(max_total_band_distance)
     , min_overlap_distance_(sdf_.GetResolution() * 0.05)
-    , min_distance_to_obstacle_(min_overlap_distance_ * 2.0)
+    , min_distance_to_obstacle_(sdf_.GetResolution() * 0.2)
     , node_removal_overlap_factor_(1.2)
     , backtrack_threshold_(0.1)
-    , collision_margin_(sdf_.GetResolution() / std::sqrt(2.0))
-    , smoothing_iterations_(200)
+//    , collision_margin_(sdf_.GetResolution() / std::sqrt(2.0))
+    , smoothing_iterations_(100)
 {
     (void)generator;
     setPointsAndSmooth(starting_points);
+    assert(bandIsValidWithVisualization());
 }
 
 QuinlanRubberBand& QuinlanRubberBand::operator=(const QuinlanRubberBand& other)
@@ -50,9 +52,7 @@ QuinlanRubberBand& QuinlanRubberBand::operator=(const QuinlanRubberBand& other)
     assert(max_total_band_distance_ == other.max_total_band_distance_);
 
     band_ = other.band_;
-
-
-
+#if ENABLE_DEBUGGING
     if (useStoredBand())
     {
         loadStoredBand();
@@ -61,11 +61,9 @@ QuinlanRubberBand& QuinlanRubberBand::operator=(const QuinlanRubberBand& other)
     {
         storeBand();
     }
+#endif
 
-
-
-    assert(bandIsValid());
-
+    assert(bandIsValidWithVisualization());
     return *this;
 }
 
@@ -73,6 +71,7 @@ void QuinlanRubberBand::setPointsWithoutSmoothing(const EigenHelpers::VectorVect
 {
     band_ = points;
 
+#if ENABLE_DEBUGGING
     if (useStoredBand())
     {
         loadStoredBand();
@@ -81,23 +80,24 @@ void QuinlanRubberBand::setPointsWithoutSmoothing(const EigenHelpers::VectorVect
     {
         storeBand();
     }
+#endif
 
     for (auto& point: band_)
     {
         point = projectToValidBubble(point);
-        assert(getBubbleSize(point) >= min_distance_to_obstacle_ &&
-               "Every point in the band must be inside the valid region of the SDF");
     }
     interpolateBandPoints();
-    const bool verbose = false;
+    const bool verbose = true;
     removeExtraBandPoints(verbose);
+    assert(bandIsValidWithVisualization());
 }
 
 void QuinlanRubberBand::setPointsAndSmooth(const EigenHelpers::VectorVector3d& points)
 {
     setPointsWithoutSmoothing(points);
-    const bool verbose = false;
+    const bool verbose = true;
     smoothBandPoints(verbose);
+    assert(bandIsValidWithVisualization());
 }
 
 /**
@@ -114,15 +114,14 @@ const EigenHelpers::VectorVector3d& QuinlanRubberBand::forwardPropagateRubberBan
         const Eigen::Vector3d second_endpoint_target,
         bool verbose)
 {
+    assert(bandIsValidWithVisualization());
+
     // Ensure that the new points are both in bounds, and are at least min_distance_to_obstacle_ from anything
-//    assert(getBubbleSize(first_endpoint_target) >= min_distance_to_obstacle_);
-//    assert(getBubbleSize(second_endpoint_target) >= min_distance_to_obstacle_);
     // Add the new endpoints, then let the interpolate and smooth process handle the propogation
     band_.insert(band_.begin(), projectToValidBubble(first_endpoint_target));
     band_.push_back(projectToValidBubble(second_endpoint_target));
 
-
-
+#if ENABLE_DEBUGGING
     if (useStoredBand())
     {
         loadStoredBand();
@@ -131,14 +130,20 @@ const EigenHelpers::VectorVector3d& QuinlanRubberBand::forwardPropagateRubberBan
     {
         storeBand();
     }
+#endif
 
-
-
+    verbose = true;
     interpolateBandPoints();
     removeExtraBandPoints(verbose);
     smoothBandPoints(verbose);
+
+    assert(bandIsValidWithVisualization());
     return band_;
 }
+
+
+
+
 
 const EigenHelpers::VectorVector3d& QuinlanRubberBand::getVectorRepresentation() const
 {
@@ -198,19 +203,16 @@ void QuinlanRubberBand::visualizeWithBubbles(
         visualize(marker_name, safe_color, overstretched_color, id, visualization_enabled);
 
         // Delete all sphere, markers, probably from just this publisher, and then republish
-        if (false)
+#if ENABLE_DEBUGGING
         {
-//            visualization_msgs::Marker marker;
-//            marker.action = visualization_msgs::Marker::DELETEALL;
-//            vis_.publish(marker);
-
-//            vis_.deleteObjects(marker_name + "_bubbles", 1, 305);
+            vis_.deleteObjects(marker_name + "_bubbles", 1, 305);
+            std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
 
             std::vector<double> bubble_sizes(band_.size());
             std::vector<std_msgs::ColorRGBA> colors(band_.size());
             for (size_t idx = 0; idx < band_.size(); ++idx)
             {
-                bubble_sizes[idx] = sdf_.EstimateDistance3d(band_[idx]).first;
+                bubble_sizes[idx] = getBubbleSize(band_[idx]);
                 colors[idx] = ColorBuilder::MakeFromFloatColors(
                             (float)idx / (float)(band_.size() - 1),
                             0.0f,
@@ -218,76 +220,72 @@ void QuinlanRubberBand::visualizeWithBubbles(
                             0.3f);
             }
             vis_.visualizeSpheres(marker_name + "_bubbles", band_, bubble_sizes, colors, id);
+            std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
         }
+#endif
     }
 }
 
 
 
+
+
+
 Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& location) const
 {
-    const double distance = getBubbleSize(location);
-    if (distance >= min_overlap_distance_)
+    if (getBubbleSize(location) >= min_overlap_distance_)
     {
         return location;
     }
 
-    const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_ + collision_margin_ * 1.00000000001);
+    const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);// + collision_margin_);
     const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);
 
-    const auto distance_to_boundary = sdf_.DistanceToBoundary3d(post_boundary_project);
-    const auto distance_to_obstacles = sdf_.EstimateDistance3d(post_boundary_project);
-
-    if (distance_to_boundary.first < min_distance_to_obstacle_ ||
-        distance_to_obstacles.first - collision_margin_ < min_distance_to_obstacle_)
+#if ENABLE_DEBUGGING
+    if (false)
     {
-        constexpr int p = 20;
-        std::cerr << std::setprecision(p) << "location:                                                                 " << location.transpose() << std::endl;
+        const auto distance_to_boundary = sdf_.DistanceToBoundary3d(post_boundary_project);
+        const auto distance_to_obstacles = sdf_.EstimateDistance3d(post_boundary_project);
 
-        const auto starting_distance_to_boundary = sdf_.DistanceToBoundary3d(location);
-        const auto starting_distance_to_obstacles = sdf_.EstimateDistance3d(location);
+        if (distance_to_boundary.first < min_distance_to_obstacle_ ||
+    //        distance_to_obstacles.first - collision_margin_ < min_distance_to_obstacle_)
+            distance_to_obstacles.first < min_distance_to_obstacle_)
+        {
+            constexpr int p = 20;
+            std::cerr << std::setprecision(p) << "location:                                                                 " << location.transpose() << std::endl;
 
-        std::cerr << std::setprecision(p) << "Starting dist to obstacle: " << starting_distance_to_obstacles.first << std::endl;
-        std::cerr << std::setprecision(p) << "Starting dist to boundary: " << starting_distance_to_boundary.first << std::endl;
+            const auto starting_distance_to_boundary = sdf_.DistanceToBoundary3d(location);
+            const auto starting_distance_to_obstacles = sdf_.EstimateDistance3d(location);
 
-        std::cerr << std::setprecision(p) << "Final dist to obstacle:    " << distance_to_obstacles.first << std::endl;
-        std::cerr << std::setprecision(p) << "Final dist to boundary:    " << distance_to_boundary.first << std::endl;
+            std::cerr << std::setprecision(p) << "Starting dist to obstacle: " << starting_distance_to_obstacles.first << std::endl;
+            std::cerr << std::setprecision(p) << "Starting dist to boundary: " << starting_distance_to_boundary.first << std::endl;
 
-        std::cerr << std::setprecision(p) << "collision - location:      " << (post_collision_project - location).norm() << std::endl;
-        std::cerr << std::setprecision(p) << "boundary - collision:      " << (post_boundary_project - post_collision_project).norm() << std::endl;
+            std::cerr << std::setprecision(p) << "Final dist to obstacle:    " << distance_to_obstacles.first << std::endl;
+            std::cerr << std::setprecision(p) << "Final dist to boundary:    " << distance_to_boundary.first << std::endl;
 
-        std::cerr << std::setprecision(p) << "Post boundary value:                                                      " << post_boundary_project.transpose() << std::endl;
+            std::cerr << std::setprecision(p) << "collision - location:      " << (post_collision_project - location).norm() << std::endl;
+            std::cerr << std::setprecision(p) << "boundary - collision:      " << (post_boundary_project - post_collision_project).norm() << std::endl;
 
-        const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
-        const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_ + collision_margin_ * 1.00000000001);
+            std::cerr << std::setprecision(p) << "Post boundary value:                                                      " << post_boundary_project.transpose() << std::endl;
+
+            const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
+            const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);// + collision_margin_ * 1.00000000001);
+        }
     }
 
-
     assert(getBubbleSize(post_boundary_project) >= min_distance_to_obstacle_);
+#endif
     return post_boundary_project;
 }
 
 double QuinlanRubberBand::getBubbleSize(const Eigen::Vector3d& location) const
 {
     const Eigen::Vector4d loc_4d(location.x(), location.y(), location.z(), 1.0);
-    auto distance_to_boundary = sdf_.DistanceToBoundary4d(loc_4d);
-//    const auto distance_to_obstacles = sdf_.EstimateDistance4d(loc_4d);
-    const auto distance_to_obstacles = sdf_.GetSafe4d(loc_4d);
-//    assert(distance_to_boundary.second == distance_to_obstacles.second);
-
-
-    // TODO: HACK!!! - if the point is inside the SDF, but far from the floor, report the distance to the boundary as the same as the distance to obstacles
-    // Needed for table experiment as there is no side walls, may need something similar for rope maze
-    if (distance_to_obstacles.second &&
-        (location.z() > sdf_.GridIndexToLocation(0.0, 0.0, 0.0)[2]) + sdf_.GetResolution() * 2.0)
-    {
-        distance_to_boundary = distance_to_boundary;
-    }
-
-
-
-    const auto distance = std::min(distance_to_boundary.first, (double)distance_to_obstacles.first - collision_margin_);
-//    std::cout << location.transpose() << " Estimate dist: " << distance_to_obstacles.first << " Boundary dist: " << distance_to_boundary.first << std::endl;
+    const auto distance_to_boundary = sdf_.DistanceToBoundary4d(loc_4d);
+    const auto distance_to_obstacles = sdf_.EstimateDistance4d(loc_4d);
+    assert(distance_to_boundary.second == distance_to_obstacles.second);
+    const auto distance = std::min(distance_to_boundary.first, distance_to_obstacles.first);
+//    std::cout << std::setprecision(12) << std::setw(15) << location.transpose() << " Estimate dist: " << distance_to_obstacles.first << " Boundary dist: " << distance_to_boundary.first << " Reported distance: " << distance << std::endl;
     return distance;
 }
 
@@ -301,6 +299,9 @@ bool QuinlanRubberBand::sufficientOverlap(
 
 bool QuinlanRubberBand::bandIsValid() const
 {
+#if !ENABLE_DEBUGGING
+    return true;
+#endif
     if (band_.size() < 2)
     {
         return false;
@@ -308,15 +309,17 @@ bool QuinlanRubberBand::bandIsValid() const
 
     for (size_t node_idx = 0; node_idx < band_.size() - 1; ++node_idx)
     {
-        const auto& curr_node = band_[node_idx];
-        assert(sdf_.CheckInBounds3d(curr_node));
-        const auto& next_node = band_[node_idx + 1];
-        const double dist = (curr_node - next_node).norm();
-        const double curr_bubble_size = getBubbleSize(curr_node);
-        const double next_bubble_size = getBubbleSize(next_node);
-        if (!sufficientOverlap(curr_bubble_size, next_bubble_size, dist))
+        const auto& curr = band_[node_idx];
+        const auto& next = band_[node_idx + 1];
+        const double curr_bubble_size = getBubbleSize(curr);
+        const double next_bubble_size = getBubbleSize(next);
+        const double dist = (curr - next).norm();
+        if (!sdf_.CheckInBounds3d(curr) ||
+            curr_bubble_size < min_distance_to_obstacle_ ||
+            !sufficientOverlap(curr_bubble_size, next_bubble_size, dist))
         {
             std::cerr << "Problem between node " << node_idx << " and " << node_idx + 1 << std::endl
+                      << "In bounds: " << sdf_.CheckInBounds3d(curr) << std::endl
                       << "Curr bubble size: " << curr_bubble_size << std::endl
                       << "Next bubble size: " << next_bubble_size << std::endl
                       << "Curr + next:      " << curr_bubble_size + next_bubble_size << std::endl
@@ -324,28 +327,49 @@ bool QuinlanRubberBand::bandIsValid() const
             return false;
         }
     }
+    if (getBubbleSize(band_.back()) < min_distance_to_obstacle_)
+    {
+        std::cerr << "Problem at last node: "
+                  << "Bubble size:        " << getBubbleSize(band_.back()) << std::endl;
+        return false;
+    }
 
     return true;
 }
 
 bool QuinlanRubberBand::bandIsValidWithVisualization() const
 {
+#if !ENABLE_DEBUGGING
+    return true;
+#endif
     if (!bandIsValid())
     {
-        visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
-
-        std::cout << "Num points: " << band_.size() << std::endl;
-        std::cout << PrettyPrint::PrettyPrint(band_, false, "\n") << std::endl << std::endl;
-
+        visualizeWithBubbles("quinlan_band_something_is_invalid", Visualizer::Black(), Visualizer::Cyan(), 1, true);
+        printBandData();
         return bandIsValid();
     }
     return true;
 }
 
+#if ENABLE_DEBUGGING
+void QuinlanRubberBand::interpolateBetweenPoints(
+        EigenHelpers::VectorVector3d& point_buffer,
+        const Eigen::Vector3d& target)
+#else
 void QuinlanRubberBand::interpolateBetweenPoints(
         EigenHelpers::VectorVector3d& point_buffer,
         const Eigen::Vector3d& target) const
+#endif
 {
+#if ENABLE_DEBUGGING
+    const auto starting_band = band_;
+    band_ = point_buffer;
+    if (point_buffer.size() >= 2)
+    {
+        assert(bandIsValidWithVisualization());
+    }
+#endif
+
     const double target_bubble_size = getBubbleSize(target);
 
     // TODO: verify that this cannot get stuck in an infinite loop
@@ -427,11 +451,19 @@ void QuinlanRubberBand::interpolateBetweenPoints(
         }
         // The bubbles now overlap sufficiently, so accept this point and record the new values
         point_buffer.push_back(test_point);
+#if ENABLE_DEBUGGING
+        band_ = point_buffer;
+        assert(bandIsValidWithVisualization());
+#endif
         curr_bubble_size = test_point_bubble_size;
         distance_to_end = (target - point_buffer.back()).norm();
 
         ++outer_iteration_counter;
     }
+
+#if ENABLE_DEBUGGING
+    band_ = starting_band;
+#endif
 }
 
 /**
@@ -440,11 +472,18 @@ void QuinlanRubberBand::interpolateBetweenPoints(
  */
 void QuinlanRubberBand::interpolateBandPoints()
 {
+#if ENABLE_DEBUGGING
     assert(band_.size() >= 2);
-    for (const auto& point: band_)
+    for (size_t idx = 0; idx < band_.size(); ++idx)
     {
-        assert(getBubbleSize(point) >= min_distance_to_obstacle_);
+        if (getBubbleSize(band_[idx]) < min_distance_to_obstacle_)
+        {
+            std::cerr << "idx: " << idx << " point: " << band_[idx].transpose() << " size: " << getBubbleSize(band_[idx]) << std::endl;
+        }
+
+        assert(getBubbleSize(band_[idx]) >= min_distance_to_obstacle_);
     }
+#endif
 
     EigenHelpers::VectorVector3d new_band(1, band_.front());
     for (size_t idx = 0; idx + 1 < band_.size(); ++idx)
@@ -459,72 +498,73 @@ void QuinlanRubberBand::interpolateBandPoints()
     assert(bandIsValidWithVisualization());
 }
 
-// TODO: Convert this into a single pass by using a "look forward" for overlap condition checker
 void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
 {
     assert(bandIsValidWithVisualization());
-    visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
 
+#if ENABLE_DEBUGGING
     if (verbose)
     {
         std::cout << "Start of removeExtraBandPoints\n";
+        visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
         printBandData();
     }
+#endif
 
-    // Do a forward pass, then a backwards pass to help address issues of non-symmetry
-    // Forward pass
+    // The start can't be removed, so push that point on immediately
+    EigenHelpers::VectorVector3d forward_pass;
+    forward_pass.reserve(band_.size());
+    forward_pass.push_back(band_.front());
+#if ENABLE_DEBUGGING
+    vis_.visualizePoints("remove_extra_test_points_kept_points",   {forward_pass.back()},                                       {ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f)}, (int32_t)forward_pass.size(), 0.002);
+    vis_.visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, {getBubbleSize(forward_pass.back())}, {ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 0.2f)}, (int32_t)forward_pass.size());
+#endif
+
+    for (size_t curr_idx = 1; curr_idx + 1 < band_.size(); ++curr_idx)
     {
-        // The start can't be removed, so push that point on immediately
-        EigenHelpers::VectorVector3d forward_pass;
-        forward_pass.reserve(band_.size());
-        forward_pass.push_back(band_.front());
+        const auto& prev = forward_pass.back();
+        const auto& curr = band_[curr_idx];
+        const auto& next = band_[curr_idx + 1];
 
-        for (size_t curr_idx = 1; curr_idx + 1 < band_.size(); ++curr_idx)
+        const double prev_bubble_size = getBubbleSize(prev);
+        const double curr_bubble_size = getBubbleSize(curr);
+        const double next_bubble_size = getBubbleSize(next);
+
+        const double prev_curr_dist = (prev - curr).norm();
+        const double curr_next_dist = (next - curr).norm();
+        const double prev_next_dist = (next - prev).norm();
+
+        const bool curr_bubble_is_wholey_contained_in_prev =
+                prev_bubble_size > prev_curr_dist + curr_bubble_size + min_overlap_distance_;
+
+        const bool curr_bubble_is_wholey_contained_in_next =
+                next_bubble_size > curr_next_dist + curr_bubble_size + min_overlap_distance_;
+
+        // Discard this point if it is containted in either neighbouring bubble
+        if (curr_bubble_is_wholey_contained_in_prev || curr_bubble_is_wholey_contained_in_next)
         {
-            const auto& prev = forward_pass.back();
-            const auto& curr = band_[curr_idx];
-            const auto& next = band_[curr_idx + 1];
+            continue;
+        }
 
-            const double prev_bubble_size = getBubbleSize(prev);
-            const double curr_bubble_size = getBubbleSize(curr);
-            const double next_bubble_size = getBubbleSize(next);
+        // Discard this point if prev overlaps next by enough
+        if (sufficientOverlap(prev_bubble_size, next_bubble_size, prev_next_dist * node_removal_overlap_factor_))
+        {
+            continue;
+        }
 
-            const double prev_curr_dist = (prev - curr).norm();
-            const double curr_next_dist = (next - curr).norm();
+        // Discard this point if it is too close to the previous, or too close to the next
+        if (prev.isApprox(curr) || next.isApprox(curr))
+        {
+            continue;
+        }
 
-            const bool curr_bubble_is_wholey_contained_in_prev =
-                    prev_bubble_size >= prev_curr_dist + curr_bubble_size + min_overlap_distance_;
+        // Only keep points if they do not backtrack
+        const double angle_defined_by_points = EigenHelpers::AngleDefinedByPoints(prev, curr, next);
+        assert(angle_defined_by_points >= 0.0);
+        const bool band_backtracks = angle_defined_by_points < backtrack_threshold_;
 
-            // Discard this point if it is containted in the previous bubble entirely
-            if (curr_bubble_is_wholey_contained_in_prev)
-            {
-                continue;
-            }
-
-            const bool prev_bubble_overlaps_curr_center_by_minimum =
-                    prev_bubble_size >= prev_curr_dist * node_removal_overlap_factor_ + min_overlap_distance_;
-            const bool next_bubble_overlaps_curr_center_by_minimum =
-                    next_bubble_size >= curr_next_dist * node_removal_overlap_factor_ + min_overlap_distance_;
-
-            // Discard this point if there is sufficient overlap for the neighbouring bubbles
-            if (prev_bubble_overlaps_curr_center_by_minimum && next_bubble_overlaps_curr_center_by_minimum)
-            {
-                continue;
-            }
-
-            // Discard this point if it is too close to the previous, or too close to the next
-            if (prev.isApprox(curr) || next.isApprox(curr))
-            {
-                continue;
-            }
-
-            // Only keep points if they do not backtrack
-            const double angle_defined_by_points = EigenHelpers::AngleDefinedByPoints(prev, curr, next);
-            assert(angle_defined_by_points >= 0.0);
-            const bool band_backtracks = angle_defined_by_points < backtrack_threshold_;
-
-            if (band_backtracks)
-            {
+        if (band_backtracks)
+        {
 //                std::cout << "Backtrack detected\n";
 
 //                vis_.visualizePoints("prev", {prev}, Visualizer::Blue(), 1, 0.01);
@@ -536,95 +576,47 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
 //                std::cout << next.transpose() << std::endl;
 //                std::cout << angle_defined_by_points << std::endl;
 //                std::cout << std::endl;
-                continue;
-            }
-
-            // If no item said we should delete this item, then keep it
-            forward_pass.push_back(curr);
+            continue;
         }
-        forward_pass.push_back(band_.back());
 
-        band_ = forward_pass;
-        visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
-        assert(bandIsValidWithVisualization());
-    }
-
-    // Backward pass
-    {
-        EigenHelpers::VectorVector3d backward_pass;
-        backward_pass.reserve(band_.size());
-        backward_pass.push_back(band_.back());
-
-        for (size_t curr_idx = band_.size() - 2; curr_idx > 0; --curr_idx)
+#if ENABLE_DEBUGGING
+        if (verbose)
         {
-            const auto& prev = backward_pass.back();
-            const auto& curr = band_[curr_idx];
-            const auto& next = band_[curr_idx - 1];
+            vis_.visualizePoints("remove_extra_test_prev", {prev}, {ColorBuilder::MakeFromFloatColors(1.0f, 0.0f, 0.0f, 1.0f)}, 1, 0.002);
+            vis_.visualizePoints("remove_extra_test_curr", {curr}, {ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 0.0f, 1.0f)}, 1, 0.002);
+            vis_.visualizePoints("remove_extra_test_next", {next}, {ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 1.0f, 1.0f)}, 1, 0.002);
 
-            const double prev_bubble_size = getBubbleSize(prev);
-            const double curr_bubble_size = getBubbleSize(curr);
-            const double next_bubble_size = getBubbleSize(next);
+            vis_.visualizeSpheres("remove_extra_test_prev", {prev}, {prev_bubble_size}, {ColorBuilder::MakeFromFloatColors(1.0f, 0.0f, 0.0f, 0.2f)}, 2);
+            vis_.visualizeSpheres("remove_extra_test_curr", {curr}, {curr_bubble_size}, {ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 0.0f, 0.2f)}, 2);
+            vis_.visualizeSpheres("remove_extra_test_next", {next}, {next_bubble_size}, {ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 1.0f, 0.2f)}, 2);
+            std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
 
-            const double prev_curr_dist = (prev - curr).norm();
-            const double curr_next_dist = (next - curr).norm();
 
-            const bool curr_bubble_is_wholey_contained_in_prev =
-                    prev_bubble_size >= prev_curr_dist + curr_bubble_size + min_overlap_distance_;
 
-            // Discard this point if it is containted in the previous bubble entirely
-            if (curr_bubble_is_wholey_contained_in_prev)
-            {
-                continue;
-            }
-
-            const bool prev_bubble_overlaps_curr_center_by_minimum =
-                    prev_bubble_size >= prev_curr_dist * node_removal_overlap_factor_ + min_overlap_distance_;
-            const bool next_bubble_overlaps_curr_center_by_minimum =
-                    next_bubble_size >= curr_next_dist * node_removal_overlap_factor_ + min_overlap_distance_;
-
-            // Discard this point if there is sufficient overlap for the neighbouring bubbles
-            if (prev_bubble_overlaps_curr_center_by_minimum && next_bubble_overlaps_curr_center_by_minimum)
-            {
-                continue;
-            }
-
-            // Discard this point if it is too close to the previous, or too close to the next
-            if (prev.isApprox(curr) || next.isApprox(curr))
-            {
-                continue;
-            }
-
-            // Only keep points if they do not backtrack
-            const double angle_defined_by_points = EigenHelpers::AngleDefinedByPoints(prev, curr, next);
-            assert(angle_defined_by_points >= 0.0);
-            const bool band_backtracks = angle_defined_by_points < backtrack_threshold_;
-
-            if (band_backtracks)
-            {
-//                std::cout << "Backtrack detected\n";
-
-//                vis_.visualizePoints("prev", {prev}, Visualizer::Blue(), 1, 0.01);
-//                vis_.visualizePoints("curr", {curr}, Visualizer::Magenta(), 1, 0.01);
-//                vis_.visualizePoints("next", {next}, Visualizer::Red(), 1, 0.01);
-
-//                std::cout << prev.transpose() << std::endl;
-//                std::cout << curr.transpose() << std::endl;
-//                std::cout << next.transpose() << std::endl;
-//                std::cout << angle_defined_by_points << std::endl;
-//                std::cout << std::endl;
-                continue;
-            }
-
-            // If no item said we should delete this item, then keep it
-            backward_pass.push_back(curr);
+            std::cout << "prev bubble size: " << prev_bubble_size << std::endl;
+            std::cout << "curr bubble size: " << curr_bubble_size << std::endl;
+            std::cout << "next bubble size: " << next_bubble_size << std::endl;
+            std::cout << "prev-curr dist:   " << prev_curr_dist << std::endl;
+            std::cout << "curr-next dist:   " << curr_next_dist << std::endl;
+            std::cout << "prev-next dist:   " << prev_next_dist << std::endl;
         }
-        backward_pass.push_back(band_.front());
-
-        band_ = backward_pass;
-        std::reverse(band_.begin(), band_.end());
-        visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
-        assert(bandIsValidWithVisualization());
+#endif
+        // If no item said we should delete this item, then keep it
+        forward_pass.push_back(curr);
+#if ENABLE_DEBUGGING
+        vis_.visualizePoints("remove_extra_test_points_kept_points",   {forward_pass.back()},                                       {ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f)}, (int32_t)forward_pass.size(), 0.002);
+        vis_.visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, {getBubbleSize(forward_pass.back())}, {ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 0.2f)}, (int32_t)forward_pass.size());
+#endif
     }
+    forward_pass.push_back(band_.back());
+#if ENABLE_DEBUGGING
+    vis_.visualizePoints("remove_extra_test_points_kept_points",   {forward_pass.back()},                                       {ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f)}, (int32_t)forward_pass.size(), 0.002);
+    vis_.visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, {getBubbleSize(forward_pass.back())}, {ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 0.2f)}, (int32_t)forward_pass.size());
+#endif
+
+    band_ = forward_pass;
+    visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
+    assert(bandIsValidWithVisualization());
 }
 
 void QuinlanRubberBand::smoothBandPoints(const bool verbose)
@@ -633,12 +625,14 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 
     for (size_t smoothing_iter = 0; smoothing_iter < smoothing_iterations_; ++smoothing_iter)
     {
-
+#if ENABLE_DEBUGGING
         if (verbose)
         {
+            visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
+            std::cerr << "Start of loop smoothBandPoints\n";
             printBandData();
         }
-
+#endif
 
         // The start doesn't move, so push that point on immediately
         EigenHelpers::VectorVector3d next_band;
@@ -668,17 +662,121 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 
 
 
+            // Only allow movement that points directly between next and prev
+            const Eigen::Vector3d allowed_movement_direction = (next - curr).normalized() + (prev - curr).normalized();
+            // If the allowed direction is numerically close to zero, then we are already in
+            // nearly a straight line with our neighbours, so don't move
+            // TODO: address magic number
+            if (allowed_movement_direction.norm() < 1e-3)
+            {
+                next_band.push_back(curr);
+                continue;
+            }
 
             // The optimal point is directly between prev and next, so move as far that way as our bubble allows
             const Eigen::Vector3d midpoint = prev + (next - prev) / 2.0;
+            const Eigen::Vector3d delta_raw = midpoint - curr;
+            const Eigen::Vector3d delta = EigenHelpers::VectorProjection(allowed_movement_direction, delta_raw);
             // Determine if the projection is within the bubble at the current point, and if not only move part way
-            const Eigen::Vector3d delta = midpoint - curr;
-            const double max_delta_norm = curr_bubble_size - min_distance_to_obstacle_;
-            const Eigen::Vector3d curr_prime = delta.norm() <= max_delta_norm ? midpoint : curr + max_delta_norm * delta.normalized();
+            const double max_delta_norm = std::max(0.0, curr_bubble_size - min_distance_to_obstacle_ * 1.1);// - collision_margin_);
+            const bool curr_plus_delta_inside_bubble = delta.norm() <= max_delta_norm;
+            const Eigen::Vector3d curr_prime =  curr_plus_delta_inside_bubble ? Eigen::Vector3d(curr + delta) : Eigen::Vector3d(curr + max_delta_norm * delta.normalized());
+            // Ensure that the resulting point is not in collision even with numerical rounding (and weirdness in the SDF)
+            const Eigen::Vector3d curr_prime_projected_to_distance = projectToValidBubble(curr_prime);
+            const double projected_bubble_size = getBubbleSize(curr_prime_projected_to_distance);
+
+#if ENABLE_DEBUGGING
+            const double curr_prime_bubble_size = getBubbleSize(curr_prime);
+
+
+
+            if (verbose)
+            {
+                vis_.visualizePoints("smoothing_test_prev", {prev}, {ColorBuilder::MakeFromFloatColors(1.0f, 0.0f, 0.0f, 1.0f)}, 1, 0.002);
+                vis_.visualizePoints("smoothing_test_curr", {curr}, {ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 0.0f, 1.0f)}, 1, 0.002);
+                vis_.visualizePoints("smoothing_test_curr_prime", {curr_prime}, {ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f)}, 1, 0.002);
+                vis_.visualizePoints("smoothing_test_projected", {curr_prime_projected_to_distance}, {ColorBuilder::MakeFromFloatColors(1.0f, 1.0f, 0.0f, 1.0f)}, 1, 0.002);
+                vis_.visualizePoints("smoothing_test_next", {next}, {ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 1.0f, 1.0f)}, 1, 0.002);
+
+                vis_.visualizeSpheres("smoothing_test_prev", {prev}, {prev_bubble_size}, {ColorBuilder::MakeFromFloatColors(1.0f, 0.0f, 0.0f, 0.2f)}, 2);
+                vis_.visualizeSpheres("smoothing_test_curr", {curr}, {curr_bubble_size}, {ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 0.0f, 0.2f)}, 2);
+                vis_.visualizeSpheres("smoothing_test_curr_prime", {curr_prime}, {curr_prime_bubble_size}, {ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 0.2f)}, 2);
+                vis_.visualizeSpheres("smoothing_test_projected", {curr_prime_projected_to_distance}, {projected_bubble_size}, {ColorBuilder::MakeFromFloatColors(1.0f, 1.0f, 0.0f, 0.2f)}, 2);
+                vis_.visualizeSpheres("smoothing_test_next", {next}, {next_bubble_size}, {ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 1.0f, 0.2f)}, 2);
+                std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+
+
+//                const double prev_curr_dist = (prev - curr).norm();
+//                const double curr_next_dist = (next - curr).norm();
+//                const double prev_next_dist = (next - prev).norm();
+
+                std::cout << std::setprecision(12)
+                          << "Prev:                         " << prev.transpose() << std::endl
+                          << "Curr:                         " << curr.transpose() << std::endl
+                          << "Next:                         " << next.transpose() << std::endl
+                          << "Prev - Curr:                  " << (prev - curr).normalized().transpose() << std::endl
+                          << "Next - Curr:                  " << (next - curr).normalized().transpose() << std::endl
+                          << "Allowed movement dir:         " << allowed_movement_direction.transpose() << std::endl
+                          << "Delta raw:                    " << delta_raw.transpose() << std::endl
+                          << "Delta:                        " << delta.transpose() << std::endl
+                          << "Allowed cross delta norm:     " << delta.cross(allowed_movement_direction).norm() << std::endl
+                          << std::endl;
+
+
+                std::cout << "prev bubble size:  " << prev_bubble_size << std::endl;
+                std::cout << "curr bubble size:  " << curr_bubble_size << std::endl;
+                std::cout << "prime bubble size: " << curr_prime_bubble_size << std::endl;
+                std::cout << "proj bubble size:  " << projected_bubble_size << std::endl;
+                std::cout << "next bubble size:  " << next_bubble_size << std::endl;
+//                std::cout << "prev-curr dist:    " << prev_curr_dist << std::endl;
+//                std::cout << "curr-next dist:    " << curr_next_dist << std::endl;
+//                std::cout << "prev-next dist:    " << prev_next_dist << std::endl;
+            }
 
 
 
 
+/*
+            if (curr_prime_bubble_size < min_distance_to_obstacle_)
+            {
+                std::cout << "\n\n\n\n\n\n\n\n";
+                std::cout << std::setprecision(12)
+                          << "Curr:       " << curr.transpose() << std::endl
+                          << "Midpoint:   " << midpoint.transpose() << std::endl
+                          << "Curr prime: " << curr_prime.transpose() << std::endl
+                          << "C+m*Norm:   " << (curr + max_delta_norm * delta.normalized()).transpose() << std::endl
+                          << "Delta:      " << delta.transpose() << std::endl;
+                std::cout << std::setprecision(12)
+                          << "Curr size:  " << curr_bubble_size << std::endl
+                          << "Max norm:   " << max_delta_norm << std::endl
+                          << "Delta norm: " << delta.norm() << std::endl
+                          << "Prime size: " << curr_prime_bubble_size << std::endl;
+
+                const auto curr_index_in_sdf = sdf_.LocationToGridIndex3d(curr);
+                const auto prime_index_in_sdf = sdf_.LocationToGridIndex3d(curr_prime);
+
+
+
+
+                const double curr_bubble_size = getBubbleSize(curr);
+                const double curr_prime_bubble_size = getBubbleSize(curr_prime);
+
+
+
+
+
+                std::cout << "Curr rounded:  " << PrettyPrint::PrettyPrint(sdf_.GridIndexToLocation(curr_index_in_sdf[0], curr_index_in_sdf[1], curr_index_in_sdf[2]), false, " ") << std::endl;
+                std::cout << "Prime rounded: " << PrettyPrint::PrettyPrint(sdf_.GridIndexToLocation(prime_index_in_sdf[0], prime_index_in_sdf[1], prime_index_in_sdf[2]), false, " ") << std::endl;
+
+                auto est_dist_result = getBubbleSize(curr_prime);
+                vis_.visualizePoints( "smoothing_debugging_curr", {curr}, Visualizer::Magenta(), 1, 0.002);
+                vis_.visualizeSpheres("smoothing_debugging_curr", {curr}, {curr_bubble_size}, {ColorBuilder::MakeFromFloatColors(1.0f, 0.0f, 1.0f, 0.2f)}, 2);
+                vis_.visualizePoints( "smoothing_debugging_curr_prime", {curr_prime}, Visualizer::Red(), 1, 0.002);
+                vis_.visualizeSpheres("smoothing_debugging_curr_prime", {curr_prime}, {curr_prime_bubble_size}, {ColorBuilder::MakeFromFloatColors(1.0f, 0.0f, 0.0f, 0.2f)}, 2);
+                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+            }
+            assert(curr_prime_bubble_size >= min_distance_to_obstacle_);
+*/
 
 
             if (!sdf_.CheckInBounds3d(curr_prime))
@@ -703,11 +801,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
                 std::cerr << std::endl << std::endl;
             }
             assert(sdf_.CheckInBounds3d(curr_prime));
-
-
-            // Ensure that the resulting point is not in collision even with numerical rounding
-            const Eigen::Vector3d curr_prime_projected_to_distance = projectToValidBubble(curr_prime);
-            const double projected_bubble_size = getBubbleSize(curr_prime_projected_to_distance);
+#endif
 
             // Check if the bubbles still overlap on each side
             const double prev_curr_dist = (prev - curr_prime_projected_to_distance).norm();
@@ -730,25 +824,52 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 
         // The end doesn't move, so push that point on at the end, then swap buffers
         next_band.push_back(band_.back());
+
+        // Shortcut the process if there has been no meaningful change in the band
+        // TODO: remove magic number
+        if (EigenHelpers::CloseEnough(band_, next_band, 1e-3))
+        {
+            return;
+        }
+
         band_ = next_band;
+#if ENABLE_DEBUGGING
+        if (verbose)
+        {
+            std::cout << "\n\n\nEnd of smoothing loop, iteration: " << smoothing_iter << std::endl;
+            visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
+            printBandData();
+        }
         assert(bandIsValidWithVisualization());
+#endif
 
         removeExtraBandPoints(verbose);
     }
 
+#if ENABLE_DEBUGGING
     if (verbose)
     {
         printBandData();
     }
-
     assert(bandIsValidWithVisualization());
+#endif
 }
 
 
 
 void QuinlanRubberBand::printBandData() const
 {
-    std::cout << "                       Point                   ,     bubble size    ,     overlap   ,   Angles:\n";
+#if !ENABLE_DEBUGGING
+    return;
+#endif
+    const Eigen::Vector3d min = sdf_.GetOriginTransform().translation();
+    const Eigen::Vector3d max = min + Eigen::Vector3d(sdf_.GetXSize(), sdf_.GetYSize(), sdf_.GetZSize());
+    std::cout << "SDF limits: x, y, z\n"
+              << "Max:            " << max.transpose() << std::endl
+              << "Min:            " << min.transpose() << std::endl
+              << "Band limits: Min dist to obstacle: " << min_distance_to_obstacle_ << "   Min overlap distance: " << min_overlap_distance_ << std::endl;
+
+    std::cout << "                         Point                    ,    bubble size   ,     overlap    ,   Angles:\n";
 
     Eigen::MatrixXd data = Eigen::MatrixXd::Zero(band_.size(), 6) * NAN;
 
@@ -769,6 +890,7 @@ void QuinlanRubberBand::printBandData() const
         }
     }
     std::cout << std::setprecision(12) << data << std::endl;
+    std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
 }
 
 
@@ -836,7 +958,8 @@ void QuinlanRubberBand::loadStoredBand()
 {
     try
     {
-        const auto log_folder = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "log_folder", __func__);
+//        const auto log_folder = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "log_folder", __func__);
+        const auto log_folder = ROSHelpers::GetParamRequired<std::string>(ph_, "log_folder", __func__);
         if (!log_folder.Valid())
         {
             throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
@@ -870,8 +993,5 @@ void QuinlanRubberBand::loadStoredBand()
 
 bool QuinlanRubberBand::useStoredBand() const
 {
-//    return false;
     return ROSHelpers::GetParamDebugLog<bool>(ph_, "use_stored_band", false);
 }
-
-

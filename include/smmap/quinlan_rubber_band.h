@@ -4,6 +4,9 @@
 #include <arc_utilities/eigen_helpers.hpp>
 #include "smmap/task_specification.h"
 
+#define ENABLE_DEBUGGING 1
+//#define ENABLE_DEBUGGING 0
+
 namespace smmap
 {
     class QuinlanRubberBand
@@ -69,7 +72,7 @@ namespace smmap
         const double min_distance_to_obstacle_;
         const double node_removal_overlap_factor_;
         const double backtrack_threshold_;
-        const double collision_margin_;
+//        const double collision_margin_;
         const size_t smoothing_iterations_;
 
         Eigen::Vector3d projectToValidBubble(const Eigen::Vector3d& location) const;
@@ -80,9 +83,15 @@ namespace smmap
                 const double distance) const;
         bool bandIsValid() const;
         bool bandIsValidWithVisualization() const;
+#if ENABLE_DEBUGGING
+        void interpolateBetweenPoints(
+                EigenHelpers::VectorVector3d& point_buffer,
+                const Eigen::Vector3d& target);
+#else
         void interpolateBetweenPoints(
                 EigenHelpers::VectorVector3d& point_buffer,
                 const Eigen::Vector3d& target) const;
+#endif
         void interpolateBandPoints();
         void removeExtraBandPoints(const bool verbose);
         void smoothBandPoints(const bool verbose);
