@@ -4,8 +4,8 @@
 #include <arc_utilities/eigen_helpers.hpp>
 #include "smmap/task_specification.h"
 
-#define ENABLE_DEBUGGING 1
-//#define ENABLE_DEBUGGING 0
+//#define ENABLE_DEBUGGING 1
+#define ENABLE_DEBUGGING 0
 
 namespace smmap
 {
