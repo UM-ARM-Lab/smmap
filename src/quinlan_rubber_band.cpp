@@ -35,8 +35,7 @@ QuinlanRubberBand::QuinlanRubberBand(
     , min_distance_to_obstacle_(sdf_.GetResolution() * 0.1)
     , node_removal_overlap_factor_(1.2)
     , backtrack_threshold_(0.1)
-//    , collision_margin_(sdf_.GetResolution() / std::sqrt(2.0))
-    , smoothing_iterations_(100)
+    , smoothing_iterations_(50)
 {
     (void)generator;
     setPointsAndSmooth(starting_points);
@@ -256,7 +255,6 @@ Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& l
         const auto distance_to_obstacles = sdf_.EstimateDistance3d(post_boundary_project);
 
         if (distance_to_boundary.first < min_distance_to_obstacle_ ||
-    //        distance_to_obstacles.first - collision_margin_ < min_distance_to_obstacle_)
             distance_to_obstacles.first < min_distance_to_obstacle_)
         {
             constexpr int p = 20;
@@ -277,7 +275,7 @@ Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& l
             std::cerr << std::setprecision(p) << "Post boundary value:                                                      " << post_boundary_project.transpose() << std::endl;
 
             const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
-            const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);// + collision_margin_ * 1.00000000001);
+            const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);
         }
     }
     assert(getBubbleSize(post_boundary_project) >= min_distance_to_obstacle_);
@@ -287,6 +285,11 @@ Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& l
 
 double QuinlanRubberBand::getBubbleSize(const Eigen::Vector3d& location) const
 {
+#if ENABLE_DEBUGGING
+    vis_.visualizePoints("get_bubble_size_test_location", {location}, Visualizer::Orange(), 1, 0.005);
+//    std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+#endif
+
     const Eigen::Vector4d loc_4d(location.x(), location.y(), location.z(), 1.0);
     const auto distance_to_boundary = sdf_.DistanceToBoundary4d(loc_4d);
     const auto distance_to_obstacles = sdf_.EstimateDistance4d(loc_4d);
@@ -388,16 +391,16 @@ void QuinlanRubberBand::interpolateBetweenPoints(
     double distance_to_end = (target - point_buffer.back()).norm();
     while (!sufficientOverlap(curr_bubble_size, target_bubble_size, distance_to_end))
     {
-        const Eigen::Vector3d& curr = point_buffer.back();
+        const Eigen::Vector3d curr = point_buffer.back();
 
         // Find a position between point_buffer.back() and next_node with sufficient bubble overlap
         // TODO: verify that this cannot get stuck in an infinite loop
         int inner_iteration_counter = 0;
         double interpolation_ratio = 0.5;
-        const Eigen::Vector3d interpolated_point = EigenHelpers::Interpolate(curr, target, interpolation_ratio);
+        Eigen::Vector3d interpolated_point = EigenHelpers::Interpolate(curr, target, interpolation_ratio);
         Eigen::Vector3d test_point = projectToValidBubble(interpolated_point);
         double test_point_bubble_size = getBubbleSize(test_point);
-        double distance_between_prev_and_test_point = (curr - test_point).norm();
+        double distance_between_curr_and_test_point = (curr - test_point).norm();
 
 #if ENABLE_DEBUGGING
         assert(sdf_.CheckInBounds3d(curr));
@@ -405,52 +408,88 @@ void QuinlanRubberBand::interpolateBetweenPoints(
         assert(sdf_.CheckInBounds3d(interpolated_point));
         assert(sdf_.CheckInBounds3d(test_point));
 #endif
-        ROS_WARN_COND_NAMED(outer_iteration_counter == 100, "rubber_band", "Rubber band interpolation outer loop counter at 100, probably stuck in an infinite loop");
+        ROS_WARN_STREAM_COND_NAMED(outer_iteration_counter == 20, "rubber_band", "Rubber band interpolation outer loop counter at " << outer_iteration_counter << ", probably stuck in an infinite loop");
 #if ENABLE_DEBUGGING
-        if (outer_iteration_counter >= 100)
+        if (outer_iteration_counter >= 20)
         {
+            std::cout << "\n\n\n\n\n\n\nCurr:\n";
+            getBubbleSize(curr);
+            std::cout << "\nInterp:\n";
             const double interpolated_point_bubble_size = getBubbleSize(interpolated_point);
+            std::cout << "\nTest:\n";
+            getBubbleSize(test_point);
+            std::cout << "\nTarget\n";
+            getBubbleSize(target);
+            std::cout << std::endl;
+
             std::cerr << std::setprecision(12)
                       << "Curr:   " << curr.transpose() << std::endl
                       << "Target: " << target.transpose() << std::endl
                       << "Interp: " << interpolated_point.transpose() << std::endl
                       << "Test:   " << test_point.transpose() << std::endl
                       << std::endl;
-            vis_.visualizePoints( "interpolate_debugging_curr_point",    {curr},                Visualizer::Blue(1.0f),    1, 0.005);
-            vis_.visualizeSpheres("interpolate_debugging_curr_sphere",   {curr},                Visualizer::Blue(0.2f),    2, curr_bubble_size);
-            vis_.visualizePoints( "interpolate_debugging_target_point",  {target},              Visualizer::Red(1.0f),     1, 0.005);
-            vis_.visualizeSpheres("interpolate_debugging_target_sphere", {target},              Visualizer::Red(0.2f),     2, target_bubble_size);
-            vis_.visualizePoints( "interpolate_debugging_interp_point",  {interpolated_point},  Visualizer::Green(1.0f),   1, 0.005);
-            vis_.visualizeSpheres("interpolate_debugging_interp_sphere", {interpolated_point},  Visualizer::Green(0.2f),   2, interpolated_point_bubble_size);
-            vis_.visualizePoints( "interpolate_debugging_test_point",    {test_point},          Visualizer::Cyan(1.0f),    1, 0.005);
-            vis_.visualizeSpheres("interpolate_debugging_test_sphere",   {test_point},          Visualizer::Cyan(0.2f),    2, test_point_bubble_size);
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+            vis_.visualizePoints( "interpolate_outer_debugging_curr_point",    {curr},                Visualizer::Red(1.0f),     1, 0.005);
+            vis_.visualizeSpheres("interpolate_outer_debugging_curr_sphere",   {curr},                Visualizer::Red(0.2f),     2, curr_bubble_size);
+            vis_.visualizePoints( "interpolate_outer_debugging_interp_point",  {interpolated_point},  Visualizer::Green(1.0f),   1, 0.005);
+            vis_.visualizeSpheres("interpolate_outer_debugging_interp_sphere", {interpolated_point},  Visualizer::Green(0.2f),   2, interpolated_point_bubble_size);
+            vis_.visualizePoints( "interpolate_outer_debugging_test_point",    {test_point},          Visualizer::Cyan(1.0f),    1, 0.005);
+            vis_.visualizeSpheres("interpolate_outer_debugging_test_sphere",   {test_point},          Visualizer::Cyan(0.2f),    2, test_point_bubble_size);
+            vis_.visualizePoints( "interpolate_outer_debugging_target_point",  {target},              Visualizer::Blue(1.0f),    1, 0.005);
+            vis_.visualizeSpheres("interpolate_outer_debugging_target_sphere", {target},              Visualizer::Blue(0.2f),    2, target_bubble_size);
+
+            vis_.deleteObjects("null", 1, 10);
         }
 #endif
 
-        while (!sufficientOverlap(curr_bubble_size, test_point_bubble_size, distance_between_prev_and_test_point))
+        while (!sufficientOverlap(curr_bubble_size, test_point_bubble_size, distance_between_curr_and_test_point))
         {
-            interpolation_ratio *= 0.5;
-            test_point = projectToValidBubble(EigenHelpers::Interpolate(curr, target, interpolation_ratio));
-            test_point_bubble_size = getBubbleSize(test_point);
-            distance_between_prev_and_test_point = (curr - test_point).norm();
-
-            ++inner_iteration_counter;
-            ROS_WARN_COND_NAMED(inner_iteration_counter == 30, "rubber_band", "Rubber band interpolation inner loop counter at 30, probably stuck in an infinite loop");
+            ROS_WARN_STREAM_COND_NAMED(inner_iteration_counter == 5, "rubber_band", "Rubber band interpolation inner loop counter at " << inner_iteration_counter << ", probably stuck in an infinite loop");
 #if ENABLE_DEBUGGING
-            if (inner_iteration_counter == 30)
+            if (inner_iteration_counter >= 5)
             {
-                const Eigen::Vector3d min = sdf_.GetOriginTransform().translation();
-                const Eigen::Vector3d max = min + Eigen::Vector3d(sdf_.GetXSize(), sdf_.GetYSize(), sdf_.GetZSize());
+                std::cout << "\n\n\n\n\n\n\nCurr:\n";
+                getBubbleSize(curr);
+                std::cout << "\nInterp:\n";
+                const double interpolated_point_bubble_size = getBubbleSize(interpolated_point);
+                std::cout << "\nTest:\n";
+                getBubbleSize(test_point);
+                std::cout << "\nTarget\n";
+                getBubbleSize(target);
+                std::cout << std::endl;
 
-                std::cerr << "SDF limits: x, y, z\n"
-                          << "Max:    " << max.transpose() << std::endl
-                          << "Min:    " << min.transpose() << std::endl
+                vis_.visualizePoints( "interpolate_inner_debugging_curr_point",    {curr},                Visualizer::Red(1.0f),     1, 0.005);
+                vis_.visualizeSpheres("interpolate_inner_debugging_curr_sphere",   {curr},                Visualizer::Red(0.2f),     2, curr_bubble_size);
+                vis_.visualizePoints( "interpolate_inner_debugging_interp_point",  {interpolated_point},  Visualizer::Green(1.0f),   1, 0.005);
+                vis_.visualizeSpheres("interpolate_inner_debugging_interp_sphere", {interpolated_point},  Visualizer::Green(0.2f),   2, interpolated_point_bubble_size);
+                vis_.visualizePoints( "interpolate_inner_debugging_test_point",    {test_point},          Visualizer::Cyan(1.0f),    1, 0.005);
+                vis_.visualizeSpheres("interpolate_inner_debugging_test_sphere",   {test_point},          Visualizer::Cyan(0.2f),    2, test_point_bubble_size);
+                vis_.visualizePoints( "interpolate_inner_debugging_target_point",  {target},              Visualizer::Blue(1.0f),    1, 0.005);
+                vis_.visualizeSpheres("interpolate_inner_debugging_target_sphere", {target},              Visualizer::Blue(0.2f),    2, target_bubble_size);
+
+                std::cerr << std::setprecision(12)
                           << "Curr:   " << curr.transpose() << std::endl
+                          << "Interp: " << interpolated_point.transpose() << std::endl
+                          << "Test:   " << test_point.transpose() << std::endl
                           << "Target: " << target.transpose() << std::endl
-                          << "Test:   " << test_point.transpose() << std::endl;
+                          << "curr bubble size:   " << curr_bubble_size << std::endl
+                          << "interp bubble size: " << interpolated_point_bubble_size << std::endl
+                          << "test bubble size:   " << test_point_bubble_size << std::endl
+                          << "target bubble size: " << target_bubble_size << std::endl
+                          << "curr + test:        " << curr_bubble_size + test_point_bubble_size << std::endl
+                          << "dist + min:         " << distance_between_curr_and_test_point + min_overlap_distance_ << std::endl
+                          << std::endl;
+
+                vis_.deleteObjects("null", 1, 10);
             }
 #endif
+
+            interpolation_ratio *= 0.5;
+            interpolated_point = EigenHelpers::Interpolate(curr, target, interpolation_ratio);
+            test_point = projectToValidBubble(interpolated_point);
+            test_point_bubble_size = getBubbleSize(test_point);
+            distance_between_curr_and_test_point = (curr - test_point).norm();
+
+            ++inner_iteration_counter;
         }
         // The bubbles now overlap sufficiently, so accept this point and record the new values
         point_buffer.push_back(test_point);
@@ -665,26 +704,13 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
             const double prev_bubble_size = getBubbleSize(prev);
             const double curr_bubble_size = getBubbleSize(curr);
             const double next_bubble_size = getBubbleSize(next);
-/*
-            // Project the current point onto the line between prev and next
-            const Eigen::Vector3d band_tangent_approx = next - prev;
-            const Eigen::Vector3d curr_projected_onto_tangent = prev + EigenHelpers::VectorProjection(band_tangent_approx, curr - prev);
-            const Eigen::Vector3d delta = curr_projected_onto_tangent - curr;
-            assert(delta.dot(band_tangent_approx) < 1e-10);
-
-            // Determine if the projection is within the bubble at the current point, and if not only move part way
-            const double max_delta_norm = curr_bubble_size - min_distance_to_obstacle_;
-            const Eigen::Vector3d curr_prime = delta.norm() <= max_delta_norm ? curr_projected_onto_tangent : curr + max_delta_norm * delta.normalized();
-*/
-
-
 
             // Only allow movement that points directly between next and prev
             const Eigen::Vector3d allowed_movement_direction = (next - curr).normalized() + (prev - curr).normalized();
             // If the allowed direction is numerically close to zero, then we are already in
             // nearly a straight line with our neighbours, so don't move
             // TODO: address magic number
-            if (allowed_movement_direction.norm() < 1e-3)
+            if (allowed_movement_direction.norm() < 1e-4)
             {
                 next_band.push_back(curr);
                 continue;
@@ -695,7 +721,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
             const Eigen::Vector3d delta_raw = midpoint - curr;
             const Eigen::Vector3d delta = EigenHelpers::VectorProjection(allowed_movement_direction, delta_raw);
             // Determine if the projection is within the bubble at the current point, and if not only move part way
-            const double max_delta_norm = std::max(0.0, curr_bubble_size - min_distance_to_obstacle_ * 1.1);// - collision_margin_);
+            const double max_delta_norm = std::max(0.0, curr_bubble_size - min_distance_to_obstacle_ * 1.1);
             const bool curr_plus_delta_inside_bubble = delta.norm() <= max_delta_norm;
             const Eigen::Vector3d prime =  curr_plus_delta_inside_bubble ? Eigen::Vector3d(curr + delta) : Eigen::Vector3d(curr + max_delta_norm * delta.normalized());
             // Ensure that the resulting point is not in collision even with numerical rounding (and weirdness in the SDF)
@@ -768,7 +794,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 
         // Shortcut the process if there has been no meaningful change in the band
         // TODO: remove magic number
-        if (EigenHelpers::CloseEnough(band_, next_band, 1e-3))
+        if (EigenHelpers::CloseEnough(band_, next_band, 1e-4))
         {
             return;
         }

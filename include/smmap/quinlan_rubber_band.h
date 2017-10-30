@@ -72,7 +72,6 @@ namespace smmap
         const double min_distance_to_obstacle_;
         const double node_removal_overlap_factor_;
         const double backtrack_threshold_;
-//        const double collision_margin_;
         const size_t smoothing_iterations_;
 
         Eigen::Vector3d projectToValidBubble(const Eigen::Vector3d& location) const;
