@@ -6,6 +6,8 @@
 
 //#define ENABLE_DEBUGGING 1
 #define ENABLE_DEBUGGING 0
+#define ENABLE_BAND_LOAD_SAVE 1
+//#define ENABLE_BAND_LOAD_SAVE 0
 
 namespace smmap
 {

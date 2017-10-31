@@ -51,7 +51,7 @@ QuinlanRubberBand& QuinlanRubberBand::operator=(const QuinlanRubberBand& other)
     assert(max_total_band_distance_ == other.max_total_band_distance_);
 
     band_ = other.band_;
-#if ENABLE_DEBUGGING
+#if ENABLE_BAND_LOAD_SAVE
     if (useStoredBand())
     {
         loadStoredBand();
@@ -70,7 +70,7 @@ void QuinlanRubberBand::setPointsWithoutSmoothing(const EigenHelpers::VectorVect
 {
     band_ = points;
 
-#if ENABLE_DEBUGGING
+#if ENABLE_BAND_LOAD_SAVE
     if (useStoredBand())
     {
         loadStoredBand();
@@ -120,7 +120,7 @@ const EigenHelpers::VectorVector3d& QuinlanRubberBand::forwardPropagateRubberBan
     band_.insert(band_.begin(), projectToValidBubble(first_endpoint_target));
     band_.push_back(projectToValidBubble(second_endpoint_target));
 
-#if ENABLE_DEBUGGING
+#if ENABLE_BAND_LOAD_SAVE
     if (useStoredBand())
     {
         loadStoredBand();
@@ -289,6 +289,9 @@ double QuinlanRubberBand::getBubbleSize(const Eigen::Vector3d& location) const
     vis_.visualizePoints("get_bubble_size_test_location", {location}, Visualizer::Orange(), 1, 0.005);
 //    std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
 #endif
+
+    return sdf_.EstimateDistance3d(location).first;
+
 
     const Eigen::Vector4d loc_4d(location.x(), location.y(), location.z(), 1.0);
     const auto distance_to_boundary = sdf_.DistanceToBoundary4d(loc_4d);
@@ -721,7 +724,8 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
             const Eigen::Vector3d delta_raw = midpoint - curr;
             const Eigen::Vector3d delta = EigenHelpers::VectorProjection(allowed_movement_direction, delta_raw);
             // Determine if the projection is within the bubble at the current point, and if not only move part way
-            const double max_delta_norm = std::max(0.0, curr_bubble_size - min_distance_to_obstacle_ * 1.1);
+            // Only step at most half way there in order to try and avoid oscillations - to large of a step size is bad
+            const double max_delta_norm = std::max(0.0, (curr_bubble_size - min_distance_to_obstacle_ * 1.00001) * 0.5);
             const bool curr_plus_delta_inside_bubble = delta.norm() <= max_delta_norm;
             const Eigen::Vector3d prime =  curr_plus_delta_inside_bubble ? Eigen::Vector3d(curr + delta) : Eigen::Vector3d(curr + max_delta_norm * delta.normalized());
             // Ensure that the resulting point is not in collision even with numerical rounding (and weirdness in the SDF)
