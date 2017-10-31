@@ -993,7 +993,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             for (int i = 0; i < VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS; ++i)
             {
                 net_delta += combined_delta / (double)VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS;
-                net_delta = environment_sdf_.ProjectOutOfCollision3d(current_pos + net_delta) - current_pos;
+                net_delta = environment_sdf_.ProjectOutOfCollision3dLegacy(current_pos + net_delta) - current_pos;
             }
 
             progress = net_delta.squaredNorm() > VECTOR_FIELD_FOLLOWING_MIN_PROGRESS;
