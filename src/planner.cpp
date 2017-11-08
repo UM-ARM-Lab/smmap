@@ -22,6 +22,7 @@
 #include "smmap/stretching_avoidance_controller.h"
 
 using namespace smmap;
+using namespace smmap_utilities;
 using namespace Eigen;
 using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
