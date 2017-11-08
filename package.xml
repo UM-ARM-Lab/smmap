@@ -11,6 +11,7 @@
 
   <build_depend>actionlib</build_depend>
   <build_depend>arc_utilities</build_depend>
+  <build_depend>smmap_utilities</build_depend>
   <build_depend>geometry_msgs</build_depend>
   <build_depend>kinematics_toolbox</build_depend>
   <build_depend>sdf_tools</build_depend>
@@ -19,6 +20,7 @@
 
   <run_depend>actionlib</run_depend>
   <run_depend>arc_utilities</run_depend>
+  <run_depend>smmap_utilities</run_depend>
   <run_depend>geometry_msgs</run_depend>
   <run_depend>kinematics_toolbox</run_depend>
   <run_depend>sdf_tools</run_depend>

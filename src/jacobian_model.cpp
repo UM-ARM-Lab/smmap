@@ -1,5 +1,5 @@
 #include "smmap/jacobian_model.h"
-#include "smmap/gurobi_solvers.h"
+#include "smmap_utilities/gurobi_solvers.h"
 
 using namespace smmap;
 using namespace Eigen;

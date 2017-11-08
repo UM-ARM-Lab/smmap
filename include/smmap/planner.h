@@ -9,9 +9,9 @@
 #include "smmap/robot_interface.hpp"
 #include "smmap/deformable_model.h"
 #include "smmap/deformable_controller.hpp"
-#include "smmap/kalman_filter_multiarm_bandit.hpp"
-#include "smmap/ucb_multiarm_bandit.hpp"
 #include "smmap/rubber_band.hpp"
+#include "smmap_utilities/kalman_filter_multiarm_bandit.hpp"
+#include "smmap_utilities/ucb_multiarm_bandit.hpp"
 #include "smmap/rrt_helper.h"
 #include "smmap/prm_helper.h"
 
@@ -30,7 +30,7 @@ namespace smmap
 
             void execute();
 
-        private:            
+        private:
             ////////////////////////////////////////////////////////////////////
             // Multipurpose
             ////////////////////////////////////////////////////////////////////
