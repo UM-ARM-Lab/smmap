@@ -7,6 +7,7 @@
 #include "smmap/timing.hpp"
 
 using namespace smmap;
+using namespace arc_utilities;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper function for assertion testing
@@ -755,7 +756,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVe
         };
 
         // If we've found a first order deformation, then we are similar to a blacklisted item
-        if (arc_utilities::FirstOrderDeformation::CheckFirstOrderDeformation(
+        if (FirstOrderDeformation::CheckFirstOrderDeformation(
                 blacklisted_path.size(),
                 test_band.size(),
                 straight_line_collision_check_fn))

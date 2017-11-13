@@ -15,7 +15,8 @@
 #include "smmap/ros_communication_helpers.hpp"
 #include "smmap/task_function_pointer_types.h"
 #include "smmap/visualization_tools.h"
-#include "smmap/timing.hpp"
+
+#include "arc_utilities/timing.hpp"
 
 namespace smmap
 {

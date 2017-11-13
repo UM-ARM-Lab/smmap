@@ -12,7 +12,8 @@
 #include <arc_utilities/get_neighbours.hpp>
 #include <arc_utilities/shortcut_smoothing.hpp>
 
-#include "smmap/timing.hpp"
+#include "arc_utilities/timing.hpp"
+
 #include "smmap/diminishing_rigidity_model.h"
 #include "smmap/adaptive_jacobian_model.h"
 #include "smmap/least_squares_jacobian_model.h"
@@ -23,6 +24,7 @@
 
 using namespace smmap;
 using namespace smmap_utilities;
+using namespace arc_utilities;
 using namespace Eigen;
 using namespace EigenHelpers;
 using namespace EigenHelpersConversions;

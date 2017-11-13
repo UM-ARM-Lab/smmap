@@ -9,6 +9,7 @@
 #include "smmap/task_specification_implementions.h"
 
 using namespace smmap;
+using namespace arc_utilities;
 
 #pragma message "Magic number - Stretching weight multiplication factor here"
 #define STRETCHING_WEIGHT_MULTIPLICATION_FACTOR (2000.0)
@@ -869,17 +870,17 @@ bool DijkstrasCoverageTask::saveDijkstrasResults()
         // Next serialize the results themselves
         const auto first_serializer = [] (const std::vector<int64_t>& vec_to_serialize, std::vector<uint8_t>& buffer)
         {
-            return arc_utilities::SerializeVector<int64_t>(vec_to_serialize, buffer, &arc_utilities::SerializeFixedSizePOD<int64_t>);
+            return SerializeVector<int64_t>(vec_to_serialize, buffer, &SerializeFixedSizePOD<int64_t>);
         };
         const auto second_serializer = [] (const std::vector<double>& vec_to_serialize, std::vector<uint8_t>& buffer)
         {
-            return arc_utilities::SerializeVector<double>(vec_to_serialize, buffer, &arc_utilities::SerializeFixedSizePOD<double>);
+            return SerializeVector<double>(vec_to_serialize, buffer, &SerializeFixedSizePOD<double>);
         };
         const auto pair_serializer = [&first_serializer, &second_serializer] (const std::pair<std::vector<int64_t>, std::vector<double>>& pair_to_serialize, std::vector<uint8_t>& buffer)
         {
-            return arc_utilities::SerializePair<std::vector<int64_t>, std::vector<double>>(pair_to_serialize, buffer, first_serializer, second_serializer);
+            return SerializePair<std::vector<int64_t>, std::vector<double>>(pair_to_serialize, buffer, first_serializer, second_serializer);
         };
-        arc_utilities::SerializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(dijkstras_results_, buffer, pair_serializer);
+        SerializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(dijkstras_results_, buffer, pair_serializer);
 
         // Compress and save to file
         ROS_INFO_NAMED("coverage_task", "Compressing for storage");
@@ -934,19 +935,19 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
         // Next deserialze the Dijkstras results
         const auto first_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
         {
-            return arc_utilities::DeserializeVector<int64_t>(buffer, current, &arc_utilities::DeserializeFixedSizePOD<int64_t>);
+            return DeserializeVector<int64_t>(buffer, current, &DeserializeFixedSizePOD<int64_t>);
         };
         const auto second_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
         {
-            return arc_utilities::DeserializeVector<double>(buffer, current, &arc_utilities::DeserializeFixedSizePOD<double>);
+            return DeserializeVector<double>(buffer, current, &DeserializeFixedSizePOD<double>);
         };
         const auto pair_deserializer = [&first_deserializer, &second_deserializer] (const std::vector<uint8_t>& buffer, const uint64_t current)
         {
-            return arc_utilities::DeserializePair<std::vector<int64_t>, std::vector<double>>(buffer, current, first_deserializer, second_deserializer);
+            return DeserializePair<std::vector<int64_t>, std::vector<double>>(buffer, current, first_deserializer, second_deserializer);
         };
 
         uint64_t current_position = serialzed_graph_size;
-        const auto deserialized_result = arc_utilities::DeserializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(decompressed_dijkstras_results, current_position, pair_deserializer);
+        const auto deserialized_result = DeserializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(decompressed_dijkstras_results, current_position, pair_deserializer);
         dijkstras_results_ = deserialized_result.first;
         current_position += deserialized_result.second;
         if (current_position != decompressed_dijkstras_results.size())
