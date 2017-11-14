@@ -1427,286 +1427,11 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
 
     const bool optimization_enabled = GetJacobianControllerOptimizationEnabled(ph_);
 
-    // Create some models and add them to the model set
-    if (GetUseDiminishingRigidityModel(ph_))
+    const PlannerTrialType planner_trial_type = GetPlannerTrialType(ph_);
+
+    switch (planner_trial_type)
     {
-        double translational_deformability, rotational_deformability;
-        if (ph_.getParam("translational_deformability", translational_deformability) &&
-                 ph_.getParam("rotational_deformability", rotational_deformability))
-        {
-            ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
-                                   << translational_deformability << " "
-                                   << rotational_deformability);
-        }
-        else
-        {
-            translational_deformability = task_specification_->defaultDeformability();
-            rotational_deformability = task_specification_->defaultDeformability();
-            ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
-                                   << task_specification_->defaultDeformability());
-        }
-
-        model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                  translational_deformability,
-                                  rotational_deformability));
-
-        controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                       model_list_.back(),
-                                       task_specification_->collisionScalingFactor(),
-                                       optimization_enabled));
-    }
-    else if (GetUseMultiModel(ph_))
-    {
-        ////////////////////////////////////////////////////////////////////////
-        // Diminishing rigidity models
-        ////////////////////////////////////////////////////////////////////////
-
-        #pragma message "Magic numbers: Multi-model deform range"
-        const double deform_min = 0.0;
-        const double deform_max = 25.0;
-        const double deform_step = 4.0;
-
-        for (double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step)
-        {
-            for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
-            {
-                model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                          trans_deform,
-                                          rot_deform));
-
-                controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                               model_list_.back(),
-                                               task_specification_->collisionScalingFactor(),
-                                               optimization_enabled));
-            }
-        }
-        ROS_INFO_STREAM_NAMED("planner", "Num diminishing rigidity models: "
-                               << std::floor((deform_max - deform_min) / deform_step));
-
-        ////////////////////////////////////////////////////////////////////////
-        // Adaptive jacobian models
-        ////////////////////////////////////////////////////////////////////////
-
-        #pragma message "Magic numbers: Multi-model adaptive range"
-        const double learning_rate_min = 1e-10;
-        const double learning_rate_max = 1.1e0;
-        const double learning_rate_step = 10.0;
-
-        const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
-        {
-            return task_specification_->calculateDesiredDirection(world_state);
-        };
-
-        const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
-        for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
-        {
-                model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
-                                          DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
-                                          learning_rate));
-
-                controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                               model_list_.back(),
-                                               task_specification_->collisionScalingFactor(),
-                                               optimization_enabled));
-        }
-        ROS_INFO_STREAM_NAMED("planner", "Num adaptive Jacobian models: "
-                               << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
-    }
-    else if (GetUseAdaptiveModel(ph_))
-    {
-        const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
-        {
-            return task_specification_->calculateDesiredDirection(world_state);
-        };
-
-        const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
-        model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
-                                  DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
-                                  GetAdaptiveModelLearningRate(ph_)));
-
-        controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                       model_list_.back(),
-                                       task_specification_->collisionScalingFactor(),
-                                       optimization_enabled));
-
-    }
-    // Test of multiple model controller sets at the same time.   --- Added by Mengyao
-    else if (GetUseMultiModelController(ph_))
-    {
-        ROS_INFO_NAMED("planner", "Using multiple model-controller sets");
-
-        // Constraint Model with New Controller. (MM)
-        if (false) // using a range of params
-        {
-            const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
-
-            /*
-            const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
-            const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
-            const double rotation_deformability = GetConstraintRotational(ph_);
-            */
-
-            const double rotation_deformability = GetConstraintRotational(ph_);
-
-            for (double translation_dis_deformability = 10; translation_dis_deformability < 26; translation_dis_deformability += 5)
-            {
-                double translation_dir_deformability = 20;
-
-                // ind 0, 4, 8, 12:  trans_dir: 20
-                {
-                    model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
-                                          translation_dir_deformability,
-                                          translation_dis_deformability,
-                                          rotation_deformability,
-                                          environment_sdf));
-
-                    controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
-                                                   nh_,
-                                                   ph_,
-                                                   robot_,
-                                                   environment_sdf,
-                                                   generator_,
-                                                   vis_,
-                                                   GetGripperControllerType(ph_),
-                                                   model_list_.back(),
-                                                   GetMaxSamplingCounts(ph_),
-                                                   GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
-                }
-
-                translation_dir_deformability = 30;
-                // ind 1, 5, 9, 13:  trans_dir: 30
-                {
-                    model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
-                                          translation_dir_deformability,
-                                          translation_dis_deformability,
-                                          rotation_deformability,
-                                          environment_sdf));
-
-                    controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
-                                                   nh_,
-                                                   ph_,
-                                                   robot_,
-                                                   environment_sdf,
-                                                   generator_,
-                                                   vis_,
-                                                   GetGripperControllerType(ph_),
-                                                   model_list_.back(),
-                                                   GetMaxSamplingCounts(ph_),
-                                                   GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
-                }
-
-                translation_dir_deformability = 60;
-                // ind 2, 6, 10, 14:  trans_dir: 60
-                {
-                    model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
-                                          translation_dir_deformability,
-                                          translation_dis_deformability,
-                                          rotation_deformability,
-                                          environment_sdf));
-
-                    controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
-                                                   nh_,
-                                                   ph_,
-                                                   robot_,
-                                                   environment_sdf,
-                                                   generator_,
-                                                   vis_,
-                                                   GetGripperControllerType(ph_),
-                                                   model_list_.back(),
-                                                   GetMaxSamplingCounts(ph_),
-                                                   GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
-                }
-
-                translation_dir_deformability = 200;
-                // ind 3, 7, 11, 15:  trans_dir: 100
-                {
-                    model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
-                                          translation_dir_deformability,
-                                          translation_dis_deformability,
-                                          rotation_deformability,
-                                          environment_sdf));
-
-                    controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
-                                                   nh_,
-                                                   ph_,
-                                                   robot_,
-                                                   environment_sdf,
-                                                   generator_,
-                                                   vis_,
-                                                   GetGripperControllerType(ph_),
-                                                   model_list_.back(),
-                                                   GetMaxSamplingCounts(ph_),
-                                                   GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
-                }
-
-            }
-
-        }
-        else
-        {
-            const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
-
-            const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
-            const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
-            const double rotation_deformability = GetConstraintRotational(ph_);
-
-            model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
-                                  translation_dir_deformability,
-                                  translation_dis_deformability,
-                                  rotation_deformability,
-                                  environment_sdf));
-
-            controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
-                                           nh_,
-                                           ph_,
-                                           robot_,
-                                           environment_sdf,
-                                           generator_,
-                                           vis_,
-                                           GetGripperControllerType(ph_),
-                                           model_list_.back(),
-                                           GetMaxSamplingCounts(ph_),
-                                           GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
-        }
-
-        // Dminishing Model with New Controller. (DM)
-        {
-            double translational_deformability, rotational_deformability;
-            const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
-
-            if (ph_.getParam("translational_deformability", translational_deformability) &&
-                     ph_.getParam("rotational_deformability", rotational_deformability))
-            {
-                ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
-                                       << translational_deformability << " "
-                                       << rotational_deformability);
-            }
-            else
-            {
-                translational_deformability = task_specification_->defaultDeformability();
-                rotational_deformability = task_specification_->defaultDeformability();
-                ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
-                                       << task_specification_->defaultDeformability());
-            }
-
-            model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                      translational_deformability,
-                                      rotational_deformability));
-
-            controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
-                                           nh_,
-                                           ph_,
-                                           robot_,
-                                           environment_sdf,
-                                           generator_,
-                                           vis_,
-                                           GetGripperControllerType(ph_),
-                                           model_list_.back(),
-                                           GetMaxSamplingCounts(ph_),
-                                           GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
-        }
-
-        // Dminishing Model with Old Controller. (DD)
+        case DIMINISHING_RIGIDITY_SINGLE_MODEL_LEAST_SQUARES_CONTROLLER:
         {
             double translational_deformability, rotational_deformability;
             if (ph_.getParam("translational_deformability", translational_deformability) &&
@@ -1732,79 +1457,361 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                            model_list_.back(),
                                            task_specification_->collisionScalingFactor(),
                                            optimization_enabled));
+            break;
         }
-
-    }
-    else if (GetUseConstraintModel(ph_))
-    {
-        ROS_INFO_NAMED("planner", "Using constraint model and random sampling controller");
-
-        const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
-        const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
-        const double rotation_deformability = GetConstraintRotational(ph_);
-
-        const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
-
-        model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
-                              translation_dir_deformability,
-                              translation_dis_deformability,
-                              rotation_deformability,
-                              environment_sdf));
-
-        controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
-                                       nh_,
-                                       ph_,
-                                       robot_,
-                                       environment_sdf,
-                                       generator_,
-                                       vis_,
-                                       GetGripperControllerType(ph_),
-                                       model_list_.back(),
-                                       GetMaxSamplingCounts(ph_),
-                                       GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
-    }
-    else if (GetUseDiminishingModelWithSamplingController(ph_))
-    {
-        ROS_INFO_NAMED("planner", "Using dminishing model and random sampling controller");
-
-        double translational_deformability, rotational_deformability;
-        const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
-
-        if (ph_.getParam("translational_deformability", translational_deformability) &&
-                 ph_.getParam("rotational_deformability", rotational_deformability))
+        case ADAPTIVE_JACOBIAN_SINGLE_MODEL_LEAST_SQUARES_CONTROLLER:
         {
-            ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
-                                   << translational_deformability << " "
-                                   << rotational_deformability);
+            const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
+            {
+                return task_specification_->calculateDesiredDirection(world_state);
+            };
+
+            const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
+            model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
+                                      DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
+                                      GetAdaptiveModelLearningRate(ph_)));
+
+            controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                           model_list_.back(),
+                                           task_specification_->collisionScalingFactor(),
+                                           optimization_enabled));
+            break;
         }
-        else
+        case CONSTRAINT_SINGLE_MODEL_CONSTRAINT_CONTROLLER:
         {
-            translational_deformability = task_specification_->defaultDeformability();
-            rotational_deformability = task_specification_->defaultDeformability();
-            ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
-                                   << task_specification_->defaultDeformability());
+            ROS_INFO_NAMED("planner", "Using constraint model and random sampling controller");
+
+            const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
+            const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
+            const double rotation_deformability = GetConstraintRotational(ph_);
+
+            const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+            model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                  translation_dir_deformability,
+                                  translation_dis_deformability,
+                                  rotation_deformability,
+                                  environment_sdf));
+
+            controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                           nh_,
+                                           ph_,
+                                           robot_,
+                                           environment_sdf,
+                                           generator_,
+                                           vis_,
+                                           GetGripperControllerType(ph_),
+                                           model_list_.back(),
+                                           GetMaxSamplingCounts(ph_),
+                                           GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+            break;
         }
+        case DIMINISHING_RIGIDITY_SINGLE_MODEL_CONSTRAINT_CONTROLLER:
+        {
+            ROS_INFO_NAMED("planner", "Using dminishing model and random sampling controller");
 
-        model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                  translational_deformability,
-                                  rotational_deformability));
+            double translational_deformability, rotational_deformability;
+            const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
 
-        controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
-                                       nh_,
-                                       ph_,
-                                       robot_,
-                                       environment_sdf,
-                                       generator_,
-                                       vis_,
-                                       GetGripperControllerType(ph_),
-                                       model_list_.back(),
-                                       GetMaxSamplingCounts(ph_),
-                                       GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
-    }
-    else
-    {
-        ROS_FATAL_NAMED("planner", "No model specified, terminating");
-        assert(false && "You must specify at a model type");
+            if (ph_.getParam("translational_deformability", translational_deformability) &&
+                     ph_.getParam("rotational_deformability", rotational_deformability))
+            {
+                ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                                       << translational_deformability << " "
+                                       << rotational_deformability);
+            }
+            else
+            {
+                translational_deformability = task_specification_->defaultDeformability();
+                rotational_deformability = task_specification_->defaultDeformability();
+                ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                                       << task_specification_->defaultDeformability());
+            }
+
+            model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                      translational_deformability,
+                                      rotational_deformability));
+
+            controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                           nh_,
+                                           ph_,
+                                           robot_,
+                                           environment_sdf,
+                                           generator_,
+                                           vis_,
+                                           GetGripperControllerType(ph_),
+                                           model_list_.back(),
+                                           GetMaxSamplingCounts(ph_),
+                                           GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+            break;
+        }
+        case MULTI_MODEL_BANDIT_TEST:
+        {
+            ////////////////////////////////////////////////////////////////////////
+            // Diminishing rigidity models
+            ////////////////////////////////////////////////////////////////////////
+
+            #pragma message "Magic numbers: Multi-model deform range"
+            const double deform_min = 0.0;
+            const double deform_max = 25.0;
+            const double deform_step = 4.0;
+
+            for (double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step)
+            {
+                for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
+                {
+                    model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                              trans_deform,
+                                              rot_deform));
+
+                    controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                                   model_list_.back(),
+                                                   task_specification_->collisionScalingFactor(),
+                                                   optimization_enabled));
+                }
+            }
+            ROS_INFO_STREAM_NAMED("planner", "Num diminishing rigidity models: "
+                                   << std::floor((deform_max - deform_min) / deform_step));
+
+            ////////////////////////////////////////////////////////////////////////
+            // Adaptive jacobian models
+            ////////////////////////////////////////////////////////////////////////
+
+            #pragma message "Magic numbers: Multi-model adaptive range"
+            const double learning_rate_min = 1e-10;
+            const double learning_rate_max = 1.1e0;
+            const double learning_rate_step = 10.0;
+
+            const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
+            {
+                return task_specification_->calculateDesiredDirection(world_state);
+            };
+
+            const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
+            for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
+            {
+                    model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
+                                              DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
+                                              learning_rate));
+
+                    controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                                   model_list_.back(),
+                                                   task_specification_->collisionScalingFactor(),
+                                                   optimization_enabled));
+            }
+            ROS_INFO_STREAM_NAMED("planner", "Num adaptive Jacobian models: "
+                                   << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
+            break;
+        }
+        case MULTI_MODEL_CONTROLLER_TEST:
+        {
+            ROS_INFO_NAMED("planner", "Using multiple model-controller sets");
+
+            // Constraint Model with New Controller. (MM)
+            if (false) // using a range of params
+            {
+                const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+                /*
+                const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
+                const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
+                const double rotation_deformability = GetConstraintRotational(ph_);
+                */
+
+                const double rotation_deformability = GetConstraintRotational(ph_);
+
+                for (double translation_dis_deformability = 10; translation_dis_deformability < 26; translation_dis_deformability += 5)
+                {
+                    double translation_dir_deformability = 20;
+
+                    // ind 0, 4, 8, 12:  trans_dir: 20
+                    {
+                        model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                              translation_dir_deformability,
+                                              translation_dis_deformability,
+                                              rotation_deformability,
+                                              environment_sdf));
+
+                        controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                                       nh_,
+                                                       ph_,
+                                                       robot_,
+                                                       environment_sdf,
+                                                       generator_,
+                                                       vis_,
+                                                       GetGripperControllerType(ph_),
+                                                       model_list_.back(),
+                                                       GetMaxSamplingCounts(ph_),
+                                                       GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                    }
+
+                    translation_dir_deformability = 30;
+                    // ind 1, 5, 9, 13:  trans_dir: 30
+                    {
+                        model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                              translation_dir_deformability,
+                                              translation_dis_deformability,
+                                              rotation_deformability,
+                                              environment_sdf));
+
+                        controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                                       nh_,
+                                                       ph_,
+                                                       robot_,
+                                                       environment_sdf,
+                                                       generator_,
+                                                       vis_,
+                                                       GetGripperControllerType(ph_),
+                                                       model_list_.back(),
+                                                       GetMaxSamplingCounts(ph_),
+                                                       GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                    }
+
+                    translation_dir_deformability = 60;
+                    // ind 2, 6, 10, 14:  trans_dir: 60
+                    {
+                        model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                              translation_dir_deformability,
+                                              translation_dis_deformability,
+                                              rotation_deformability,
+                                              environment_sdf));
+
+                        controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                                       nh_,
+                                                       ph_,
+                                                       robot_,
+                                                       environment_sdf,
+                                                       generator_,
+                                                       vis_,
+                                                       GetGripperControllerType(ph_),
+                                                       model_list_.back(),
+                                                       GetMaxSamplingCounts(ph_),
+                                                       GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                    }
+
+                    translation_dir_deformability = 200;
+                    // ind 3, 7, 11, 15:  trans_dir: 100
+                    {
+                        model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                              translation_dir_deformability,
+                                              translation_dis_deformability,
+                                              rotation_deformability,
+                                              environment_sdf));
+
+                        controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                                       nh_,
+                                                       ph_,
+                                                       robot_,
+                                                       environment_sdf,
+                                                       generator_,
+                                                       vis_,
+                                                       GetGripperControllerType(ph_),
+                                                       model_list_.back(),
+                                                       GetMaxSamplingCounts(ph_),
+                                                       GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                    }
+
+                }
+
+            }
+            else
+            {
+                const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+                const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
+                const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
+                const double rotation_deformability = GetConstraintRotational(ph_);
+
+                model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                      translation_dir_deformability,
+                                      translation_dis_deformability,
+                                      rotation_deformability,
+                                      environment_sdf));
+
+                controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                               nh_,
+                                               ph_,
+                                               robot_,
+                                               environment_sdf,
+                                               generator_,
+                                               vis_,
+                                               GetGripperControllerType(ph_),
+                                               model_list_.back(),
+                                               GetMaxSamplingCounts(ph_),
+                                               GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+            }
+
+            // Dminishing Model with New Controller. (DM)
+            {
+                double translational_deformability, rotational_deformability;
+                const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+                if (ph_.getParam("translational_deformability", translational_deformability) &&
+                         ph_.getParam("rotational_deformability", rotational_deformability))
+                {
+                    ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                                           << translational_deformability << " "
+                                           << rotational_deformability);
+                }
+                else
+                {
+                    translational_deformability = task_specification_->defaultDeformability();
+                    rotational_deformability = task_specification_->defaultDeformability();
+                    ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                                           << task_specification_->defaultDeformability());
+                }
+
+                model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                          translational_deformability,
+                                          rotational_deformability));
+
+                controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                                               nh_,
+                                               ph_,
+                                               robot_,
+                                               environment_sdf,
+                                               generator_,
+                                               vis_,
+                                               GetGripperControllerType(ph_),
+                                               model_list_.back(),
+                                               GetMaxSamplingCounts(ph_),
+                                               GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+            }
+
+            // Dminishing Model with Old Controller. (DD)
+            {
+                double translational_deformability, rotational_deformability;
+                if (ph_.getParam("translational_deformability", translational_deformability) &&
+                         ph_.getParam("rotational_deformability", rotational_deformability))
+                {
+                    ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                                           << translational_deformability << " "
+                                           << rotational_deformability);
+                }
+                else
+                {
+                    translational_deformability = task_specification_->defaultDeformability();
+                    rotational_deformability = task_specification_->defaultDeformability();
+                    ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                                           << task_specification_->defaultDeformability());
+                }
+
+                model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                          translational_deformability,
+                                          rotational_deformability));
+
+                controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                               model_list_.back(),
+                                               task_specification_->collisionScalingFactor(),
+                                               optimization_enabled));
+            }
+            break;
+        }
+        default:
+        {
+            ROS_FATAL_NAMED("planner", "Invalid trial type, this should not be possible.");
+            assert(false && "Invalid trial type, this should not be possible.");
+        }
     }
 
     assert(controller_list_.size() == model_list_.size());
