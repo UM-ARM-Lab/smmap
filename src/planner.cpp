@@ -1321,23 +1321,26 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
             {
                 // First serialize
                 std::vector<uint8_t> buffer;
+
                 const uint64_t bytes_used = SerializeAllGrippersPoseTrajectory(global_plan_gripper_trajectory_, buffer);
-                const auto deserialized_results = DeserializeAllGrippersPoseTrajectory(buffer, 0);
-                const auto& deserialized_traj = deserialized_results.first;
-                const auto deserialized_bytes_read = deserialized_results.second;
 
                 // Verify no mistakes made in serialization
-                assert(deserialized_bytes_read == bytes_used);
-                assert(global_plan_gripper_trajectory_.size() == deserialized_traj.size());
-                for (size_t time_idx = 0; time_idx < deserialized_traj.size(); ++time_idx)
                 {
-                    const auto& planned_poses = global_plan_gripper_trajectory_[time_idx];
-                    const auto& deserialized_poses = deserialized_traj[time_idx];
-
-                    assert(planned_poses.size() == deserialized_poses.size());
-                    for (size_t gripper_idx = 0; gripper_idx < deserialized_poses.size(); ++gripper_idx)
+                    const auto deserialized_results = DeserializeAllGrippersPoseTrajectory(buffer, 0);
+                    const auto& deserialized_traj = deserialized_results.first;
+                    const auto deserialized_bytes_read = deserialized_results.second;
+                    assert(deserialized_bytes_read == bytes_used);
+                    assert(global_plan_gripper_trajectory_.size() == deserialized_traj.size());
+                    for (size_t time_idx = 0; time_idx < deserialized_traj.size(); ++time_idx)
                     {
-                        assert(planned_poses[gripper_idx].matrix() == deserialized_poses[gripper_idx].matrix());
+                        const auto& planned_poses = global_plan_gripper_trajectory_[time_idx];
+                        const auto& deserialized_poses = deserialized_traj[time_idx];
+
+                        assert(planned_poses.size() == deserialized_poses.size());
+                        for (size_t gripper_idx = 0; gripper_idx < deserialized_poses.size(); ++gripper_idx)
+                        {
+                            assert(planned_poses[gripper_idx].matrix() == deserialized_poses[gripper_idx].matrix());
+                        }
                     }
                 }
 
