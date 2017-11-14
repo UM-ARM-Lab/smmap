@@ -663,6 +663,8 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     const bool visualize_rrt_smoothing = true;
     const auto smoothed_path = rrtShortcutSmooth(rrt_results.first, visualize_rrt_smoothing);
 
+    std::cout << PrettyPrint::PrettyPrint(smoothed_path.back().getBand().getVectorRepresentation(), false, "\n") << std::endl << std::endl;
+
     if (visualization_enabled_globally_)
     {
         vis_.deleteObjects(RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
@@ -680,6 +682,11 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
 void RRTHelper::addBandToBlacklist(const EigenHelpers::VectorVector3d& band)
 {
     blacklisted_goal_rubber_bands_.push_back(band);
+}
+
+void RRTHelper::clearBlacklist()
+{
+    blacklisted_goal_rubber_bands_.clear();
 }
 
 bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const
@@ -1054,16 +1061,16 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                 continue;
             }
 
-            if (visualization_enabled_globally_ && visualization_enabled_locally)
-            {
-                const RRTGrippersRepresentation& start_band_endpoints = smoothing_start_config.getBand().getEndpoints();
-                const RRTGrippersRepresentation& end_band_endpoints = smoothing_target_end_config.getBand().getEndpoints();
+//            if (visualization_enabled_globally_ && visualization_enabled_locally)
+//            {
+//                const RRTGrippersRepresentation& start_band_endpoints = smoothing_start_config.getBand().getEndpoints();
+//                const RRTGrippersRepresentation& end_band_endpoints = smoothing_target_end_config.getBand().getEndpoints();
 
-                vis_.visualizeCubes(RRT_SHORTCUT_FIRST_GRIPPER_NS, {start_band_endpoints.first, end_band_endpoints.first}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 10);
-                vis_.visualizeCubes(RRT_SHORTCUT_SECOND_GRIPPER_NS, {start_band_endpoints.second, end_band_endpoints.second}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Cyan(), 10);
-                ros::spinOnce();
-                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
-            }
+//                vis_.visualizeCubes(RRT_SHORTCUT_FIRST_GRIPPER_NS, {start_band_endpoints.first, end_band_endpoints.first}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 10);
+//                vis_.visualizeCubes(RRT_SHORTCUT_SECOND_GRIPPER_NS, {start_band_endpoints.second, end_band_endpoints.second}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Cyan(), 10);
+//                ros::spinOnce();
+//                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+//            }
 
             // Forward simulate the rubber band along the straight line between gripper positions
             const bool local_visualization_enabled = false;
@@ -1127,13 +1134,13 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                             second_gripper_end_pos);
             }
 
-            if (visualization_enabled_globally_ && visualization_enabled_locally)
-            {
-                vis_.visualizeCubes(RRT_SHORTCUT_FIRST_GRIPPER_NS, target_waypoints_first_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 10);
-                vis_.visualizeCubes(RRT_SHORTCUT_SECOND_GRIPPER_NS, target_waypoints_second_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Cyan(), 10);
-                ros::spinOnce();
-                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
-            }
+//            if (visualization_enabled_globally_ && visualization_enabled_locally)
+//            {
+//                vis_.visualizeCubes(RRT_SHORTCUT_FIRST_GRIPPER_NS, target_waypoints_first_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 10);
+//                vis_.visualizeCubes(RRT_SHORTCUT_SECOND_GRIPPER_NS, target_waypoints_second_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Cyan(), 10);
+//                ros::spinOnce();
+//                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+//            }
 
             // Make a guess about the number of nodes we'll end up using
             assert(target_waypoints_first_gripper.size() == target_waypoints_second_gripper.size());
@@ -1252,11 +1259,12 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         }
     }
 
-    if (visualization_enabled_globally_ && visualization_enabled_locally)
-    {
-        vis_.deleteObjects(RRT_SHORTCUT_FIRST_GRIPPER_NS, 1, 21);
-        vis_.deleteObjects(RRT_SHORTCUT_SECOND_GRIPPER_NS, 1, 21);
-    }
+//    if (visualization_enabled_globally_ && visualization_enabled_locally)
+//    {
+//        vis_.deleteObjects(RRT_SHORTCUT_FIRST_GRIPPER_NS, 1, 21);
+//        vis_.deleteObjects(RRT_SHORTCUT_SECOND_GRIPPER_NS, 1, 21);
+//    }
+//    vis_.clearVisualizationsBullet();
 
     // Record the statistics and return the result
     const double smoothing_time = function_wide_stopwatch(READ);

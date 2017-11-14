@@ -178,7 +178,7 @@ void QuinlanRubberBand::visualize(
 {
     if (visualization_enabled)
     {
-        vis_.visualizePoints(marker_name + "_points", band_, Visualizer::Green(), 1, 0.002);
+//        vis_.visualizePoints(marker_name + "_points", band_, Visualizer::Green(), 1, 0.002);
         if (isOverstretched())
         {
             vis_.visualizeXYZTrajectory(marker_name, band_, overstretched_color, id);

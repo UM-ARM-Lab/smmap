@@ -277,10 +277,11 @@ void Planner::execute()
             const double current_error = task_specification_->calculateError(world_feedback);
             ROS_INFO_STREAM_NAMED("planner", "   Planner/Task sim time " << world_feedback.sim_time_ << "\t Error: " << current_error);
 
-            vis_.deleteObjects(Planner::PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * GetNumLookaheadSteps(ph_)) + 10);
-            vis_.deleteObjects(Planner::PROJECTED_BAND_NS,               1, (int32_t)GetNumLookaheadSteps(ph_) + 10);
-            vis_.deleteObjects(Planner::PROJECTED_POINT_PATH_NS,         1, 2);
-            vis_.deleteObjects(Planner::PROJECTED_POINT_PATH_LINES_NS,   1, 2);
+            vis_.deleteObjects(PROJECTED_BAND_NS, 1, 30);
+            vis_.clearVisualizationsBullet();
+            std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+            vis_.clearVisualizationsBullet();
+            std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
             if (world_feedback.sim_time_ - start_time >= task_specification_->maxTime())
             {
@@ -350,11 +351,17 @@ WorldState Planner::sendNextCommand(
             {
                 planning_needed = true;
 
-                vis_.deleteObjects(DESIRED_DELTA_NS, 1, 100);
-                vis_.deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
-                vis_.deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
-                vis_.deleteObjects(PROJECTED_POINT_PATH_NS,         1, 2);
-                vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS,   1, 2);
+                std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
+
+//                vis_.deleteObjects(DESIRED_DELTA_NS, 1, 100);
+//                vis_.deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
+//                vis_.deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
+//                vis_.deleteObjects(PROJECTED_POINT_PATH_NS,         1, 2);
+//                vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS,   1, 2);
+
+                vis_.clearVisualizationsBullet();
+                std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+                vis_.clearVisualizationsBullet();
 
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "planner", "Invoking global planner due to overstretch");
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "planner", "Invoking global planner due to collision");
@@ -529,9 +536,14 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
         grippers_pose_history_.clear();
         error_history_.clear();
 
-        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_A_NS,   1, 2);
-        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_B_NS,   1, 2);
-        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS, 1, 2);
+        std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
+        vis_.clearVisualizationsBullet();
+        std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+        vis_.clearVisualizationsBullet();
+
+//        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_A_NS,   1, 2);
+//        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_B_NS,   1, 2);
+//        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS, 1, 2);
     }
 
     const std::vector<double> fake_rewards(model_list_.size(), NAN);
@@ -644,11 +656,12 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectF
     const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
     constexpr bool band_verbose = false;
 
+//    vis_.clearVisualizationsBullet();
 
-    vis_.deleteObjects(PROJECTED_BAND_NS, 1, (int32_t)max_lookahead_steps_ + 10);
-    vis_.deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
-    vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
-    vis_.deleteObjects(PROJECTED_GRIPPER_NS, 1, (int32_t)(4 * max_lookahead_steps_) + 10);
+//    vis_.deleteObjects(PROJECTED_BAND_NS, 1, (int32_t)max_lookahead_steps_ + 10);
+//    vis_.deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
+//    vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
+//    vis_.deleteObjects(PROJECTED_GRIPPER_NS, 1, (int32_t)(4 * max_lookahead_steps_) + 10);
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -677,6 +690,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectF
         return dijkstras_task_->calculateErrorCorrectionDeltaFixedCorrespondences(world_state, correspondences.correspondences_);
     };
 
+
+//    vis_.clearVisualizationsBullet();
 
     rubber_band_between_grippers_->visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
 
@@ -1123,6 +1138,9 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
     target_gripper_poses[0].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(gripper0_position_pre_project, min_dist_to_obstacles);
     target_gripper_poses[1].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(gripper1_position_pre_project, min_dist_to_obstacles);
 
+//    std::cout << "Gripper 0 get: " << dijkstras_task_->environment_sdf_.Get3d(target_gripper_poses[0].translation()) << std::endl;
+//    std::cout << "Gripper 1 get: " << dijkstras_task_->environment_sdf_.Get3d(target_gripper_poses[1].translation()) << std::endl;
+
 //    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
 //    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
 
@@ -1177,6 +1195,8 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
 
     // Planning if we did not load a plan from file
     {
+        vis_.clearVisualizationsBullet();
+
         RRTConfig start_config(
                     std::pair<Vector3d, Vector3d>(
                                 world_state.all_grippers_single_pose_[0].translation(),
@@ -1193,8 +1213,13 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
         const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
         const auto rrt_results = rrt_helper_->rrtPlan(start_config, rrt_grippers_goal, time_limit);
 
-        vis_.deleteObjects(CLUSTERING_TARGETS_NS, 1, 2);
+//        vis_.deleteObjects(CLUSTERING_TARGETS_NS, 1, 2);
+        vis_.clearVisualizationsBullet();
+        std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+        vis_.clearVisualizationsBullet();
+        std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         rrt_helper_->visualizePath(rrt_results);
+        std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
         global_plan_current_timestep_ = 0;
         executing_global_gripper_trajectory_ = true;
