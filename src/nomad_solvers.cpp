@@ -68,10 +68,13 @@ GripperMotionNomadEvaluator::GripperMotionNomadEvaluator(
     , fix_step_size_(fix_step_size)
 {}
 
-bool GripperMotionNomadEvaluator::eval_x (NOMAD::Eval_Point& x,
+bool GripperMotionNomadEvaluator::eval_x(
+        NOMAD::Eval_Point& x,
         const NOMAD::Double& h_max,
         bool& count_eval)
 {
+    UNUSED(h_max); // TODO: Why don't we use h_max?
+
     // count a black-box evaluation
     count_eval = true;
 

@@ -20,13 +20,13 @@ namespace smmap
                             const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn,
                             const WorldState& world_current_state,
                             const double dt)
-                        : task_desired_object_delta_fn_(task_desired_object_delta_fn)
-                        , world_current_state_(world_current_state)
+//                        : task_desired_object_delta_fn_(task_desired_object_delta_fn)
+                        : world_current_state_(world_current_state)
                         , desired_object_motion_(task_desired_object_delta_fn(world_current_state))
                         , dt_(dt)
                     {}
 
-                    const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn_;
+//                    const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn_;
                     const WorldState& world_current_state_;
                     ObjectDeltaAndWeight desired_object_motion_;
                     const double dt_;

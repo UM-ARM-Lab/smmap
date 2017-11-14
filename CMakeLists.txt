@@ -23,7 +23,6 @@ find_package(Eigen3 REQUIRED)
 set(Eigen3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 find_package(PythonLibs 2.7 REQUIRED)
 find_package(GUROBI REQUIRED)
-
 find_package(NOMAD REQUIRED)
 
 ################################################
@@ -89,6 +88,7 @@ FILE(GLOB h_SRC "include/${PROJECT_NAME}/*.h")
 FILE(GLOB cpp_SRC "src/*.cpp")
 
 ## Simulator tests
+# TODO: Update other Bandit versions with correct names and linking
 #add_executable(${PROJECT_NAME}_test_node_KFMANDB nodes/${PROJECT_NAME}_test_node.cpp)
 #add_dependencies(${PROJECT_NAME}_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
 #target_link_libraries(${PROJECT_NAME}_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_LIBRARIES})

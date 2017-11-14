@@ -21,7 +21,7 @@ namespace smmap
                     Visualizer& vis,
                     GripperControllerType gripper_controller_type,
                     const DeformableModel::Ptr& deformable_model,
-                    const int64_t max_count);
+                    const int max_count);
 
             //////////////////////////////////////////////////////////////////////////////////////
             // Called from outside to find the optimal gripper command
@@ -74,13 +74,13 @@ namespace smmap
             // Collision constraint related function
             /////////////////////////////////////////////////////////////////////////////////////////
 
-            const double gripperCollisionCheckHelper(
+            double gripperCollisionCheckHelper(
                     const AllGrippersSinglePose& current_gripper_pose,
-                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+                    const AllGrippersSinglePoseDelta& test_gripper_motion) const;
 
             bool gripperCollisionCheckResult(
                     const AllGrippersSinglePose& current_gripper_pose,
-                    const AllGrippersSinglePoseDelta &test_gripper_motion);
+                    const AllGrippersSinglePoseDelta &test_gripper_motion) const;
 
             /////////////////////////////////////////////////////////////////////////////////////////
             // Stretching constraint related function
@@ -127,7 +127,7 @@ namespace smmap
             double max_stretch_factor_;
             double stretching_cosine_threshold_;
 
-            const int64_t max_count_;
+            const int max_count_;
             int sample_count_;
 
             bool fix_step_;

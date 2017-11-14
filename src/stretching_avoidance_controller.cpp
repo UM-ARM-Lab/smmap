@@ -19,7 +19,7 @@ StretchingAvoidanceController::StretchingAvoidanceController(
         Visualizer& vis,
         GripperControllerType gripper_controller_type,
         const DeformableModel::Ptr& deformable_model,
-        const int64_t max_count)
+        const int max_count)
     : object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
     , gripper_collision_checker_(nh)
     , grippers_data_(robot.getGrippersData())
@@ -203,7 +203,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
 
 
 std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceController::solvedByNomad(
-        const DeformableModel::DeformableModelInputData &input_data,
+        const DeformableModel::DeformableModelInputData& input_data,
         const double max_gripper_velocity)
 {
     const double max_step_size = max_gripper_velocity * input_data.dt_;
@@ -326,7 +326,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
         // parameters creation:
         NOMAD::Parameters p ( out );
 //        NOMAD::Parameters p;
-        p.set_DIMENSION (6 * num_grippers);             // number of variables
+        p.set_DIMENSION ((int)(6 * num_grippers));             // number of variables
 
         vector<NOMAD::bb_output_type> bbot (4); // definition of
         bbot[0] = NOMAD::OBJ;                   // output types
@@ -342,7 +342,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
 
         p.set_BB_OUTPUT_TYPE(bbot);
 
-        const int x_dim = 6 * num_grippers;
+        const int x_dim = (int)(6 * num_grippers);
         const int size_of_initial_batch = 5;
 
         {
@@ -357,11 +357,10 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
             }
         }
 
-        p.set_LOWER_BOUND(NOMAD::Point(6 * num_grippers, -max_step_size)); // all var. >= -6
-        p.set_UPPER_BOUND(NOMAD::Point(6 * num_grippers, max_step_size)); // all var. >= -6
+        p.set_LOWER_BOUND(NOMAD::Point((int)(6 * num_grippers), -max_step_size)); // all var. >= -6
+        p.set_UPPER_BOUND(NOMAD::Point((int)(6 * num_grippers), max_step_size)); // all var. >= -6
 
-        p.set_MAX_BB_EVAL (max_count_);     // the algorithm terminates after
-                                     // 100 black-box evaluations
+        p.set_MAX_BB_EVAL(max_count_);     // the algorithm terminates after max_count_ black-box evaluations
         p.set_DISPLAY_DEGREE(2);
         //p.set_SGTELIB_MODEL_DISPLAY("");
         p.set_SOLUTION_FILE("sol.txt");
@@ -643,9 +642,9 @@ void StretchingAvoidanceController::visualize_gripper_motion(
                         Visualizer::Olive());
 }
 
-const double StretchingAvoidanceController::gripperCollisionCheckHelper(
+double StretchingAvoidanceController::gripperCollisionCheckHelper(
         const AllGrippersSinglePose& current_gripper_pose,
-        const AllGrippersSinglePoseDelta& test_gripper_motion)
+        const AllGrippersSinglePoseDelta& test_gripper_motion) const
 {
     const auto grippers_test_poses = kinematics::applyTwist(current_gripper_pose, test_gripper_motion);
 
@@ -665,17 +664,10 @@ const double StretchingAvoidanceController::gripperCollisionCheckHelper(
 
 bool StretchingAvoidanceController::gripperCollisionCheckResult(
         const AllGrippersSinglePose& current_gripper_pose,
-        const AllGrippersSinglePoseDelta& test_gripper_motion)
+        const AllGrippersSinglePoseDelta& test_gripper_motion) const
 {
-    bool collision_violation = false;
-
-    const double min_dis_to_obstacle = gripperCollisionCheckHelper(current_gripper_pose,
-                                                                   test_gripper_motion);
-    if (min_dis_to_obstacle < distance_to_obstacle_threshold_)
-    {
-        collision_violation = true;
-    }
-
+    const double min_dis_to_obstacle = gripperCollisionCheckHelper(current_gripper_pose, test_gripper_motion);
+    const bool collision_violation = (min_dis_to_obstacle < distance_to_obstacle_threshold_);
     return collision_violation;
 }
 
@@ -765,7 +757,7 @@ double StretchingAvoidanceController::ropeTwoGripperStretchingHelper(
                         stretching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind))
                                 / resulting_gripper_motion.norm();
                     }
-                    stretching_cos = stretching_sum / current_gripper_pose.size();
+                    stretching_cos = stretching_sum / (double)(current_gripper_pose.size());
                }
                 break;
             }
@@ -778,7 +770,7 @@ double StretchingAvoidanceController::ropeTwoGripperStretchingHelper(
                     stretching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind))
                             / resulting_gripper_motion.norm();
                 }
-                stretching_cos = stretching_sum / current_gripper_pose.size();
+                stretching_cos = stretching_sum / (double)(current_gripper_pose.size());
                 break;
             }
             default:
@@ -935,7 +927,7 @@ double StretchingAvoidanceController::clothTwoGripperStretchingHelper(
             stretching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind))
                     / resulting_gripper_motion.norm();
         }
-        stretching_cos = stretching_sum / current_gripper_pose.size();
+        stretching_cos = stretching_sum / (double)(current_gripper_pose.size());
     }
 
     return stretching_cos;

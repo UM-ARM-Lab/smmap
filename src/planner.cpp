@@ -1826,7 +1826,7 @@ void Planner::initializeGrippersMaxDistance()
         }
         else if (GetDeformableType(nh_) == ROPE)
         {
-            max_grippers_distance_ = GetRopeSegmentLength(nh_) * GetRopeNumLinks(nh_) * 1.0;
+            max_grippers_distance_ = GetRopeSegmentLength(nh_) * (double)GetRopeNumLinks(nh_);
         }
     }
 }
