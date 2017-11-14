@@ -19,8 +19,7 @@ StretchingAvoidanceController::StretchingAvoidanceController(
         Visualizer& vis,
         GripperControllerType gripper_controller_type,
         const DeformableModel::Ptr& deformable_model,
-        const int64_t max_count,
-        const double distance_to_obstacle_threshold)
+        const int64_t max_count)
     : object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
     , gripper_collision_checker_(nh)
     , grippers_data_(robot.getGrippersData())
@@ -217,7 +216,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
             input_data.desired_object_motion_.weight;
           //  input_data.task_desired_object_delta_fn_(current_world_state).weight;
 
-    const ssize_t num_grippers = current_world_state.all_grippers_single_pose_.size();
+    const size_t num_grippers = current_world_state.all_grippers_single_pose_.size();
     const ssize_t num_nodes = current_world_state.object_configuration_.cols();
 
     const Eigen::MatrixXd node_squared_distance =
@@ -303,7 +302,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
             const AllGrippersSinglePoseDelta& test_gripper_motion)
     {
         double max_value = 0.0;
-        for (ssize_t gripper_ind = 0; gripper_ind < test_gripper_motion.size(); gripper_ind += 6)
+        for (size_t gripper_ind = 0; gripper_ind < test_gripper_motion.size(); gripper_ind += 6)
         {
             const double velocity_norm = GripperVelocity6dNorm(test_gripper_motion.at(gripper_ind));
             if (velocity_norm > max_value)
@@ -345,42 +344,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
 
         const int x_dim = 6 * num_grippers;
         const int size_of_initial_batch = 5;
-        // Set a list of initial points
-        /*
-        {
-            NOMAD::Point x0 = NOMAD::Point(x_dim, 0.0);
-            NOMAD::Point x1 = NOMAD::Point(x_dim, 0.0);
-            NOMAD::Point x2 = NOMAD::Point(x_dim, 0.0);
-            NOMAD::Point x3 = NOMAD::Point(x_dim, 0.0);
-            NOMAD::Point x4 = NOMAD::Point(x_dim, 0.0);
-            NOMAD::Point x5 = NOMAD::Point(x_dim, 0.0);
-            NOMAD::Point x6 = NOMAD::Point(x_dim, 0.0);
-            NOMAD::Point x7 = NOMAD::Point(x_dim, 0.0);
 
-            x1.reset(x_dim, max_step_size / 6.0);
-            x2.set_coord(0, max_step_size / 3.0);
-            x3.set_coord(x_dim / 2, max_step_size / 3.0);
-            x4.set_coord(1, max_step_size/3.0);
-            x5.set_coord(x_dim / 2 + 1, max_step_size/3.0);
-            x6.set_coord(2, max_step_size/3.0);
-            x7.set_coord(x_dim / 2 + 2, max_step_size/3.0);
-
-            p.set_X0 (x0);  // starting point
-            p.set_X0 (x1);  // starting point
-            p.set_X0 (-x1);  // starting point
-            p.set_X0(-x2-x3);
-            p.set_X0(-x4 - x5);
-            p.set_X0(-x6 - x7);
-            p.set_X0(x2 + x3);
-            p.set_X0(x4 + x5);
-            p.set_X0(-x6 - x7);
-            p.set_X0(x0 + x2 + x4 + x6);
-            p.set_X0(x0 + x1 + x3 + x5);
-            p.set_X0(x0 - x2 - x4 - x6);
-            p.set_X0(x0 - x1 - x3 - x5);
-
-        }
-        */
         {
             for (int sample_ind = 0; sample_ind < size_of_initial_batch; sample_ind++)
             {
@@ -392,7 +356,6 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
                 p.set_X0(x0);
             }
         }
-
 
         p.set_LOWER_BOUND(NOMAD::Point(6 * num_grippers, -max_step_size)); // all var. >= -6
         p.set_UPPER_BOUND(NOMAD::Point(6 * num_grippers, max_step_size)); // all var. >= -6
@@ -544,7 +507,6 @@ double StretchingAvoidanceController::errorOfControlByPrediction(
 {
     ssize_t num_nodes = predicted_object_p_dot.cols();
     double sum_of_error = 0;
-    const double zero_thrshold = 0.000001;
 
     for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
     {
@@ -632,7 +594,7 @@ void StretchingAvoidanceController::visualize_cloth_stretching_vector(
     const std::vector<double>& second_contribution = second_stretching_vector_info.node_contribution_;
 
     Eigen::Vector3d first_correction_vector = Eigen::MatrixXd::Zero(3,1);
-    for (int stretching_ind = 0; stretching_ind < first_from_nodes.size(); stretching_ind++)
+    for (size_t stretching_ind = 0; stretching_ind < first_from_nodes.size(); stretching_ind++)
     {
         first_correction_vector +=
                 first_contribution.at(stretching_ind) *
@@ -640,7 +602,7 @@ void StretchingAvoidanceController::visualize_cloth_stretching_vector(
                  - object_configuration.block<3, 1>(0, first_from_nodes.at(stretching_ind)));
     }
     Eigen::Vector3d second_correction_vector = Eigen::MatrixXd::Zero(3,1);
-    for (int stretching_ind = 0; stretching_ind < second_from_nodes.size(); stretching_ind++)
+    for (size_t stretching_ind = 0; stretching_ind < second_from_nodes.size(); stretching_ind++)
     {
         second_correction_vector +=
                 second_contribution.at(stretching_ind) *
@@ -885,7 +847,7 @@ double StretchingAvoidanceController::clothTwoGripperStretchingHelper(
     Eigen::Vector3d point_on_second_gripper = Eigen::MatrixXd::Zero(3,1);
 
     Eigen::Vector3d first_correction_vector = Eigen::MatrixXd::Zero(3,1);
-    for (int stretching_ind = 0; stretching_ind < first_from_nodes.size(); stretching_ind++)
+    for (size_t stretching_ind = 0; stretching_ind < first_from_nodes.size(); stretching_ind++)
     {
         first_correction_vector +=
                 first_contribution.at(stretching_ind) *
@@ -903,7 +865,7 @@ double StretchingAvoidanceController::clothTwoGripperStretchingHelper(
     point_on_first_gripper = point_on_first_gripper - current_gripper_pose.at(0).translation();
 
     Eigen::Vector3d second_correction_vector = Eigen::MatrixXd::Zero(3,1);
-    for (int stretching_ind = 0; stretching_ind < second_from_nodes.size(); stretching_ind++)
+    for (size_t stretching_ind = 0; stretching_ind < second_from_nodes.size(); stretching_ind++)
     {
         second_correction_vector +=
                 second_contribution.at(stretching_ind) *

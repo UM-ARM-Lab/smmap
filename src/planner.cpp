@@ -1486,8 +1486,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                            vis_,
                                            GetGripperControllerType(ph_),
                                            model_list_.back(),
-                                           GetMaxSamplingCounts(ph_),
-                                           GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                                           GetMaxSamplingCounts(ph_)));
             break;
         }
         case DIMINISHING_RIGIDITY_SINGLE_MODEL_CONSTRAINT_CONTROLLER:
@@ -1525,8 +1524,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                            vis_,
                                            GetGripperControllerType(ph_),
                                            model_list_.back(),
-                                           GetMaxSamplingCounts(ph_),
-                                           GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                                           GetMaxSamplingCounts(ph_)));
             break;
         }
         case MULTI_MODEL_BANDIT_TEST:
@@ -1625,8 +1623,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                                        vis_,
                                                        GetGripperControllerType(ph_),
                                                        model_list_.back(),
-                                                       GetMaxSamplingCounts(ph_),
-                                                       GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                                                       GetMaxSamplingCounts(ph_)));
                     }
 
                     translation_dir_deformability = 30;
@@ -1647,8 +1644,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                                        vis_,
                                                        GetGripperControllerType(ph_),
                                                        model_list_.back(),
-                                                       GetMaxSamplingCounts(ph_),
-                                                       GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                                                       GetMaxSamplingCounts(ph_)));
                     }
 
                     translation_dir_deformability = 60;
@@ -1669,8 +1665,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                                        vis_,
                                                        GetGripperControllerType(ph_),
                                                        model_list_.back(),
-                                                       GetMaxSamplingCounts(ph_),
-                                                       GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                                                       GetMaxSamplingCounts(ph_)));
                     }
 
                     translation_dir_deformability = 200;
@@ -1691,8 +1686,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                                        vis_,
                                                        GetGripperControllerType(ph_),
                                                        model_list_.back(),
-                                                       GetMaxSamplingCounts(ph_),
-                                                       GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                                                       GetMaxSamplingCounts(ph_)));
                     }
 
                 }
@@ -1721,8 +1715,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                                vis_,
                                                GetGripperControllerType(ph_),
                                                model_list_.back(),
-                                               GetMaxSamplingCounts(ph_),
-                                               GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                                               GetMaxSamplingCounts(ph_)));
             }
 
             // Dminishing Model with New Controller. (DM)
@@ -1758,8 +1751,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                                vis_,
                                                GetGripperControllerType(ph_),
                                                model_list_.back(),
-                                               GetMaxSamplingCounts(ph_),
-                                               GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
+                                               GetMaxSamplingCounts(ph_)));
             }
 
             // Dminishing Model with Old Controller. (DD)

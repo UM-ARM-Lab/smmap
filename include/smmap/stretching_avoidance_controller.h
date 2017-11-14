@@ -13,8 +13,7 @@ namespace smmap
     class StretchingAvoidanceController : public DeformableController
     {
         public:
-            StretchingAvoidanceController(
-                    ros::NodeHandle& nh,
+            StretchingAvoidanceController(ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
                     RobotInterface& robot,
                     const sdf_tools::SignedDistanceField& sdf,
@@ -22,8 +21,7 @@ namespace smmap
                     Visualizer& vis,
                     GripperControllerType gripper_controller_type,
                     const DeformableModel::Ptr& deformable_model,
-                    const int64_t max_count,
-                    const double distance_to_obstacle_threshold);
+                    const int64_t max_count);
 
             //////////////////////////////////////////////////////////////////////////////////////
             // Called from outside to find the optimal gripper command
