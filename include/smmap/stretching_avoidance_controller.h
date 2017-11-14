@@ -1,5 +1,5 @@
-#ifndef LEAST_SQUARES_CONTROLLER_RANDOM_SAMPLING_H
-#define LEAST_SQUARES_CONTROLLER_RANDOM_SAMPLING_H
+#ifndef STRETCHINGAVOIDANCECONTROLLER_H
+#define STRETCHINGAVOIDANCECONTROLLER_H
 
 #include <sdf_tools/sdf.hpp>
 
@@ -10,98 +10,10 @@
 
 namespace smmap
 {
-
-    // This structure is currently not in use. The stretching information is now from ros.
-    // It might help later work, so leave it here.
-    struct GripperStretchingInfo
-    {
-        GripperStretchingInfo()
-        {}
-        GripperStretchingInfo(ssize_t num_x_steps, ssize_t num_y_steps)
-            : node_xy_ind(num_x_steps, num_y_steps)
-        {}
-        GripperStretchingInfo(
-                ssize_t num_x_steps,
-                ssize_t num_y_steps,
-                const GripperData& gripper_data)
-            : node_xy_ind(num_x_steps, num_y_steps)
-            , attatched_nodes_(gripper_data.node_indices_)
-        {
-            setEdgeNodes();
-        }
-
-        void setEdgeNodes()
-        {
-            from_nodes_.clear();
-            to_nodes_.clear();
-
-            for(int attatched_ind = 0; attatched_ind < attatched_nodes_.size(); attatched_ind++)
-            {
-                bool is_cloth_edge = false;
-                bool is_boundary_attatched = false;
-                std::vector<ssize_t> node_neighbor = node_xy_ind.Neighbor8Ind(attatched_nodes_.at(attatched_ind));
-
-                // if out of cloth, assign -1; if on cloth && attatched, assign -2
-                for (int neighbor_ind = 0; neighbor_ind < node_neighbor.size(); neighbor_ind++)
-                {
-                    if(node_neighbor.at(neighbor_ind) == -1)
-                    {
-                        is_cloth_edge == true;
-                    }
-                    if(!isAttached(node_neighbor.at(neighbor_ind)))
-                    {
-                        is_boundary_attatched == true;
-                    }
-                    else
-                    {
-                        node_neighbor.at(neighbor_ind) = -2;
-                    }
-                }
-
-                if(is_boundary_attatched)
-                {
-                    from_nodes_.push_back(attatched_nodes_.at(attatched_ind));
-                    to_nodes_.push_back(node_neighbor);
-                }
-            }
-        }
-
-        void setGripperStretchingInfo(
-                ssize_t num_x_steps,
-                ssize_t num_y_steps,
-                const GripperData& gripper_data)
-        {
-            node_xy_ind.SetNodeXYInd(num_x_steps, num_y_steps);
-            attatched_nodes_ = gripper_data.node_indices_;
-            setEdgeNodes();
-        }
-
-        bool isAttached(ssize_t node_ind)
-        {
-            for(int attatched_ind = 0; attatched_ind < attatched_nodes_.size(); attatched_ind++)
-            {
-                if (node_ind == attatched_nodes_.at(attatched_ind))
-                    return true;
-            }
-            return false;
-        }
-
-        NodeXYInd node_xy_ind;
-        std::vector<long> attatched_nodes_;
-        std::vector<ssize_t> from_nodes_;
-        // each sub-vector is of size 8; -1 out of bound, -2 attached
-        /* Layout :
-         *   3  2  1
-         *   4  X  0
-         *   5  6  7
-        */
-        std::vector<std::vector<ssize_t>> to_nodes_;
-    };
-
-    class LeastSquaresControllerRandomSampling : public DeformableController
+    class StretchingAvoidanceController : public DeformableController
     {
         public:
-            LeastSquaresControllerRandomSampling(
+            StretchingAvoidanceController(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
                     RobotInterface& robot,
@@ -116,9 +28,6 @@ namespace smmap
             //////////////////////////////////////////////////////////////////////////////////////
             // Called from outside to find the optimal gripper command
             //////////////////////////////////////////////////////////////////////////////////////
-
-            void setGripperControllerType(GripperControllerType gripper_controller_type);
-
 
         private:
             /////////////////////////////////////////////////////////////////////////////////////////
@@ -224,7 +133,6 @@ namespace smmap
             int sample_count_;
 
             bool fix_step_;
-            bool previous_over_stretch_state_;
             bool over_stretch_;
             const std::string log_file_path_;
 

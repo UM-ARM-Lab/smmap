@@ -19,7 +19,7 @@
 #include "smmap/constraint_jacobian_model.h"
 
 #include "smmap/least_squares_controller_with_object_avoidance.h"
-#include "smmap/least_squares_controller_random_sampling.h"
+#include "smmap/stretching_avoidance_controller.h"
 
 using namespace smmap;
 using namespace Eigen;
@@ -194,7 +194,7 @@ Planner::Planner(
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
 
     , logging_enabled_(GetLoggingEnabled(nh_))
-    , controller_logging_enabled_(true)
+    , controller_logging_enabled_(GetLoggingEnabled(nh_))
     , vis_(vis)
     , visualize_desired_motion_(GetVisualizeObjectDesiredMotion(ph_))
     , visualize_predicted_motion_(GetVisualizeObjectPredictedMotion(ph_))
@@ -463,7 +463,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     ObjectDeltaAndWeight& task_desired_motion = model_input_data.desired_object_motion_;
     const Eigen::VectorXd desired_p_dot = task_desired_motion.delta;
     const Eigen::VectorXd desired_p_dot_weight = task_desired_motion.weight;
-    const int num_grippers = GetGrippersData(nh_).size();
+    const ssize_t num_grippers = GetGrippersData(nh_).size();
 
     if (calculate_regret_ && num_models_ > 1)
     {
@@ -477,9 +477,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
             ObjectPointSet real_p_dot = world_state.object_configuration_ - current_object_configuration;
             ssize_t num_nodes = real_p_dot.cols();
 
-            int point_count = 0;
-            bool over_stretch = false;
-            const double max_stretch_factor = GetMaxStretchFactor(ph_);
+            int point_count = 0;            
             double max_stretching = 0.0;
             double desired_p_dot_ave_norm = 0.0;
             double desired_p_dot_max = 0.0;
@@ -516,12 +514,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
                     if (this_stretching_factor > max_stretching)
                     {
                         max_stretching = this_stretching_factor;
-                    }
-
-                    const double max_distance = max_stretch_factor * object_initial_node_distance_(first_node, second_node);
-                    if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
-                    {
-                        over_stretch = true;
                     }
                 }
             }
@@ -561,8 +553,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
         ssize_t num_nodes = real_p_dot.cols();
 
         int point_count = 0;
-        bool over_stretch = false;
-        const double max_stretch_factor = GetMaxStretchFactor(ph_);
         double max_stretching = 0.0;
         double desired_p_dot_ave_norm = 0.0;
         double desired_p_dot_max = 0.0;
@@ -599,12 +589,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 if (this_stretching_factor > max_stretching)
                 {
                     max_stretching = this_stretching_factor;
-                }
-
-                const double max_distance = max_stretch_factor * object_initial_node_distance_(first_node, second_node);
-                if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
-                {
-                    over_stretch = true;
                 }
             }
         }
@@ -1493,7 +1477,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                   rotation_deformability,
                                   environment_sdf));
 
-            controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+            controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                            nh_,
                                            ph_,
                                            robot_,
@@ -1532,7 +1516,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                       translational_deformability,
                                       rotational_deformability));
 
-            controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+            controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                            nh_,
                                            ph_,
                                            robot_,
@@ -1632,7 +1616,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                               rotation_deformability,
                                               environment_sdf));
 
-                        controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                        controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                                        nh_,
                                                        ph_,
                                                        robot_,
@@ -1654,7 +1638,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                               rotation_deformability,
                                               environment_sdf));
 
-                        controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                        controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                                        nh_,
                                                        ph_,
                                                        robot_,
@@ -1676,7 +1660,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                               rotation_deformability,
                                               environment_sdf));
 
-                        controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                        controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                                        nh_,
                                                        ph_,
                                                        robot_,
@@ -1698,7 +1682,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                               rotation_deformability,
                                               environment_sdf));
 
-                        controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                        controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                                        nh_,
                                                        ph_,
                                                        robot_,
@@ -1728,7 +1712,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                       rotation_deformability,
                                       environment_sdf));
 
-                controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                                nh_,
                                                ph_,
                                                robot_,
@@ -1765,7 +1749,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                           translational_deformability,
                                           rotational_deformability));
 
-                controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
+                controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                                nh_,
                                                ph_,
                                                robot_,
@@ -1850,7 +1834,7 @@ void Planner::initializeGrippersMaxDistance()
         }
         else if (GetDeformableType(nh_) == ROPE)
         {
-            max_grippers_distance_ = GetRopeSegmentLength(nh_) * GetRopeNumLinks(nh_);
+            max_grippers_distance_ = GetRopeSegmentLength(nh_) * GetRopeNumLinks(nh_) * 1.0;
         }
     }
 }
@@ -2040,7 +2024,6 @@ void Planner::visualize_gripper_motion(
     }
         case 2:
     {
-//        break;
         vis_.visualizeLines("DD grippers motion",
                             line_starts,
                             line_ends,
