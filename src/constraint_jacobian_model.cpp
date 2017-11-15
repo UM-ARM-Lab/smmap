@@ -106,45 +106,41 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
 
     // Move the object based on the movement of each gripper
     for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
-    {        
+    {
         // Assume that our Jacobian is correct, and predict where we will end up
         delta += J.block(0, 6 * (ssize_t)gripper_ind, J.rows(), 6) * grippers_pose_delta[gripper_ind];
     }
 
     for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
     {
+        // Do nothing if we are not in collision
         if (environment_sdf_.EstimateDistance3d(current_configuration.col(node_ind)).first > obstacle_threshold_)
         {
             continue;
         }
         else
-        {            
-            Vector3d node_p_dot = delta.block(node_ind*3, 0, 3, 1);
-            std::vector<double> sur_n
-                    = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
-            if(sur_n.size()>1)
+        {
+            const Vector3d& node_p_dot = delta.block<3, 1>(node_ind * 3, 0);
+            std::vector<double> sur_n = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
+            if (sur_n.size() > 1)
             {
-                Vector3d surface_normal= Vector3d::Map(sur_n.data(),sur_n.size());
-                surface_normal = surface_normal/surface_normal.norm();
+                const Vector3d surface_normal = Vector3d::Map(sur_n.data(), sur_n.size()).normalized();
 
                 // if node is moving outward from obstacle, unmask.
-                double dot_result = node_p_dot.dot(surface_normal);
-                if (dot_result<0.0)
+                const double dot_result = node_p_dot.dot(surface_normal);
+                if (dot_result < 0.0)
                 {
-                    MatrixXd projected_node_p_dot = node_p_dot - dot_result * surface_normal;
-                    delta.block(node_ind*3, 0, 3, 1) = projected_node_p_dot;
+                    const auto projected_node_p_dot = node_p_dot - dot_result * surface_normal;
+                    delta.block<3, 1>(node_ind * 3, 0) = projected_node_p_dot;
                 }
             }
 
         }
     }
 
-    // This delta is a stacked vector
-    Eigen::MatrixXd delta_with_mask = delta;
-
-    // this delta is a 3xn vector
-    delta_with_mask.resizeLike(input_data.world_current_state_.object_configuration_);
-    return delta_with_mask;
+    // Resize delta to a 3xn vector
+    delta.resizeLike(input_data.world_current_state_.object_configuration_);
+    return delta;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -258,8 +254,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
     const ssize_t num_lines = num_nodes_ * 3;
     MatrixXd M(num_lines, num_lines);
     M.setIdentity(num_lines,num_lines);
-    Matrix3d I3 = Matrix3d::Identity(3,3);
-
+    const Matrix3d I3 = Matrix3d::Identity();
 
     for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
     {
@@ -271,25 +266,20 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
         // if is close to obstacle
         else
         {
-            const Vector3d node_p_dot = object_p_dot.block<3,1>(node_ind*3,0);
+            const Vector3d node_p_dot = object_p_dot.block<3, 1>(node_ind * 3, 0);
 
             // sur_n pointing out from obstacle
-            std::vector<double> sur_n
-                    = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
+            std::vector<double> sur_n = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
 
-            if(sur_n.size()>1)
+            if (sur_n.size() > 1)
             {
-                Vector3d surface_normal= Vector3d::Map(sur_n.data(),sur_n.size());
-
-                double surface_vector_norm = std::sqrt(std::pow(surface_normal(0),2)+std::pow(surface_normal(1),2)+std::pow(surface_normal(2),2));
-
-                surface_normal = surface_normal/surface_vector_norm;
+                const Vector3d surface_normal = Vector3d::Map(sur_n.data(),sur_n.size()).normalized();
                 // if node is moving outward from obstacle, unmask.
-                double dot_result = 100*node_p_dot(0)*surface_normal(0)+100*node_p_dot(1)*surface_normal(1)+100*node_p_dot(2)*surface_normal(2);
-                if (dot_result<0.0)
+                const double dot_result = node_p_dot.dot(surface_normal);
+                if (dot_result < 0.0)
                 {
                     const Matrix<double, 1, 3> surface_normal_inv = surface_normal.adjoint();
-                    M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
+                    M.block<3, 3>(node_ind * 3, node_ind * 3) = I3 - surface_normal*surface_normal_inv;
                 }
             }
         }
@@ -329,9 +319,9 @@ Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node
         dot3 = 0;
     }
 
-    beta_rigidity(0,0) = std::exp(translation_dir_deformability_ * dot1);
-    beta_rigidity(1,1) = std::exp(translation_dir_deformability_ * dot2);
-    beta_rigidity(2,2) = std::exp(translation_dir_deformability_ * dot3);
+    beta_rigidity(0, 0) = std::exp(translation_dir_deformability_ * dot1);
+    beta_rigidity(1, 1) = std::exp(translation_dir_deformability_ * dot2);
+    beta_rigidity(2, 2) = std::exp(translation_dir_deformability_ * dot3);
 
     return beta_rigidity;
 }
@@ -339,16 +329,16 @@ Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node
 
 double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, const double dist_rest) const
 {
-    double ration;
+    double ratio;
     if (std::fabs(dist_rest) < 0.00001)
     {
-        ration = 1;
+        ratio = 1;
     }
     else
     {
-        ration = dist_to_gripper / dist_rest;
+        ratio = dist_to_gripper / dist_rest;
     }
 
-    return std::pow(ration,translation_dis_deformability_);
+    return std::pow(ratio, translation_dis_deformability_);
 
 }

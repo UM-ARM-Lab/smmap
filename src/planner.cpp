@@ -435,7 +435,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
                         model_input_data,
                         robot_.max_gripper_velocity_);
 
-            visualize_gripper_motion( world_state.all_grippers_single_pose_,
+            visualizeGripperMotion( world_state.all_grippers_single_pose_,
                                       suggested_robot_commands[model_ind].first,
                                       model_ind);
 
@@ -1946,7 +1946,7 @@ void Planner::visualizeDesiredMotion(
     }
 }
 
-void Planner::visualize_gripper_motion(
+void Planner::visualizeGripperMotion(
         const AllGrippersSinglePose& current_gripper_pose,
         const AllGrippersSinglePoseDelta& gripper_motion,
         const ssize_t model_ind)

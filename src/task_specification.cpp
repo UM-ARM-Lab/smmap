@@ -108,6 +108,8 @@ TaskSpecification::TaskSpecification(
     , current_error_last_simtime_calced_(NAN)
     , current_error_(NAN)
 
+    , desired_motion_scaling_factor_(GetDesiredMotionScalingFactor(ph_))
+
     , deformable_type_(deformable_type)
     , task_type_(task_type)
     , is_dijkstras_type_task_(is_dijkstras_type_task)
@@ -422,10 +424,10 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
             GlobalStopwatch(RESET);
             bool visualize_stretching_lines = false;
 
-            if(!GetStretchingCorrectionFromTask(ph_))
+            if (!GetStretchingCorrectionFromTask(ph_))
             {
-                ObjectDeltaAndWeight no_stretching_correction(num_nodes_ * 3);
-                first_step_stretching_correction_ = no_stretching_correction;
+                // If we're not getting it from the task, then set it to zero
+                first_step_stretching_correction_ = ObjectDeltaAndWeight(num_nodes_ * 3);;
             }
             else
             {
@@ -441,8 +443,8 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
             first_step_last_simtime_calced_ = world_state.sim_time_;
             first_step_calculated_.store(true);
 
-            // Try to scaled down size of desired motion
-            first_step_desired_motion_.delta = first_step_desired_motion_.delta / GetDesiredDownScale(ph_);
+            // Scale down the motion so that we are not asking for movements well beyond anything reasonable
+            first_step_desired_motion_.delta = first_step_desired_motion_.delta / desired_motion_scaling_factor_;
 
             return first_step_desired_motion_;
         }

@@ -17,16 +17,13 @@ namespace smmap
           GripperMotionNomadEvaluator(
                   const NOMAD::Parameters& p,
                   const ssize_t num_grippers,
-                  const double gripper_radius,
-                  const double stretching_threshold,
-                  const double max_step_size,
                   const std::function<double(const AllGrippersSinglePoseDelta& test_gripper_motion)>& eval_error_cost_fn,
                   const std::function<double(const AllGrippersSinglePoseDelta& test_gripper_motion)>& collision_constraint_fn,
                   const std::function<double(const AllGrippersSinglePoseDelta& test_gripper_motion)>& stretching_constraint_fn,
                   const std::function<double(const AllGrippersSinglePoseDelta& test_gripper_motion)>& gripper_motion_constraint_fn,
                   const bool fix_step_size = false);
 
-          bool eval_x (
+          bool eval_x(
                   NOMAD::Eval_Point& x,
                   const NOMAD::Double& h_max,
                   bool& count_eval);
@@ -37,9 +34,6 @@ namespace smmap
         private:
           const ssize_t num_grippers_;
 
-          const NOMAD::Double gripper_radius_;
-          const NOMAD::Double stretching_threshold_;
-          const NOMAD::Double max_step_size_;
           const std::function<double(const AllGrippersSinglePoseDelta& test_gripper_motion)> eval_error_cost_fn_;
           const std::function<double(const AllGrippersSinglePoseDelta& test_gripper_motion)> collision_constraint_fn_;
           const std::function<double(const AllGrippersSinglePoseDelta& test_gripper_motion)> stretching_constraint_fn_;

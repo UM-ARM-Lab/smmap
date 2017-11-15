@@ -149,6 +149,8 @@ namespace smmap
             AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
             std::unique_ptr<RRTHelper> rrt_helper_;
 
+            // These are both intended only for logging purposes, the individual
+            // controllers may (or may not) have their own copies for their own purposes
             const Eigen::MatrixXd object_initial_node_distance_;
             // The way this is used assumes that the grippers start at a
             // "max distance but not with object stretched" distance from each other
@@ -163,7 +165,7 @@ namespace smmap
                     const ObjectDeltaAndWeight& desired_motion,
                     const bool visualization_enabled = true) const;
 
-            void visualize_gripper_motion(
+            void visualizeGripperMotion(
                     const AllGrippersSinglePose& current_gripper_pose,
                     const AllGrippersSinglePoseDelta& gripper_motion,
                     const ssize_t model_ind);
@@ -179,7 +181,6 @@ namespace smmap
                     const ssize_t model_used,
                     const std::vector<double>& rewards_for_all_models);
 
-            // Contoller logger.  --- Added by Mengyao
             void controllerLogData(const WorldState& current_world_state,
                     const std::vector<double>& ave_contol_error,
                     const std::vector<double> current_stretching_factor,

@@ -258,14 +258,15 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
                                           desired_p_dot_weight);
     };
 
-    // Return the min distance of gripper to obstacle
+    // Return the min distance of gripper to obstacle, minus the gripper radius
+    const double gripper_radius = GetRobotGripperRadius();
     const std::function<double(const AllGrippersSinglePoseDelta&)> collision_constraint_fn = [&] (
             const AllGrippersSinglePoseDelta& test_gripper_motion)
     {
         const double min_dis_to_obstacle = gripperCollisionCheckHelper(
                     current_world_state.all_grippers_single_pose_,
                     test_gripper_motion);
-        return min_dis_to_obstacle;
+        return gripper_radius - min_dis_to_obstacle;;
     };
 
     // Return the sum of cos (an indicator of direction) gripper motion to stretching vector
@@ -276,17 +277,18 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
         {
             assert(false && "num of grippers not match");
         }
+
         switch (deformable_type_)
         {
             case ROPE:
             {
-                return ropeTwoGripperStretchingHelper(
+                return stretching_cosine_threshold_ - ropeTwoGripperStretchingHelper(
                             input_data,
                             test_gripper_motion);
             }
             case CLOTH:
             {
-                return clothTwoGripperStretchingHelper(
+                return stretching_cosine_threshold_ - clothTwoGripperStretchingHelper(
                             input_data,
                             test_gripper_motion);
             }
@@ -310,13 +312,14 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
                 max_value = velocity_norm;
             }
         }
-        return max_value;
+        return max_value - max_step_size;
 
     };
 
+    // TODO: figure out a way to deal with logging, for now leave extra code here for reference
     ofstream out(log_file_path_.c_str(), ios::out);
-    // NOMAD::Display out ( std::cout );
-    out.precision ( NOMAD::DISPLAY_PRECISION_STD );
+    // NOMAD::Display out (std::cout);
+    out.precision (NOMAD::DISPLAY_PRECISION_STD);
 
     try
     {
@@ -326,7 +329,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
         // parameters creation:
         NOMAD::Parameters p ( out );
 //        NOMAD::Parameters p;
-        p.set_DIMENSION ((int)(6 * num_grippers));             // number of variables
+        p.set_DIMENSION ((int)(6 * num_grippers));  // number of variables
 
         vector<NOMAD::bb_output_type> bbot (4); // definition of
         bbot[0] = NOMAD::OBJ;                   // output types
@@ -368,13 +371,9 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
         // parameters validation:
         p.check();
 
-        const double gripper_radius = 0.023;
         // custom evaluator creation:
         GripperMotionNomadEvaluator ev(p,
                                        num_grippers,
-                                       gripper_radius,
-                                       stretching_cosine_threshold_,
-                                       max_step_size,
                                        eval_error_cost_fn,
                                        collision_constraint_fn,
                                        stretching_constraint_fn,
@@ -382,7 +381,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
                                        fix_step_);
 
         // algorithm creation and execution:
-        NOMAD::Mads mads ( p , &ev );
+        NOMAD::Mads mads(p, &ev);
         mads.run();
 
         const NOMAD::Eval_Point* best_x = mads.get_best_feasible();
@@ -394,7 +393,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
         cerr << "\nNOMAD has been interrupted (" << e.what() << ")\n\n";
     }
 
-    NOMAD::Slave::stop_slaves ( out );
+    NOMAD::Slave::stop_slaves(out);
     NOMAD::end();
 
     std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> suggested_grippers_command(
