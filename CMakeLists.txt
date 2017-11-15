@@ -29,7 +29,7 @@ find_package(NOMAD REQUIRED)
 ## Declare ROS messages, services and actions ##
 ################################################
 
-## Messages defined in smmap_msgs package
+## Messages defined in deformable_manipulation_msgs package
 
 ###################################
 ## catkin specific configuration ##

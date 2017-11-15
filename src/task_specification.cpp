@@ -108,7 +108,7 @@ TaskSpecification::TaskSpecification(
     , current_error_last_simtime_calced_(NAN)
     , current_error_(NAN)
 
-    , desired_motion_scaling_factor_(GetDesiredMotionScalingFactor(ph_))
+    , desired_motion_scaling_factor_(GetDesiredMotionScalingFactor(ph))
 
     , deformable_type_(deformable_type)
     , task_type_(task_type)
