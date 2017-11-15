@@ -401,7 +401,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
 {
     Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
-    Stopwatch controller_stopwatch;
 
     DeformableModel::DeformableModelInputData model_input_data(
                 world_state,
@@ -428,7 +427,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     {
         if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
         {
-            controller_stopwatch(RESET);
+            Stopwatch individual_controller_stopwatch;
 
             suggested_robot_commands[model_ind] =
                 controller_list_[model_ind]->getGripperMotion(
@@ -439,10 +438,10 @@ WorldState Planner::sendNextCommandUsingLocalController(
                                       suggested_robot_commands[model_ind].first,
                                       model_ind);
 
-            time_used[model_ind] = controller_stopwatch(READ);
+            time_used[model_ind] = individual_controller_stopwatch(READ);
 
             // Measure the time it took to pick a model
-            ROS_INFO_STREAM_NAMED("planner", model_ind << "th Controller get suggested motion in" << controller_stopwatch(READ) << " seconds");
+            ROS_INFO_STREAM_NAMED("planner", model_ind << "th Controller get suggested motion in" << time_used[model_ind] << " seconds");
         }
     }
 
@@ -452,85 +451,88 @@ WorldState Planner::sendNextCommandUsingLocalController(
     // Calculate regret if we need to
     std::vector<double> individual_rewards(num_models_, std::numeric_limits<double>::infinity());
 
-    // Calculate control error, stretching severity    --- Added by Mengyao
-    std::vector<double> ave_control_error(num_models_, 0.0);
+    ////// Build a function to collect the data needed for each controller's log //////
+    // Data used by the function, per model
+    std::vector<double> avg_control_error(num_models_, 0.0);
     std::vector<double> current_stretching_factor(num_models_, 0.0);
-
     const ObjectDeltaAndWeight& task_desired_motion = model_input_data.desired_object_motion_;
-    const Eigen::VectorXd desired_p_dot = task_desired_motion.delta;
-    const Eigen::VectorXd desired_p_dot_weight = task_desired_motion.weight;
+    const Eigen::VectorXd& desired_p_dot = task_desired_motion.delta;
+    const Eigen::VectorXd& desired_p_dot_weight = task_desired_motion.weight;
     const ssize_t num_grippers = GetGrippersData(nh_).size();
-
-    if (calculate_regret_ && num_models_ > 1)
+    const ssize_t num_nodes = world_state.object_configuration_.cols();
+    // The function itself
+    const auto single_controller_logging_data_collection_fn = [&] (const size_t model_ind, const WorldState& resulting_world_state)
     {
-        stopwatch(RESET);
-        const double prev_error = task_specification_->calculateError(world_state);
-        const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
+        // Get control errors for different model-controller sets.
+        const ObjectPointSet real_p_dot = resulting_world_state.object_configuration_ - current_object_configuration;
+
+        int point_count = 0;
+        double max_stretching = 0.0;
+        double desired_p_dot_avg_norm = 0.0;
+        double desired_p_dot_max = 0.0;
+
+        for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
         {
-            individual_rewards[model_ind] = prev_error - task_specification_->calculateError(world_state);
-
-            // Get control errors for different model-controller sets. --- Added by Mengyao
-            ObjectPointSet real_p_dot = world_state.object_configuration_ - current_object_configuration;
-            ssize_t num_nodes = real_p_dot.cols();
-
-            int point_count = 0;            
-            double max_stretching = 0.0;
-            double desired_p_dot_ave_norm = 0.0;
-            double desired_p_dot_max = 0.0;
-
-            for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
+            const double point_weight = desired_p_dot_weight(node_ind * 3);
+            if (point_weight > 0.0)
             {
                 //  Calculate p_dot error
                 const Eigen::Vector3d& point_real_p_dot = real_p_dot.col(node_ind);
                 const Eigen::Vector3d& point_desired_p_dot = desired_p_dot.segment<3>(node_ind * 3);
-                const double point_weight = desired_p_dot_weight(node_ind * 3);
+                avg_control_error[model_ind] += (point_real_p_dot - point_desired_p_dot).norm();
 
-                if (point_weight > 0)
+                desired_p_dot_avg_norm += point_desired_p_dot.norm();
+                if (point_desired_p_dot.norm() > desired_p_dot_max)
                 {
-                    point_count ++;
-                    ave_control_error[model_ind] = ave_control_error[model_ind] + (point_real_p_dot - point_desired_p_dot).norm();
-
-                    desired_p_dot_ave_norm += point_desired_p_dot.norm();
-                    if (point_desired_p_dot.norm() > desired_p_dot_max)
-                    {
-                        desired_p_dot_max = point_desired_p_dot.norm();
-                    }
+                    desired_p_dot_max = point_desired_p_dot.norm();
                 }
 
-                // Calculate stretching factor
-                const Eigen::MatrixXd node_squared_distance =
-                        CalculateSquaredDistanceMatrix(world_state.object_configuration_);
-
-                ssize_t first_node = node_ind;
-
-                for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
-                {
-                    double this_stretching_factor = std::sqrt(node_squared_distance(first_node, second_node))
-                            / object_initial_node_distance_(first_node, second_node);
-                    if (this_stretching_factor > max_stretching)
-                    {
-                        max_stretching = this_stretching_factor;
-                    }
-                }
+                point_count++;
             }
-            if(point_count > 0)
+
+            // Calculate stretching factor
+            const Eigen::MatrixXd node_distance =
+                    CalculateDistanceMatrix(resulting_world_state.object_configuration_);
+
+            const ssize_t first_node = node_ind;
+            for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
             {
-                ave_control_error[model_ind] = ave_control_error[model_ind] / point_count;
-                desired_p_dot_ave_norm /= point_count;
+                const double this_stretching_factor = node_distance(first_node, second_node)
+                        / object_initial_node_distance_(first_node, second_node);
+                max_stretching = std::max(max_stretching, this_stretching_factor);
             }
-            if (num_grippers == 2)
-            {
-                double this_stretching_factor = (world_state.all_grippers_single_pose_.at(0).translation()
-                        - world_state.all_grippers_single_pose_.at(1).translation()).norm()
-                        / initial_grippers_distance_;
-                if (this_stretching_factor > max_stretching)
-                {
-                    max_stretching = this_stretching_factor;
-                }
-            }
-            current_stretching_factor[model_ind] = max_stretching;
-            ROS_INFO_STREAM_NAMED("planner", "average desired p dot is" << desired_p_dot_ave_norm);
-            ROS_INFO_STREAM_NAMED("planner", "max pointwise desired p dot is" << desired_p_dot_max);
+        }
+
+
+        if (point_count > 0)
+        {
+            avg_control_error[model_ind] = avg_control_error[model_ind] / point_count;
+            desired_p_dot_avg_norm /= point_count;
+        }
+
+        // Catch cases where the grippers and the nodes don't align, this should still be flagged as large stretch
+        if (num_grippers == 2)
+        {
+            const double this_stretching_factor = (resulting_world_state.all_grippers_single_pose_.at(0).translation()
+                    - resulting_world_state.all_grippers_single_pose_.at(1).translation()).norm()
+                    / initial_grippers_distance_;
+            max_stretching = std::max(max_stretching, this_stretching_factor);
+        }
+        current_stretching_factor[model_ind] = max_stretching;
+        ROS_INFO_STREAM_NAMED("planner", "average desired p dot is" << desired_p_dot_avg_norm);
+        ROS_INFO_STREAM_NAMED("planner", "max pointwise desired p dot is" << desired_p_dot_max);
+    };
+
+    if (num_models_ > 1 && calculate_regret_)
+    {
+        stopwatch(RESET);
+        const double prev_error = task_specification_->calculateError(world_state);
+
+        // Build a feedback function to log data for each model that we are testing
+        const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& resulting_world_state)
+        {
+            individual_rewards[model_ind] = prev_error - task_specification_->calculateError(resulting_world_state);
+            single_controller_logging_data_collection_fn(model_ind, resulting_world_state);
         };
 
         std::vector<AllGrippersSinglePose> poses_to_test(num_models_);
@@ -544,69 +546,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
     }
     else if (num_models_ == 1)
     {
-        ssize_t model_ind = 0;
-        ObjectPointSet real_p_dot = world_state.object_configuration_ - current_object_configuration;
-        ssize_t num_nodes = real_p_dot.cols();
-
-        int point_count = 0;
-        double max_stretching = 0.0;
-        double desired_p_dot_ave_norm = 0.0;
-        double desired_p_dot_max = 0.0;
-
-        for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
-        {
-            //  Calculate p_dot error
-            const Eigen::Vector3d& point_real_p_dot = real_p_dot.col(node_ind);
-            const Eigen::Vector3d& point_desired_p_dot = desired_p_dot.segment<3>(node_ind * 3);
-            const double point_weight = desired_p_dot_weight(node_ind * 3);
-
-            if (point_weight > 0)
-            {
-                point_count ++;
-                ave_control_error[model_ind] = ave_control_error[model_ind] + (point_real_p_dot - point_desired_p_dot).norm();
-
-                desired_p_dot_ave_norm += point_desired_p_dot.norm();
-                if (point_desired_p_dot.norm() > desired_p_dot_max)
-                {
-                    desired_p_dot_max = point_desired_p_dot.norm();
-                }
-            }
-
-            // Calculate stretching factor
-            const Eigen::MatrixXd node_squared_distance =
-                    CalculateSquaredDistanceMatrix(world_state.object_configuration_);
-
-            ssize_t first_node = node_ind;
-
-            for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
-            {
-                double this_stretching_factor = std::sqrt(node_squared_distance(first_node, second_node))
-                        / object_initial_node_distance_(first_node, second_node);
-                if (this_stretching_factor > max_stretching)
-                {
-                    max_stretching = this_stretching_factor;
-                }
-            }
-        }
-        if(point_count > 0)
-        {
-            ave_control_error[model_ind] = ave_control_error[model_ind] / point_count;
-            desired_p_dot_ave_norm /= point_count;
-        }
-        if (num_grippers == 2)
-        {
-            const double this_stretching_factor = (world_state.all_grippers_single_pose_.at(0).translation()
-                    - world_state.all_grippers_single_pose_.at(1).translation()).norm()
-                    / initial_grippers_distance_;
-            if (this_stretching_factor > max_stretching)
-            {
-                max_stretching = this_stretching_factor;
-            }
-        }
-        current_stretching_factor[model_ind] = max_stretching;
-
-        ROS_INFO_STREAM_NAMED("planner", "average desired p dot is  " << desired_p_dot_ave_norm);
-        ROS_INFO_STREAM_NAMED("planner", "max pointwise desired p dot is  " << desired_p_dot_max);
+        const ssize_t model_ind = 0;
+        single_controller_logging_data_collection_fn(model_ind, world_state.object_configuration_);
     }
 
     // Execute the command
@@ -634,8 +575,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     updateModels(world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
 
     logData(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use, individual_rewards);
-
-    controllerLogData(world_feedback, ave_control_error, current_stretching_factor, time_used);
+    controllerLogData(world_feedback, avg_control_error, current_stretching_factor, time_used);
 
     const double controller_time = function_wide_stopwatch(READ) - robot_execution_time;
     ROS_INFO_STREAM_NAMED("planner", "Total local controller time                     " << controller_time << " seconds");
