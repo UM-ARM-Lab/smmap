@@ -133,10 +133,7 @@ namespace smmap
             bool fix_step_;
             bool over_stretch_;
             const std::string log_file_path_;
-
-
     };
-
 }
 
 #endif // LEAST_SQUARES_CONTROLLER_RANDOM_SAMPLING_H

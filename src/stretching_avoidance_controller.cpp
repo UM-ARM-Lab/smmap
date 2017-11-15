@@ -76,6 +76,8 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
 // Private optimization function
 /////////////////////////////////////////////////////////////////////////////////
 
+//#define USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER 1
+
 std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceController::solvedByRandomSampling(
         const DeformableModel::DeformableModelInputData& input_data,
         const double max_gripper_velocity)
@@ -85,10 +87,8 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
 
     const Eigen::VectorXd& desired_object_p_dot =
             input_data.desired_object_motion_.delta;
-          //  input_data.task_desired_object_delta_fn_(current_world_state).delta;
     const Eigen::VectorXd& desired_p_dot_weight =
             input_data.desired_object_motion_.weight;
-          //  input_data.task_desired_object_delta_fn_(current_world_state).weight;
 
     const ssize_t num_grippers = current_world_state.all_grippers_single_pose_.size();
     const ssize_t num_nodes = current_world_state.object_configuration_.cols();
@@ -97,8 +97,11 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
             CalculateSquaredDistanceMatrix(current_world_state.object_configuration_);
 
     std::vector<std::pair<AllGrippersSinglePoseDelta, double>> per_thread_optimal_command(
-//                arc_helpers::GetNumOMPThreads(),
+#ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
+                arc_helpers::GetNumOMPThreads(),
+#else
                 1,
+#endif
                 std::make_pair(AllGrippersSinglePoseDelta(), std::numeric_limits<double>::infinity()));
 
     // Checking the stretching status for current object configuration for once
@@ -120,17 +123,18 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
             break;
 	}
     }
-
-//    #pragma omp parallel for
+#ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
+    #pragma omp parallel for
+#endif
     for (int64_t ind_count = 0; ind_count < max_count_; ind_count++)
     {
         AllGrippersSinglePoseDelta grippers_motion_sample = allGripperPoseDeltaSampler(num_grippers, max_step_size);
 
-//        #if defined(_OPENMP)
-//        const size_t thread_num = (size_t)omp_get_thread_num();
-//        #else
+#ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
+        const size_t thread_num = (size_t)omp_get_thread_num();
+#else
         const size_t thread_num = 0;
-//        #endif
+#endif
 
         // Use constraint_violation checker for gripper collosion
         // Constraint violation checking here
@@ -201,6 +205,8 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
     return suggested_grippers_command;
 }
 
+#undef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
+
 
 std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceController::solvedByNomad(
         const DeformableModel::DeformableModelInputData& input_data,
@@ -211,10 +217,8 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
 
     const Eigen::VectorXd& desired_object_p_dot =
             input_data.desired_object_motion_.delta;
-          //  input_data.task_desired_object_delta_fn_(current_world_state).delta;
     const Eigen::VectorXd& desired_p_dot_weight =
             input_data.desired_object_motion_.weight;
-          //  input_data.task_desired_object_delta_fn_(current_world_state).weight;
 
     const size_t num_grippers = current_world_state.all_grippers_single_pose_.size();
     const ssize_t num_nodes = current_world_state.object_configuration_.cols();
@@ -266,6 +270,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
         const double min_dis_to_obstacle = gripperCollisionCheckHelper(
                     current_world_state.all_grippers_single_pose_,
                     test_gripper_motion);
+
         return gripper_radius - min_dis_to_obstacle;;
     };
 
@@ -273,7 +278,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
     const std::function<double(const AllGrippersSinglePoseDelta&)> stretching_constraint_fn = [&] (
             const AllGrippersSinglePoseDelta& test_gripper_motion)
     {
-        if(test_gripper_motion.size()!=2 || test_gripper_motion.size()!=num_grippers)
+        if (test_gripper_motion.size()!= 2 || test_gripper_motion.size() != num_grippers)
         {
             assert(false && "num of grippers not match");
         }
@@ -327,9 +332,9 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
         NOMAD::begin(0, nullptr);
 
         // parameters creation:
-        NOMAD::Parameters p ( out );
+        NOMAD::Parameters p(out);
 //        NOMAD::Parameters p;
-        p.set_DIMENSION ((int)(6 * num_grippers));  // number of variables
+        p.set_DIMENSION((int)(6 * num_grippers));  // number of variables
 
         vector<NOMAD::bb_output_type> bbot (4); // definition of
         bbot[0] = NOMAD::OBJ;                   // output types
@@ -348,20 +353,18 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
         const int x_dim = (int)(6 * num_grippers);
         const int size_of_initial_batch = 5;
 
+        for (int sample_ind = 0; sample_ind < size_of_initial_batch; sample_ind++)
         {
-            for (int sample_ind = 0; sample_ind < size_of_initial_batch; sample_ind++)
+            NOMAD::Point x0 = NOMAD::Point(x_dim, 0.0);
+            for (int coord_ind = 0; coord_ind < x_dim; coord_ind++)
             {
-                NOMAD::Point x0 = NOMAD::Point(x_dim, 0.0);
-                for (int coord_ind = 0; coord_ind < x_dim; coord_ind++)
-                {
-                    x0.set_coord(coord_ind, EigenHelpers::Interpolate(-max_step_size, max_step_size, uniform_unit_distribution_(generator_)));
-                }
-                p.set_X0(x0);
+                x0.set_coord(coord_ind, EigenHelpers::Interpolate(-max_step_size, max_step_size, uniform_unit_distribution_(generator_)));
             }
+            p.set_X0(x0);
         }
 
-        p.set_LOWER_BOUND(NOMAD::Point((int)(6 * num_grippers), -max_step_size)); // all var. >= -6
-        p.set_UPPER_BOUND(NOMAD::Point((int)(6 * num_grippers), max_step_size)); // all var. >= -6
+        p.set_LOWER_BOUND(NOMAD::Point((int)(6 * num_grippers), -max_step_size));
+        p.set_UPPER_BOUND(NOMAD::Point((int)(6 * num_grippers), max_step_size));
 
         p.set_MAX_BB_EVAL(max_count_);     // the algorithm terminates after max_count_ black-box evaluations
         p.set_DISPLAY_DEGREE(2);
@@ -400,7 +403,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
                 optimal_gripper_command,
                 ObjectPointSet::Zero(3, num_nodes));
 
-    if(!(suggested_grippers_command.first.size() > 0))
+    if (suggested_grippers_command.first.size() == 0)
     {
         suggested_grippers_command.first = setAllGripperPoseDeltaZero(num_grippers);
     }
