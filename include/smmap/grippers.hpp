@@ -32,7 +32,7 @@ namespace smmap
     typedef kinematics::VectorVector6d AllGrippersSinglePoseDelta;
     typedef std::vector<AllGrippersSinglePoseDelta> AllGrippersPoseDeltaTrajectory;
 
-    // Stretching tracking vector information --- Added by Mengyao
+    // Stretching tracking vector information
     struct StretchingVectorInfo
     {
         StretchingVectorInfo()
@@ -83,7 +83,7 @@ namespace smmap
         /// Vector of the indices of the nodes that are grasped by the gripper
         std::vector<long> node_indices_;
 
-        // Stretching tracking vector information --- Added by Mengyao
+        /// Stretching tracking vector information. Note that this data member is only valid for cloth experiments
         StretchingVectorInfo stretching_vector_info_;
 
         /**

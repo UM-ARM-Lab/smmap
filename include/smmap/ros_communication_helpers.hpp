@@ -63,11 +63,6 @@ namespace smmap
                                                             VectorAnytypeToVectorLong(stretching_vector_info_srv_data.response.neighbor_indices),
                                                             stretching_vector_info_srv_data.response.contributions));
                     }
-                    else if (gripper_node_indices_client.call(node_indices_srv_data))
-                    {
-                        grippers_data.push_back(GripperData(gripper_names[gripper_ind],
-                                                  VectorAnytypeToVectorLong(node_indices_srv_data.response.indices)));
-                    }
                     else
                     {
                         ROS_ERROR_STREAM_NAMED("ros_comms_helpers",
@@ -79,7 +74,6 @@ namespace smmap
             }
             case DeformableType::ROPE:
             {
-                // Service client to get stretching vector information --- Added by Mengyao
                 grippers_data.reserve(gripper_names.size());
                 for (size_t gripper_ind = 0; gripper_ind < gripper_names.size(); gripper_ind++)
                 {
@@ -89,7 +83,7 @@ namespace smmap
                     if (gripper_node_indices_client.call(node_indices_srv_data))
                     {
                         grippers_data.push_back(GripperData(gripper_names[gripper_ind],
-                                                VectorAnytypeToVectorLong(node_indices_srv_data.response.indices)));
+                                                            VectorAnytypeToVectorLong(node_indices_srv_data.response.indices)));
                     }
                     else
                     {

@@ -192,6 +192,7 @@ Planner::Planner(
     , global_plan_gripper_trajectory_(0)
     , rrt_helper_(nullptr)
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
+    , initial_grippers_distance_(robot_.getGrippersInitialDistance())
 
     , logging_enabled_(GetLoggingEnabled(nh_))
     , controller_logging_enabled_(GetLoggingEnabled(nh_))
@@ -202,7 +203,6 @@ Planner::Planner(
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
     initializeLogging();
     initializeControllerLogging();
-    initializeGrippersMaxDistance();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -522,7 +522,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
             {
                 double this_stretching_factor = (world_state.all_grippers_single_pose_.at(0).translation()
                         - world_state.all_grippers_single_pose_.at(1).translation()).norm()
-                        / max_grippers_distance_;
+                        / initial_grippers_distance_;
                 if (this_stretching_factor > max_stretching)
                 {
                     max_stretching = this_stretching_factor;
@@ -595,9 +595,9 @@ WorldState Planner::sendNextCommandUsingLocalController(
         }
         if (num_grippers == 2)
         {
-            double this_stretching_factor = (world_state.all_grippers_single_pose_.at(0).translation()
+            const double this_stretching_factor = (world_state.all_grippers_single_pose_.at(0).translation()
                     - world_state.all_grippers_single_pose_.at(1).translation()).norm()
-                    / max_grippers_distance_;
+                    / initial_grippers_distance_;
             if (this_stretching_factor > max_stretching)
             {
                 max_stretching = this_stretching_factor;
@@ -1800,22 +1800,6 @@ void Planner::createBandits()
                 VectorXd::Zero(num_models_),
                 MatrixXd::Identity(num_models_, num_models_) * 1e6);
 #endif
-}
-
-// Initialize max grippers distance  --- Added by Mengyao
-void Planner::initializeGrippersMaxDistance()
-{
-    if (GetGrippersData(nh_).size() == 2)
-    {
-        if (GetDeformableType(nh_) == CLOTH)
-        {
-            max_grippers_distance_ = GetClothYSize(nh_) - 0.03;
-        }
-        else if (GetDeformableType(nh_) == ROPE)
-        {
-            max_grippers_distance_ = GetRopeSegmentLength(nh_) * (double)GetRopeNumLinks(nh_);
-        }
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

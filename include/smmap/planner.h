@@ -99,9 +99,6 @@ namespace smmap
             void addModel(DeformableModel::Ptr model);
             void createBandits();
 
-            // Added by Mengyao. --- Initialize Max Grippers Distance, for 2 grippers only
-            void initializeGrippersMaxDistance();
-
             const bool calculate_regret_;
             ssize_t num_models_;
             std::vector<DeformableModel::Ptr> model_list_;
@@ -153,7 +150,9 @@ namespace smmap
             std::unique_ptr<RRTHelper> rrt_helper_;
 
             const Eigen::MatrixXd object_initial_node_distance_;
-            double max_grippers_distance_;
+            // The way this is used assumes that the grippers start at a
+            // "max distance but not with object stretched" distance from each other
+            const double initial_grippers_distance_;
 
             ////////////////////////////////////////////////////////////////////
             // Logging and visualization functionality
