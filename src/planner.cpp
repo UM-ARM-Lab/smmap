@@ -218,6 +218,7 @@ void Planner::execute()
     if (enable_stuck_detection_)
     {
         assert(robot_.getGrippersData().size() == 2);
+        assert(model_list_.size() == 1);
 
         dijkstras_task_ = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
         assert(dijkstras_task_ != nullptr);
@@ -252,7 +253,10 @@ void Planner::execute()
         path_between_grippers_through_object_ = GetShortestPathBetweenGrippersThroughObject(robot_.getGrippersData(), GetObjectInitialConfiguration(nh_), neighbour_fn);
         const auto starting_band_points = GetPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
 
-        const double max_band_distance = (world_feedback.all_grippers_single_pose_[0].translation() - world_feedback.all_grippers_single_pose_[1].translation()).norm() * dijkstras_task_->maxStretchFactor();
+        const auto gripper_delta =
+                world_feedback.all_grippers_single_pose_[0].translation()
+                - world_feedback.all_grippers_single_pose_[1].translation();
+        const double max_band_distance = gripper_delta.norm() * dijkstras_task_->maxStretchFactor();
         virtual_rubber_band_between_grippers_ = std::make_shared<VirtualRubberBand>(
                     starting_band_points,
                     max_band_distance,
@@ -399,13 +403,9 @@ WorldState Planner::sendNextCommandUsingLocalController(
     Stopwatch function_wide_stopwatch;
     Stopwatch controller_stopwatch;
 
-    const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
-    {
-        return task_specification_->calculateDesiredDirection(world_state);
-    };
     DeformableModel::DeformableModelInputData model_input_data(
-                task_desired_direction_fn,
                 world_state,
+                task_specification_->calculateDesiredDirection(world_state),
                 robot_.dt_);
     const ObjectPointSet current_object_configuration = world_state.object_configuration_;
 
@@ -416,10 +416,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
-    #pragma message "allow model_to_use = 0"
-    //assert(model_to_use == 0);
-
-
     const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
 
@@ -460,7 +456,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     std::vector<double> ave_control_error(num_models_, 0.0);
     std::vector<double> current_stretching_factor(num_models_, 0.0);
 
-    ObjectDeltaAndWeight& task_desired_motion = model_input_data.desired_object_motion_;
+    const ObjectDeltaAndWeight& task_desired_motion = model_input_data.desired_object_motion_;
     const Eigen::VectorXd desired_p_dot = task_desired_motion.delta;
     const Eigen::VectorXd desired_p_dot_weight = task_desired_motion.weight;
     const ssize_t num_grippers = GetGrippersData(nh_).size();
@@ -815,13 +811,6 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ROS_INFO_STREAM_NAMED("planner", "Starting future constraint violation detection   - Version 2a - Total steps taken " << actual_lookahead_steps);
     assert(num_models_ == 1 && current_world_state.all_grippers_single_pose_.size() == 2);
-    const auto& correspondences = dijkstras_task_->getCoverPointCorrespondences(current_world_state);
-    const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
-    {
-        return dijkstras_task_->calculateErrorCorrectionDeltaFixedCorrespondences(world_state, correspondences.correspondences_);
-    };
-
-
     virtual_rubber_band_between_grippers_->visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
 
 
@@ -837,12 +826,17 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     WorldState world_state_copy = current_world_state;
     VirtualRubberBand virtual_rubber_band_between_grippers_copy = *virtual_rubber_band_between_grippers_.get();
-    const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, world_state_copy, robot_.dt_);
-
+    // Fix the correspondeces at time 0, then use these to project the motion of the cloth/rope into the future
+    const auto& correspondences = dijkstras_task_->getCoverPointCorrespondences(current_world_state);
     projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.reserve(actual_lookahead_steps);
     for (size_t t = 0; t < actual_lookahead_steps; ++t)
     {
         // Determine what direction to move the grippers
+        const DeformableModel::DeformableModelInputData model_input_data(
+                    world_state_copy,
+                    dijkstras_task_->calculateErrorCorrectionDeltaFixedCorrespondences(world_state_copy, correspondences.correspondences_),
+                    robot_.dt_);
+
         const std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command =
                 controller_list_[0]->getGripperMotion(
                     model_input_data,
@@ -1448,12 +1442,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
         }
         case ADAPTIVE_JACOBIAN_SINGLE_MODEL_LEAST_SQUARES_CONTROLLER:
         {
-            const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
-            {
-                return task_specification_->calculateDesiredDirection(world_state);
-            };
-
-            const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
+            const DeformableModel::DeformableModelInputData input_data(initial_world_state, task_specification_->calculateDesiredDirection(initial_world_state), robot_.dt_);
             model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
                                       DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
                                       GetAdaptiveModelLearningRate(ph_)));
@@ -1567,12 +1556,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
             const double learning_rate_max = 1.1e0;
             const double learning_rate_step = 10.0;
 
-            const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
-            {
-                return task_specification_->calculateDesiredDirection(world_state);
-            };
-
-            const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
+            const DeformableModel::DeformableModelInputData input_data(initial_world_state, task_specification_->calculateDesiredDirection(initial_world_state), robot_.dt_);
             for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
             {
                     model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
