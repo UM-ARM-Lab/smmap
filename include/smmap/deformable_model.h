@@ -17,16 +17,16 @@ namespace smmap
             {
                 public:
                     DeformableModelInputData(
-                            const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn,
                             const WorldState& world_current_state,
+                            const ObjectDeltaAndWeight& desired_object_motion,
                             const double dt)
-                        : task_desired_object_delta_fn_(task_desired_object_delta_fn)
-                        , world_current_state_(world_current_state)
+                        : world_current_state_(world_current_state)
+                        , desired_object_motion_(desired_object_motion)
                         , dt_(dt)
                     {}
 
-                    const TaskDesiredObjectDeltaFunctionType& task_desired_object_delta_fn_;
                     const WorldState& world_current_state_;
+                    const ObjectDeltaAndWeight desired_object_motion_;
                     const double dt_;
             };
 

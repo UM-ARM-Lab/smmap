@@ -149,6 +149,13 @@ namespace smmap
             AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
             std::unique_ptr<RRTHelper> rrt_helper_;
 
+            // These are both intended only for logging purposes, the individual
+            // controllers may (or may not) have their own copies for their own purposes
+            const Eigen::MatrixXd object_initial_node_distance_;
+            // The way this is used assumes that the grippers start at a
+            // "max distance but not with object stretched" distance from each other
+            const double initial_grippers_distance_;
+
             ////////////////////////////////////////////////////////////////////
             // Logging and visualization functionality
             ////////////////////////////////////////////////////////////////////
@@ -158,7 +165,14 @@ namespace smmap
                     const ObjectDeltaAndWeight& desired_motion,
                     const bool visualization_enabled = true) const;
 
+            void visualizeGripperMotion(
+                    const AllGrippersSinglePose& current_gripper_pose,
+                    const AllGrippersSinglePoseDelta& gripper_motion,
+                    const ssize_t model_ind);
+
             void initializeLogging();
+
+            void initializeControllerLogging();
 
             void logData(
                     const WorldState& current_world_state,
@@ -167,8 +181,16 @@ namespace smmap
                     const ssize_t model_used,
                     const std::vector<double>& rewards_for_all_models);
 
+            void controllerLogData(const WorldState& current_world_state,
+                    const std::vector<double>& ave_contol_error,
+                    const std::vector<double> current_stretching_factor,
+                    const std::vector<double> num_stretching_violation);
+
             const bool logging_enabled_;
+            const bool controller_logging_enabled_;
             std::unordered_map<std::string, Log::Log> loggers_;
+            std::unordered_map<std::string, Log::Log> controller_loggers_;
+
             Visualizer& vis_;
             const bool visualize_desired_motion_;
             const bool visualize_predicted_motion_;

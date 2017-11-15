@@ -79,6 +79,15 @@ const AllGrippersSinglePose RobotInterface::getGrippersPose()
     return grippers_pose;
 }
 
+double RobotInterface::getGrippersInitialDistance()
+{
+    const AllGrippersSinglePose poses = getGrippersPose();
+    assert(poses.size() == 2);
+    const auto gripper0_translation = poses[0].translation();
+    const auto gripper1_translation = poses[1].translation();
+    return (gripper0_translation - gripper1_translation).norm();
+}
+
 WorldState RobotInterface::sendGrippersPoses(const AllGrippersSinglePose& grippers_poses)
 {
     return sendGrippersPoses_impl(toRosGrippersPoses(grippers_poses));

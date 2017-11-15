@@ -23,6 +23,7 @@ find_package(Eigen3 REQUIRED)
 set(Eigen3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 find_package(PythonLibs 2.7 REQUIRED)
 find_package(GUROBI REQUIRED)
+find_package(NOMAD REQUIRED)
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -40,6 +41,7 @@ catkin_package(
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
     DEPENDS         Eigen3
                     GUROBI
+                    NOMAD
 )
 
 ###########
@@ -55,6 +57,7 @@ include_directories(include
     ${catkin_INCLUDE_DIRS}
     ${PYTHON_INCLUDE_DIRS}
     ${GUROBI_INCLUDE_DIRS}
+    ${NOMAD_INCLUDE_DIRS}
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -flto -O3 -g -Wall -Wextra -Wpedantic -Wconversion")
@@ -85,6 +88,7 @@ FILE(GLOB h_SRC "include/${PROJECT_NAME}/*.h")
 FILE(GLOB cpp_SRC "src/*.cpp")
 
 ## Simulator tests
+# TODO: Update other Bandit versions with correct names and linking
 #add_executable(${PROJECT_NAME}_test_node_KFMANDB nodes/${PROJECT_NAME}_test_node.cpp)
 #add_dependencies(${PROJECT_NAME}_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
 #target_link_libraries(${PROJECT_NAME}_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_LIBRARIES})
@@ -97,7 +101,7 @@ FILE(GLOB cpp_SRC "src/*.cpp")
 
 add_executable(planner_test_node_UCB nodes/planner_test_node.cpp ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 add_dependencies(planner_test_node_UCB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(planner_test_node_UCB ${catkin_LIBRARIES} ${GUROBI_LIBRARIES})
+target_link_libraries(planner_test_node_UCB ${catkin_LIBRARIES} ${GUROBI_LIBRARIES} ${NOMAD_LIBRARIES})
 set_target_properties(planner_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT -DENABLE_PARALLEL_K_NEAREST_NEIGHBORS")
 
 ## Synthethic trials
