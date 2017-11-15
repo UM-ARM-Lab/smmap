@@ -547,7 +547,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     else if (num_models_ == 1)
     {
         const ssize_t model_ind = 0;
-        single_controller_logging_data_collection_fn(model_ind, world_state.object_configuration_);
+        single_controller_logging_data_collection_fn(model_ind, world_state);
     }
 
     // Execute the command
@@ -1880,7 +1880,7 @@ void Planner::visualizeDesiredMotion(
             vis_.visualizeObjectDelta(
                         DESIRED_DELTA_NS,
                         current_world_state.object_configuration_,
-                        AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta * 100),
+                        AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
                         Visualizer::Green());
         }
     }
@@ -1904,38 +1904,38 @@ void Planner::visualizeGripperMotion(
     switch (model_ind)
     {
         case 0:
-    {
-        vis_.visualizeLines("MM grippers motion",
-                            line_starts,
-                            line_ends,
-                            Visualizer::Black());
-        std::cout << "0 first gripper motion norm: "
-                  << gripper_motion.at(0).norm()
-                  << std::endl;
-        break;
-    }
+        {
+            vis_.visualizeLines("MM grippers motion",
+                                line_starts,
+                                line_ends,
+                                Visualizer::Black());
+            std::cout << "0 first gripper motion norm: "
+                      << gripper_motion.at(0).norm()
+                      << std::endl;
+            break;
+        }
         case 1:
-    {
-        vis_.visualizeLines("DM grippers motion",
-                            line_starts,
-                            line_ends,
-                            Visualizer::Silver());
-        std::cout << "1 first gripper motion norm: "
-                  << gripper_motion.at(0).norm()
-                  << std::endl;
-        break;
-    }
+        {
+            vis_.visualizeLines("DM grippers motion",
+                                line_starts,
+                                line_ends,
+                                Visualizer::Silver());
+            std::cout << "1 first gripper motion norm: "
+                      << gripper_motion.at(0).norm()
+                      << std::endl;
+            break;
+        }
         case 2:
-    {
-        vis_.visualizeLines("DD grippers motion",
-                            line_starts,
-                            line_ends,
-                            Visualizer::Yellow());
-        std::cout << "2 first gripper motion norm: "
-                  << gripper_motion.at(0).norm()
-                  << std::endl;
-        break;
-    }
+        {
+            vis_.visualizeLines("DD grippers motion",
+                                line_starts,
+                                line_ends,
+                                Visualizer::Yellow());
+            std::cout << "2 first gripper motion norm: "
+                      << gripper_motion.at(0).norm()
+                      << std::endl;
+            break;
+        }
         default:
         {
             assert(false && "grippers_motion color not assigned for this index");
@@ -1998,7 +1998,6 @@ void Planner::initializeControllerLogging()
         Log::Log seed_log(log_folder + "seed.txt", false);
         LOG_STREAM(seed_log, std::hex << seed_);
 
-        // Loggers for controller performance.  --- Added by Mengyao
         controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
                                        "control_time",
                                        Log::Log(log_folder + "control_time.txt", false)));
@@ -2051,7 +2050,6 @@ void Planner::logData(
     }
 }
 
-// Contoller logger.  --- Added by Mengyao
 void Planner::controllerLogData(
         const WorldState& current_world_state,
         const std::vector<double> &ave_contol_error,
@@ -2078,6 +2076,3 @@ void Planner::controllerLogData(
             PrettyPrint::PrettyPrint(num_stretching_violation, false, " "));
     }
 }
-
-
-
