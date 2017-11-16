@@ -1,8 +1,9 @@
 #include "smmap/least_squares_controller_with_object_avoidance.h"
-#include "smmap/gurobi_solvers.h"
+#include <smmap_utilities/gurobi_solvers.h>
 #include "smmap/jacobian_model.h"
 
 using namespace smmap;
+using namespace smmap_utilities;
 using namespace Eigen;
 using namespace EigenHelpers;
 

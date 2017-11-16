@@ -11,8 +11,9 @@
 #include <arc_utilities/simple_astar_planner.hpp>
 #include <arc_utilities/get_neighbours.hpp>
 #include <arc_utilities/shortcut_smoothing.hpp>
+#include <arc_utilities/timing.hpp>
+#include <arc_utilities/zlib_helpers.hpp>
 
-#include "smmap/timing.hpp"
 #include "smmap/diminishing_rigidity_model.h"
 #include "smmap/adaptive_jacobian_model.h"
 #include "smmap/least_squares_jacobian_model.h"
@@ -22,6 +23,8 @@
 #include "smmap/stretching_avoidance_controller.h"
 
 using namespace smmap;
+using namespace smmap_utilities;
+using namespace arc_utilities;
 using namespace Eigen;
 using namespace EigenHelpers;
 using namespace EigenHelpersConversions;

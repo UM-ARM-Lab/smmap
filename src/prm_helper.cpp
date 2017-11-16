@@ -6,6 +6,7 @@
 #include <arc_utilities/shortcut_smoothing.hpp>
 
 using namespace smmap;
+using namespace smmap_utilities;
 
 PRMHelper::PRMHelper(
         const sdf_tools::SignedDistanceField& environment_sdf,

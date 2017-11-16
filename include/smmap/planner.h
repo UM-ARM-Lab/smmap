@@ -2,15 +2,15 @@
 #define SMMAP_PLANNER_H
 
 #include <arc_utilities/log.hpp>
+#include <smmap_utilities/kalman_filter_multiarm_bandit.hpp>
+#include <smmap_utilities/ucb_multiarm_bandit.hpp>
+#include <smmap_utilities/visualization_tools.h>
 
 #include "smmap/task_function_pointer_types.h"
 #include "smmap/task_specification.h"
-#include "smmap/visualization_tools.h"
 #include "smmap/robot_interface.hpp"
 #include "smmap/deformable_model.h"
 #include "smmap/deformable_controller.hpp"
-#include "smmap/kalman_filter_multiarm_bandit.hpp"
-#include "smmap/ucb_multiarm_bandit.hpp"
 #include "smmap/rubber_band.hpp"
 #include "smmap/rrt_helper.h"
 #include "smmap/prm_helper.h"
@@ -25,12 +25,12 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             Planner(RobotInterface& robot,
-                    Visualizer& vis,
+                    smmap_utilities::Visualizer& vis,
                     const std::shared_ptr<TaskSpecification>& task_specification);
 
             void execute();
 
-        private:            
+        private:
             ////////////////////////////////////////////////////////////////////
             // Multipurpose
             ////////////////////////////////////////////////////////////////////
@@ -107,13 +107,13 @@ namespace smmap
             std::vector<DeformableController::Ptr> controller_list_;
 
 #ifdef UCB_BANDIT
-            UCB1Normal<std::mt19937_64> model_utility_bandit_;
+            smmap_utilities::UCB1Normal<std::mt19937_64> model_utility_bandit_;
 #endif
 #ifdef KFMANB_BANDIT
-            KalmanFilterMANB<std::mt19937_64> model_utility_bandit_;
+            smmap_utilities::KalmanFilterMANB<std::mt19937_64> model_utility_bandit_;
 #endif
 #ifdef KFMANDB_BANDIT
-            KalmanFilterMANDB<std::mt19937_64> model_utility_bandit_;
+            smmap_utilities::KalmanFilterMANDB<std::mt19937_64> model_utility_bandit_;
 #endif
             double reward_std_dev_scale_factor_;
             const double process_noise_factor_;
@@ -197,7 +197,7 @@ namespace smmap
             std::unordered_map<std::string, Log::Log> loggers_;
             std::unordered_map<std::string, Log::Log> controller_loggers_;
 
-            Visualizer& vis_;
+            smmap_utilities::Visualizer& vis_;
             const bool visualize_desired_motion_;
             const bool visualize_gripper_motion_;
             const bool visualize_predicted_motion_;

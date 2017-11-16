@@ -2,6 +2,8 @@
 #define QUINLAN_RUBBER_BAND
 
 #include <arc_utilities/eigen_helpers.hpp>
+#include <smmap_utilities/visualization_tools.h>
+
 #include "smmap/task_specification.h"
 
 //#define ENABLE_DEBUGGING 1
@@ -18,14 +20,14 @@ namespace smmap
                 const Eigen::Vector3d& start_point,
                 const Eigen::Vector3d& end_point,
                 const std::shared_ptr<DijkstrasCoverageTask>& task,
-                const Visualizer& vis,
+                const smmap_utilities::Visualizer& vis,
                 std::mt19937_64& generator);
 
         QuinlanRubberBand(
                 EigenHelpers::VectorVector3d starting_points,
                 const double max_total_band_distance,
                 const std::shared_ptr<DijkstrasCoverageTask>& task,
-                const Visualizer& vis,
+                const smmap_utilities::Visualizer& vis,
                 std::mt19937_64& generator);
 
         QuinlanRubberBand& operator=(const QuinlanRubberBand& other);
@@ -65,7 +67,7 @@ namespace smmap
         ros::NodeHandle ph_;
         const std::shared_ptr<DijkstrasCoverageTask> task_;
         const sdf_tools::SignedDistanceField& sdf_;
-        const Visualizer& vis_;
+        const smmap_utilities::Visualizer& vis_;
 
         EigenHelpers::VectorVector3d band_;
 

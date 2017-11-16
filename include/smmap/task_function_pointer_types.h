@@ -4,7 +4,6 @@
 #include <functional>
 
 #include "smmap/trajectory.hpp"
-#include "smmap/visualization_tools.h"
 
 namespace smmap
 {

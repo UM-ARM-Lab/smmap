@@ -2,6 +2,8 @@
 #include <numeric>
 #include <arc_utilities/arc_exceptions.hpp>
 #include <arc_utilities/log.hpp>
+#include <arc_utilities/zlib_helpers.hpp>
+#include <arc_utilities/timing.hpp>
 #include <deformable_manipulation_msgs/messages.h>
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
 
@@ -9,6 +11,8 @@
 #include "smmap/task_specification_implementions.h"
 
 using namespace smmap;
+using namespace smmap_utilities;
+using namespace arc_utilities;
 
 #pragma message "Magic number - Stretching weight multiplication factor here"
 #define STRETCHING_WEIGHT_MULTIPLICATION_FACTOR (2000.0)
@@ -864,7 +868,7 @@ bool DijkstrasCoverageTask::saveDijkstrasResults()
         std::vector<uint8_t> buffer;
         // First serialize the graph that created the results
         ROS_INFO_NAMED("coverage_task", "Serializing the data");
-        free_space_graph_.SerializeSelf(buffer, &EigenHelpers::Serialize<Eigen::Vector3d>);
+        free_space_graph_.SerializeSelf(buffer, &arc_utilities::SerializeEigenType<Eigen::Vector3d>);
 
         // Next serialize the results themselves
         const auto first_serializer = [] (const std::vector<int64_t>& vec_to_serialize, std::vector<uint8_t>& buffer)
@@ -924,7 +928,7 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
 
         // First check that the graph we have matches the graph that is stored
         std::vector<uint8_t> temp_buffer;
-        const uint64_t serialzed_graph_size = free_space_graph_.SerializeSelf(temp_buffer, &EigenHelpers::Serialize<Eigen::Vector3d>);
+        const uint64_t serialzed_graph_size = free_space_graph_.SerializeSelf(temp_buffer, &arc_utilities::SerializeEigenType<Eigen::Vector3d>);
         const auto mismatch_results = std::mismatch(temp_buffer.begin(), temp_buffer.end(), decompressed_dijkstras_results.begin());
         if (mismatch_results.first != temp_buffer.end())
         {

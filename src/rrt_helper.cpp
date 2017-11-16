@@ -4,9 +4,11 @@
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/first_order_deformation.h>
 #include <arc_utilities/simple_dtw.hpp>
-#include "smmap/timing.hpp"
+#include <arc_utilities/timing.hpp>
 
 using namespace smmap;
+using namespace smmap_utilities;
+using namespace arc_utilities;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper function for assertion testing
@@ -755,7 +757,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVe
         };
 
         // If we've found a first order deformation, then we are similar to a blacklisted item
-        if (arc_utilities::FirstOrderDeformation::CheckFirstOrderDeformation(
+        if (FirstOrderDeformation::CheckFirstOrderDeformation(
                 blacklisted_path.size(),
                 test_band.size(),
                 straight_line_collision_check_fn))
