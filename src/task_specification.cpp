@@ -2,6 +2,8 @@
 #include <numeric>
 #include <arc_utilities/arc_exceptions.hpp>
 #include <arc_utilities/log.hpp>
+#include <arc_utilities/zlib_helpers.hpp>
+#include <arc_utilities/timing.hpp>
 #include <deformable_manipulation_msgs/messages.h>
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
 
@@ -9,6 +11,7 @@
 #include "smmap/task_specification_implementions.h"
 
 using namespace smmap;
+using namespace smmap_utilities;
 using namespace arc_utilities;
 
 #pragma message "Magic number - Stretching weight multiplication factor here"

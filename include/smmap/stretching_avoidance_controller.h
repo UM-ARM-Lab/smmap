@@ -2,6 +2,7 @@
 #define STRETCHINGAVOIDANCECONTROLLER_H
 
 #include <sdf_tools/sdf.hpp>
+#include <smmap_utilities/visualization_tools.h>
 
 #include "smmap/deformable_controller.hpp"
 #include "smmap/grippers.hpp"
@@ -17,7 +18,7 @@ namespace smmap
                     RobotInterface& robot,
                     const sdf_tools::SignedDistanceField& sdf,
                     std::mt19937_64& generator,
-                    Visualizer& vis,
+                    smmap_utilities::Visualizer& vis,
                     GripperControllerType gripper_controller_type,
                     const DeformableModel::Ptr& deformable_model,
                     const int max_count);
@@ -115,7 +116,7 @@ namespace smmap
             std::mt19937_64& generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
 
-            Visualizer& vis_;
+            smmap_utilities::Visualizer& vis_;
 
             GripperControllerType gripper_controller_type_;
             const DeformableType deformable_type_;

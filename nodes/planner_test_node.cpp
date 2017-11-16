@@ -1,7 +1,5 @@
 #include "smmap/planner.h"
 
-using namespace smmap;
-
 int main(int argc, char* argv[])
 {
     // Read in all ROS parameters
@@ -10,11 +8,11 @@ int main(int argc, char* argv[])
     ros::NodeHandle nh;
     ros::NodeHandle ph("~");
 
-    RobotInterface robot(nh);
-    Visualizer vis(nh, ph);
+    smmap::RobotInterface robot(nh);
+    smmap_utilities::Visualizer vis(nh, ph);
 
-    TaskSpecification::Ptr task_specification = TaskSpecification::MakeTaskSpecification(nh, ph);
-    Planner planner(robot, vis, task_specification);
+    smmap::TaskSpecification::Ptr task_specification = smmap::TaskSpecification::MakeTaskSpecification(nh, ph);
+    smmap::Planner planner(robot, vis, task_specification);
     planner.execute();
 
     return 0;

@@ -4,8 +4,7 @@
 #include <Eigen/Dense>
 #include <arc_utilities/simple_prm_planner.hpp>
 #include <sdf_tools/sdf.hpp>
-
-#include "smmap/visualization_tools.h"
+#include <smmap_utilities/visualization_tools.h>
 
 namespace smmap
 {
@@ -22,7 +21,7 @@ namespace smmap
 
             PRMHelper(
                     const sdf_tools::SignedDistanceField& environment_sdf,
-                    const Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     std::mt19937_64& generator,
                     const Eigen::Vector3d planning_world_lower_limits,
                     const Eigen::Vector3d planning_world_upper_limits,
@@ -44,7 +43,7 @@ namespace smmap
             std::mt19937_64& generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
             const sdf_tools::SignedDistanceField& environment_sdf_;
-            const Visualizer& vis_;
+            const smmap_utilities::Visualizer& vis_;
             const bool visualization_enabled_globally_;
 
             arc_dijkstras::Graph<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> roadmap_;

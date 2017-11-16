@@ -9,6 +9,7 @@
 #include "smmap/grippers.hpp"
 
 using namespace smmap;
+using namespace smmap_utilities;
 
 StretchingAvoidanceController::StretchingAvoidanceController(
         ros::NodeHandle& nh,

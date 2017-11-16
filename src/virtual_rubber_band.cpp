@@ -3,6 +3,7 @@
 #include <arc_utilities/shortcut_smoothing.hpp>
 
 using namespace smmap;
+using namespace smmap_utilities;
 
 #pragma message "Magic number for smoothing distance here"
 static constexpr int MIN_BAND_SMOOTHING_INDEX_DISTANCE = 10;

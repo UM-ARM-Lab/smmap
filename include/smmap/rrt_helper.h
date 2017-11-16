@@ -1,13 +1,11 @@
 #ifndef RRT_HELPER_H
 #define RRT_HELPER_H
 
-//#include <arc_utilities/arc_helpers.hpp>
-
 #include <random>
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/simple_rrt_planner.hpp>
+#include <smmap_utilities/visualization_tools.h>
 
-#include "smmap/visualization_tools.h"
 #include "smmap/rubber_band.hpp"
 #include "smmap/prm_helper.h"
 
@@ -85,7 +83,7 @@ namespace smmap
 
             RRTHelper(
                     const sdf_tools::SignedDistanceField& environment_sdf,
-                    const Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     std::mt19937_64& generator,
                     const std::shared_ptr<PRMHelper>& prm_helper,
                     const Eigen::Vector3d planning_world_lower_limits,
@@ -191,7 +189,7 @@ namespace smmap
 
             std::mt19937_64& generator_;
             const sdf_tools::SignedDistanceField& environment_sdf_;
-            const Visualizer& vis_;
+            const smmap_utilities::Visualizer& vis_;
             const bool visualization_enabled_globally_;
             const std_msgs::ColorRGBA band_safe_color_;
             const std_msgs::ColorRGBA band_overstretched_color_;

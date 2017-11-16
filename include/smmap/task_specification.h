@@ -7,16 +7,14 @@
 #include <tuple>
 #include <Eigen/Dense>
 #include <arc_utilities/dijkstras.hpp>
-#include <arc_utilities/zlib_helpers.hpp>
 #include <sdf_tools/sdf.hpp>
 #include <deformable_manipulation_experiment_params/task_enums.h>
 #include <deformable_manipulation_experiment_params/xyzgrid.h>
+#include <smmap_utilities/visualization_tools.h>
 
 #include "smmap/ros_communication_helpers.hpp"
 #include "smmap/task_function_pointer_types.h"
-#include "smmap/visualization_tools.h"
 
-#include "arc_utilities/timing.hpp"
 
 namespace smmap
 {
@@ -49,7 +47,7 @@ namespace smmap
             TaskSpecification(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    Visualizer vis,
+                    smmap_utilities::Visualizer vis,
                     const DeformableType deformable_type,
                     const TaskType task_type,
                     const bool is_dijkstras_type_task = false);
@@ -59,13 +57,13 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             void visualizeDeformableObject(
-                    Visualizer& vis,
+                    smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const;
 
             void visualizeDeformableObject(
-                    Visualizer& vis,
+                    smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const;
@@ -185,7 +183,7 @@ namespace smmap
 
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
-            Visualizer vis_;
+            smmap_utilities::Visualizer vis_;
 
             const std::vector<GripperData> grippers_data_;
             const Eigen::MatrixXd object_initial_node_distance_;
@@ -203,13 +201,13 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             virtual void visualizeDeformableObject_impl(
-                    Visualizer& vis,
+                    smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const = 0;
 
             virtual void visualizeDeformableObject_impl(
-                    Visualizer& vis,
+                    smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const = 0;

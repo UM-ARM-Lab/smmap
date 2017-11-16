@@ -5,6 +5,7 @@
 #include <thread>
 
 using namespace smmap;
+using namespace smmap_utilities;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
 QuinlanRubberBand::QuinlanRubberBand(

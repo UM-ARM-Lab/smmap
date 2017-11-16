@@ -12,6 +12,7 @@
 #include <arc_utilities/get_neighbours.hpp>
 #include <arc_utilities/shortcut_smoothing.hpp>
 #include <arc_utilities/timing.hpp>
+#include <arc_utilities/zlib_helpers.hpp>
 
 #include "smmap/diminishing_rigidity_model.h"
 #include "smmap/adaptive_jacobian_model.h"
