@@ -917,7 +917,7 @@ void QuinlanRubberBand::storeBand() const
 
         std::vector<uint8_t> buffer;
         arc_utilities::SerializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
-                    band_, buffer, &arc_utilities::SerializeEigenVector3d);
+                    band_, buffer, &arc_utilities::SerializeEigenType<Eigen::Vector3d>);
         ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
     }
     catch (const std::exception& e)
@@ -953,7 +953,7 @@ void QuinlanRubberBand::loadStoredBand()
 
         const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(full_path);
         const auto deserialized_results = arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
-                    buffer, 0, &arc_utilities::DeserializeEigenVector3d);
+                    buffer, 0, &arc_utilities::DeserializeEigenType<Eigen::Vector3d>);
         band_ = deserialized_results.first;
 
     }

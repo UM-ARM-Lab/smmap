@@ -6,7 +6,6 @@
 #include "smmap/deformable_controller.hpp"
 #include "smmap/grippers.hpp"
 #include "smmap/robot_interface.hpp"
-#include "smmap/nomad_solvers.h"
 
 namespace smmap
 {

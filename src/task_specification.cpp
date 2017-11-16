@@ -865,22 +865,22 @@ bool DijkstrasCoverageTask::saveDijkstrasResults()
         std::vector<uint8_t> buffer;
         // First serialize the graph that created the results
         ROS_INFO_NAMED("coverage_task", "Serializing the data");
-        free_space_graph_.SerializeSelf(buffer, &EigenHelpers::Serialize<Eigen::Vector3d>);
+        free_space_graph_.SerializeSelf(buffer, &arc_utilities::SerializeEigenType<Eigen::Vector3d>);
 
         // Next serialize the results themselves
         const auto first_serializer = [] (const std::vector<int64_t>& vec_to_serialize, std::vector<uint8_t>& buffer)
         {
-            return SerializeVector<int64_t>(vec_to_serialize, buffer, &SerializeFixedSizePOD<int64_t>);
+            return arc_utilities::SerializeVector<int64_t>(vec_to_serialize, buffer, &arc_utilities::SerializeFixedSizePOD<int64_t>);
         };
         const auto second_serializer = [] (const std::vector<double>& vec_to_serialize, std::vector<uint8_t>& buffer)
         {
-            return SerializeVector<double>(vec_to_serialize, buffer, &SerializeFixedSizePOD<double>);
+            return arc_utilities::SerializeVector<double>(vec_to_serialize, buffer, &arc_utilities::SerializeFixedSizePOD<double>);
         };
         const auto pair_serializer = [&first_serializer, &second_serializer] (const std::pair<std::vector<int64_t>, std::vector<double>>& pair_to_serialize, std::vector<uint8_t>& buffer)
         {
-            return SerializePair<std::vector<int64_t>, std::vector<double>>(pair_to_serialize, buffer, first_serializer, second_serializer);
+            return arc_utilities::SerializePair<std::vector<int64_t>, std::vector<double>>(pair_to_serialize, buffer, first_serializer, second_serializer);
         };
-        SerializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(dijkstras_results_, buffer, pair_serializer);
+        arc_utilities::SerializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(dijkstras_results_, buffer, pair_serializer);
 
         // Compress and save to file
         ROS_INFO_NAMED("coverage_task", "Compressing for storage");
@@ -925,7 +925,7 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
 
         // First check that the graph we have matches the graph that is stored
         std::vector<uint8_t> temp_buffer;
-        const uint64_t serialzed_graph_size = free_space_graph_.SerializeSelf(temp_buffer, &EigenHelpers::Serialize<Eigen::Vector3d>);
+        const uint64_t serialzed_graph_size = free_space_graph_.SerializeSelf(temp_buffer, &arc_utilities::SerializeEigenType<Eigen::Vector3d>);
         const auto mismatch_results = std::mismatch(temp_buffer.begin(), temp_buffer.end(), decompressed_dijkstras_results.begin());
         if (mismatch_results.first != temp_buffer.end())
         {
@@ -935,19 +935,19 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
         // Next deserialze the Dijkstras results
         const auto first_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
         {
-            return DeserializeVector<int64_t>(buffer, current, &DeserializeFixedSizePOD<int64_t>);
+            return arc_utilities::DeserializeVector<int64_t>(buffer, current, &arc_utilities::DeserializeFixedSizePOD<int64_t>);
         };
         const auto second_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
         {
-            return DeserializeVector<double>(buffer, current, &DeserializeFixedSizePOD<double>);
+            return arc_utilities::DeserializeVector<double>(buffer, current, &arc_utilities::DeserializeFixedSizePOD<double>);
         };
         const auto pair_deserializer = [&first_deserializer, &second_deserializer] (const std::vector<uint8_t>& buffer, const uint64_t current)
         {
-            return DeserializePair<std::vector<int64_t>, std::vector<double>>(buffer, current, first_deserializer, second_deserializer);
+            return arc_utilities::DeserializePair<std::vector<int64_t>, std::vector<double>>(buffer, current, first_deserializer, second_deserializer);
         };
 
         uint64_t current_position = serialzed_graph_size;
-        const auto deserialized_result = DeserializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(decompressed_dijkstras_results, current_position, pair_deserializer);
+        const auto deserialized_result = arc_utilities::DeserializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(decompressed_dijkstras_results, current_position, pair_deserializer);
         dijkstras_results_ = deserialized_result.first;
         current_position += deserialized_result.second;
         if (current_position != decompressed_dijkstras_results.size())

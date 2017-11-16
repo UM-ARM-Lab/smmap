@@ -2,6 +2,8 @@
 #define SMMAP_PLANNER_H
 
 #include <arc_utilities/log.hpp>
+#include <smmap_utilities/kalman_filter_multiarm_bandit.hpp>
+#include <smmap_utilities/ucb_multiarm_bandit.hpp>
 
 #include "smmap/task_function_pointer_types.h"
 #include "smmap/task_specification.h"
@@ -10,8 +12,6 @@
 #include "smmap/deformable_model.h"
 #include "smmap/deformable_controller.hpp"
 #include "smmap/rubber_band.hpp"
-#include "smmap_utilities/kalman_filter_multiarm_bandit.hpp"
-#include "smmap_utilities/ucb_multiarm_bandit.hpp"
 #include "smmap/rrt_helper.h"
 #include "smmap/prm_helper.h"
 

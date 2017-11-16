@@ -1,12 +1,12 @@
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
+#include <smmap_utilities/nomad_solvers.h>
+#include <kinematics_toolbox/kinematics.h>
 #include <omp.h>
 
 #include "smmap/stretching_avoidance_controller.h"
 #include "smmap/ros_communication_helpers.hpp"
-
 #include "smmap/grippers.hpp"
-#include <kinematics_toolbox/kinematics.h>
 
 using namespace smmap;
 
@@ -375,13 +375,13 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
         p.check();
 
         // custom evaluator creation:
-        GripperMotionNomadEvaluator ev(p,
-                                       num_grippers,
-                                       eval_error_cost_fn,
-                                       collision_constraint_fn,
-                                       stretching_constraint_fn,
-                                       gripper_motion_constraint_fn,
-                                       fix_step_);
+        smmap_utilities::GripperMotionNomadEvaluator ev(p,
+                                                        num_grippers,
+                                                        eval_error_cost_fn,
+                                                        collision_constraint_fn,
+                                                        stretching_constraint_fn,
+                                                        gripper_motion_constraint_fn,
+                                                        fix_step_);
 
         // algorithm creation and execution:
         NOMAD::Mads mads(p, &ev);

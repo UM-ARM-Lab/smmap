@@ -4,7 +4,7 @@
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/first_order_deformation.h>
 #include <arc_utilities/simple_dtw.hpp>
-#include "smmap/timing.hpp"
+#include <arc_utilities/timing.hpp>
 
 using namespace smmap;
 using namespace arc_utilities;
