@@ -3,28 +3,10 @@
 #include <thread>
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/first_order_deformation.h>
+#include <arc_utilities/simple_dtw.hpp>
+#include "smmap/timing.hpp"
 
 using namespace smmap;
-
-#define NN_BLACKLIST_DISTANCE (std::numeric_limits<double>::max() - 1e10)
-
-const std::string RRTHelper::RRT_BLACKLISTED_GOAL_BANDS_NS  = "rrt_blacklisted_goal_bands";
-const std::string RRTHelper::RRT_GOAL_TESTING_NS            = "rrt_goal_testing";
-
-const std::string RRTHelper::RRT_TREE_GRIPPER_A_NS          = "rrt_tree_gripper_a";
-const std::string RRTHelper::RRT_TREE_GRIPPER_B_NS          = "rrt_tree_gripper_b";
-
-const std::string RRTHelper::RRT_SAMPLE_NS                  = "rrt_sample";
-const std::string RRTHelper::RRT_FORWARD_PROP_START_NS      = "rrt_forward_prop_start";
-const std::string RRTHelper::RRT_FORWARD_PROP_STEPS_NS      = "rrt_forward_prop_steps";
-
-const std::string RRTHelper::RRT_SOLUTION_GRIPPER_A_NS      = "rrt_solution_gripper_a";
-const std::string RRTHelper::RRT_SOLUTION_GRIPPER_B_NS      = "rrt_solution_gripper_b";
-const std::string RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS    = "rrt_solution_rubber_band";
-
-const std::string RRTHelper::RRT_SHORTCUT_FIRST_GRIPPER_NS  = "rrt_shortcut_first_gripper";
-const std::string RRTHelper::RRT_SHORTCUT_SECOND_GRIPPER_NS = "rrt_shortcut_second_gripper";
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper function for assertion testing
@@ -46,7 +28,7 @@ static bool gripperPositionsAreApproximatelyEqual(
 }
 
 static bool bandEndpointsMatchGripperPositions(
-        const VirtualRubberBand& band,
+        const RubberBand& band,
         const RRTGrippersRepresentation& grippers)
 {
     return gripperPositionsAreApproximatelyEqual(grippers, band.getEndpoints());
@@ -58,7 +40,7 @@ static bool bandEndpointsMatchGripperPositions(
 
 RRTConfig::RRTConfig(
         const RRTGrippersRepresentation& grippers_position,
-        const VirtualRubberBand& band,
+        const RubberBand& band,
         const bool is_visible_to_blacklist)
     : grippers_position_(grippers_position)
     , band_(band)
@@ -70,7 +52,7 @@ const RRTGrippersRepresentation& RRTConfig::getGrippers() const
     return grippers_position_;
 }
 
-const VirtualRubberBand& RRTConfig::getBand() const
+const RubberBand& RRTConfig::getBand() const
 {
     return band_;
 }
@@ -83,15 +65,22 @@ bool RRTConfig::isVisibleToBlacklist() const
 // Returned distance is the Euclidian distance of two grippers pos
 double RRTConfig::distance(const RRTConfig& other) const
 {
-    return RRTConfig::Distance(*this, other);
+    return RRTConfig::distance(*this, other);
 }
 
-double RRTConfig::Distance(const RRTConfig& c1, const RRTConfig& c2)
+double RRTConfig::distance(const RRTConfig& c1, const RRTConfig& c2)
 {
-    return RRTConfig::Distance(c1.getGrippers(), c2.getGrippers());
+#ifdef DTW_DISTANCE
+    const auto distance_fn = [] (const Eigen::Vector3d p1, const Eigen::Vector3d p2)
+    {
+        return (p1 - p2).norm();
+    };
+    return simple_dtw::ComputeDTWDistance(c1.getBand().getVectorRepresentation(), c2.getBand().getVectorRepresentation(), distance_fn);
+#endif
+    return RRTConfig::distance(c1.getGrippers(), c2.getGrippers());
 }
 
-double RRTConfig::Distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2)
+double RRTConfig::distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2)
 {
     const Eigen::Vector3d& c1_first_gripper     = c1.first;
     const Eigen::Vector3d& c1_second_gripper    = c1.second;
@@ -100,16 +89,17 @@ double RRTConfig::Distance(const RRTGrippersRepresentation& c1, const RRTGripper
     return std::sqrt((c1_first_gripper - c2_first_gripper).squaredNorm() + (c1_second_gripper - c2_second_gripper).squaredNorm());
 }
 
-double RRTConfig::PathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index)
+// Only calculates the distance travelled by the grippers, not the entire band
+double RRTConfig::pathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index)
 {
     assert(start_index < end_index);
     assert(end_index < path.size());
-    double distance = 0;
+    double path_distance = 0;
     for (size_t idx = start_index; idx < end_index; ++idx)
     {
-        distance += Distance(path[idx], path[idx + 1]);
+        path_distance += RRTConfig::distance(path[idx].getGrippers(), path[idx + 1].getGrippers());
     }
-    return distance;
+    return path_distance;
 }
 
 bool RRTConfig::operator==(const RRTConfig& other) const
@@ -168,12 +158,9 @@ RRTHelper::RRTHelper(
         const sdf_tools::SignedDistanceField& environment_sdf,
         const Visualizer& vis,
         std::mt19937_64& generator,
-        const double x_limits_lower,
-        const double x_limits_upper,
-        const double y_limits_lower,
-        const double y_limits_upper,
-        const double z_limits_lower,
-        const double z_limits_upper,
+        const std::shared_ptr<PRMHelper>& prm_helper,
+        const Eigen::Vector3d planning_world_lower_limits,
+        const Eigen::Vector3d planning_world_upper_limits,
         const double max_step_size,
         const double goal_bias,
         const double goal_reach_radius,
@@ -183,9 +170,8 @@ RRTHelper::RRTHelper(
         const uint32_t max_smoothing_iterations,
         const uint32_t max_failed_smoothing_iterations,
         const bool visualization_enabled)
-    : x_limits_(x_limits_lower,x_limits_upper)
-    , y_limits_(y_limits_lower,y_limits_upper)
-    , z_limits_(z_limits_lower,z_limits_upper)
+    : planning_world_lower_limits_(planning_world_lower_limits)
+    , planning_world_upper_limits_(planning_world_upper_limits)
     , max_step_size_(max_step_size)
     , goal_bias_(goal_bias)
     , goal_reach_radius_(goal_reach_radius)
@@ -195,6 +181,7 @@ RRTHelper::RRTHelper(
     , max_failed_smoothing_iterations_(max_failed_smoothing_iterations)
     , uniform_unit_distribution_(0.0, 1.0)
     , uniform_shortcut_smoothing_int_distribution_(1, 4)
+    , prm_helper_(prm_helper)
     , generator_(generator)
     , environment_sdf_(environment_sdf)
     , vis_(vis)
@@ -202,11 +189,15 @@ RRTHelper::RRTHelper(
     , band_safe_color_(Visualizer::Black())
     , band_overstretched_color_(Visualizer::Cyan())
     , gripper_min_distance_to_obstacles_(gripper_min_distance_to_obstacles)
+    , total_sampling_time_(NAN)
     , total_nearest_neighbour_time_(NAN)
     , total_everything_included_forward_propogation_time_(NAN)
     , total_band_forward_propogation_time_(NAN)
     , total_first_order_vis_propogation_time_(NAN)
 {
+    assert(planning_world_lower_limits_.x() <= planning_world_upper_limits_.x());
+    assert(planning_world_lower_limits_.y() <= planning_world_upper_limits_.y());
+    assert(planning_world_lower_limits_.z() <= planning_world_upper_limits_.z());
     assert(max_step_size_ > 0.0);
     assert(goal_reach_radius_ > 0.0);
     assert(homotopy_distance_penalty_ >= 0.0);
@@ -223,32 +214,45 @@ int64_t RRTHelper::nearestNeighbour(
         const RRTConfig& config)
 {
     Stopwatch stopwatch;
+
+    arc_helpers::DoNotOptimize(nodes);
+    int64_t nn_idx = nearestNeighbour_internal(nodes, config);
+    arc_helpers::DoNotOptimize(nn_idx);
+
+    const double nn_time = stopwatch(READ);
+    total_nearest_neighbour_time_ += nn_time;
+
+    return nn_idx;
+}
+
+int64_t RRTHelper::nearestNeighbour_internal(
+        const std::vector<ExternalRRTState>& nodes,
+        const RRTConfig& config)
+{
     assert(nodes.size() >= 1);
 
+    // If we did not sample the goal, then just use the normal distance metric
+    // We cannot use "auto" here because of the ternary later that choses between these 2 function types
     const std::function<double(const ExternalRRTState&, const RRTConfig&)> basic_distance_fn = [&] (
-            const ExternalRRTState& rrt_state,
-            const RRTConfig& rrt_config)
+            const ExternalRRTState& rrt_state, const RRTConfig& rrt_config)
     {
-        return RRTConfig::Distance(rrt_state.GetValueImmutable(), rrt_config);
+        return RRTConfig::distance(rrt_state.GetValueImmutable(), rrt_config);
     };
-
     // If we sampled the goal, then distance is also a function of "homotopy class"
+    // We cannot use "auto" here because of the ternary later that choses between these 2 function types
     const std::function<double(const ExternalRRTState&, const RRTConfig&)> goal_sampled_distance_fn = [&] (
-            const ExternalRRTState& rrt_state,
-            const RRTConfig& rrt_config)
+            const ExternalRRTState& rrt_state, const RRTConfig& rrt_config)
     {
-        const double basic_distance = RRTConfig::Distance(rrt_state.GetValueImmutable(), rrt_config);
+        const double basic_distance = basic_distance_fn(rrt_state.GetValueImmutable(), rrt_config);
 
         const auto blacklist_itr = goal_expansion_nn_blacklist_.find(rrt_state.GetValueImmutable());
-        const bool goal_blacklisted = (blacklist_itr != goal_expansion_nn_blacklist_.end());
-        if (goal_blacklisted)
+        const bool state_blacklisted = (blacklist_itr != goal_expansion_nn_blacklist_.end());
+        if (state_blacklisted)
         {
             return NN_BLACKLIST_DISTANCE + basic_distance;
         }
         else
         {
-//            const double homotopy_penalty = rrt_state.GetValueImmutable().isVisibleToBlacklist() ? homotopy_distance_penalty_ : 0.0;
-//            return basic_distance + homotopy_penalty;
             return basic_distance;
         }
     };
@@ -268,12 +272,48 @@ int64_t RRTHelper::nearestNeighbour(
         goal_expansion_nn_blacklist_.insert(nodes[nn_idx].GetValueImmutable());
     }
 
-    const double nn_time = stopwatch(READ);
-    total_nearest_neighbour_time_ += nn_time;
     return nn_idx;
 }
 
-RRTGrippersRepresentation RRTHelper::posPairSampling()
+RRTConfig RRTHelper::configSampling()
+{
+    Stopwatch stopwatch;
+
+    arc_helpers::DoNotOptimize(grippers_goal_position_);
+#ifdef PRM_SAMPLING
+    const RRTConfig sample = prmBasedSampling_internal();
+#else
+    const RRTConfig sample(posPairSampling_internal(), *starting_band_, false);
+#endif
+    arc_helpers::DoNotOptimize(sample.getGrippers());
+
+    const double sampling_time = stopwatch(READ);
+    total_sampling_time_ += sampling_time;
+
+    return sample;
+}
+
+RRTConfig RRTHelper::prmBasedSampling_internal()
+{
+    const RRTGrippersRepresentation rand_grippers_sample = posPairSampling_internal();
+    const bool goal_is_target_config = gripperPositionsAreApproximatelyEqual(grippers_goal_position_, rand_grippers_sample);
+
+    // If we've sampled the goal, then keep sampling until the result is not visible to the blacklist
+    EigenHelpers::VectorVector3d band_path;
+    do
+    {
+        band_path = prm_helper_->getRandomPath(rand_grippers_sample.first, rand_grippers_sample.second);
+    }
+    while (goal_is_target_config && isBandFirstOrderVisibileToBlacklist(band_path));
+
+    RubberBand band(*starting_band_);
+    band.setPointsWithoutSmoothing(band_path);
+    band.visualize(PRMHelper::PRM_RANDOM_PATH_NS, Visualizer::Orange(), Visualizer::Orange(), 1, visualization_enabled_globally_);
+
+    return RRTConfig(rand_grippers_sample, band, false);
+}
+
+RRTGrippersRepresentation RRTHelper::posPairSampling_internal()
 {
     RRTGrippersRepresentation rand_sample;
     const bool sample_goal = uniform_unit_distribution_(generator_) < goal_bias_;
@@ -284,28 +324,35 @@ RRTGrippersRepresentation RRTHelper::posPairSampling()
     }
     else
     {
-        const double x1 = EigenHelpers::Interpolate(x_limits_.first, x_limits_.second, uniform_unit_distribution_(generator_));
-        const double y1 = EigenHelpers::Interpolate(y_limits_.first, y_limits_.second, uniform_unit_distribution_(generator_));
-        const double z1 = EigenHelpers::Interpolate(z_limits_.first, z_limits_.second, uniform_unit_distribution_(generator_));
+        do
+        {
+            const double x1 = EigenHelpers::Interpolate(planning_world_lower_limits_.x(), planning_world_upper_limits_.x(), uniform_unit_distribution_(generator_));
+            const double y1 = EigenHelpers::Interpolate(planning_world_lower_limits_.y(), planning_world_upper_limits_.y(), uniform_unit_distribution_(generator_));
+            const double z1 = EigenHelpers::Interpolate(planning_world_lower_limits_.z(), planning_world_upper_limits_.z(), uniform_unit_distribution_(generator_));
+            rand_sample.first = Eigen::Vector3d(x1, y1, z1);
+        }
+        while (environment_sdf_.EstimateDistance3d(rand_sample.first).first < gripper_min_distance_to_obstacles_);
 
-        // Pick a second point within band_max_length of the first point
-        // Math taken from here:
-        // http://mathworld.wolfram.com/SpherePointPicking.html
-        // https://math.stackexchange.com/questions/87230/picking-random-points-in-the-volume-of-sphere-with-uniform-probability
+        // We want to only sample within a radius max_grippers_distance_, and within the world extents; to do so
+        // uniformly, we sample from an axis aligned box limited by R and the world extents, rejecting samples that lie
+        // outside a radius max_grippers_distance_
+        const double x2_min = std::max(planning_world_lower_limits_.x(), rand_sample.first.x() - max_grippers_distance_);
+        const double x2_max = std::min(planning_world_upper_limits_.x(), rand_sample.first.x() + max_grippers_distance_);
+        const double y2_min = std::max(planning_world_lower_limits_.y(), rand_sample.first.y() - max_grippers_distance_);
+        const double y2_max = std::min(planning_world_upper_limits_.y(), rand_sample.first.y() + max_grippers_distance_);
+        const double z2_min = std::max(planning_world_lower_limits_.z(), rand_sample.first.z() - max_grippers_distance_);
+        const double z2_max = std::min(planning_world_upper_limits_.z(), rand_sample.first.z() + max_grippers_distance_);
 
-        const double u = uniform_unit_distribution_(generator_);
-        const double v = uniform_unit_distribution_(generator_);
-        const double theta = 2.0 * M_PI * u;
-        const double phi = std::acos(2.0 * v - 1);
-        const double radial_distance = uniform_unit_distribution_(generator_);
-        const double r = max_grippers_distance_ * std::pow(radial_distance, 1.0 / 3.0);
-
-        const double x2_delta = r * std::cos(theta) * std::sin(phi);
-        const double y2_delta = r * std::sin(theta) * std::sin(phi);
-        const double z2_delta = r * std::cos(phi);
-
-        rand_sample.first = Eigen::Vector3d(x1, y1, z1);
-        rand_sample.second = Eigen::Vector3d(x1 + x2_delta, y1 + y2_delta, z1 + z2_delta);
+        bool valid = false;
+        do
+        {
+            const double x2 = EigenHelpers::Interpolate(x2_min, x2_max, uniform_unit_distribution_(generator_));
+            const double y2 = EigenHelpers::Interpolate(y2_min, y2_max, uniform_unit_distribution_(generator_));
+            const double z2 = EigenHelpers::Interpolate(z2_min, z2_max, uniform_unit_distribution_(generator_));
+            rand_sample.second = Eigen::Vector3d(x2, y2, z2);
+            valid = (rand_sample.first - rand_sample.second).norm() <= max_grippers_distance_;
+        }
+        while (!valid || environment_sdf_.EstimateDistance3d(rand_sample.second).first < gripper_min_distance_to_obstacles_);
     }
 
     return rand_sample;
@@ -313,7 +360,7 @@ RRTGrippersRepresentation RRTHelper::posPairSampling()
 
 bool RRTHelper::goalReached(const RRTConfig& node)
 {
-    if (RRTConfig::Distance(node.getGrippers(), grippers_goal_position_) < goal_reach_radius_)
+    if (RRTConfig::distance(node.getGrippers(), grippers_goal_position_) < goal_reach_radius_)
     {
         if (visualization_enabled_globally_)
         {
@@ -323,7 +370,6 @@ bool RRTHelper::goalReached(const RRTConfig& node)
         }
 
         // Only accept paths that are different from those on the blacklist
-//        if (!node.isVisibleToBlacklist())
         if (!isBandFirstOrderVisibileToBlacklist(node.getBand()))
         {
             return true;
@@ -363,7 +409,7 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
     const RRTGrippersRepresentation& starting_grippers_position = nearest_neighbor.getGrippers();
     const RRTGrippersRepresentation& target_grippers_position = random_target.getGrippers();
 
-    const double target_is_goal_config = RRTConfig::Distance(random_target.getGrippers(), grippers_goal_position_) < goal_reach_radius_;
+    const double target_is_goal_config = RRTConfig::distance(random_target.getGrippers(), grippers_goal_position_) < goal_reach_radius_;
 
     if (visualization_enabled_globally_ && visualization_enabled_locally && target_is_goal_config && false)
     {
@@ -405,7 +451,7 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
 
     // Allocate space for potential children
     std::vector<std::pair<RRTConfig, int64_t>> propagated_states;
-    const double total_distance = RRTConfig::Distance(nearest_neighbor, random_target);
+    const double total_distance = RRTConfig::distance(nearest_neighbor.getGrippers(), random_target.getGrippers());
     const uint32_t max_total_steps = (uint32_t)ceil(total_distance / max_step_size_);
     propagated_states.reserve(max_total_steps);
 
@@ -419,7 +465,7 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
         // Using ternary operator here so that we can avoid making copies, and still take advantage of const correctness
         const bool use_nearest_neighbour_as_prev = (parent_offset == -1);
         const RRTConfig& prev_node = (use_nearest_neighbour_as_prev ? nearest_neighbor : propagated_states[parent_offset].first);
-        const VirtualRubberBand& prev_band = prev_node.getBand();
+        const RubberBand& prev_band = prev_node.getBand();
 
         const double ratio = std::min(1.0, (double)(step_index + 1) * max_step_size_ / total_distance);
         const Eigen::Vector3d gripper_a_interpolated = EigenHelpers::Interpolate(starting_grippers_position.first, target_grippers_position.first, ratio);
@@ -428,7 +474,9 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
 
         // If the grippers enter collision, then return however far we were able to get
         if ((environment_sdf_.EstimateDistance3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
-            (environment_sdf_.EstimateDistance3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_))
+            (environment_sdf_.EstimateDistance3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_) ||
+            (environment_sdf_.DistanceToBoundary3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
+            (environment_sdf_.DistanceToBoundary3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_))
         {
 //            if (visualization_enabled_locally)
 //            {
@@ -440,8 +488,8 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
         }
 
         // Forward simulate the rubber band to test this transition
-        VirtualRubberBand next_band(prev_band);
-        next_band.forwardSimulateVirtualRubberBandToEndpointTargets(
+        RubberBand next_band(prev_band);
+        next_band.forwardPropagateRubberBandToEndpointTargets(
                     next_grippers_position.first,
                     next_grippers_position.second,
                     rubber_band_verbose);
@@ -543,6 +591,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
 {
     grippers_goal_position_ = grippers_goal;
     max_grippers_distance_ = start.getBand().maxSafeLength();
+    starting_band_.reset(new RubberBand(start.getBand()));
 
     if (visualization_enabled_globally_)
     {
@@ -561,27 +610,21 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     }
 
     // Build the functions that are needed by SimpleHybridRRTPlanner
-    const std::function<bool(const RRTConfig&)> goal_reached_fn = [&] (const RRTConfig& node)
+    const auto goal_reached_fn = [&] (const RRTConfig& node)
     {
         const bool goal_reached = goalReached(node);
         return goal_reached;
     };
-
-    const std::function<RRTConfig(void)> sampling_fn = [&] ()
+    const auto sampling_fn = [&] ()
     {
-        const RRTConfig sample_config(posPairSampling(), start.getBand(), false);
-        return sample_config;
+        return configSampling();
     };
-
-    const std::function<int64_t(const std::vector<ExternalRRTState>&, const RRTConfig&)> nearest_neighbor_fn = [&] (
-            const std::vector<ExternalRRTState>& nodes, const RRTConfig& config )
+    const auto nearest_neighbor_fn = [&] (const std::vector<ExternalRRTState>& nodes, const RRTConfig& config)
     {
         const int64_t neighbour_idx = nearestNeighbour(nodes, config);
         return neighbour_idx;
     };
-
-    const std::function<std::vector<std::pair<RRTConfig, int64_t>>(const RRTConfig&, const RRTConfig&)> forward_propagation_fn = [&] (
-            const RRTConfig& nearest_neighbor, const RRTConfig& random_target )
+    const auto forward_propagation_fn = [&] (const RRTConfig& nearest_neighbor, const RRTConfig& random_target)
     {
         const bool local_visualization_enabled = true;
         const bool calculate_first_order_vis = false;
@@ -590,6 +633,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
         return propogation_results;
     };
 
+    total_sampling_time_ = 0.0;
     total_nearest_neighbour_time_ = 0.0;
     total_everything_included_forward_propogation_time_ = 0.0;
     total_band_forward_propogation_time_ = 0.0;
@@ -598,7 +642,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     ROS_INFO_NAMED("rrt", "Starting SimpleHybridRRTPlanner");
 
     // Call the actual planner
-    const auto rrt_results = simple_rrt_planner::SimpleHybridRRTPlanner::Plan(
+    const auto rrt_results = simple_rrt_planner::SimpleHybridRRTPlanner::Plan<RRTConfig, RRTAllocator>(
                 start, nearest_neighbor_fn, goal_reached_fn, sampling_fn, forward_propagation_fn, time_limit);
 
     if (visualization_enabled_globally_)
@@ -606,16 +650,20 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
         vis_.clearVisualizationsBullet();
     }
 
-    statistics_["planning0_nearest_neighbour_time                        "] = total_nearest_neighbour_time_;
-    statistics_["planning1_forward_propogation_band_sim_time             "] = total_band_forward_propogation_time_;
-    statistics_["planning2_forward_propogation_first_order_vis_time      "] = total_first_order_vis_propogation_time_;
-    statistics_["planning3_forward_propogation_everything_included_time  "] = total_everything_included_forward_propogation_time_;
+    statistics_["planning0_sampling_time                                 "] = total_sampling_time_;
+    statistics_["planning1_nearest_neighbour_time                        "] = total_nearest_neighbour_time_;
+    statistics_["planning2_forward_propogation_band_sim_time             "] = total_band_forward_propogation_time_;
+    statistics_["planning3_forward_propogation_first_order_vis_time      "] = total_first_order_vis_propogation_time_;
+    statistics_["planning4_forward_propogation_everything_included_time  "] = total_everything_included_forward_propogation_time_;
+    statistics_["planning5_total_time                                    "] = rrt_results.second.at("planning_time");
 
     std::cout << "\nSimpleRRT Statistics:\n" << PrettyPrint::PrettyPrint(rrt_results.second, false, "\n") << std::endl << std::endl;
     ROS_INFO_NAMED("rrt", "Starting Shortcut Smoothing");
 
     const bool visualize_rrt_smoothing = true;
     const auto smoothed_path = rrtShortcutSmooth(rrt_results.first, visualize_rrt_smoothing);
+
+    std::cout << PrettyPrint::PrettyPrint(smoothed_path.back().getBand().getVectorRepresentation(), false, "\n") << std::endl << std::endl;
 
     if (visualization_enabled_globally_)
     {
@@ -634,6 +682,11 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
 void RRTHelper::addBandToBlacklist(const EigenHelpers::VectorVector3d& band)
 {
     blacklisted_goal_rubber_bands_.push_back(band);
+}
+
+void RRTHelper::clearBlacklist()
+{
+    blacklisted_goal_rubber_bands_.clear();
 }
 
 bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const
@@ -714,15 +767,18 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVe
     return false;
 }
 
-bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VirtualRubberBand& test_band)
+bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band)
 {
     Stopwatch stopwatch;
     auto vector_representation = test_band.getVectorRepresentation();
+
     arc_helpers::DoNotOptimize(vector_representation);
     const bool is_first_order_visible = isBandFirstOrderVisibileToBlacklist(vector_representation);
     arc_helpers::DoNotOptimize(is_first_order_visible);
+
     const double first_order_vis_time = stopwatch(READ);
     total_first_order_vis_propogation_time_ += first_order_vis_time;
+
     return is_first_order_visible;
 }
 
@@ -852,7 +908,7 @@ static EigenHelpers::VectorVector3d createOtherGripperWaypoints(
 std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulateGrippersPath(
         const std::vector<RRTConfig, RRTAllocator>& path,
         const size_t start_index,
-        VirtualRubberBand rubber_band)
+        RubberBand rubber_band)
 {
     Stopwatch function_wide_stopwatch;
     Stopwatch stopwatch;
@@ -891,7 +947,7 @@ std::pair<bool, std::vector<RRTConfig, RRTAllocator>> RRTHelper::forwardSimulate
         // Forward simulate the band
         stopwatch(RESET);
         const auto& ending_grippers_pos = path[path_idx].getGrippers();
-        rubber_band.forwardSimulateVirtualRubberBandToEndpointTargets(
+        rubber_band.forwardPropagateRubberBandToEndpointTargets(
                     ending_grippers_pos.first,
                     ending_grippers_pos.second,
                     rubber_band_verbose);
@@ -997,24 +1053,24 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         if (smoothing_type == 1 || smoothing_type == 2)
         {
             // Check if the edge possibly can be smoothed
-            const double minimum_distance = RRTConfig::Distance(smoothing_start_config, smoothing_target_end_config);
-            const double path_distance = RRTConfig::PathDistance(path, smoothing_start_index, smoothing_end_index);
+            const double minimum_distance = RRTConfig::distance(smoothing_start_config.getGrippers(), smoothing_target_end_config.getGrippers());
+            const double path_distance = RRTConfig::pathDistance(path, smoothing_start_index, smoothing_end_index);
             // Essentially this checks if there is a kink in the path
             if (EigenHelpers::IsApprox(path_distance, minimum_distance, 1e-6))
             {
                 continue;
             }
 
-            if (visualization_enabled_globally_ && visualization_enabled_locally)
-            {
-                const RRTGrippersRepresentation& start_band_endpoints = smoothing_start_config.getBand().getEndpoints();
-                const RRTGrippersRepresentation& end_band_endpoints = smoothing_target_end_config.getBand().getEndpoints();
+//            if (visualization_enabled_globally_ && visualization_enabled_locally)
+//            {
+//                const RRTGrippersRepresentation& start_band_endpoints = smoothing_start_config.getBand().getEndpoints();
+//                const RRTGrippersRepresentation& end_band_endpoints = smoothing_target_end_config.getBand().getEndpoints();
 
-                vis_.visualizeCubes(RRT_SHORTCUT_FIRST_GRIPPER_NS, {start_band_endpoints.first, end_band_endpoints.first}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 10);
-                vis_.visualizeCubes(RRT_SHORTCUT_SECOND_GRIPPER_NS, {start_band_endpoints.second, end_band_endpoints.second}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Cyan(), 10);
-                ros::spinOnce();
-                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
-            }
+//                vis_.visualizeCubes(RRT_SHORTCUT_FIRST_GRIPPER_NS, {start_band_endpoints.first, end_band_endpoints.first}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 10);
+//                vis_.visualizeCubes(RRT_SHORTCUT_SECOND_GRIPPER_NS, {start_band_endpoints.second, end_band_endpoints.second}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Cyan(), 10);
+//                ros::spinOnce();
+//                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+//            }
 
             // Forward simulate the rubber band along the straight line between gripper positions
             const bool local_visualization_enabled = false;
@@ -1078,13 +1134,13 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                             second_gripper_end_pos);
             }
 
-            if (visualization_enabled_globally_ && visualization_enabled_locally)
-            {
-                vis_.visualizeCubes(RRT_SHORTCUT_FIRST_GRIPPER_NS, target_waypoints_first_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 10);
-                vis_.visualizeCubes(RRT_SHORTCUT_SECOND_GRIPPER_NS, target_waypoints_second_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Cyan(), 10);
-                ros::spinOnce();
-                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
-            }
+//            if (visualization_enabled_globally_ && visualization_enabled_locally)
+//            {
+//                vis_.visualizeCubes(RRT_SHORTCUT_FIRST_GRIPPER_NS, target_waypoints_first_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 10);
+//                vis_.visualizeCubes(RRT_SHORTCUT_SECOND_GRIPPER_NS, target_waypoints_second_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Cyan(), 10);
+//                ros::spinOnce();
+//                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+//            }
 
             // Make a guess about the number of nodes we'll end up using
             assert(target_waypoints_first_gripper.size() == target_waypoints_second_gripper.size());
@@ -1203,21 +1259,22 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         }
     }
 
-    if (visualization_enabled_globally_ && visualization_enabled_locally)
-    {
-        vis_.deleteObjects(RRT_SHORTCUT_FIRST_GRIPPER_NS, 1, 21);
-        vis_.deleteObjects(RRT_SHORTCUT_SECOND_GRIPPER_NS, 1, 21);
-    }
+//    if (visualization_enabled_globally_ && visualization_enabled_locally)
+//    {
+//        vis_.deleteObjects(RRT_SHORTCUT_FIRST_GRIPPER_NS, 1, 21);
+//        vis_.deleteObjects(RRT_SHORTCUT_SECOND_GRIPPER_NS, 1, 21);
+//    }
+//    vis_.clearVisualizationsBullet();
 
     // Record the statistics and return the result
     const double smoothing_time = function_wide_stopwatch(READ);
 
     statistics_["smoothing0_failed_iterations                            "] = (double)failed_iterations;
-    statistics_["smoothing0_iterations                                   "] = (double)num_iterations;
-    statistics_["smoothing1_forward_propogation_band_sim_time            "] = total_band_forward_propogation_time_;
-    statistics_["smoothing2_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
-    statistics_["smoothing3_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
-    statistics_["smoothing4_total_time                                   "] = smoothing_time;
+    statistics_["smoothing1_iterations                                   "] = (double)num_iterations;
+    statistics_["smoothing2_forward_propogation_band_sim_time            "] = total_band_forward_propogation_time_;
+    statistics_["smoothing3_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
+    statistics_["smoothing4_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
+    statistics_["smoothing5_total_time                                   "] = smoothing_time;
 
     return path;
 }
@@ -1242,7 +1299,7 @@ void RRTHelper::visualizePath(const std::vector<RRTConfig, RRTAllocator>& path) 
         {
             const RRTConfig& config = path[ind];
             const RRTGrippersRepresentation& gripper_positions = config.getGrippers();
-            const VirtualRubberBand& rubber_band = config.getBand();
+            const RubberBand& rubber_band = config.getBand();
 
             gripper_a_cubes.push_back(gripper_positions.first);
             gripper_b_cubes.push_back(gripper_positions.second);

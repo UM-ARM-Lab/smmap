@@ -11,8 +11,9 @@
 #include "smmap/deformable_controller.hpp"
 #include "smmap/kalman_filter_multiarm_bandit.hpp"
 #include "smmap/ucb_multiarm_bandit.hpp"
-#include "smmap/virtual_rubber_band.h"
+#include "smmap/rubber_band.hpp"
 #include "smmap/rrt_helper.h"
+#include "smmap/prm_helper.h"
 
 namespace smmap
 {
@@ -68,14 +69,15 @@ namespace smmap
                     const std::vector<EigenHelpers::VectorVector3d>& projected_paths,
                     const bool visualization_enabled = true);
 
-            std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<VirtualRubberBand>> detectFutureConstraintViolations(
+            std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<RubberBand>> detectFutureConstraintViolations(
                     const WorldState& current_world_state,
                     const bool visualization_enabled = true);
 
-            bool globalPlannerNeededDueToOverstretch(
-                    const WorldState& current_world_state);
+            bool globalPlannerNeededDueToOverstretch(const WorldState& current_world_state);
 
             bool globalPlannerNeededDueToLackOfProgress();
+
+            bool predictStuckForGlobalPlannerResults(const bool visualization_enabled = true);
 
             ////////////////////////////////////////////////////////////////////
             // Global gripper planner functions
@@ -99,7 +101,7 @@ namespace smmap
             void addModel(DeformableModel::Ptr model);
             void createBandits();
 
-            const bool calculate_regret_;
+            const bool collect_results_for_all_models_;
             ssize_t num_models_;
             std::vector<DeformableModel::Ptr> model_list_;
             std::vector<DeformableController::Ptr> controller_list_;
@@ -137,7 +139,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             const bool enable_stuck_detection_;
-            std::shared_ptr<VirtualRubberBand> virtual_rubber_band_between_grippers_;
+            std::shared_ptr<RubberBand> rubber_band_between_grippers_;
             std::vector<ssize_t> path_between_grippers_through_object_;
             const size_t max_lookahead_steps_;
             const size_t max_grippers_pose_history_length_;
@@ -148,6 +150,7 @@ namespace smmap
             size_t global_plan_current_timestep_;
             AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
             std::unique_ptr<RRTHelper> rrt_helper_;
+            std::shared_ptr<PRMHelper> prm_helper_;
 
             // These are both intended only for logging purposes, the individual
             // controllers may (or may not) have their own copies for their own purposes
@@ -170,45 +173,51 @@ namespace smmap
                     const AllGrippersSinglePoseDelta& gripper_motion,
                     const ssize_t model_ind);
 
-            void initializeLogging();
+            void initializePlannerLogging();
 
             void initializeControllerLogging();
 
-            void logData(
-                    const WorldState& current_world_state,
+            void logPlannerData(
+                    const WorldState& initial_world_state,
+                    const WorldState& resulting_world_state,
+                    const std::vector<WorldState>& individual_model_results,
                     const Eigen::VectorXd& model_utility_mean,
                     const Eigen::MatrixXd& model_utility_covariance,
-                    const ssize_t model_used,
-                    const std::vector<double>& rewards_for_all_models);
+                    const ssize_t model_used);
 
-            void controllerLogData(const WorldState& current_world_state,
-                    const std::vector<double>& ave_contol_error,
-                    const std::vector<double> current_stretching_factor,
-                    const std::vector<double> num_stretching_violation);
+            void controllerLogData(
+                    const WorldState& initial_world_state,
+                    const WorldState& resulting_world_state,
+                    const std::vector<WorldState>& individual_model_results,
+                    const DeformableModel::DeformableModelInputData& model_input_data,
+                    const std::vector<double>& individual_computation_times);
 
-            const bool logging_enabled_;
+            const bool planner_logging_enabled_;
             const bool controller_logging_enabled_;
             std::unordered_map<std::string, Log::Log> loggers_;
             std::unordered_map<std::string, Log::Log> controller_loggers_;
 
             Visualizer& vis_;
             const bool visualize_desired_motion_;
+            const bool visualize_gripper_motion_;
             const bool visualize_predicted_motion_;
 
         public:
-            const static std::string DESIRED_DELTA_NS;
-            const static std::string PREDICTED_DELTA_NS;
-            const static std::string PROJECTED_GRIPPER_NS;
-            const static std::string PROJECTED_BAND_NS;
-            const static std::string PROJECTED_POINT_PATH_NS;
-            const static std::string PROJECTED_POINT_PATH_LINES_NS;
+            // Topic names used for publishing visualization data
+            static constexpr auto DESIRED_DELTA_NS                         = "desired delta";
+            static constexpr auto PREDICTED_DELTA_NS                       = "predicted_delta";
 
-            const static std::string CONSTRAINT_VIOLATION_VERSION1_NS;
+            static constexpr auto PROJECTED_GRIPPER_NS                     = "projected_grippers";
+            static constexpr auto PROJECTED_BAND_NS                        = "projected_band";
+            static constexpr auto PROJECTED_POINT_PATH_NS                  = "projected_point_paths";
+            static constexpr auto PROJECTED_POINT_PATH_LINES_NS            = "projected_point_path_lines";
 
-            const static std::string CLUSTERING_TARGETS_NS;
-            const static std::string CLUSTERING_RESULTS_PRE_PROJECT_NS;
-            const static std::string CLUSTERING_RESULTS_POST_PROJECT_NS;
-            const static std::string CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS;
+            static constexpr auto CONSTRAINT_VIOLATION_VERSION1_NS         = "constraint_violation_version1";
+
+            static constexpr auto CLUSTERING_TARGETS_NS                    = "clustering_targets";
+            static constexpr auto CLUSTERING_RESULTS_PRE_PROJECT_NS        = "clustering_pre_project";
+            static constexpr auto CLUSTERING_RESULTS_POST_PROJECT_NS       = "clustering_post_project";
+            static constexpr auto CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS   = "clustering_assigned_centers";
     };
 }
 

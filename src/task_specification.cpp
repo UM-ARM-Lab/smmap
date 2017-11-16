@@ -108,6 +108,7 @@ TaskSpecification::TaskSpecification(
     , current_error_last_simtime_calced_(NAN)
     , current_error_(NAN)
 
+    , use_stretching_correction_from_task_(GetStretchingCorrectionFromTask(ph))
     , desired_motion_scaling_factor_(GetDesiredMotionScalingFactor(ph))
 
     , deformable_type_(deformable_type)
@@ -359,8 +360,16 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
         const WorldState& world_state,
         bool visualize) const
 {
-//    return calculateStretchingCorrectionDeltaFullyConnected(world_state.object_configuration_, visualize);
-    return calculateStretchingCorrectionDeltaPairwise(world_state.object_configuration_, visualize);
+    if (use_stretching_correction_from_task_)
+    {
+//        return calculateStretchingCorrectionDeltaFullyConnected(world_state.object_configuration_, visualize);
+        return calculateStretchingCorrectionDeltaPairwise(world_state.object_configuration_, visualize);
+    }
+    else
+    {
+        // If we're not getting it from the task, then set it to zero
+        return ObjectDeltaAndWeight(num_nodes_ * 3);;
+    }
 }
 
 
@@ -422,17 +431,8 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
             ROS_INFO_STREAM_NAMED("task_specification", "Found best error correction delta in " << GlobalStopwatch(READ) << " seconds");
 
             GlobalStopwatch(RESET);
-            bool visualize_stretching_lines = false;
-
-            if (!GetStretchingCorrectionFromTask(ph_))
-            {
-                // If we're not getting it from the task, then set it to zero
-                first_step_stretching_correction_ = ObjectDeltaAndWeight(num_nodes_ * 3);;
-            }
-            else
-            {
-                first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, visualize_stretching_lines);
-            }
+            const bool visualize_stretching_lines = false;
+            first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, visualize_stretching_lines);
             ROS_INFO_STREAM_NAMED("task_specification", "Found stretching correction delta in " << GlobalStopwatch(READ) << " seconds");
 
             GlobalStopwatch(RESET);
@@ -1009,7 +1009,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             for (int i = 0; i < VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS; ++i)
             {
                 net_delta += combined_delta / (double)VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS;
-                net_delta = environment_sdf_.ProjectOutOfCollision3d(current_pos + net_delta) - current_pos;
+                net_delta = environment_sdf_.ProjectOutOfCollision3dLegacy(current_pos + net_delta) - current_pos;
             }
 
             progress = net_delta.squaredNorm() > VECTOR_FIELD_FOLLOWING_MIN_PROGRESS;

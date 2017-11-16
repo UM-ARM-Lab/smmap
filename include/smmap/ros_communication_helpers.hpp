@@ -154,6 +154,10 @@ namespace smmap
         cover_point_normal_vectors_client.call(srv_data);
         ObjectPointSet cover_point_normals =
             EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(srv_data.response.points);
+        for (ssize_t col_ind = 0; col_ind < cover_point_normals.cols(); ++col_ind)
+        {
+            cover_point_normals.col(col_ind).normalize();
+        }
 
         ROS_INFO_NAMED("ros_comms_helpers" , "Number of cover point normals: %zu", srv_data.response.points.size());
 

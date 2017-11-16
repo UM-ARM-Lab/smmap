@@ -159,6 +159,9 @@ namespace smmap
             double current_error_last_simtime_calced_;
             double current_error_;
 
+            // Determines if the task is doing stretching avoidance, or a controller
+            const bool use_stretching_correction_from_task_;
+
             // Rescale the desired motion so that it is less absurd
             const double desired_motion_scaling_factor_;
 

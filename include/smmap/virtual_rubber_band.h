@@ -9,6 +9,11 @@ namespace smmap
     class VirtualRubberBand
     {
         public:
+            static constexpr auto BAND_POST_FORWARD_STEP_NS         = "band_post_forward_step";
+            static constexpr auto BAND_POST_SUBDIVIDE_STEP_NS       = "band_post_subdivide_step";
+            static constexpr auto BAND_POST_SHORTCUT_SMOOTHING_NS   = "band_post_shortcut_smoothing";
+            static constexpr auto BAND_BADNESS_NS                   = "band_badness";
+
             VirtualRubberBand(
                     const Eigen::Vector3d& start_point,
                     const Eigen::Vector3d& end_point,
@@ -23,11 +28,13 @@ namespace smmap
                     const Visualizer& vis,
                     std::mt19937_64& generator);
 
-            smmap::VirtualRubberBand& operator=(const smmap::VirtualRubberBand& other);
+            VirtualRubberBand& operator=(const VirtualRubberBand& other);
+
+            void setPointsWithoutSmoothing(const EigenHelpers::VectorVector3d& points);
 
             void setPointsAndSmooth(const EigenHelpers::VectorVector3d& points);
 
-            const EigenHelpers::VectorVector3d& forwardSimulateVirtualRubberBandToEndpointTargets(
+            const EigenHelpers::VectorVector3d& forwardPropagateRubberBandToEndpointTargets(
                     const Eigen::Vector3d first_endpoint_target,
                     const Eigen::Vector3d second_endpoint_target,
                     bool verbose);
@@ -56,14 +63,10 @@ namespace smmap
             const Visualizer& vis_;
 
         public:
-            static const std::string BAND_POST_FORWARD_STEP_NS;
-            static const std::string BAND_POST_SUBDIVIDE_STEP_NS;
-            static const std::string BAND_POST_SHORTCUT_SMOOTHING_NS;
-            static const std::string BAND_BADNESS_NS;
-
             const double max_integration_step_size_;
             const double max_distance_between_rubber_band_points_;
-            const int num_smoothing_ittrs_;
+            const int num_smoothing_iters_per_band_point_;
+            const int min_smoothing_iters_;
             const double min_object_radius_;
             const double max_total_band_distance_;
 

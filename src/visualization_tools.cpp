@@ -88,76 +88,100 @@ void Visualizer::InitializeStandardColors()
     standard_colors_initialized_ = true;
 }
 
-std_msgs::ColorRGBA Visualizer::Red()
+std_msgs::ColorRGBA Visualizer::Red(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return red_;
+    auto color = red_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Green()
+std_msgs::ColorRGBA Visualizer::Green(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return green_;
+    auto color = green_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Blue()
+std_msgs::ColorRGBA Visualizer::Blue(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return blue_;
+    auto color = blue_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Black()
+std_msgs::ColorRGBA Visualizer::Black(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return black_;
+    auto color = black_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Magenta()
+std_msgs::ColorRGBA Visualizer::Magenta(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return magenta_;
+    auto color = magenta_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Yellow()
+std_msgs::ColorRGBA Visualizer::Yellow(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return yellow_;
+    auto color = yellow_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Cyan()
+std_msgs::ColorRGBA Visualizer::Cyan(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return cyan_;
+    auto color = cyan_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::White()
+std_msgs::ColorRGBA Visualizer::White(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return white_;
+    auto color = white_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Silver()
+std_msgs::ColorRGBA Visualizer::Silver(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return silver_;
+    auto color = silver_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Coral()
+std_msgs::ColorRGBA Visualizer::Coral(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return coral_;
+    auto color = coral_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Olive()
+std_msgs::ColorRGBA Visualizer::Olive(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return olive_;
+    auto color = olive_;
+    color.a = alpha;
+    return color;
 }
 
-std_msgs::ColorRGBA Visualizer::Orange()
+std_msgs::ColorRGBA Visualizer::Orange(const float alpha)
 {
     assert(standard_colors_initialized_);
-    return orange_;
+    auto color = orange_;
+    color.a = alpha;
+    return color;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -170,15 +194,13 @@ Visualizer::Visualizer(
     : Visualizer(
           nh,
           ph,
-          GetVisualizationMarkerTopic(nh),
-          GetVisualizationMarkerArrayTopic(nh))
+          GetVisualizationMarkerTopic(nh))
 {}
 
 Visualizer::Visualizer(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        const std::string& marker_topic,
-        const std::string& marker_array_topic)
+        const std::string& marker_topic)
     : disable_all_visualizations_(GetDisableAllVisualizations(ph))
     , clear_markers_srv_(nh.serviceClient<std_srvs::Empty>(GetClearVisualizationsTopic(nh), true))
     , world_frame_name_(GetWorldFrameName())
@@ -189,11 +211,13 @@ Visualizer::Visualizer(
     if (!disable_all_visualizations_)
     {
         clear_markers_srv_.waitForExistence();
-
-        // Publish visualization request markers
-        visualization_marker_pub_        = nh.advertise<visualization_msgs::Marker>(marker_topic, 100);
-        visualization_marker_vector_pub_ = nh.advertise<visualization_msgs::MarkerArray>(marker_array_topic, 100);
+        visualization_marker_pub_        = nh.advertise<visualization_msgs::Marker>(marker_topic, 256);
     }
+}
+
+void Visualizer::publish(const visualization_msgs::Marker& marker) const
+{
+    visualization_marker_pub_.publish(marker);
 }
 
 void Visualizer::clearVisualizationsBullet() const
@@ -250,8 +274,7 @@ void Visualizer::visualizePoints(
 {
     if (!disable_all_visualizations_)
     {
-        std::vector<std_msgs::ColorRGBA> colors(points.size(), color);
-
+        const std::vector<std_msgs::ColorRGBA> colors(points.size(), color);
         visualizePoints(marker_name, points, colors, id, scale);
     }
 }
@@ -294,6 +317,7 @@ void Visualizer::visualizeCubes(
         visualization_msgs::Marker marker;
 
         marker.header.frame_id = world_frame_name_;
+        marker.pose.orientation.w = 1.0;
 
         marker.type = visualization_msgs::Marker::CUBE_LIST;
         marker.ns = marker_name;
@@ -304,6 +328,74 @@ void Visualizer::visualizeCubes(
 
         marker.header.stamp = ros::Time::now();
         visualization_marker_pub_.publish(marker);
+    }
+}
+
+void Visualizer::visualizeSpheres(const std::string& marker_name,
+        const EigenHelpers::VectorVector3d& points,
+        const std_msgs::ColorRGBA& color,
+        const int32_t starting_id,
+        const double& radius) const
+{
+    const std::vector<std_msgs::ColorRGBA> colors(points.size(), color);
+    const std::vector<double> radiuses(points.size(), radius);
+    visualizeSpheres(marker_name, points, colors, starting_id, radiuses);
+}
+
+void Visualizer::visualizeSpheres(
+        const std::string& marker_name,
+        const EigenHelpers::VectorVector3d& points,
+        const std_msgs::ColorRGBA& color,
+        const int32_t starting_id,
+        const std::vector<double>& radiuses) const
+{
+    if (!disable_all_visualizations_)
+    {
+        const std::vector<std_msgs::ColorRGBA> colors(points.size(), color);
+        visualizeSpheres(marker_name, points, colors, starting_id, radiuses);
+    }
+}
+
+void Visualizer::visualizeSpheres(
+        const std::string& marker_name,
+        const EigenHelpers::VectorVector3d& points,
+        const std::vector<std_msgs::ColorRGBA>& colors,
+        const int32_t starting_id,
+        const std::vector<double>& radiuses) const
+{
+    if (!disable_all_visualizations_)
+    {
+        if (points.size() != radiuses.size())
+        {
+            ROS_ERROR_NAMED("visualizer", "Invalid sphere list, need number of points and radiuses to match");
+        }
+
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = world_frame_name_;
+        marker.header.stamp = ros::Time::now();
+
+        for (size_t idx = 0; idx < points.size(); ++idx)
+        {
+            marker.type = visualization_msgs::Marker::SPHERE;
+            marker.ns = marker_name;
+            marker.id = starting_id + (int32_t)idx;
+            marker.scale.x = radiuses[idx] * 2.0;
+            marker.scale.y = radiuses[idx] * 2.0;
+            marker.scale.z = radiuses[idx] * 2.0;
+            marker.pose.position = EigenHelpersConversions::EigenVector3dToGeometryPoint(points[idx]);
+            marker.pose.orientation.x = 0.0;
+            marker.pose.orientation.y = 0.0;
+            marker.pose.orientation.z = 0.0;
+            marker.pose.orientation.w = 1.0;
+            marker.color = colors[idx];
+            visualization_marker_pub_.publish(marker);
+
+            if (idx % 100 == 0)
+            {
+                ros::spinOnce();
+                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+            }
+        }
     }
 }
 
@@ -389,44 +481,6 @@ void Visualizer::visualizeCloth(
     }
 }
 
-visualization_msgs::MarkerArray::_markers_type Visualizer::createGripperMarker(
-        const std::string& marker_name,
-        const Eigen::Isometry3d& eigen_pose,
-        const std_msgs::ColorRGBA& color,
-        const int32_t id) const
-{
-    visualization_msgs::MarkerArray::_markers_type markers;
-    markers.resize(2);
-
-    markers[0].header.frame_id = world_frame_name_;
-
-    markers[0].type = visualization_msgs::Marker::CUBE;
-    markers[0].ns = marker_name;
-    markers[0].id = id;
-    //markers[0].scale.x = 0.03;
-    markers[0].scale.x = 0.01;
-    markers[0].scale.y = 0.03;
-    markers[0].scale.z = 0.01;
-    markers[0].pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(eigen_pose * Eigen::Translation3d(0.0, 0.0, gripper_apperture_));
-    markers[0].color = color;
-
-    markers[1].header.frame_id = world_frame_name_;
-
-    markers[1].type = visualization_msgs::Marker::CUBE;
-    markers[1].ns = marker_name;
-    markers[1].id = id + 1;
-//    markers[1].scale.x = 0.03;
-    markers[0].scale.x = 0.01;
-    markers[1].scale.y = 0.03;
-    markers[1].scale.z = 0.01;
-    markers[1].pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(eigen_pose * Eigen::Translation3d(0.0, 0.0, -gripper_apperture_));
-    markers[1].color = color;
-
-    markers[0].header.stamp = ros::Time::now();
-    markers[1].header.stamp = markers[0].header.stamp;
-    return markers;
-}
-
 void Visualizer::visualizeGripper(
         const std::string& marker_name,
         const Eigen::Isometry3d& eigen_pose,
@@ -435,10 +489,29 @@ void Visualizer::visualizeGripper(
 {
     if (!disable_all_visualizations_)
     {
-        visualization_msgs::MarkerArray marker;
-        marker.markers = createGripperMarker(marker_name, eigen_pose, color, id);
-        visualization_marker_pub_.publish(marker.markers[0]);
-        visualization_marker_pub_.publish(marker.markers[1]);
+        visualization_msgs::Marker marker;
+
+        marker.header.frame_id = world_frame_name_;
+        marker.header.stamp = ros::Time::now();
+
+        marker.type = visualization_msgs::Marker::CUBE_LIST;
+        marker.ns = marker_name;
+        marker.id = id;
+        marker.scale.x = 0.03;
+        marker.scale.y = 0.03;
+        marker.scale.z = 0.01;
+        marker.pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(eigen_pose);
+        marker.colors = {color, color};
+
+        geometry_msgs::Point p;
+        p.x = 0.0;
+        p.y = 0.0;
+        p.z = gripper_apperture_ * 0.5;
+        marker.points.push_back(p);
+        p.z = -gripper_apperture_ * 0.5;
+        marker.points.push_back(p);
+
+        visualization_marker_pub_.publish(marker);
     }
 }
 
@@ -452,7 +525,7 @@ void Visualizer::visualizeGrippers(
     {
         for (size_t gripper_ind = 0; gripper_ind < eigen_poses.size(); ++gripper_ind)
         {
-            visualizeGripper(marker_name, eigen_poses[gripper_ind], color, id + (int32_t)(2*gripper_ind + 1));
+            visualizeGripper(marker_name, eigen_poses[gripper_ind], color, id + (int32_t)gripper_ind);
         }
     }
 }

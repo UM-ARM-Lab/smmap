@@ -477,9 +477,9 @@ namespace smmap
                 , distance_to_obstacle_(distance_to_obstacle)
             {}
 
-            const Eigen::Vector3d nearest_point_to_obstacle_;
-            const Eigen::Vector3d obstacle_surface_normal_;
-            const double distance_to_obstacle_;
+            Eigen::Vector3d nearest_point_to_obstacle_;
+            Eigen::Vector3d obstacle_surface_normal_;
+            double distance_to_obstacle_;
     };
 
     inline std::ostream& operator<<(std::ostream& os, const smmap::CollisionData& data)
@@ -725,7 +725,8 @@ namespace smmap
 
     inline uint64_t SerializeAllGrippersPoseTrajectory(const AllGrippersPoseTrajectory& traj, std::vector<uint8_t>& buffer)
     {
-        const std::function<uint64_t(const AllGrippersSinglePose&, std::vector<uint8_t>&)> item_serializer = [] (const AllGrippersSinglePose& grippers_pose, std::vector<uint8_t>& buffer)
+        const std::function<uint64_t(const AllGrippersSinglePose&, std::vector<uint8_t>&)> item_serializer = []
+                (const AllGrippersSinglePose& grippers_pose, std::vector<uint8_t>& buffer)
         {
             return SerializeAllGrippersSinglePose(grippers_pose, buffer);
         };
@@ -734,7 +735,8 @@ namespace smmap
 
     inline std::pair<AllGrippersPoseTrajectory, uint64_t> DeserializeAllGrippersPoseTrajectory(const std::vector<uint8_t>& buffer, const uint64_t current)
     {
-        const std::function<std::pair<AllGrippersSinglePose, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> item_deserializer = [] (const std::vector<uint8_t>& buffer, const uint64_t current)
+        const std::function<std::pair<AllGrippersSinglePose, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> item_deserializer = []
+                (const std::vector<uint8_t>& buffer, const uint64_t current)
         {
             return DeserializeAllGrippersSinglePose(buffer, current);
         };

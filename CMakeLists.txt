@@ -61,7 +61,7 @@ include_directories(include
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -flto -O3 -g -Wall -Wextra -Wpedantic -Wconversion")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O0 -g -Wall -Wextra -Wpedantic -Wconversion")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -Og -g -Wall -Wextra -Wpedantic -Wconversion")
 
 unset(USE_OPEN_MP CACHE)
 option(USE_OPEN_MP "Set to ON if we want to use OpenMP" ON)
@@ -102,7 +102,7 @@ FILE(GLOB cpp_SRC "src/*.cpp")
 add_executable(planner_test_node_UCB nodes/planner_test_node.cpp ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 add_dependencies(planner_test_node_UCB ${catkin_EXPORTED_TARGETS})
 target_link_libraries(planner_test_node_UCB ${catkin_LIBRARIES} ${GUROBI_LIBRARIES} ${NOMAD_LIBRARIES})
-set_target_properties(planner_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT -DENABLE_PARALLEL_K_NEAREST_NEIGHBORS")
+set_target_properties(planner_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT -DENABLE_PARALLEL_K_NEAREST_NEIGHBORS  -DENABLE_PARALLEL_ROADMAP")
 
 ## Synthethic trials
 #add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp src/cvxopt_solvers.cpp src/gurobi_solvers.cpp)

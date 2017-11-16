@@ -8,7 +8,8 @@
 #include <arc_utilities/simple_rrt_planner.hpp>
 
 #include "smmap/visualization_tools.h"
-#include "smmap/virtual_rubber_band.h"
+#include "smmap/rubber_band.hpp"
+#include "smmap/prm_helper.h"
 
 namespace smmap
 {
@@ -37,58 +38,58 @@ namespace smmap
 
             RRTConfig(
                     const RRTGrippersRepresentation& grippers_position,
-                    const VirtualRubberBand& band,
+                    const RubberBand& band,
                     const bool is_visible_to_blacklist);
 
             const RRTGrippersRepresentation& getGrippers() const;
-            const VirtualRubberBand& getBand() const;
+            const RubberBand& getBand() const;
             bool isVisibleToBlacklist() const;
 
             // returned distance is the Euclidian distance of two grippers pos
             double distance(const RRTConfig& other) const;
-            static double Distance(const RRTConfig& c1, const RRTConfig& c2);
-            static double Distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
-            static double PathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index);
+            static double distance(const RRTConfig& c1, const RRTConfig& c2);
+            static double distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
+            static double pathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index);
 
             bool operator==(const RRTConfig& other) const;
 
         private:
 
             RRTGrippersRepresentation grippers_position_;
-            VirtualRubberBand band_;
+            RubberBand band_;
             bool is_visible_to_blacklist_;
     };
 
     class RRTHelper
     {
         public:
-            static const std::string RRT_BLACKLISTED_GOAL_BANDS_NS;
-            static const std::string RRT_GOAL_TESTING_NS;
+            static constexpr double NN_BLACKLIST_DISTANCE = (std::numeric_limits<double>::max() - 1e10);
 
-            static const std::string RRT_TREE_GRIPPER_A_NS;
-            static const std::string RRT_TREE_GRIPPER_B_NS;
+            // Topic names used for publishing visualization data
+            static constexpr auto RRT_BLACKLISTED_GOAL_BANDS_NS  = "rrt_blacklisted_goal_bands";
+            static constexpr auto RRT_GOAL_TESTING_NS            = "rrt_goal_testing";
 
-            static const std::string RRT_SAMPLE_NS;
-            static const std::string RRT_FORWARD_PROP_START_NS;
-            static const std::string RRT_FORWARD_PROP_STEPS_NS;
+            static constexpr auto RRT_TREE_GRIPPER_A_NS          = "rrt_tree_gripper_a";
+            static constexpr auto RRT_TREE_GRIPPER_B_NS          = "rrt_tree_gripper_b";
 
-            static const std::string RRT_SOLUTION_GRIPPER_A_NS;
-            static const std::string RRT_SOLUTION_GRIPPER_B_NS;
-            static const std::string RRT_SOLUTION_RUBBER_BAND_NS;
+            static constexpr auto RRT_SAMPLE_NS                  = "rrt_sample";
+            static constexpr auto RRT_FORWARD_PROP_START_NS      = "rrt_forward_prop_start";
+            static constexpr auto RRT_FORWARD_PROP_STEPS_NS      = "rrt_forward_prop_steps";
 
-            static const std::string RRT_SHORTCUT_FIRST_GRIPPER_NS;
-            static const std::string RRT_SHORTCUT_SECOND_GRIPPER_NS;
+            static constexpr auto RRT_SOLUTION_GRIPPER_A_NS      = "rrt_solution_gripper_a";
+            static constexpr auto RRT_SOLUTION_GRIPPER_B_NS      = "rrt_solution_gripper_b";
+            static constexpr auto RRT_SOLUTION_RUBBER_BAND_NS    = "rrt_solution_rubber_band";
+
+            static constexpr auto RRT_SHORTCUT_FIRST_GRIPPER_NS  = "rrt_shortcut_first_gripper";
+            static constexpr auto RRT_SHORTCUT_SECOND_GRIPPER_NS = "rrt_shortcut_second_gripper";
 
             RRTHelper(
                     const sdf_tools::SignedDistanceField& environment_sdf,
                     const Visualizer& vis,
                     std::mt19937_64& generator,
-                    const double x_limits_lower,
-                    const double x_limits_upper,
-                    const double y_limits_lower,
-                    const double y_limits_upper,
-                    const double z_limits_lower,
-                    const double z_limits_upper,
+                    const std::shared_ptr<PRMHelper>& prm_helper,
+                    const Eigen::Vector3d planning_world_lower_limits,
+                    const Eigen::Vector3d planning_world_upper_limits,
                     const double max_step_size,
                     const double goal_bias,
                     const double goal_reach_radius,
@@ -96,7 +97,8 @@ namespace smmap
                     const double homotopy_distance_penalty,
                     const int64_t max_shortcut_index_distance,
                     const uint32_t max_smoothing_iterations,
-                    const uint32_t max_failed_smoothing_iterations, const bool visualization_enabled);
+                    const uint32_t max_failed_smoothing_iterations,
+                    const bool visualization_enabled);
 
             std::vector<RRTConfig, RRTAllocator> rrtPlan(
                     const RRTConfig& start,
@@ -104,9 +106,10 @@ namespace smmap
                     const std::chrono::duration<double>& time_limit);
 
             void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
+            void clearBlacklist();
 
             bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const;
-            bool isBandFirstOrderVisibileToBlacklist(const VirtualRubberBand& test_band);
+            bool isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band);
 
             ///////////////////////////////////////////////////////////////////////////////////////
             // Visualization and other debugging tools
@@ -127,7 +130,17 @@ namespace smmap
                     const std::vector<ExternalRRTState>& nodes,
                     const RRTConfig& config);
 
-            RRTGrippersRepresentation posPairSampling();
+            // Used for timing purposes
+            // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
+            int64_t nearestNeighbour_internal(
+                    const std::vector<ExternalRRTState>& nodes,
+                    const RRTConfig& config);
+
+            RRTConfig configSampling();
+            // Used for timing purposes
+            // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
+            RRTConfig prmBasedSampling_internal();
+            RRTGrippersRepresentation posPairSampling_internal();
 
             bool goalReached(const RRTConfig& node);
 
@@ -154,7 +167,7 @@ namespace smmap
             std::pair<bool, std::vector<RRTConfig, RRTAllocator>> forwardSimulateGrippersPath(
                     const std::vector<RRTConfig, RRTAllocator>& path,
                     const size_t start_index,
-                    VirtualRubberBand rubber_band);
+                    RubberBand rubber_band);
 
             std::vector<RRTConfig, RRTAllocator> rrtShortcutSmooth(
                     std::vector<RRTConfig, RRTAllocator> path,
@@ -162,9 +175,8 @@ namespace smmap
 
 
         private:
-            const std::pair<double, double> x_limits_;
-            const std::pair<double, double> y_limits_;
-            const std::pair<double, double> z_limits_;
+            const Eigen::Vector3d planning_world_lower_limits_;
+            const Eigen::Vector3d planning_world_upper_limits_;
             const double max_step_size_;
             const double goal_bias_;
             const double goal_reach_radius_;
@@ -175,6 +187,7 @@ namespace smmap
             const uint32_t max_failed_smoothing_iterations_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
             std::uniform_int_distribution<int> uniform_shortcut_smoothing_int_distribution_;
+            std::shared_ptr<PRMHelper> prm_helper_;
 
             std::mt19937_64& generator_;
             const sdf_tools::SignedDistanceField& environment_sdf_;
@@ -183,6 +196,7 @@ namespace smmap
             const std_msgs::ColorRGBA band_safe_color_;
             const std_msgs::ColorRGBA band_overstretched_color_;
 
+            std::unique_ptr<RubberBand> starting_band_;
             RRTGrippersRepresentation grippers_goal_position_;
             double max_grippers_distance_;
             std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
@@ -191,6 +205,7 @@ namespace smmap
 
             // Planning and Smoothing statistics
             std::map<std::string, double> statistics_;
+            double total_sampling_time_;
             double total_nearest_neighbour_time_;
             double total_everything_included_forward_propogation_time_;
             double total_band_forward_propogation_time_;

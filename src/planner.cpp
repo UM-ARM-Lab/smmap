@@ -25,25 +25,10 @@ using namespace smmap;
 using namespace Eigen;
 using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
+using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
 #pragma message "Magic number - reward scaling factor starting value"
 #define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
-
-const std::string Planner::DESIRED_DELTA_NS                         = "desired delta";
-const std::string Planner::PREDICTED_DELTA_NS                       = "predicted_delta";
-
-const std::string Planner::PROJECTED_GRIPPER_NS                     = "projected_grippers";
-const std::string Planner::PROJECTED_BAND_NS                        = "projected_band";
-const std::string Planner::PROJECTED_POINT_PATH_NS                  = "projected_point_paths";
-const std::string Planner::PROJECTED_POINT_PATH_LINES_NS            = "projected_point_path_lines";
-
-const std::string Planner::CONSTRAINT_VIOLATION_VERSION1_NS         = "constraint_violation_version1";
-
-const std::string Planner::CLUSTERING_TARGETS_NS                    = "clustering_targets";
-const std::string Planner::CLUSTERING_RESULTS_PRE_PROJECT_NS        = "clustering_pre_project";
-const std::string Planner::CLUSTERING_RESULTS_POST_PROJECT_NS       = "clustering_post_project";
-const std::string Planner::CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS   = "clustering_assigned_centers";
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal helpers
@@ -56,7 +41,7 @@ const std::string Planner::CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS   = "clusterin
  * @param neighour_fn
  * @return The index of the nodes between the grippers, following the shortest path through the object
  */
-static std::vector<ssize_t> GetShortestPathBetweenGrippersThroughObject(
+static std::vector<ssize_t> getShortestPathBetweenGrippersThroughObject(
         const std::vector<GripperData>& grippers_data,
         const ObjectPointSet& object,
         const std::function<std::vector<ssize_t>(const ssize_t& node)> neighbour_fn)
@@ -87,7 +72,7 @@ static std::vector<ssize_t> GetShortestPathBetweenGrippersThroughObject(
     return plan;
 }
 
-static EigenHelpers::VectorVector3d GetPathBetweenGrippersThroughObject(
+static EigenHelpers::VectorVector3d getPathBetweenGrippersThroughObject(
         const WorldState& world_state,
         const std::vector<ssize_t>& object_node_idxs_between_grippers)
 {
@@ -106,7 +91,8 @@ static EigenHelpers::VectorVector3d GetPathBetweenGrippersThroughObject(
     return nodes;
 }
 
-static size_t SizeOfLargestVector(const std::vector<VectorVector3d>& vectors)
+template <typename T, typename Alloc = std::allocator<T>>
+static size_t sizeOfLargestVector(const std::vector<T, Alloc>& vectors)
 {
     size_t largest_vector = 0;
 
@@ -118,7 +104,7 @@ static size_t SizeOfLargestVector(const std::vector<VectorVector3d>& vectors)
     return largest_vector;
 }
 
-std::vector<uint32_t> NumberOfPointsInEachCluster(
+std::vector<uint32_t> numberOfPointsInEachCluster(
         const std::vector<uint32_t>& cluster_labels,
         const uint32_t num_clusters,
         const std::vector<long>& grapsed_points,
@@ -170,6 +156,7 @@ Planner::Planner(
         RobotInterface& robot,
         Visualizer& vis,
         const std::shared_ptr<TaskSpecification>& task_specification)
+    // Robot and task parameters
     : nh_("")
     , ph_("~")
     , seed_(GetPlannerSeed(ph_))
@@ -177,13 +164,13 @@ Planner::Planner(
     , robot_(robot)
     , task_specification_(task_specification)
     , dijkstras_task_(nullptr)
-
-    , calculate_regret_(GetCalculateRegret(ph_))
+    // Multi-model and regret based model selection parameters
+    , collect_results_for_all_models_(GetCollectResultsForAllModels(ph_))
     , reward_std_dev_scale_factor_(REWARD_STANDARD_DEV_SCALING_FACTOR_START)
     , process_noise_factor_(GetProcessNoiseFactor(ph_))
     , observation_noise_factor_(GetObservationNoiseFactor(ph_))
     , correlation_strength_factor_(GetCorrelationStrengthFactor(ph_))
-
+    // 'Stuck' detection and RRT prameters
     , enable_stuck_detection_(GetEnableStuckDetection(ph_))
     , max_lookahead_steps_(GetNumLookaheadSteps(ph_))
     , max_grippers_pose_history_length_(GetMaxGrippersPoseHistoryLength(ph_))
@@ -191,17 +178,20 @@ Planner::Planner(
     , global_plan_current_timestep_(-1)
     , global_plan_gripper_trajectory_(0)
     , rrt_helper_(nullptr)
+    , prm_helper_(nullptr)
+    // Used to generate some log data by some controllers
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
     , initial_grippers_distance_(robot_.getGrippersInitialDistance())
-
-    , logging_enabled_(GetLoggingEnabled(nh_))
-    , controller_logging_enabled_(GetLoggingEnabled(nh_))
+    // Logging and visualization parameters
+    , planner_logging_enabled_(GetPlannerLoggingEnabled(ph_))
+    , controller_logging_enabled_(GetControllerLoggingEnabled(ph_))
     , vis_(vis)
     , visualize_desired_motion_(GetVisualizeObjectDesiredMotion(ph_))
+    , visualize_gripper_motion_(GetVisualizerGripperMotion(ph_))
     , visualize_predicted_motion_(GetVisualizeObjectPredictedMotion(ph_))
 {
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
-    initializeLogging();
+    initializePlannerLogging();
     initializeControllerLogging();
 }
 
@@ -217,11 +207,49 @@ void Planner::execute()
 
     if (enable_stuck_detection_)
     {
+        // Extract the maximum distance between the grippers
+        // This assumes that the starting position of the grippers is at the maximum "unstretched" distance
         assert(robot_.getGrippersData().size() == 2);
         assert(model_list_.size() == 1);
 
+        const auto& grippers_starting_poses = world_feedback.all_grippers_single_pose_;
         dijkstras_task_ = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
         assert(dijkstras_task_ != nullptr);
+        const double max_band_distance =
+                (grippers_starting_poses[0].translation() - grippers_starting_poses[1].translation()).norm()
+                * dijkstras_task_->maxStretchFactor();
+
+        // Find the shortest path through the object, between the grippers, while follow nodes of the object.
+        // Used to determine the starting position of the rubber band at each timestep
+        const auto neighbour_fn = [&] (const ssize_t& node)
+        {
+            return dijkstras_task_->getNodeNeighbours(node);
+        };
+        path_between_grippers_through_object_ = getShortestPathBetweenGrippersThroughObject(
+                    robot_.getGrippersData(), GetObjectInitialConfiguration(nh_), neighbour_fn);
+
+        // Create the initial rubber band
+        const auto starting_band_points = getPathBetweenGrippersThroughObject(
+                    world_feedback, path_between_grippers_through_object_);
+        rubber_band_between_grippers_ = std::make_shared<RubberBand>(
+                    starting_band_points,
+                    max_band_distance,
+                    dijkstras_task_,
+                    vis_,
+                    generator_);
+
+        prm_helper_ = std::make_shared<PRMHelper>(
+                    dijkstras_task_->environment_sdf_,
+                    vis_,
+                    generator_,
+                    Vector3d(GetRRTPlanningXMin(ph_), GetRRTPlanningYMin(ph_), GetRRTPlanningZMin(ph_)),
+                    Vector3d(GetRRTPlanningXMax(ph_), GetRRTPlanningYMax(ph_), GetRRTPlanningZMax(ph_)),
+                    !GetDisableAllVisualizations(ph_),
+                    GetPRMNumNearest(ph_),
+                    GetPRMNumSamples(ph_),
+                    dijkstras_task_->work_space_grid_.minStepDimension());
+        prm_helper_->initializeRoadmap();
+        prm_helper_->visualize(GetVisualizePRM(ph_));
 
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         rrt_helper_ = std::unique_ptr<RRTHelper>(
@@ -229,12 +257,9 @@ void Planner::execute()
                         dijkstras_task_->environment_sdf_,
                         vis_,
                         generator_,
-                        GetRRTPlanningXMin(ph_),
-                        GetRRTPlanningXMax(ph_),
-                        GetRRTPlanningYMin(ph_),
-                        GetRRTPlanningYMax(ph_),
-                        GetRRTPlanningZMin(ph_),
-                        GetRRTPlanningZMax(ph_),
+                        prm_helper_,
+                        Vector3d(GetRRTPlanningXMin(ph_), GetRRTPlanningYMin(ph_), GetRRTPlanningZMin(ph_)),
+                        Vector3d(GetRRTPlanningXMax(ph_), GetRRTPlanningYMax(ph_), GetRRTPlanningZMax(ph_)),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
                         GetRRTGoalBias(ph_),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
@@ -244,29 +269,12 @@ void Planner::execute()
                         GetRRTMaxSmoothingIterations(ph_),
                         GetRRTMaxFailedSmoothingIterations(ph_),
                         !GetDisableAllVisualizations(ph_)));
-
-        // Create the initial rubber band
-        const auto neighbour_fn = [&] (const ssize_t& node)
-        {
-            return dijkstras_task_->getNodeNeighbours(node);
-        };
-        path_between_grippers_through_object_ = GetShortestPathBetweenGrippersThroughObject(robot_.getGrippersData(), GetObjectInitialConfiguration(nh_), neighbour_fn);
-        const auto starting_band_points = GetPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
-
-        const auto gripper_delta =
-                world_feedback.all_grippers_single_pose_[0].translation()
-                - world_feedback.all_grippers_single_pose_[1].translation();
-        const double max_band_distance = gripper_delta.norm() * dijkstras_task_->maxStretchFactor();
-        virtual_rubber_band_between_grippers_ = std::make_shared<VirtualRubberBand>(
-                    starting_band_points,
-                    max_band_distance,
-                    dijkstras_task_,
-                    vis_,
-                    generator_);
     }
 
     while (robot_.ok())
     {
+        // TODO: Can I remove this extraneous world_state object? All it does is cache the value of world_feedback for
+        // a single function call.
         const WorldState world_state = world_feedback;
         world_feedback = sendNextCommand(world_state);
 
@@ -274,13 +282,14 @@ void Planner::execute()
                      || task_specification_->taskDone(world_feedback)))
         {
             ROS_INFO_NAMED("planner", "------------------------------- End of Task -------------------------------------------");
-            const double current_error = task_specification_->calculateError(world_state);
-            ROS_INFO_STREAM_NAMED("planner", "   Planner/Task sim time " << world_state.sim_time_ << "\t Error: " << current_error);
+            const double current_error = task_specification_->calculateError(world_feedback);
+            ROS_INFO_STREAM_NAMED("planner", "   Planner/Task sim time " << world_feedback.sim_time_ << "\t Error: " << current_error);
 
-            vis_.deleteObjects(Planner::PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * GetNumLookaheadSteps(ph_)) + 10);
-            vis_.deleteObjects(Planner::PROJECTED_BAND_NS,               1, (int32_t)GetNumLookaheadSteps(ph_) + 10);
-            vis_.deleteObjects(Planner::PROJECTED_POINT_PATH_NS,         1, 2);
-            vis_.deleteObjects(Planner::PROJECTED_POINT_PATH_LINES_NS,   1, 2);
+            vis_.deleteObjects(PROJECTED_BAND_NS, 1, 30);
+            vis_.clearVisualizationsBullet();
+            std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+            vis_.clearVisualizationsBullet();
+            std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
             if (world_feedback.sim_time_ - start_time >= task_specification_->maxTime())
             {
@@ -321,7 +330,20 @@ WorldState Planner::sendNextCommand(
         // Check if the global plan has 'hooked' the deformable object on something
         if (executing_global_gripper_trajectory_)
         {
+            Stopwatch stopwatch;
+            const bool global_plan_will_overstretch = predictStuckForGlobalPlannerResults();
+            ROS_INFO_STREAM_NAMED("planner", "Determined if global planner needed in          " << stopwatch(READ) << " seconds");
 
+            if (global_plan_will_overstretch)
+            {
+                planning_needed = true;
+
+                vis_.deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
+                vis_.deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
+
+                ROS_WARN_NAMED("planner", "Invoking global planner as the current plan will overstretch the deformable object");
+                ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
+            }
         }
         // Check if the local controller will be stuck
         else
@@ -337,15 +359,20 @@ WorldState Planner::sendNextCommand(
             {
                 planning_needed = true;
 
-                vis_.deleteObjects(DESIRED_DELTA_NS, 1, 100);
-                vis_.deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
-                vis_.deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
-                vis_.deleteObjects(PROJECTED_POINT_PATH_NS,         1, 2);
-                vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS,   1, 2);
+                std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
+
+//                vis_.deleteObjects(DESIRED_DELTA_NS, 1, 100);
+//                vis_.deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
+//                vis_.deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
+//                vis_.deleteObjects(PROJECTED_POINT_PATH_NS,         1, 2);
+//                vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS,   1, 2);
+
+                vis_.clearVisualizationsBullet();
+                std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+                vis_.clearVisualizationsBullet();
 
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "planner", "Invoking global planner due to overstretch");
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "planner", "Invoking global planner due to collision");
-
                 ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
             }
         }
@@ -353,7 +380,7 @@ WorldState Planner::sendNextCommand(
         // If we need to (re)plan due to the local controller getting stuck, or the gobal plan failing, then do so
         if (planning_needed)
         {
-            rrt_helper_->addBandToBlacklist(virtual_rubber_band_between_grippers_->getVectorRepresentation());
+            rrt_helper_->addBandToBlacklist(rubber_band_between_grippers_->getVectorRepresentation());
             planGlobalGripperTrajectory(world_state);
         }
 
@@ -369,8 +396,8 @@ WorldState Planner::sendNextCommand(
         }
 
         // Update the band with the new position of the deformable object
-        const auto band_points = GetPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
-        virtual_rubber_band_between_grippers_->setPointsAndSmooth(band_points);
+        const auto band_points = getPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
+        rubber_band_between_grippers_->setPointsAndSmooth(band_points);
 
         // Keep the last N grippers positions recorded to detect if the grippers are stuck
         grippers_pose_history_.push_back(world_feedback.all_grippers_single_pose_);
@@ -406,7 +433,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 world_state,
                 task_specification_->calculateDesiredDirection(world_state),
                 robot_.dt_);
-    const ObjectPointSet current_object_configuration = world_state.object_configuration_;
 
     if (visualize_desired_motion_)
     {
@@ -421,11 +447,11 @@ WorldState Planner::sendNextCommandUsingLocalController(
     // Querry each model for it's best gripper delta
     stopwatch(RESET);
     std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>> suggested_robot_commands(num_models_);
-    std::vector<double> time_used(num_models_, 0.0);
+    std::vector<double> controller_computation_time(num_models_, 0.0);
     #pragma omp parallel for
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
     {
-        if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
+        if (collect_results_for_all_models_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
         {
             Stopwatch individual_controller_stopwatch;
 
@@ -434,107 +460,26 @@ WorldState Planner::sendNextCommandUsingLocalController(
                         model_input_data,
                         robot_.max_gripper_velocity_);
 
-            visualizeGripperMotion( world_state.all_grippers_single_pose_,
-                                      suggested_robot_commands[model_ind].first,
-                                      model_ind);
-
-            time_used[model_ind] = individual_controller_stopwatch(READ);
+            controller_computation_time[model_ind] = individual_controller_stopwatch(READ);
 
             // Measure the time it took to pick a model
-            ROS_INFO_STREAM_NAMED("planner", model_ind << "th Controller get suggested motion in" << time_used[model_ind] << " seconds");
+            ROS_INFO_STREAM_NAMED("planner", model_ind << "th Controller get suggested motion in          " << controller_computation_time[model_ind] << " seconds");
         }
     }
 
     // Measure the time it took to pick a model
     ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in  " << stopwatch(READ) << " seconds");
 
-    // Calculate regret if we need to
-    std::vector<double> individual_rewards(num_models_, std::numeric_limits<double>::infinity());
-
-    ////// Build a function to collect the data needed for each controller's log //////
-    // Data used by the function, per model
-    std::vector<double> avg_control_error(num_models_, 0.0);
-    std::vector<double> current_stretching_factor(num_models_, 0.0);
-    const ObjectDeltaAndWeight& task_desired_motion = model_input_data.desired_object_motion_;
-    const Eigen::VectorXd& desired_p_dot = task_desired_motion.delta;
-    const Eigen::VectorXd& desired_p_dot_weight = task_desired_motion.weight;
-    const ssize_t num_grippers = GetGrippersData(nh_).size();
-    const ssize_t num_nodes = world_state.object_configuration_.cols();
-    // The function itself
-    const auto single_controller_logging_data_collection_fn = [&] (const size_t model_ind, const WorldState& resulting_world_state)
-    {
-        // Get control errors for different model-controller sets.
-        const ObjectPointSet real_p_dot = resulting_world_state.object_configuration_ - current_object_configuration;
-
-        int point_count = 0;
-        double max_stretching = 0.0;
-        double desired_p_dot_avg_norm = 0.0;
-        double desired_p_dot_max = 0.0;
-
-        for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
-        {
-            const double point_weight = desired_p_dot_weight(node_ind * 3);
-            if (point_weight > 0.0)
-            {
-                //  Calculate p_dot error
-                const Eigen::Vector3d& point_real_p_dot = real_p_dot.col(node_ind);
-                const Eigen::Vector3d& point_desired_p_dot = desired_p_dot.segment<3>(node_ind * 3);
-                avg_control_error[model_ind] += (point_real_p_dot - point_desired_p_dot).norm();
-
-                desired_p_dot_avg_norm += point_desired_p_dot.norm();
-                if (point_desired_p_dot.norm() > desired_p_dot_max)
-                {
-                    desired_p_dot_max = point_desired_p_dot.norm();
-                }
-
-                point_count++;
-            }
-
-            // Calculate stretching factor
-            const Eigen::MatrixXd node_distance =
-                    CalculateDistanceMatrix(resulting_world_state.object_configuration_);
-
-            const ssize_t first_node = node_ind;
-            for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
-            {
-                const double this_stretching_factor = node_distance(first_node, second_node)
-                        / object_initial_node_distance_(first_node, second_node);
-                max_stretching = std::max(max_stretching, this_stretching_factor);
-            }
-        }
-
-
-        if (point_count > 0)
-        {
-            avg_control_error[model_ind] = avg_control_error[model_ind] / point_count;
-            desired_p_dot_avg_norm /= point_count;
-        }
-
-        // Catch cases where the grippers and the nodes don't align, this should still be flagged as large stretch
-        if (num_grippers == 2)
-        {
-            const double this_stretching_factor = (resulting_world_state.all_grippers_single_pose_.at(0).translation()
-                    - resulting_world_state.all_grippers_single_pose_.at(1).translation()).norm()
-                    / initial_grippers_distance_;
-            max_stretching = std::max(max_stretching, this_stretching_factor);
-        }
-        current_stretching_factor[model_ind] = max_stretching;
-        ROS_INFO_STREAM_NAMED("planner", "average desired p dot is" << desired_p_dot_avg_norm);
-        ROS_INFO_STREAM_NAMED("planner", "max pointwise desired p dot is" << desired_p_dot_max);
-    };
-
-    if (num_models_ > 1 && calculate_regret_)
+    // Collect feedback data for logging purposes
+    std::vector<WorldState> individual_model_results(num_models_);
+    if (collect_results_for_all_models_)
     {
         stopwatch(RESET);
-        const double prev_error = task_specification_->calculateError(world_state);
-
         // Build a feedback function to log data for each model that we are testing
         const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& resulting_world_state)
         {
-            individual_rewards[model_ind] = prev_error - task_specification_->calculateError(resulting_world_state);
-            single_controller_logging_data_collection_fn(model_ind, resulting_world_state);
+            individual_model_results[model_ind] = resulting_world_state;
         };
-
         std::vector<AllGrippersSinglePose> poses_to_test(num_models_);
         for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
         {
@@ -543,11 +488,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
         robot_.testGrippersPoses(poses_to_test, test_feedback_fn);
 
         ROS_INFO_STREAM_NAMED("planner", "Collected data to calculate regret in " << stopwatch(READ) << " seconds");
-    }
-    else if (num_models_ == 1)
-    {
-        const ssize_t model_ind = 0;
-        single_controller_logging_data_collection_fn(model_ind, world_state);
     }
 
     // Execute the command
@@ -561,24 +501,35 @@ WorldState Planner::sendNextCommandUsingLocalController(
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
 
+    if (visualize_gripper_motion_)
+    {
+        for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
+        {
+            visualizeGripperMotion(world_state.all_grippers_single_pose_,
+                                   suggested_robot_commands[(size_t)model_ind].first,
+                                   model_ind);
+        }
+    }
+
     if (visualize_predicted_motion_)
     {
         const ObjectPointSet& object_delta = suggested_robot_commands[(size_t)model_to_use].second;
         vis_.visualizeObjectDelta(
                     PREDICTED_DELTA_NS,
                     world_state.object_configuration_,
-                    world_state.object_configuration_ + 80.0 * object_delta,
+                    world_state.object_configuration_ + object_delta,
                     Visualizer::Blue());
     }
 
-    ROS_INFO_NAMED("planner", "Updating models and logging data");
-    updateModels(world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
-
-    logData(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use, individual_rewards);
-    controllerLogData(world_feedback, avg_control_error, current_stretching_factor, time_used);
+    ROS_INFO_NAMED("planner", "Updating models");
+    updateModels(world_state, model_input_data.desired_object_motion_, suggested_robot_commands, model_to_use, world_feedback);
 
     const double controller_time = function_wide_stopwatch(READ) - robot_execution_time;
     ROS_INFO_STREAM_NAMED("planner", "Total local controller time                     " << controller_time << " seconds");
+
+    ROS_INFO_NAMED("planner", "Logging data");
+    logPlannerData(world_state, world_feedback, individual_model_results, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use);
+    controllerLogData(world_state, world_feedback, individual_model_results, model_input_data, controller_computation_time);
 
     return world_feedback;
 }
@@ -591,34 +542,32 @@ WorldState Planner::sendNextCommandUsingLocalController(
 WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
         const WorldState& current_world_state)
 {
-    (void)current_world_state;
     assert(executing_global_gripper_trajectory_);
     assert(global_plan_current_timestep_ < global_plan_gripper_trajectory_.size());
 
     const WorldState world_feedback = robot_.sendGrippersPoses(global_plan_gripper_trajectory_[global_plan_current_timestep_]);
-    const bool verbose = false;
-    virtual_rubber_band_between_grippers_->forwardSimulateVirtualRubberBandToEndpointTargets(
-                world_feedback.all_grippers_single_pose_[0].translation(),
-                world_feedback.all_grippers_single_pose_[1].translation(),
-                verbose);
 
     ++global_plan_current_timestep_;
     if (global_plan_current_timestep_ == global_plan_gripper_trajectory_.size())
     {
-        std::cerr << "Global plan finished, resetting grippers pose history\n";
-        std::cerr << "Global plan finished, resetting error history\n";
+        ROS_INFO_NAMED("planner", "Global plan finished, resetting grippers pose history and error history");
 
         executing_global_gripper_trajectory_ = false;
         grippers_pose_history_.clear();
         error_history_.clear();
 
-        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_A_NS,   1, 2);
-        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_B_NS,   1, 2);
-        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS, 1, 2);
+        std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
+        vis_.clearVisualizationsBullet();
+        std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+        vis_.clearVisualizationsBullet();
+
+//        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_A_NS,   1, 2);
+//        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_B_NS,   1, 2);
+//        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS, 1, 2);
     }
 
-    const std::vector<double> fake_rewards(model_list_.size(), NAN);
-    logData(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), -1, fake_rewards);
+    const std::vector<WorldState> fake_all_models_results(num_models_, world_feedback);
+    logPlannerData(current_world_state, world_feedback, fake_all_models_results, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), -1);
 
     return world_feedback;
 }
@@ -664,6 +613,8 @@ bool Planner::checkForClothStretchingViolations(
         const std::vector<VectorVector3d>& projected_paths,
         const bool visualization_enabled)
 {
+    assert(false && "This function has not been checked/updated in a long time, and may no longer be valid/useful");
+
     bool violations_exist = false;
 
     VectorVector3d vis_start_points;
@@ -709,7 +660,7 @@ bool Planner::checkForClothStretchingViolations(
     return violations_exist;
 }
 
-std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::detectFutureConstraintViolations(
+std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectFutureConstraintViolations(
         const WorldState& current_world_state,
         const bool visualization_enabled)
 {
@@ -717,18 +668,20 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     Stopwatch function_wide_stopwatch;
 
     assert(task_specification_->is_dijkstras_type_task_ && current_world_state.all_grippers_single_pose_.size() == 2);
-    std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> projected_deformable_point_paths_and_projected_virtual_rubber_bands;
+    std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 
-    const static std_msgs::ColorRGBA gripper_color = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
+    // TODO: Move to class wide location, currently in 2 locations in this file
+    const static std_msgs::ColorRGBA gripper_color = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
     const static std_msgs::ColorRGBA rubber_band_safe_color = Visualizer::Black();
     const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
-    const bool verbose = false;
+    const bool band_verbose = false;
 
+//    vis_.clearVisualizationsBullet();
 
-    vis_.deleteObjects(PROJECTED_BAND_NS, 1, (int32_t)max_lookahead_steps_ + 10);
-    vis_.deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
-    vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
-    vis_.deleteObjects(PROJECTED_GRIPPER_NS, 1, (int32_t)(4 * max_lookahead_steps_) + 10);
+//    vis_.deleteObjects(PROJECTED_BAND_NS, 1, (int32_t)max_lookahead_steps_ + 10);
+//    vis_.deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
+//    vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
+//    vis_.deleteObjects(PROJECTED_GRIPPER_NS, 1, (int32_t)(4 * max_lookahead_steps_) + 10);
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -737,7 +690,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     stopwatch(RESET);
     const std::vector<VectorVector3d> projected_deformable_point_paths = dijkstras_task_->findPathFromObjectToTarget(current_world_state, max_lookahead_steps_);
 
-    const size_t actual_lookahead_steps = SizeOfLargestVector(projected_deformable_point_paths) - 1;
+    const size_t actual_lookahead_steps = sizeOfLargestVector(projected_deformable_point_paths) - 1;
     // sizeOfLargest(...) should be at least 2, so this assert should always be true
     assert(actual_lookahead_steps <= max_lookahead_steps_);
 
@@ -751,7 +704,16 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ROS_INFO_STREAM_NAMED("planner", "Starting future constraint violation detection   - Version 2a - Total steps taken " << actual_lookahead_steps);
     assert(num_models_ == 1 && current_world_state.all_grippers_single_pose_.size() == 2);
-    virtual_rubber_band_between_grippers_->visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
+    const auto& correspondences = dijkstras_task_->getCoverPointCorrespondences(current_world_state);
+    const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
+    {
+        return dijkstras_task_->calculateErrorCorrectionDeltaFixedCorrespondences(world_state, correspondences.correspondences_);
+    };
+
+
+//    vis_.clearVisualizationsBullet();
+
+    rubber_band_between_grippers_->visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
 
 
 
@@ -765,9 +727,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     WorldState world_state_copy = current_world_state;
-    VirtualRubberBand virtual_rubber_band_between_grippers_copy = *virtual_rubber_band_between_grippers_.get();
-    // Fix the correspondeces at time 0, then use these to project the motion of the cloth/rope into the future
-    const auto& correspondences = dijkstras_task_->getCoverPointCorrespondences(current_world_state);
+    RubberBand rubber_band_between_grippers_copy = *rubber_band_between_grippers_.get();
+
     projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.reserve(actual_lookahead_steps);
     for (size_t t = 0; t < actual_lookahead_steps; ++t)
     {
@@ -776,7 +737,6 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
                     world_state_copy,
                     dijkstras_task_->calculateErrorCorrectionDeltaFixedCorrespondences(world_state_copy, correspondences.correspondences_),
                     robot_.dt_);
-
         const std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command =
                 controller_list_[0]->getGripperMotion(
                     model_input_data,
@@ -803,14 +763,14 @@ std::pair<std::vector<VectorVector3d>, std::vector<VirtualRubberBand>> Planner::
         }
 
         // Move the virtual rubber band to follow the grippers, projecting out of collision as needed
-        virtual_rubber_band_between_grippers_copy.forwardSimulateVirtualRubberBandToEndpointTargets(
+        rubber_band_between_grippers_copy.forwardPropagateRubberBandToEndpointTargets(
                     current_grippers_pose[0].translation(),
                     current_grippers_pose[1].translation(),
-                    verbose);
-        projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.push_back(virtual_rubber_band_between_grippers_copy);
+                    band_verbose);
+        projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.push_back(rubber_band_between_grippers_copy);
 
         // Visualize
-        virtual_rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
+        rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
         vis_.visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color, (int32_t)(4 * t) + 1);
 
         // Finish collecting the gripper collision data
@@ -836,18 +796,15 @@ bool Planner::globalPlannerNeededDueToOverstretch(
 
     double filtered_band_length = projected_rubber_bands.front().totalLength();
 
-//    std::cerr << "Max band length: " << virtual_rubber_band_between_grippers_->maxSafeLength() << std::endl;
-
     for (size_t t = 0; t < projected_rubber_bands.size(); ++t)
     {
-        const VirtualRubberBand& band = projected_rubber_bands[t];
+        const RubberBand& band = projected_rubber_bands[t];
         const double band_length = band.totalLength();
         const std::pair<Eigen::Vector3d, Eigen::Vector3d> endpoints = band.getEndpoints();
         const double distance_between_endpoints = (endpoints.first - endpoints.second).norm();
 
         // Apply a low pass filter to the band length to try and remove "blips" in the estimate
         filtered_band_length = annealing_factor * filtered_band_length + (1.0 - annealing_factor) * band_length;
-//        std::cerr << "Current band length: " << band_length << " Filtered band length: " << filtered_band_length << std::endl;
         // If the band is currently overstretched, and not in free space, then predict future problems
         if (filtered_band_length > band.maxSafeLength() && !CloseEnough(band_length, distance_between_endpoints, 1e-6))
         {
@@ -884,7 +841,7 @@ bool Planner::globalPlannerNeededDueToLackOfProgress()
         error_deltas[time_idx - 1] = error_history_[time_idx] - start_error;
     }
 
-    if (logging_enabled_)
+    if (planner_logging_enabled_)
     {
         // Determine if there is a general positive slope on the distances
         // - we should be moving away from the start config if we are not stuck
@@ -906,6 +863,39 @@ bool Planner::globalPlannerNeededDueToLackOfProgress()
     }
 
     return false;
+}
+
+bool Planner::predictStuckForGlobalPlannerResults(const bool visualization_enabled)
+{
+    assert(global_plan_current_timestep_ < global_plan_gripper_trajectory_.size());
+
+    // TODO: Move to class wide location, currently in 2 positions in this file
+    const static std_msgs::ColorRGBA gripper_color = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
+    const static std_msgs::ColorRGBA rubber_band_safe_color = Visualizer::Black();
+    const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
+    constexpr bool band_verbose = false;
+
+    RubberBand rubber_band_between_grippers_copy = *rubber_band_between_grippers_;
+
+    bool overstretch_predicted = false;
+    const size_t traj_waypoints_per_large_step = (size_t)std::floor(dijkstras_task_->work_space_grid_.minStepDimension() / robot_.dt_ / robot_.max_gripper_velocity_);
+    for (size_t t = 0; (t < max_lookahead_steps_) &&
+                       (global_plan_current_timestep_ + t * traj_waypoints_per_large_step < global_plan_gripper_trajectory_.size()); ++t)
+    {
+        // Forward project the band and check for overstretch
+        const auto& grippers_pose = global_plan_gripper_trajectory_[global_plan_current_timestep_ + t * traj_waypoints_per_large_step];
+        rubber_band_between_grippers_copy.forwardPropagateRubberBandToEndpointTargets(
+                    grippers_pose[0].translation(),
+                    grippers_pose[1].translation(),
+                    band_verbose);
+        overstretch_predicted |= rubber_band_between_grippers_copy.isOverstretched();
+
+        // Visualize
+        rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
+        vis_.visualizeGrippers(PROJECTED_GRIPPER_NS, grippers_pose, gripper_color, (int32_t)(4 * t) + 1);
+    }
+
+    return overstretch_predicted;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -967,8 +957,8 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
     const auto& gripper0_grapsed_points = dijkstras_task_->getGripperAttachedNodesIndices(0);
     const auto& gripper1_grapsed_points = dijkstras_task_->getGripperAttachedNodesIndices(1);
 
-    const auto gripper0_cluster_counts = NumberOfPointsInEachCluster(cluster_labels, num_clusters, gripper0_grapsed_points, correspondences);
-    const auto gripper1_cluster_counts = NumberOfPointsInEachCluster(cluster_labels, num_clusters, gripper1_grapsed_points, correspondences);
+    const auto gripper0_cluster_counts = numberOfPointsInEachCluster(cluster_labels, num_clusters, gripper0_grapsed_points, correspondences);
+    const auto gripper1_cluster_counts = numberOfPointsInEachCluster(cluster_labels, num_clusters, gripper1_grapsed_points, correspondences);
 
     // Set some values so that the logic used in the if-else chain makes sense to read
     const bool gripper0_no_match_to_cluster0    = gripper0_cluster_counts[0] == 0;
@@ -1225,11 +1215,13 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
 
     // Planning if we did not load a plan from file
     {
+        vis_.clearVisualizationsBullet();
+
         RRTConfig start_config(
                     std::pair<Vector3d, Vector3d>(
                                 world_state.all_grippers_single_pose_[0].translation(),
                                 world_state.all_grippers_single_pose_[1].translation()),
-                    *virtual_rubber_band_between_grippers_,
+                    *rubber_band_between_grippers_,
                     true);
 
         // Note that the rubber band part of the target is ignored at the present time
@@ -1241,8 +1233,13 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
         const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
         const auto rrt_results = rrt_helper_->rrtPlan(start_config, rrt_grippers_goal, time_limit);
 
-        vis_.deleteObjects(CLUSTERING_TARGETS_NS, 1, 2);
+//        vis_.deleteObjects(CLUSTERING_TARGETS_NS, 1, 2);
+        vis_.clearVisualizationsBullet();
+        std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+        vis_.clearVisualizationsBullet();
+        std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         rrt_helper_->visualizePath(rrt_results);
+        std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
         global_plan_current_timestep_ = 0;
         executing_global_gripper_trajectory_ = true;
@@ -1944,9 +1941,9 @@ void Planner::visualizeGripperMotion(
     }
 }
 
-void Planner::initializeLogging()
+void Planner::initializePlannerLogging()
 {
-    if (logging_enabled_)
+    if (planner_logging_enabled_)
     {
         const std::string log_folder = GetLogFolder(nh_);
         ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
@@ -2011,30 +2008,44 @@ void Planner::initializeControllerLogging()
                                        Log::Log(log_folder + "realtime_stretching_factor.txt", false)));
 
         controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
-                                       "count_stretching_violation",
-                                       Log::Log(log_folder + "count_stretching_violation.txt", false)));
+                                       "individual_computation_times",
+                                       Log::Log(log_folder + "individual_computation_times.txt", false)));
     }
 }
 
-void Planner::logData(
-        const WorldState& current_world_state,
+// Note that resulting_world_state may not be exactly indentical to individual_model_rewards[model_used]
+// because of the way forking words (and doesn't) in Bullet. They should be very close however.
+void Planner::logPlannerData(
+        const WorldState& initial_world_state,
+        const WorldState& resulting_world_state,
+        const std::vector<WorldState>& individual_model_results,
         const Eigen::VectorXd& model_utility_mean,
         const Eigen::MatrixXd& model_utility_covariance,
-        const ssize_t model_used,
-        const std::vector<double>& rewards_for_all_models)
+        const ssize_t model_used)
 {
-    if (logging_enabled_)
+    if (planner_logging_enabled_)
     {
+        std::vector<double> rewards_for_all_models(num_models_, std::numeric_limits<double>::quiet_NaN());
+        if (collect_results_for_all_models_)
+        {
+            const double prev_error = task_specification_->calculateError(initial_world_state);
+            for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
+            {
+                const double current_error = task_specification_->calculateError(individual_model_results[(size_t)model_ind]);
+                rewards_for_all_models[(size_t)model_ind] = prev_error - current_error;
+            }
+        }
+
         const static Eigen::IOFormat single_line(
                     Eigen::StreamPrecision,
                     Eigen::DontAlignCols,
                     " ", " ", "", "");
 
         LOG(loggers_.at("time"),
-             current_world_state.sim_time_);
+             resulting_world_state.sim_time_);
 
         LOG(loggers_.at("error"),
-             task_specification_->calculateError(current_world_state));
+             task_specification_->calculateError(resulting_world_state));
 
         LOG(loggers_.at("utility_mean"),
              model_utility_mean.format(single_line));
@@ -2050,29 +2061,112 @@ void Planner::logData(
     }
 }
 
+// Note that resulting_world_state may not be exactly indentical to individual_model_rewards[model_used]
+// because of the way forking words (and doesn't) in Bullet. They should be very close however.
 void Planner::controllerLogData(
-        const WorldState& current_world_state,
-        const std::vector<double> &ave_contol_error,
-        const std::vector<double> current_stretching_factor,
-        const std::vector<double> num_stretching_violation)
+        const WorldState& initial_world_state,
+        const WorldState& resulting_world_state,
+        const std::vector<WorldState>& individual_model_results,
+        const DeformableModel::DeformableModelInputData& model_input_data,
+        const std::vector<double>& individual_computation_times)
 {
-    if(controller_logging_enabled_)
+    if (controller_logging_enabled_)
     {
+        // This function only works properly if we've collected all the data for each model,
+        // so make sure the code crashes at a known point if that's the case
+        assert(collect_results_for_all_models_);
+
+        // Split out data used for computation for each model
+        const ObjectDeltaAndWeight& task_desired_motion = model_input_data.desired_object_motion_;
+        const Eigen::VectorXd& desired_p_dot = task_desired_motion.delta;
+        const Eigen::VectorXd& desired_p_dot_weight = task_desired_motion.weight;
+        const ssize_t num_grippers = initial_world_state.all_grippers_single_pose_.size();
+        const ssize_t num_nodes = initial_world_state.object_configuration_.cols();
+
+        // Data used by the function, per model
+        std::vector<double> avg_control_error(num_models_, std::numeric_limits<double>::quiet_NaN());
+        std::vector<double> current_stretching_factor(num_models_, std::numeric_limits<double>::quiet_NaN());
+
+        for (size_t model_ind = 0; (ssize_t)model_ind < num_models_; ++model_ind)
+        {
+            // Get control errors for different model-controller sets.
+            const ObjectPointSet real_p_dot =
+                    individual_model_results[model_ind].object_configuration_
+                    - initial_world_state.object_configuration_;
+
+            int point_count = 0;
+            double max_stretching = 0.0;
+            double desired_p_dot_avg_norm = 0.0;
+            double desired_p_dot_max = 0.0;
+
+            // Calculate stretching factor
+            const Eigen::MatrixXd node_distance =
+                    CalculateDistanceMatrix(individual_model_results[model_ind].object_configuration_);
+
+            for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
+            {
+                const double point_weight = desired_p_dot_weight(node_ind * 3);
+                if (point_weight > 0.0)
+                {
+                    //  Calculate p_dot error
+                    const Eigen::Vector3d& point_real_p_dot = real_p_dot.col(node_ind);
+                    const Eigen::Vector3d& point_desired_p_dot = desired_p_dot.segment<3>(node_ind * 3);
+                    avg_control_error[model_ind] += (point_real_p_dot - point_desired_p_dot).norm();
+
+                    desired_p_dot_avg_norm += point_desired_p_dot.norm();
+                    if (point_desired_p_dot.norm() > desired_p_dot_max)
+                    {
+                        desired_p_dot_max = point_desired_p_dot.norm();
+                    }
+
+                    point_count++;
+                }
+
+                const ssize_t first_node = node_ind;
+                for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
+                {
+                    const double this_stretching_factor = node_distance(first_node, second_node)
+                            / object_initial_node_distance_(first_node, second_node);
+                    max_stretching = std::max(max_stretching, this_stretching_factor);
+                }
+            }
+
+            if (point_count > 0)
+            {
+                avg_control_error[model_ind] = avg_control_error[model_ind] / point_count;
+                desired_p_dot_avg_norm /= point_count;
+            }
+
+            // Catch cases where the grippers and the nodes don't align, this should still be flagged as large stretch
+            if (num_grippers == 2)
+            {
+                const auto gripper_delta =
+                        individual_model_results[model_ind].all_grippers_single_pose_.at(0).translation()
+                        - individual_model_results[model_ind].all_grippers_single_pose_.at(1).translation();
+                const double this_stretching_factor = gripper_delta.norm() / initial_grippers_distance_;
+                max_stretching = std::max(max_stretching, this_stretching_factor);
+            }
+            current_stretching_factor[model_ind] = max_stretching;
+            ROS_INFO_STREAM_NAMED("planner", "average desired p dot is       " << desired_p_dot_avg_norm);
+            ROS_INFO_STREAM_NAMED("planner", "max pointwise desired p dot is " << desired_p_dot_max);
+        }
+
+        // Do the actual logging itself
         const static Eigen::IOFormat single_line(
                     Eigen::StreamPrecision,
                     Eigen::DontAlignCols,
                     " ", " ", "", "");
 
         LOG(controller_loggers_.at("control_time"),
-            current_world_state.sim_time_);
+            resulting_world_state.sim_time_);
 
         LOG(controller_loggers_.at("control_error_realtime"),
-            PrettyPrint::PrettyPrint(ave_contol_error, false, " "));
+            PrettyPrint::PrettyPrint(avg_control_error, false, " "));
 
         LOG(controller_loggers_.at("realtime_stretching_factor"),
             PrettyPrint::PrettyPrint(current_stretching_factor, false, " "));
 
-        LOG(controller_loggers_.at("count_stretching_violation"),
-            PrettyPrint::PrettyPrint(num_stretching_violation, false, " "));
+        LOG(controller_loggers_.at("individual_computation_times"),
+            PrettyPrint::PrettyPrint(individual_computation_times, false, " "));
     }
 }
