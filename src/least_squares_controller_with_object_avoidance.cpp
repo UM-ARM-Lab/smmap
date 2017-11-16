@@ -38,7 +38,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerWith
 
     // Retrieve the desired object velocity (p_dot)
     const ObjectDeltaAndWeight desired_object_velocity =
-            input_data.task_desired_object_delta_fn_(input_data.world_current_state_);
+            input_data.desired_object_motion_;
 
     // Recalculate the jacobian at each timestep, because of rotations being non-linear
     const auto test = std::static_pointer_cast<JacobianModel>(model_);

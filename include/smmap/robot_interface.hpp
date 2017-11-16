@@ -28,6 +28,9 @@ namespace smmap
 
             const AllGrippersSinglePose getGrippersPose();
 
+            // This function assumes only 2 grippers, and it is called before the grippers are moved by sendGrippersPoses
+            double getGrippersInitialDistance();
+
             WorldState sendGrippersPoses(const AllGrippersSinglePose& grippers_pose);
 
             bool testGrippersPoses(const std::vector<AllGrippersSinglePose>& grippers_pose,

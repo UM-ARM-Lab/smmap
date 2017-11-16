@@ -560,6 +560,7 @@ void QuinlanRubberBand::interpolateBandPoints()
 
 void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
 {
+    (void)verbose;
     assert(bandIsValidWithVisualization());
 
 #if ENABLE_DEBUGGING

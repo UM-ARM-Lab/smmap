@@ -101,7 +101,7 @@ namespace smmap
             void addModel(DeformableModel::Ptr model);
             void createBandits();
 
-            const bool calculate_regret_;
+            const bool collect_results_for_all_models_;
             ssize_t num_models_;
             std::vector<DeformableModel::Ptr> model_list_;
             std::vector<DeformableController::Ptr> controller_list_;
@@ -152,6 +152,13 @@ namespace smmap
             std::unique_ptr<RRTHelper> rrt_helper_;
             std::shared_ptr<PRMHelper> prm_helper_;
 
+            // These are both intended only for logging purposes, the individual
+            // controllers may (or may not) have their own copies for their own purposes
+            const Eigen::MatrixXd object_initial_node_distance_;
+            // The way this is used assumes that the grippers start at a
+            // "max distance but not with object stretched" distance from each other
+            const double initial_grippers_distance_;
+
             ////////////////////////////////////////////////////////////////////
             // Logging and visualization functionality
             ////////////////////////////////////////////////////////////////////
@@ -161,19 +168,38 @@ namespace smmap
                     const ObjectDeltaAndWeight& desired_motion,
                     const bool visualization_enabled = true) const;
 
-            void initializeLogging();
+            void visualizeGripperMotion(
+                    const AllGrippersSinglePose& current_gripper_pose,
+                    const AllGrippersSinglePoseDelta& gripper_motion,
+                    const ssize_t model_ind);
 
-            void logData(
-                    const WorldState& current_world_state,
+            void initializePlannerLogging();
+
+            void initializeControllerLogging();
+
+            void logPlannerData(
+                    const WorldState& initial_world_state,
+                    const WorldState& resulting_world_state,
+                    const std::vector<WorldState>& individual_model_results,
                     const Eigen::VectorXd& model_utility_mean,
                     const Eigen::MatrixXd& model_utility_covariance,
-                    const ssize_t model_used,
-                    const std::vector<double>& rewards_for_all_models);
+                    const ssize_t model_used);
 
-            const bool logging_enabled_;
+            void controllerLogData(
+                    const WorldState& initial_world_state,
+                    const WorldState& resulting_world_state,
+                    const std::vector<WorldState>& individual_model_results,
+                    const DeformableModel::DeformableModelInputData& model_input_data,
+                    const std::vector<double>& individual_computation_times);
+
+            const bool planner_logging_enabled_;
+            const bool controller_logging_enabled_;
             std::unordered_map<std::string, Log::Log> loggers_;
+            std::unordered_map<std::string, Log::Log> controller_loggers_;
+
             Visualizer& vis_;
             const bool visualize_desired_motion_;
+            const bool visualize_gripper_motion_;
             const bool visualize_predicted_motion_;
 
         public:

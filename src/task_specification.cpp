@@ -63,6 +63,9 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::ROPE_MAZE:
             return std::make_shared<RopeMaze>(nh, ph);
 
+        case TaskType::ROPE_ZIG_MATCH:
+            return std::make_shared<RopeMaze>(nh, ph);
+
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
             return nullptr;
@@ -104,6 +107,9 @@ TaskSpecification::TaskSpecification(
     , current_error_calculated_(false)
     , current_error_last_simtime_calced_(NAN)
     , current_error_(NAN)
+
+    , use_stretching_correction_from_task_(GetStretchingCorrectionFromTask(ph))
+    , desired_motion_scaling_factor_(GetDesiredMotionScalingFactor(ph))
 
     , deformable_type_(deformable_type)
     , task_type_(task_type)
@@ -354,8 +360,16 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
         const WorldState& world_state,
         bool visualize) const
 {
-//    return calculateStretchingCorrectionDeltaFullyConnected(world_state.object_configuration_, visualize);
-    return calculateStretchingCorrectionDeltaPairwise(world_state.object_configuration_, visualize);
+    if (use_stretching_correction_from_task_)
+    {
+//        return calculateStretchingCorrectionDeltaFullyConnected(world_state.object_configuration_, visualize);
+        return calculateStretchingCorrectionDeltaPairwise(world_state.object_configuration_, visualize);
+    }
+    else
+    {
+        // If we're not getting it from the task, then set it to zero
+        return ObjectDeltaAndWeight(num_nodes_ * 3);;
+    }
 }
 
 
@@ -418,8 +432,6 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
 
             GlobalStopwatch(RESET);
             const bool visualize_stretching_lines = false;
-        //    ObjectDeltaAndWeight no_stretching_correction(num_nodes_ * 3);
-        //    first_step_stretching_correction_ = no_stretching_correction;
             first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, visualize_stretching_lines);
             ROS_INFO_STREAM_NAMED("task_specification", "Found stretching correction delta in " << GlobalStopwatch(READ) << " seconds");
 
@@ -430,6 +442,10 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
 
             first_step_last_simtime_calced_ = world_state.sim_time_;
             first_step_calculated_.store(true);
+
+            // Scale down the motion so that we are not asking for movements well beyond anything reasonable
+            first_step_desired_motion_.delta = first_step_desired_motion_.delta / desired_motion_scaling_factor_;
+
             return first_step_desired_motion_;
         }
     }

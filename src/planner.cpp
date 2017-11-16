@@ -19,7 +19,7 @@
 #include "smmap/constraint_jacobian_model.h"
 
 #include "smmap/least_squares_controller_with_object_avoidance.h"
-#include "smmap/least_squares_controller_random_sampling.h"
+#include "smmap/stretching_avoidance_controller.h"
 
 using namespace smmap;
 using namespace Eigen;
@@ -165,7 +165,7 @@ Planner::Planner(
     , task_specification_(task_specification)
     , dijkstras_task_(nullptr)
     // Multi-model and regret based model selection parameters
-    , calculate_regret_(GetCalculateRegret(ph_))
+    , collect_results_for_all_models_(GetCollectResultsForAllModels(ph_))
     , reward_std_dev_scale_factor_(REWARD_STANDARD_DEV_SCALING_FACTOR_START)
     , process_noise_factor_(GetProcessNoiseFactor(ph_))
     , observation_noise_factor_(GetObservationNoiseFactor(ph_))
@@ -179,14 +179,20 @@ Planner::Planner(
     , global_plan_gripper_trajectory_(0)
     , rrt_helper_(nullptr)
     , prm_helper_(nullptr)
+    // Used to generate some log data by some controllers
+    , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
+    , initial_grippers_distance_(robot_.getGrippersInitialDistance())
     // Logging and visualization parameters
-    , logging_enabled_(GetLoggingEnabled(nh_))
+    , planner_logging_enabled_(GetPlannerLoggingEnabled(ph_))
+    , controller_logging_enabled_(GetControllerLoggingEnabled(ph_))
     , vis_(vis)
     , visualize_desired_motion_(GetVisualizeObjectDesiredMotion(ph_))
+    , visualize_gripper_motion_(GetVisualizerGripperMotion(ph_))
     , visualize_predicted_motion_(GetVisualizeObjectPredictedMotion(ph_))
 {
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
-    initializeLogging();
+    initializePlannerLogging();
+    initializeControllerLogging();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -204,6 +210,8 @@ void Planner::execute()
         // Extract the maximum distance between the grippers
         // This assumes that the starting position of the grippers is at the maximum "unstretched" distance
         assert(robot_.getGrippersData().size() == 2);
+        assert(model_list_.size() == 1);
+
         const auto& grippers_starting_poses = world_feedback.all_grippers_single_pose_;
         dijkstras_task_ = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
         assert(dijkstras_task_ != nullptr);
@@ -421,55 +429,57 @@ WorldState Planner::sendNextCommandUsingLocalController(
     Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
 
-    const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
-    {
-        return task_specification_->calculateDesiredDirection(world_state);
-    };
-    const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, world_state, robot_.dt_);
-    const ObjectDeltaAndWeight task_desired_motion = task_desired_direction_fn(world_state);
+    DeformableModel::DeformableModelInputData model_input_data(
+                world_state,
+                task_specification_->calculateDesiredDirection(world_state),
+                robot_.dt_);
 
     if (visualize_desired_motion_)
     {
-        visualizeDesiredMotion(world_state, task_desired_motion);
+        visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_);
     }
 
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
-    assert(model_to_use == 0);
-
-
     const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
 
     // Querry each model for it's best gripper delta
     stopwatch(RESET);
     std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>> suggested_robot_commands(num_models_);
+    std::vector<double> controller_computation_time(num_models_, 0.0);
     #pragma omp parallel for
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
     {
-        if (calculate_regret_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
+        if (collect_results_for_all_models_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
         {
+            Stopwatch individual_controller_stopwatch;
+
             suggested_robot_commands[model_ind] =
                 controller_list_[model_ind]->getGripperMotion(
                         model_input_data,
                         robot_.max_gripper_velocity_);
+
+            controller_computation_time[model_ind] = individual_controller_stopwatch(READ);
+
+            // Measure the time it took to pick a model
+            ROS_INFO_STREAM_NAMED("planner", model_ind << "th Controller get suggested motion in          " << controller_computation_time[model_ind] << " seconds");
         }
     }
 
     // Measure the time it took to pick a model
     ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in  " << stopwatch(READ) << " seconds");
 
-    // Calculate regret if we need to
-    std::vector<double> individual_rewards(num_models_, std::numeric_limits<double>::infinity());
-    if (calculate_regret_ && num_models_ > 1)
+    // Collect feedback data for logging purposes
+    std::vector<WorldState> individual_model_results(num_models_);
+    if (collect_results_for_all_models_)
     {
         stopwatch(RESET);
-        const double prev_error = task_specification_->calculateError(world_state);
-        const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& world_state)
+        // Build a feedback function to log data for each model that we are testing
+        const auto test_feedback_fn = [&] (const size_t model_ind, const WorldState& resulting_world_state)
         {
-            individual_rewards[model_ind] = prev_error - task_specification_->calculateError(world_state);
+            individual_model_results[model_ind] = resulting_world_state;
         };
-
         std::vector<AllGrippersSinglePose> poses_to_test(num_models_);
         for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
         {
@@ -479,7 +489,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
         ROS_INFO_STREAM_NAMED("planner", "Collected data to calculate regret in " << stopwatch(READ) << " seconds");
     }
-
 
     // Execute the command
     const AllGrippersSinglePoseDelta& selected_command = suggested_robot_commands[(size_t)model_to_use].first;
@@ -492,23 +501,35 @@ WorldState Planner::sendNextCommandUsingLocalController(
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
 
+    if (visualize_gripper_motion_)
+    {
+        for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
+        {
+            visualizeGripperMotion(world_state.all_grippers_single_pose_,
+                                   suggested_robot_commands[(size_t)model_ind].first,
+                                   model_ind);
+        }
+    }
+
     if (visualize_predicted_motion_)
     {
         const ObjectPointSet& object_delta = suggested_robot_commands[(size_t)model_to_use].second;
         vis_.visualizeObjectDelta(
                     PREDICTED_DELTA_NS,
                     world_state.object_configuration_,
-                    world_state.object_configuration_ + 300.0 * object_delta,
+                    world_state.object_configuration_ + object_delta,
                     Visualizer::Blue());
     }
 
-    ROS_INFO_NAMED("planner", "Updating models and logging data");
-    updateModels(world_state, task_desired_motion, suggested_robot_commands, model_to_use, world_feedback);
-
-    logData(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use, individual_rewards);
+    ROS_INFO_NAMED("planner", "Updating models");
+    updateModels(world_state, model_input_data.desired_object_motion_, suggested_robot_commands, model_to_use, world_feedback);
 
     const double controller_time = function_wide_stopwatch(READ) - robot_execution_time;
     ROS_INFO_STREAM_NAMED("planner", "Total local controller time                     " << controller_time << " seconds");
+
+    ROS_INFO_NAMED("planner", "Logging data");
+    logPlannerData(world_state, world_feedback, individual_model_results, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use);
+    controllerLogData(world_state, world_feedback, individual_model_results, model_input_data, controller_computation_time);
 
     return world_feedback;
 }
@@ -521,7 +542,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
 WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
         const WorldState& current_world_state)
 {
-    (void)current_world_state;
     assert(executing_global_gripper_trajectory_);
     assert(global_plan_current_timestep_ < global_plan_gripper_trajectory_.size());
 
@@ -546,8 +566,8 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
 //        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS, 1, 2);
     }
 
-    const std::vector<double> fake_rewards(model_list_.size(), NAN);
-    logData(world_feedback, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), -1, fake_rewards);
+    const std::vector<WorldState> fake_all_models_results(num_models_, world_feedback);
+    logPlannerData(current_world_state, world_feedback, fake_all_models_results, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), -1);
 
     return world_feedback;
 }
@@ -654,7 +674,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectF
     const static std_msgs::ColorRGBA gripper_color = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
     const static std_msgs::ColorRGBA rubber_band_safe_color = Visualizer::Black();
     const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
-    constexpr bool band_verbose = false;
+    const bool band_verbose = false;
 
 //    vis_.clearVisualizationsBullet();
 
@@ -708,12 +728,15 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectF
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     WorldState world_state_copy = current_world_state;
     RubberBand rubber_band_between_grippers_copy = *rubber_band_between_grippers_.get();
-    const DeformableModel::DeformableModelInputData model_input_data(task_desired_direction_fn, world_state_copy, robot_.dt_);
 
     projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.reserve(actual_lookahead_steps);
     for (size_t t = 0; t < actual_lookahead_steps; ++t)
     {
         // Determine what direction to move the grippers
+        const DeformableModel::DeformableModelInputData model_input_data(
+                    world_state_copy,
+                    dijkstras_task_->calculateErrorCorrectionDeltaFixedCorrespondences(world_state_copy, correspondences.correspondences_),
+                    robot_.dt_);
         const std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> robot_command =
                 controller_list_[0]->getGripperMotion(
                     model_input_data,
@@ -818,7 +841,7 @@ bool Planner::globalPlannerNeededDueToLackOfProgress()
         error_deltas[time_idx - 1] = error_history_[time_idx] - start_error;
     }
 
-    if (logging_enabled_)
+    if (planner_logging_enabled_)
     {
         // Determine if there is a general positive slope on the distances
         // - we should be moving away from the start config if we are not stuck
@@ -1138,9 +1161,6 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
     target_gripper_poses[0].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(gripper0_position_pre_project, min_dist_to_obstacles);
     target_gripper_poses[1].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(gripper1_position_pre_project, min_dist_to_obstacles);
 
-//    std::cout << "Gripper 0 get: " << dijkstras_task_->environment_sdf_.Get3d(target_gripper_poses[0].translation()) << std::endl;
-//    std::cout << "Gripper 1 get: " << dijkstras_task_->environment_sdf_.Get3d(target_gripper_poses[1].translation()) << std::endl;
-
 //    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
 //    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
 
@@ -1325,141 +1345,373 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
 
     const bool optimization_enabled = GetJacobianControllerOptimizationEnabled(ph_);
 
-    // Create some models and add them to the model set
-    if (GetUseDiminishingRigidityModel(ph_))
+    const PlannerTrialType planner_trial_type = GetPlannerTrialType(ph_);
+
+    switch (planner_trial_type)
     {
-        double translational_deformability, rotational_deformability;
-        if (ph_.getParam("translational_deformability", translational_deformability) &&
-                 ph_.getParam("rotational_deformability", rotational_deformability))
+        case DIMINISHING_RIGIDITY_SINGLE_MODEL_LEAST_SQUARES_CONTROLLER:
         {
-            ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
-                                   << translational_deformability << " "
-                                   << rotational_deformability);
-        }
-        else
-        {
-            translational_deformability = task_specification_->defaultDeformability();
-            rotational_deformability = task_specification_->defaultDeformability();
-            ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
-                                   << task_specification_->defaultDeformability());
-        }
-
-        model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                  translational_deformability,
-                                  rotational_deformability));
-
-        controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                       model_list_.back(),
-                                       task_specification_->collisionScalingFactor(),
-                                       optimization_enabled));
-    }
-    else if (GetUseMultiModel(ph_))
-    {
-        ////////////////////////////////////////////////////////////////////////
-        // Diminishing rigidity models
-        ////////////////////////////////////////////////////////////////////////
-
-        #pragma message "Magic numbers: Multi-model deform range"
-        const double deform_min = 0.0;
-        const double deform_max = 25.0;
-        const double deform_step = 4.0;
-
-        for (double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step)
-        {
-            for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
+            double translational_deformability, rotational_deformability;
+            if (ph_.getParam("translational_deformability", translational_deformability) &&
+                     ph_.getParam("rotational_deformability", rotational_deformability))
             {
+                ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                                       << translational_deformability << " "
+                                       << rotational_deformability);
+            }
+            else
+            {
+                translational_deformability = task_specification_->defaultDeformability();
+                rotational_deformability = task_specification_->defaultDeformability();
+                ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                                       << task_specification_->defaultDeformability());
+            }
+
+            model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                      translational_deformability,
+                                      rotational_deformability));
+
+            controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                           model_list_.back(),
+                                           task_specification_->collisionScalingFactor(),
+                                           optimization_enabled));
+            break;
+        }
+        case ADAPTIVE_JACOBIAN_SINGLE_MODEL_LEAST_SQUARES_CONTROLLER:
+        {
+            const DeformableModel::DeformableModelInputData input_data(initial_world_state, task_specification_->calculateDesiredDirection(initial_world_state), robot_.dt_);
+            model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
+                                      DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
+                                      GetAdaptiveModelLearningRate(ph_)));
+
+            controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                           model_list_.back(),
+                                           task_specification_->collisionScalingFactor(),
+                                           optimization_enabled));
+            break;
+        }
+        case CONSTRAINT_SINGLE_MODEL_CONSTRAINT_CONTROLLER:
+        {
+            ROS_INFO_NAMED("planner", "Using constraint model and random sampling controller");
+
+            const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
+            const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
+            const double rotation_deformability = GetConstraintRotational(ph_);
+
+            const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+            model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                  translation_dir_deformability,
+                                  translation_dis_deformability,
+                                  rotation_deformability,
+                                  environment_sdf));
+
+            controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+                                           nh_,
+                                           ph_,
+                                           robot_,
+                                           environment_sdf,
+                                           generator_,
+                                           vis_,
+                                           GetGripperControllerType(ph_),
+                                           model_list_.back(),
+                                           GetMaxSamplingCounts(ph_)));
+            break;
+        }
+        case DIMINISHING_RIGIDITY_SINGLE_MODEL_CONSTRAINT_CONTROLLER:
+        {
+            ROS_INFO_NAMED("planner", "Using dminishing model and random sampling controller");
+
+            double translational_deformability, rotational_deformability;
+            const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+            if (ph_.getParam("translational_deformability", translational_deformability) &&
+                     ph_.getParam("rotational_deformability", rotational_deformability))
+            {
+                ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                                       << translational_deformability << " "
+                                       << rotational_deformability);
+            }
+            else
+            {
+                translational_deformability = task_specification_->defaultDeformability();
+                rotational_deformability = task_specification_->defaultDeformability();
+                ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                                       << task_specification_->defaultDeformability());
+            }
+
+            model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                      translational_deformability,
+                                      rotational_deformability));
+
+            controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+                                           nh_,
+                                           ph_,
+                                           robot_,
+                                           environment_sdf,
+                                           generator_,
+                                           vis_,
+                                           GetGripperControllerType(ph_),
+                                           model_list_.back(),
+                                           GetMaxSamplingCounts(ph_)));
+            break;
+        }
+        case MULTI_MODEL_BANDIT_TEST:
+        {
+            ////////////////////////////////////////////////////////////////////////
+            // Diminishing rigidity models
+            ////////////////////////////////////////////////////////////////////////
+
+            #pragma message "Magic numbers: Multi-model deform range"
+            const double deform_min = 0.0;
+            const double deform_max = 25.0;
+            const double deform_step = 4.0;
+
+            for (double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step)
+            {
+                for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
+                {
+                    model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                              trans_deform,
+                                              rot_deform));
+
+                    controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                                   model_list_.back(),
+                                                   task_specification_->collisionScalingFactor(),
+                                                   optimization_enabled));
+                }
+            }
+            ROS_INFO_STREAM_NAMED("planner", "Num diminishing rigidity models: "
+                                   << std::floor((deform_max - deform_min) / deform_step));
+
+            ////////////////////////////////////////////////////////////////////////
+            // Adaptive jacobian models
+            ////////////////////////////////////////////////////////////////////////
+
+            #pragma message "Magic numbers: Multi-model adaptive range"
+            const double learning_rate_min = 1e-10;
+            const double learning_rate_max = 1.1e0;
+            const double learning_rate_step = 10.0;
+
+            const DeformableModel::DeformableModelInputData input_data(initial_world_state, task_specification_->calculateDesiredDirection(initial_world_state), robot_.dt_);
+            for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
+            {
+                    model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
+                                              DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
+                                              learning_rate));
+
+                    controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                                   model_list_.back(),
+                                                   task_specification_->collisionScalingFactor(),
+                                                   optimization_enabled));
+            }
+            ROS_INFO_STREAM_NAMED("planner", "Num adaptive Jacobian models: "
+                                   << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
+            break;
+        }
+        case MULTI_MODEL_CONTROLLER_TEST:
+        {
+            ROS_INFO_NAMED("planner", "Using multiple model-controller sets");
+
+            // Constraint Model with New Controller. (MM)
+            if (false) // using a range of params
+            {
+                const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+                /*
+                const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
+                const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
+                const double rotation_deformability = GetConstraintRotational(ph_);
+                */
+
+                const double rotation_deformability = GetConstraintRotational(ph_);
+
+                for (double translation_dis_deformability = 10; translation_dis_deformability < 26; translation_dis_deformability += 5)
+                {
+                    double translation_dir_deformability = 20;
+
+                    // ind 0, 4, 8, 12:  trans_dir: 20
+                    {
+                        model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                              translation_dir_deformability,
+                                              translation_dis_deformability,
+                                              rotation_deformability,
+                                              environment_sdf));
+
+                        controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+                                                       nh_,
+                                                       ph_,
+                                                       robot_,
+                                                       environment_sdf,
+                                                       generator_,
+                                                       vis_,
+                                                       GetGripperControllerType(ph_),
+                                                       model_list_.back(),
+                                                       GetMaxSamplingCounts(ph_)));
+                    }
+
+                    translation_dir_deformability = 30;
+                    // ind 1, 5, 9, 13:  trans_dir: 30
+                    {
+                        model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                              translation_dir_deformability,
+                                              translation_dis_deformability,
+                                              rotation_deformability,
+                                              environment_sdf));
+
+                        controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+                                                       nh_,
+                                                       ph_,
+                                                       robot_,
+                                                       environment_sdf,
+                                                       generator_,
+                                                       vis_,
+                                                       GetGripperControllerType(ph_),
+                                                       model_list_.back(),
+                                                       GetMaxSamplingCounts(ph_)));
+                    }
+
+                    translation_dir_deformability = 60;
+                    // ind 2, 6, 10, 14:  trans_dir: 60
+                    {
+                        model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                              translation_dir_deformability,
+                                              translation_dis_deformability,
+                                              rotation_deformability,
+                                              environment_sdf));
+
+                        controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+                                                       nh_,
+                                                       ph_,
+                                                       robot_,
+                                                       environment_sdf,
+                                                       generator_,
+                                                       vis_,
+                                                       GetGripperControllerType(ph_),
+                                                       model_list_.back(),
+                                                       GetMaxSamplingCounts(ph_)));
+                    }
+
+                    translation_dir_deformability = 200;
+                    // ind 3, 7, 11, 15:  trans_dir: 100
+                    {
+                        model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                              translation_dir_deformability,
+                                              translation_dis_deformability,
+                                              rotation_deformability,
+                                              environment_sdf));
+
+                        controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+                                                       nh_,
+                                                       ph_,
+                                                       robot_,
+                                                       environment_sdf,
+                                                       generator_,
+                                                       vis_,
+                                                       GetGripperControllerType(ph_),
+                                                       model_list_.back(),
+                                                       GetMaxSamplingCounts(ph_)));
+                    }
+
+                }
+
+            }
+            else
+            {
+                const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+                const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
+                const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
+                const double rotation_deformability = GetConstraintRotational(ph_);
+
+                model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                      translation_dir_deformability,
+                                      translation_dis_deformability,
+                                      rotation_deformability,
+                                      environment_sdf));
+
+                controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+                                               nh_,
+                                               ph_,
+                                               robot_,
+                                               environment_sdf,
+                                               generator_,
+                                               vis_,
+                                               GetGripperControllerType(ph_),
+                                               model_list_.back(),
+                                               GetMaxSamplingCounts(ph_)));
+            }
+
+            // Dminishing Model with New Controller. (DM)
+            {
+                double translational_deformability, rotational_deformability;
+                const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+                if (ph_.getParam("translational_deformability", translational_deformability) &&
+                         ph_.getParam("rotational_deformability", rotational_deformability))
+                {
+                    ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                                           << translational_deformability << " "
+                                           << rotational_deformability);
+                }
+                else
+                {
+                    translational_deformability = task_specification_->defaultDeformability();
+                    rotational_deformability = task_specification_->defaultDeformability();
+                    ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                                           << task_specification_->defaultDeformability());
+                }
+
                 model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                          trans_deform,
-                                          rot_deform));
+                                          translational_deformability,
+                                          rotational_deformability));
+
+                controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+                                               nh_,
+                                               ph_,
+                                               robot_,
+                                               environment_sdf,
+                                               generator_,
+                                               vis_,
+                                               GetGripperControllerType(ph_),
+                                               model_list_.back(),
+                                               GetMaxSamplingCounts(ph_)));
+            }
+
+            // Dminishing Model with Old Controller. (DD)
+            {
+                double translational_deformability, rotational_deformability;
+                if (ph_.getParam("translational_deformability", translational_deformability) &&
+                         ph_.getParam("rotational_deformability", rotational_deformability))
+                {
+                    ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                                           << translational_deformability << " "
+                                           << rotational_deformability);
+                }
+                else
+                {
+                    translational_deformability = task_specification_->defaultDeformability();
+                    rotational_deformability = task_specification_->defaultDeformability();
+                    ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                                           << task_specification_->defaultDeformability());
+                }
+
+                model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                          translational_deformability,
+                                          rotational_deformability));
 
                 controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
                                                model_list_.back(),
                                                task_specification_->collisionScalingFactor(),
                                                optimization_enabled));
             }
+            break;
         }
-        ROS_INFO_STREAM_NAMED("planner", "Num diminishing rigidity models: "
-                               << std::floor((deform_max - deform_min) / deform_step));
-
-        ////////////////////////////////////////////////////////////////////////
-        // Adaptive jacobian models
-        ////////////////////////////////////////////////////////////////////////
-
-        #pragma message "Magic numbers: Multi-model adaptive range"
-        const double learning_rate_min = 1e-10;
-        const double learning_rate_max = 1.1e0;
-        const double learning_rate_step = 10.0;
-
-        const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
+        default:
         {
-            return task_specification_->calculateDesiredDirection(world_state);
-        };
-
-        const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
-        for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
-        {
-                model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
-                                          DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
-                                          learning_rate));
-
-                controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                               model_list_.back(),
-                                               task_specification_->collisionScalingFactor(),
-                                               optimization_enabled));
+            ROS_FATAL_NAMED("planner", "Invalid trial type, this should not be possible.");
+            assert(false && "Invalid trial type, this should not be possible.");
         }
-        ROS_INFO_STREAM_NAMED("planner", "Num adaptive Jacobian models: "
-                               << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
-    }
-    else if (GetUseAdaptiveModel(ph_))
-    {
-        const TaskDesiredObjectDeltaFunctionType task_desired_direction_fn = [&] (const WorldState& world_state)
-        {
-            return task_specification_->calculateDesiredDirection(world_state);
-        };
-
-        const DeformableModel::DeformableModelInputData input_data(task_desired_direction_fn, initial_world_state, robot_.dt_);
-        model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
-                                  DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(input_data),
-                                  GetAdaptiveModelLearningRate(ph_)));
-
-        controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                       model_list_.back(),
-                                       task_specification_->collisionScalingFactor(),
-                                       optimization_enabled));
-
-    }
-    else if (GetUseConstraintModel(ph_))
-    {
-        ROS_INFO_NAMED("planner", "Using constraint model and random sampling controller");
-
-        const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
-        const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
-        const double rotation_deformability = GetConstraintRotational(ph_);
-
-        const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
-
-        model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
-                              translation_dir_deformability,
-                              translation_dis_deformability,
-                              rotation_deformability,
-                              environment_sdf));
-
-        controller_list_.push_back(std::make_shared<LeastSquaresControllerRandomSampling>(
-                                       nh_,
-                                       ph_,
-                                       robot_,
-                                       environment_sdf,
-                                       generator_,
-                                       vis_,
-                                       GetGripperControllerType(ph_),
-                                       model_list_.back(),
-                                       GetMaxSamplingCounts(ph_),
-                                       GetRobotGripperRadius() + GetRobotMinGripperDistanceToObstacles()));
-    }
-    else
-    {
-        ROS_FATAL_NAMED("planner", "No model specified, terminating");
-        assert(false && "You must specify at a model type");
     }
 
     assert(controller_list_.size() == model_list_.size());
@@ -1631,9 +1883,67 @@ void Planner::visualizeDesiredMotion(
     }
 }
 
-void Planner::initializeLogging()
+void Planner::visualizeGripperMotion(
+        const AllGrippersSinglePose& current_gripper_pose,
+        const AllGrippersSinglePoseDelta& gripper_motion,
+        const ssize_t model_ind)
 {
-    if (logging_enabled_)
+    const auto grippers_test_poses = kinematics::applyTwist(current_gripper_pose, gripper_motion);
+    EigenHelpers::VectorVector3d line_starts;
+    EigenHelpers::VectorVector3d line_ends;
+
+    for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
+    {
+        line_starts.push_back(current_gripper_pose[gripper_ind].translation());
+        line_ends.push_back(current_gripper_pose[gripper_ind].translation() + 100 * (grippers_test_poses[gripper_ind].translation() - current_gripper_pose[gripper_ind].translation()));
+    }
+
+    switch (model_ind)
+    {
+        case 0:
+        {
+            vis_.visualizeLines("MM grippers motion",
+                                line_starts,
+                                line_ends,
+                                Visualizer::Black());
+            std::cout << "0 first gripper motion norm: "
+                      << gripper_motion.at(0).norm()
+                      << std::endl;
+            break;
+        }
+        case 1:
+        {
+            vis_.visualizeLines("DM grippers motion",
+                                line_starts,
+                                line_ends,
+                                Visualizer::Silver());
+            std::cout << "1 first gripper motion norm: "
+                      << gripper_motion.at(0).norm()
+                      << std::endl;
+            break;
+        }
+        case 2:
+        {
+            vis_.visualizeLines("DD grippers motion",
+                                line_starts,
+                                line_ends,
+                                Visualizer::Yellow());
+            std::cout << "2 first gripper motion norm: "
+                      << gripper_motion.at(0).norm()
+                      << std::endl;
+            break;
+        }
+        default:
+        {
+            assert(false && "grippers_motion color not assigned for this index");
+            break;
+        }
+    }
+}
+
+void Planner::initializePlannerLogging()
+{
+    if (planner_logging_enabled_)
     {
         const std::string log_folder = GetLogFolder(nh_);
         ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
@@ -1675,25 +1985,67 @@ void Planner::initializeLogging()
     }
 }
 
-void Planner::logData(
-        const WorldState& current_world_state,
+void Planner::initializeControllerLogging()
+{
+    if(controller_logging_enabled_)
+    {
+        const std::string log_folder = GetLogFolder(nh_);
+        ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
+
+        Log::Log seed_log(log_folder + "seed.txt", false);
+        LOG_STREAM(seed_log, std::hex << seed_);
+
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "control_time",
+                                       Log::Log(log_folder + "control_time.txt", false)));
+
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "control_error_realtime",
+                                       Log::Log(log_folder + "control_error_realtime.txt", false)));
+
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "realtime_stretching_factor",
+                                       Log::Log(log_folder + "realtime_stretching_factor.txt", false)));
+
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "individual_computation_times",
+                                       Log::Log(log_folder + "individual_computation_times.txt", false)));
+    }
+}
+
+// Note that resulting_world_state may not be exactly indentical to individual_model_rewards[model_used]
+// because of the way forking words (and doesn't) in Bullet. They should be very close however.
+void Planner::logPlannerData(
+        const WorldState& initial_world_state,
+        const WorldState& resulting_world_state,
+        const std::vector<WorldState>& individual_model_results,
         const Eigen::VectorXd& model_utility_mean,
         const Eigen::MatrixXd& model_utility_covariance,
-        const ssize_t model_used,
-        const std::vector<double>& rewards_for_all_models)
+        const ssize_t model_used)
 {
-    if (logging_enabled_)
+    if (planner_logging_enabled_)
     {
+        std::vector<double> rewards_for_all_models(num_models_, std::numeric_limits<double>::quiet_NaN());
+        if (collect_results_for_all_models_)
+        {
+            const double prev_error = task_specification_->calculateError(initial_world_state);
+            for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
+            {
+                const double current_error = task_specification_->calculateError(individual_model_results[(size_t)model_ind]);
+                rewards_for_all_models[(size_t)model_ind] = prev_error - current_error;
+            }
+        }
+
         const static Eigen::IOFormat single_line(
                     Eigen::StreamPrecision,
                     Eigen::DontAlignCols,
                     " ", " ", "", "");
 
         LOG(loggers_.at("time"),
-             current_world_state.sim_time_);
+             resulting_world_state.sim_time_);
 
         LOG(loggers_.at("error"),
-             task_specification_->calculateError(current_world_state));
+             task_specification_->calculateError(resulting_world_state));
 
         LOG(loggers_.at("utility_mean"),
              model_utility_mean.format(single_line));
@@ -1706,5 +2058,115 @@ void Planner::logData(
 
         LOG(loggers_.at("rewards_for_all_models"),
             PrettyPrint::PrettyPrint(rewards_for_all_models, false, " "));
+    }
+}
+
+// Note that resulting_world_state may not be exactly indentical to individual_model_rewards[model_used]
+// because of the way forking words (and doesn't) in Bullet. They should be very close however.
+void Planner::controllerLogData(
+        const WorldState& initial_world_state,
+        const WorldState& resulting_world_state,
+        const std::vector<WorldState>& individual_model_results,
+        const DeformableModel::DeformableModelInputData& model_input_data,
+        const std::vector<double>& individual_computation_times)
+{
+    if (controller_logging_enabled_)
+    {
+        // This function only works properly if we've collected all the data for each model,
+        // so make sure the code crashes at a known point if that's the case
+        assert(collect_results_for_all_models_);
+
+        // Split out data used for computation for each model
+        const ObjectDeltaAndWeight& task_desired_motion = model_input_data.desired_object_motion_;
+        const Eigen::VectorXd& desired_p_dot = task_desired_motion.delta;
+        const Eigen::VectorXd& desired_p_dot_weight = task_desired_motion.weight;
+        const ssize_t num_grippers = initial_world_state.all_grippers_single_pose_.size();
+        const ssize_t num_nodes = initial_world_state.object_configuration_.cols();
+
+        // Data used by the function, per model
+        std::vector<double> avg_control_error(num_models_, std::numeric_limits<double>::quiet_NaN());
+        std::vector<double> current_stretching_factor(num_models_, std::numeric_limits<double>::quiet_NaN());
+
+        for (size_t model_ind = 0; (ssize_t)model_ind < num_models_; ++model_ind)
+        {
+            // Get control errors for different model-controller sets.
+            const ObjectPointSet real_p_dot =
+                    individual_model_results[model_ind].object_configuration_
+                    - initial_world_state.object_configuration_;
+
+            int point_count = 0;
+            double max_stretching = 0.0;
+            double desired_p_dot_avg_norm = 0.0;
+            double desired_p_dot_max = 0.0;
+
+            // Calculate stretching factor
+            const Eigen::MatrixXd node_distance =
+                    CalculateDistanceMatrix(individual_model_results[model_ind].object_configuration_);
+
+            for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
+            {
+                const double point_weight = desired_p_dot_weight(node_ind * 3);
+                if (point_weight > 0.0)
+                {
+                    //  Calculate p_dot error
+                    const Eigen::Vector3d& point_real_p_dot = real_p_dot.col(node_ind);
+                    const Eigen::Vector3d& point_desired_p_dot = desired_p_dot.segment<3>(node_ind * 3);
+                    avg_control_error[model_ind] += (point_real_p_dot - point_desired_p_dot).norm();
+
+                    desired_p_dot_avg_norm += point_desired_p_dot.norm();
+                    if (point_desired_p_dot.norm() > desired_p_dot_max)
+                    {
+                        desired_p_dot_max = point_desired_p_dot.norm();
+                    }
+
+                    point_count++;
+                }
+
+                const ssize_t first_node = node_ind;
+                for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
+                {
+                    const double this_stretching_factor = node_distance(first_node, second_node)
+                            / object_initial_node_distance_(first_node, second_node);
+                    max_stretching = std::max(max_stretching, this_stretching_factor);
+                }
+            }
+
+            if (point_count > 0)
+            {
+                avg_control_error[model_ind] = avg_control_error[model_ind] / point_count;
+                desired_p_dot_avg_norm /= point_count;
+            }
+
+            // Catch cases where the grippers and the nodes don't align, this should still be flagged as large stretch
+            if (num_grippers == 2)
+            {
+                const auto gripper_delta =
+                        individual_model_results[model_ind].all_grippers_single_pose_.at(0).translation()
+                        - individual_model_results[model_ind].all_grippers_single_pose_.at(1).translation();
+                const double this_stretching_factor = gripper_delta.norm() / initial_grippers_distance_;
+                max_stretching = std::max(max_stretching, this_stretching_factor);
+            }
+            current_stretching_factor[model_ind] = max_stretching;
+            ROS_INFO_STREAM_NAMED("planner", "average desired p dot is       " << desired_p_dot_avg_norm);
+            ROS_INFO_STREAM_NAMED("planner", "max pointwise desired p dot is " << desired_p_dot_max);
+        }
+
+        // Do the actual logging itself
+        const static Eigen::IOFormat single_line(
+                    Eigen::StreamPrecision,
+                    Eigen::DontAlignCols,
+                    " ", " ", "", "");
+
+        LOG(controller_loggers_.at("control_time"),
+            resulting_world_state.sim_time_);
+
+        LOG(controller_loggers_.at("control_error_realtime"),
+            PrettyPrint::PrettyPrint(avg_control_error, false, " "));
+
+        LOG(controller_loggers_.at("realtime_stretching_factor"),
+            PrettyPrint::PrettyPrint(current_stretching_factor, false, " "));
+
+        LOG(controller_loggers_.at("individual_computation_times"),
+            PrettyPrint::PrettyPrint(individual_computation_times, false, " "));
     }
 }
