@@ -1,5 +1,4 @@
 #ifndef GRIPPERS_HPP
-
 #define GRIPPERS_HPP
 
 #include <limits>

@@ -167,6 +167,7 @@ Planner::Planner(
     , robot_(robot)
     , task_specification_(task_specification)
     , dijkstras_task_(nullptr)
+    , templates_collector_(nullptr)
     // Multi-model and regret based model selection parameters
     , collect_results_for_all_models_(GetCollectResultsForAllModels(ph_))
     , reward_std_dev_scale_factor_(REWARD_STANDARD_DEV_SCALING_FACTOR_START)
@@ -186,6 +187,7 @@ Planner::Planner(
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
     , initial_grippers_distance_(robot_.getGrippersInitialDistance())
     // Logging and visualization parameters
+    , fully_observable_(GetFullyObservable(nh_))
     , planner_logging_enabled_(GetPlannerLoggingEnabled(ph_))
     , controller_logging_enabled_(GetControllerLoggingEnabled(ph_))
     , vis_(vis)
@@ -207,6 +209,8 @@ void Planner::execute()
     WorldState world_feedback = robot_.start();
     const double start_time = world_feedback.sim_time_;
     initializeModelAndControllerSet(world_feedback);
+
+    templates_collector_ = std::make_shared<TemplatesCollector>(nh_, ph_, vis_);
 
     if (enable_stuck_detection_)
     {
@@ -274,12 +278,33 @@ void Planner::execute()
                         !GetDisableAllVisualizations(ph_)));
     }
 
+    bool collect_template = templates_collector_->isCollectingTemplates();
+    /*
+    if (!collect_template)
+    {
+        collect_template = !templates_collector_->loadObjectTemplates();
+
+    }
+    */
     while (robot_.ok())
     {
         // TODO: Can I remove this extraneous world_state object? All it does is cache the value of world_feedback for
         // a single function call.
         const WorldState world_state = world_feedback;
         world_feedback = sendNextCommand(world_state);
+
+        if (collect_template)
+        {            
+            templates_collector_->addTemplate(
+                        world_feedback.object_configuration_,
+                        world_feedback.all_grippers_single_pose_);
+
+            collect_template = templates_collector_->isCollectingTemplates();
+            if (!collect_template)
+            {
+                templates_collector_->saveObjectTemplates();
+            }
+        }
 
         if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()
                      || task_specification_->taskDone(world_feedback)))
@@ -432,14 +457,97 @@ WorldState Planner::sendNextCommandUsingLocalController(
     Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
 
+
+    // Make copies of the original worldState for occlusion  ---- Added by Mengyao
+    // Occluded function should be re-written later, should be some information contained in the world-feedback
+
+    WorldState occluded_world_state = world_state;
+    const ssize_t total_num_nodes = world_state.object_configuration_.cols();
+
+    std::vector<double> estimation_error(1, 0.0);
+
+    // real_object_motion and change_in_estimation are the differenct in configuration between the two states
+    // These values are logged to analysis the sensitivity (jumping) in estimation
+    std::vector<double> real_object_motion(1, 0.0);
+    std::vector<double> change_in_estimation(1, 0.0);
+
+    ROS_INFO_NAMED("planner", "If not fully observable, show the unobservable nodes in red");
+    if (!fully_observable_)
+    {
+    //    visualizeNodesOnObject(occluded_world_state.object_configuration_, "ocluded_object");
+        visualizeEstimateNodesOnObject(
+                    world_state.object_configuration_,
+                    world_state.observable_nodes_,
+                    "ground_true");
+
+        if (!templates_collector_->isCollectingTemplates())
+        {
+            occluded_world_state = occludedWorldState(world_state);
+
+            const ssize_t num_observed_nodes = occluded_world_state.object_configuration_.cols();
+            const ssize_t num_grippers = occluded_world_state.all_grippers_single_pose_.size();
+
+            Eigen::Matrix3Xd observable_data =
+                    Eigen::MatrixXd::Zero( 3, num_observed_nodes + num_grippers);
+            observable_data.leftCols(num_observed_nodes) = occluded_world_state.object_configuration_;
+
+            for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+            {
+                Eigen::VectorXd gripper_pose =
+                        EigenHelpers::TransformToRPY(occluded_world_state.all_grippers_single_pose_.at(gripper_ind));
+                observable_data.col(num_observed_nodes + gripper_ind) = gripper_pose.head(3);
+            }
+
+            const ObjectPointSet estimate_configuration =
+                    templates_collector_->GetEstimateConfiguration(occluded_world_state);
+
+            //TODO: replace the occluded object with the estimate one
+
+            visualizeEstimateNodesOnObject(
+                        estimate_configuration,
+                        world_state.observable_nodes_,
+                        "estimate_object", Visualizer::Silver());
+
+            occluded_world_state.object_configuration_ = estimate_configuration;
+
+            ROS_INFO_NAMED("planner", "Successfully get estimation configuration");
+        }
+    }
+
+    const ObjectPointSet estimation_diff = world_state.object_configuration_ - occluded_world_state.object_configuration_;
+
+    if (last_estimation_.cols() > 0)
+    {
+        change_in_estimation[0] = CalculateSumOfPointDiff(last_estimation_, occluded_world_state.object_configuration_);
+    }
+    else
+    {
+        change_in_estimation[0] = 0.0;
+    }
+
+    last_estimation_ = occluded_world_state.object_configuration_;
+
+    // record estimation error
+    for (ssize_t node_ind = 0; node_ind < world_state.object_configuration_.cols(); node_ind++)
+    {
+        //  Calculate p_dot error
+        const Eigen::Vector3d& point_estimation_diff = estimation_diff.col(node_ind);
+
+        estimation_error[0] = estimation_error[0] + point_estimation_diff.norm();
+    }
+
     DeformableModel::DeformableModelInputData model_input_data(
-                world_state,
-                task_specification_->calculateDesiredDirection(world_state),
+                occluded_world_state,
+                task_specification_->calculateDesiredDirection(occluded_world_state),
                 robot_.dt_);
+
+    const ObjectPointSet current_true_object_configuration = world_state.object_configuration_;
+    //const ObjectPointSet current_object_configuration = occluded_world_state.object_configuration_;
 
     if (visualize_desired_motion_)
     {
-        visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_);
+    //    visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_);
+        visualizeDesiredMotion(occluded_world_state, model_input_data.desired_object_motion_);
     }
 
     // Pick an arm to use
@@ -504,11 +612,13 @@ WorldState Planner::sendNextCommandUsingLocalController(
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
 
+    real_object_motion[0] = CalculateSumOfPointDiff(world_feedback.object_configuration_, current_true_object_configuration);
+
     if (visualize_gripper_motion_)
     {
         for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
         {
-            visualizeGripperMotion(world_state.all_grippers_single_pose_,
+            visualizeGripperMotion(occluded_world_state.all_grippers_single_pose_,
                                    suggested_robot_commands[(size_t)model_ind].first,
                                    model_ind);
         }
@@ -533,6 +643,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     ROS_INFO_NAMED("planner", "Logging data");
     logPlannerData(world_state, world_feedback, individual_model_results, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use);
     controllerLogData(world_state, world_feedback, individual_model_results, model_input_data, controller_computation_time);
+    templatesMatchingLogData(world_feedback, estimation_error, real_object_motion, change_in_estimation);
 
     return world_feedback;
 }
@@ -1944,6 +2055,45 @@ void Planner::visualizeGripperMotion(
     }
 }
 
+void Planner::visualizeEstimateNodesOnObject(
+        const ObjectPointSet& object_configuration,
+        const std::vector<bool>& is_observable,
+        const std::__cxx11::string& marker,
+        const std_msgs::ColorRGBA& show_color) const
+{
+    EigenHelpers::VectorVector3d observable_nodes;
+    for (ssize_t node_ind = 0; node_ind < object_configuration.cols(); node_ind++)
+    {
+        if(!is_observable.at(node_ind))
+        {
+            observable_nodes.push_back(object_configuration.col(node_ind));
+        }
+    }
+
+    vis_.visualizePoints(
+                marker,
+                observable_nodes,
+                show_color);
+}
+
+
+void Planner::visualizeNodesOnObject(const ObjectPointSet& object_configuration,
+        const std::__cxx11::string& marker,
+        const std_msgs::ColorRGBA& show_color) const
+{
+    EigenHelpers::VectorVector3d observable_nodes;
+    for (ssize_t node_ind = 0; node_ind < object_configuration.cols(); node_ind++)
+    {
+        observable_nodes.push_back(object_configuration.col(node_ind));
+    }
+
+    vis_.visualizePoints(
+                marker,
+                observable_nodes,
+                show_color);
+}
+
+
 void Planner::initializePlannerLogging()
 {
     if (planner_logging_enabled_)
@@ -2064,6 +2214,33 @@ void Planner::logPlannerData(
     }
 }
 
+// Contoller logger.  --- Added by Mengyao
+void Planner::templatesMatchingLogData(const WorldState& current_world_state,
+        const std::vector<double> &ave_contol_error,
+        const std::vector<double> &real_object_motion,
+        const std::vector<double> &state_estimation_diff)
+{
+    if(controller_logging_enabled_)
+    {
+        const static Eigen::IOFormat single_line(
+                    Eigen::StreamPrecision,
+                    Eigen::DontAlignCols,
+                    " ", " ", "", "");
+
+        LOG(controller_loggers_.at("control_time"),
+            current_world_state.sim_time_);
+
+        LOG(controller_loggers_.at("estimation_error"),
+            PrettyPrint::PrettyPrint(ave_contol_error, false, " "));
+
+        LOG(controller_loggers_.at("real_object_motion"),
+            PrettyPrint::PrettyPrint(real_object_motion, false, " "));
+
+        LOG(controller_loggers_.at("states_estimation_diff"),
+            PrettyPrint::PrettyPrint(state_estimation_diff, false, " "));
+    }
+}
+
 // Note that resulting_world_state may not be exactly indentical to individual_model_rewards[model_used]
 // because of the way forking words (and doesn't) in Bullet. They should be very close however.
 void Planner::controllerLogData(
@@ -2173,3 +2350,50 @@ void Planner::controllerLogData(
             PrettyPrint::PrettyPrint(individual_computation_times, false, " "));
     }
 }
+
+
+///////////////////////////////////////////////////////////////////////
+// World state modification / copy helper function. For occlusion ---- Added by Mengyao
+///////////////////////////////////////////////////////////////////////
+WorldState Planner::occludedWorldState(const WorldState& world_state)
+{
+    WorldState occluded_world_state;
+    const ObservableNodes& observable_nodes = world_state.observable_nodes_;
+    const ssize_t num_grippers = world_state.all_grippers_single_pose_.size();
+    const ssize_t num_all_nodes = world_state.object_configuration_.cols();
+    const ssize_t num_rows = 3;
+    ssize_t count_occlusion = 0;
+
+    occluded_world_state.object_configuration_ = world_state.object_configuration_;
+
+
+    for (ssize_t node_ind = 0; node_ind < num_all_nodes; node_ind++)
+    {
+        ssize_t occluded_ind = node_ind - count_occlusion;
+
+    //    if(node_ind > num_all_nodes / num_rows && node_ind < num_all_nodes * 2 / num_rows)
+        if(!observable_nodes.at(node_ind))
+        {
+            ssize_t numCols = occluded_world_state.object_configuration_.cols()-1;
+
+            occluded_world_state.object_configuration_.block(0, occluded_ind, num_rows, numCols-occluded_ind)
+                    = occluded_world_state.object_configuration_.block(0,occluded_ind+1, num_rows, numCols-occluded_ind);
+            occluded_world_state.object_configuration_.conservativeResize(num_rows,numCols);
+
+            count_occlusion++;
+        }        
+    }
+
+    occluded_world_state.observabel_correspondency_ = world_state.observabel_correspondency_;
+    occluded_world_state.all_grippers_single_pose_ = world_state.all_grippers_single_pose_;
+    occluded_world_state.gripper_collision_data_.reserve(num_grippers);
+
+    for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+    {
+        occluded_world_state.gripper_collision_data_.push_back(world_state.gripper_collision_data_.at(gripper_ind));        
+    }
+    occluded_world_state.sim_time_ = world_state.sim_time_;
+
+    return occluded_world_state;
+}
+
