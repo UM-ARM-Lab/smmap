@@ -2,8 +2,9 @@
 #define TEMPLATESCOLLECTOR_H
 
 #include <Eigen/Dense>
+#include <smmap_utilities/visualization_tools.h>
 #include "smmap/trajectory.hpp"
-#include "smmap/visualization_tools.h"
+
 
 namespace smmap
 {
@@ -15,7 +16,7 @@ namespace smmap
             TemplatesCollector(
                     ros::NodeHandle nh,
                     ros::NodeHandle ph,
-                    Visualizer& vis);
+                    smmap_utilities::Visualizer& vis);
 
             typedef std::shared_ptr<TemplatesCollector> SharedPtr;
 
@@ -149,7 +150,7 @@ namespace smmap
 
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
-            Visualizer& vis_;
+            smmap_utilities::Visualizer& vis_;
 
             bool collect_templates_;
             bool include_grippers_;

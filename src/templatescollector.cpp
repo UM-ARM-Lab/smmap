@@ -7,13 +7,17 @@
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
+#include <arc_utilities/serialization_eigen.hpp>
+#include <arc_utilities/serialization.hpp>
+#include <smmap_utilities/gurobi_solvers.h>
+#include <arc_utilities/timing.hpp>
 
 #include "smmap/templatescollector.h"
-#include "smmap/timing.hpp"
 #include "smmap/trajectory.hpp"
-#include "smmap/gurobi_solvers.h"
 
 using namespace smmap;
+using namespace smmap_utilities;
+using namespace arc_utilities;
 
 
 TemplatesCollector::TemplatesCollector(
@@ -179,10 +183,10 @@ bool TemplatesCollector::loadObjectTemplates()
 
          uint64_t current_position = 0;
          const auto deserialized_result
-                 = arc_helpers::DeserializeVector<Eigen::VectorXd>(
+                 = DeserializeVector<Eigen::VectorXd>(
                      decompressed_templates_results,
                      current_position,
-                     &EigenHelpers::Deserialize<Eigen::VectorXd>);
+                     &Deserialize<Eigen::VectorXd>);
 
          object_templates_ = EigenHelpers::EigenVectorXdsToMatrix3Xds(deserialized_result.first);
          current_position += deserialized_result.second;
@@ -211,7 +215,7 @@ bool TemplatesCollector::saveObjectTemplates()
         std::vector<uint8_t> buffer;
         // First serialize the graph that created the results
         ROS_INFO_NAMED("templates_collection", "Serializing the templates data");
-        SerializeSelf(buffer, &EigenHelpers::Serialize<Eigen::VectorXd>);
+        SerializeSelf(buffer, &Serialize<Eigen::VectorXd>);
 
         // Compress and save to file
         ROS_INFO_NAMED("templates_collection", "Compressing for templates storage");
@@ -307,7 +311,7 @@ uint64_t TemplatesCollector::SerializeSelf(
                 value_serializer);
 
     std::vector<Eigen::VectorXd> object_templates_vectors = EigenHelpers::EigenMatrix3XdsToVectorXds(object_templates_);
-    arc_helpers::SerializeVector<Eigen::VectorXd>(object_templates_vectors, buffer, graph_state_serializer);
+    SerializeVector<Eigen::VectorXd>(object_templates_vectors, buffer, graph_state_serializer);
     // Figure out how many bytes were written
     const uint64_t end_buffer_size = buffer.size();
     const uint64_t bytes_written = end_buffer_size - start_buffer_size;
@@ -345,7 +349,7 @@ uint64_t TemplatesCollector::DeserializeSelf(
     const auto graph_state_deserializer = std::bind(
                 TemplatesCollector::DeserializeSingleTemplate,
                 std::placeholders::_1, std::placeholders::_2, value_deserializer);
-    const auto deserialized_nodes = arc_helpers::DeserializeVector<Eigen::VectorXd>(buffer, current, graph_state_deserializer);
+    const auto deserialized_nodes = DeserializeVector<Eigen::VectorXd>(buffer, current, graph_state_deserializer);
 
     std::vector<Eigen::VectorXd> object_templates_vectors = deserialized_nodes.first;
     object_templates_ = EigenHelpers::EigenVectorXdsToMatrix3Xds(object_templates_vectors);

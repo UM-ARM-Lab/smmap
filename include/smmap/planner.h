@@ -182,7 +182,7 @@ namespace smmap
                     const ObjectPointSet& object_configuration,
                     const std::vector<bool> &is_observable,
                     const std::string& marker,
-                    const std_msgs::ColorRGBA& show_color = Visualizer::Coral()) const;
+                    const std_msgs::ColorRGBA& show_color = smmap_utilities::Visualizer::Coral()) const;
 
             void visualizeNodesOnObject(const ObjectPointSet& object_configuration,
                     const std::__cxx11::string& marker,

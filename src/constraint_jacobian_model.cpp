@@ -6,6 +6,7 @@
 
 using namespace smmap;
 using namespace Eigen;
+using namespace arc_utilities;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Static member initialization
