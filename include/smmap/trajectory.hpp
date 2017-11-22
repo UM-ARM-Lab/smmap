@@ -14,6 +14,10 @@ namespace smmap
     typedef std::vector<ObjectPointSet> ObjectTrajectory;
     typedef std::vector<ObjectTrajectory> VectorObjectTrajectory;
 
+
+    typedef std::vector<bool> ObservableNodes;
+    typedef std::vector<ssize_t> ObservableIndexes;
+
     struct ObjectDeltaAndWeight
     {
         public:
@@ -33,6 +37,9 @@ namespace smmap
     struct WorldState
     {
         ObjectPointSet object_configuration_;
+        ObservableNodes observable_nodes_;
+        ObservableIndexes observabel_correspondency_;
+
         AllGrippersSinglePose all_grippers_single_pose_;
         std::vector<CollisionData> gripper_collision_data_;
         double sim_time_;
@@ -51,6 +58,18 @@ namespace smmap
         feedback_eigen.object_configuration_ =
                 EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(
                     feedback_ros.object_configuration);
+
+        feedback_eigen.observable_nodes_ =
+                EigenHelpersConversions::VectorInt8ToVectorBool(
+                    feedback_ros.observable_nodes);
+
+        for (ssize_t node_ind = 0; node_ind < feedback_eigen.observable_nodes_.size(); node_ind++)
+        {
+            if(feedback_eigen.observable_nodes_.at(node_ind))
+            {
+                feedback_eigen.observabel_correspondency_.push_back(node_ind);
+            }
+        }
 
         feedback_eigen.all_grippers_single_pose_ =
                 EigenHelpersConversions::VectorGeometryPoseToVectorIsometry3d(
@@ -178,6 +197,26 @@ namespace smmap
         squared_dist.minCoeff(&min_ind);
         return min_ind;
     }
+
+    // The function to calculated the sum of 2-norm difference of two object configuration
+    inline const double CalculateSumOfPointDiff(const ObjectPointSet& a, const ObjectPointSet& b)
+    {
+        double diff = 0;
+        const ssize_t num_nodes = a.cols();
+        if(num_nodes == 0 || b.cols()==0)
+        {
+            return diff;
+        }
+
+        assert (num_nodes == b.cols());
+        for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
+        {
+            diff = diff + (a.col(node_ind) - b.col(node_ind)).norm();
+        }
+        return diff;
+    }
+
+
 }
 
 #endif // TRAJECTORY_HPP

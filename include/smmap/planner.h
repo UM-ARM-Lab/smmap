@@ -14,6 +14,7 @@
 #include "smmap/rubber_band.hpp"
 #include "smmap/rrt_helper.h"
 #include "smmap/prm_helper.h"
+#include "smmap/templatescollector.h"
 
 namespace smmap
 {
@@ -43,6 +44,8 @@ namespace smmap
             RobotInterface& robot_;
             std::shared_ptr<TaskSpecification> task_specification_;
             std::shared_ptr<DijkstrasCoverageTask> dijkstras_task_;
+
+            TemplatesCollector::SharedPtr templates_collector_;
 
             ////////////////////////////////////////////////////////////////////
             // Sending gripper commands
@@ -145,6 +148,8 @@ namespace smmap
             const size_t max_grippers_pose_history_length_;
             AllGrippersPoseTrajectory grippers_pose_history_;
             std::vector<double> error_history_;
+            // Last estimate configuration,-------- added by Mengyao. For sensitivity test
+            ObjectPointSet last_estimation_;
 
             bool executing_global_gripper_trajectory_;
             size_t global_plan_current_timestep_;
@@ -173,6 +178,16 @@ namespace smmap
                     const AllGrippersSinglePoseDelta& gripper_motion,
                     const ssize_t model_ind);
 
+            void visualizeEstimateNodesOnObject(
+                    const ObjectPointSet& object_configuration,
+                    const std::vector<bool> &is_observable,
+                    const std::string& marker,
+                    const std_msgs::ColorRGBA& show_color = Visualizer::Coral()) const;
+
+            void visualizeNodesOnObject(const ObjectPointSet& object_configuration,
+                    const std::__cxx11::string& marker,
+                    const std_msgs::ColorRGBA& show_color) const;
+
             void initializePlannerLogging();
 
             void initializeControllerLogging();
@@ -185,12 +200,25 @@ namespace smmap
                     const Eigen::MatrixXd& model_utility_covariance,
                     const ssize_t model_used);
 
+            // Estimator logger.  --- Added by Mengyao
+            void templatesMatchingLogData(const WorldState& current_world_state,
+                    const std::vector<double>& ave_contol_error,
+                    const std::vector<double>& real_object_motion,
+                    const std::vector<double>& state_estimation_diff);
+
             void controllerLogData(
                     const WorldState& initial_world_state,
                     const WorldState& resulting_world_state,
                     const std::vector<WorldState>& individual_model_results,
                     const DeformableModel::DeformableModelInputData& model_input_data,
                     const std::vector<double>& individual_computation_times);
+
+            ///////////////////////////////////////////////////////////////////////
+            // World state modification / copy helper function. For occlusion ---- Added by Mengyao
+            ///////////////////////////////////////////////////////////////////////
+            WorldState occludedWorldState(const WorldState& world_state);
+
+            const bool fully_observable_;
 
             const bool planner_logging_enabled_;
             const bool controller_logging_enabled_;
