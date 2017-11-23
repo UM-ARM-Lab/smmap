@@ -190,6 +190,8 @@ namespace smmap
 
             void initializePlannerLogging();
 
+            void initializeEstimatorLogging();
+
             void initializeControllerLogging();
 
             void logPlannerData(
@@ -221,6 +223,7 @@ namespace smmap
             const bool fully_observable_;
 
             const bool planner_logging_enabled_;
+            const bool estimator_logging_enabled_;
             const bool controller_logging_enabled_;
             std::unordered_map<std::string, Log::Log> loggers_;
             std::unordered_map<std::string, Log::Log> controller_loggers_;

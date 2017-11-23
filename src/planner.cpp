@@ -189,6 +189,7 @@ Planner::Planner(
     // Logging and visualization parameters
     , fully_observable_(GetFullyObservable(nh_))
     , planner_logging_enabled_(GetPlannerLoggingEnabled(ph_))
+    , estimator_logging_enabled_(GetEstimatorLoggingEnabled(ph_))
     , controller_logging_enabled_(GetControllerLoggingEnabled(ph_))
     , vis_(vis)
     , visualize_desired_motion_(GetVisualizeObjectDesiredMotion(ph_))
@@ -197,6 +198,7 @@ Planner::Planner(
 {
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
     initializePlannerLogging();
+    initializeEstimatorLogging();
     initializeControllerLogging();
 }
 
@@ -1980,11 +1982,13 @@ void Planner::visualizeDesiredMotion(
             colors[node_ind].b = 0.0f;
             colors[node_ind].a = desired_motion.weight((ssize_t)node_ind * 3) > 0 ? 1.0f : 0.0f;
         }
+        /*
         task_specification_->visualizeDeformableObject(
                 vis_,
                 DESIRED_DELTA_NS,
                 AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
                 colors);
+        */
 
         if (task_specification_->deformable_type_ == DeformableType::CLOTH)
         {
@@ -2138,6 +2142,34 @@ void Planner::initializePlannerLogging()
     }
 }
 
+void Planner::initializeEstimatorLogging()
+{
+    if(estimator_logging_enabled_)
+    {
+        const std::string log_folder = GetLogFolder(nh_);
+        ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
+
+        Log::Log seed_log(log_folder + "seed.txt", false);
+        LOG_STREAM(seed_log, std::hex << seed_);
+
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "estimation_time",
+                                       Log::Log(log_folder + "estimation_time.txt", false)));
+
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "estimation_error",
+                                       Log::Log(log_folder + "estimation_error.txt", false)));
+
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "real_object_motion",
+                                       Log::Log(log_folder + "real_object_motion.txt", false)));
+
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "states_estimation_diff",
+                                       Log::Log(log_folder + "states_estimation_diff.txt", false)));
+    }
+}
+
 void Planner::initializeControllerLogging()
 {
     if(controller_logging_enabled_)
@@ -2165,6 +2197,7 @@ void Planner::initializeControllerLogging()
                                        Log::Log(log_folder + "individual_computation_times.txt", false)));
     }
 }
+
 
 // Note that resulting_world_state may not be exactly indentical to individual_model_rewards[model_used]
 // because of the way forking words (and doesn't) in Bullet. They should be very close however.
@@ -2220,14 +2253,14 @@ void Planner::templatesMatchingLogData(const WorldState& current_world_state,
         const std::vector<double> &real_object_motion,
         const std::vector<double> &state_estimation_diff)
 {
-    if(controller_logging_enabled_)
+    if(estimator_logging_enabled_)
     {
         const static Eigen::IOFormat single_line(
                     Eigen::StreamPrecision,
                     Eigen::DontAlignCols,
                     " ", " ", "", "");
 
-        LOG(controller_loggers_.at("control_time"),
+        LOG(controller_loggers_.at("estimation_time"),
             current_world_state.sim_time_);
 
         LOG(controller_loggers_.at("estimation_error"),
