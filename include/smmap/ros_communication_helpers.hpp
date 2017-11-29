@@ -229,6 +229,25 @@ namespace smmap
         sdf.LoadFromMessageRepresentation(srv_data.response.sdf);
         return sdf;
     }
+
+    inline sdf_tools::SignedDistanceField GetEnvironmentObservabilitySDF(ros::NodeHandle& nh)
+    {
+        ROS_INFO_NAMED("ros_comms_helpers", "Getting environment observability sdf");
+
+        // First we collect the data in serialzed form
+        ros::ServiceClient sdf_client =
+            nh.serviceClient<deformable_manipulation_msgs::GetSignedDistanceField>(GetObservabilitySignedDistanceFieldTopic(nh));
+
+        sdf_client.waitForExistence();
+
+        deformable_manipulation_msgs::GetSignedDistanceField srv_data;
+        sdf_client.call(srv_data);
+
+        // Then parse the message and return the result
+        sdf_tools::SignedDistanceField sdf;
+        sdf.LoadFromMessageRepresentation(srv_data.response.sdf);
+        return sdf;
+    }
 }
 
 #endif // ROS_COMMUNICATION_HELPERS_HPP

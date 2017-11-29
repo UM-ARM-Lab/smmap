@@ -1,6 +1,7 @@
 #ifndef TEMPLATESCOLLECTOR_H
 #define TEMPLATESCOLLECTOR_H
 
+#include <sdf_tools/sdf.hpp>
 #include <Eigen/Dense>
 #include <smmap_utilities/visualization_tools.h>
 #include "smmap/trajectory.hpp"
@@ -91,7 +92,7 @@ namespace smmap
             const Eigen::Matrix3Xd EstimateByProcrustesLeastSquares(
                     const WorldState& occluded_worldstate);
 
-            const Eigen::Matrix3Xd EstimateByProcrustesLeastAbsoluteDeviation(
+            const Eigen::Matrix3Xd EstimateByProcrustesLeastSquaresL1Reguralization(
                     const WorldState& occluded_worldstate);
 
 
@@ -152,20 +153,23 @@ namespace smmap
             ros::NodeHandle ph_;
             smmap_utilities::Visualizer& vis_;
 
+            const sdf_tools::SignedDistanceField observability_map_;
+
             bool collect_templates_;
             bool include_grippers_;
             const bool recollect_all_templates_;
             const int collect_frequency_;
             int internal_counter_;
             const double similarity_threshold_;
+
             const EstimatotType estimator_type_;
+            Eigen::VectorXd last_estimate_coordinate_;
 
             const ssize_t num_to_collect_;
             const ssize_t max_num_in_collector_;
             ssize_t num_pre_stored_;
             ssize_t num_templates_;
             std::vector<Eigen::Matrix3Xd> object_templates_;
-
 
     };
 

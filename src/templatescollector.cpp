@@ -14,6 +14,7 @@
 
 #include "smmap/templatescollector.h"
 #include "smmap/trajectory.hpp"
+#include "smmap/ros_communication_helpers.hpp"
 
 using namespace smmap;
 using namespace smmap_utilities;
@@ -27,6 +28,8 @@ TemplatesCollector::TemplatesCollector(
     : nh_(nh)
     , ph_(ph)
     , vis_(vis)
+
+    , observability_map_(GetEnvironmentObservabilitySDF(nh_))
 
     , collect_templates_(GetCollectTemplates(ph_))
     , include_grippers_(true)
@@ -198,6 +201,8 @@ bool TemplatesCollector::loadObjectTemplates()
          num_pre_stored_ = object_templates_.size();
          ROS_INFO_STREAM_NAMED("templates_collection", "Read templates in " << GlobalStopwatch(READ) << " seconds");
          ROS_INFO_STREAM_NAMED("templates_collection", "Num of templates loaded: " << num_pre_stored_ << ".");
+
+         last_estimate_coordinate_ = Eigen::MatrixXd::Zero(num_pre_stored_, 1);
          return true;
     }
     catch (...)
@@ -250,8 +255,8 @@ const Eigen::Matrix3Xd TemplatesCollector::GetEstimateConfiguration(
         case PROCRUSTES_LEAST_SQUARE_NORM:
             return EstimateByProcrustesLeastSquares(occluded_worldstate);
             break;
-        case PROCRUSTES_LEAST_ABSOLUTE_NORM:
-            return EstimateByProcrustesLeastAbsoluteDeviation(occluded_worldstate);
+        case PROCRUSTES_LEAST_SQUARE_L1_REGULARIZATION:
+            return EstimateByProcrustesLeastSquaresL1Reguralization(occluded_worldstate);
             break;
         default:
             assert(false || "No valid estimation algorithm");
@@ -405,9 +410,11 @@ const Eigen::Matrix3Xd TemplatesCollector::EstimateByProcrustesLeastSquares(
 
 
 // TODO: How to check the num of grippers in templates and that of the occluded world?
-const Eigen::Matrix3Xd TemplatesCollector::EstimateByProcrustesLeastAbsoluteDeviation(
+const Eigen::Matrix3Xd TemplatesCollector::EstimateByProcrustesLeastSquaresL1Reguralization(
         const WorldState& occluded_worldstate)
 {
+    assert(last_estimate_coordinate_.rows() == object_templates_.size());
+
     const ObservableIndexes& observable_correspondency = occluded_worldstate.observabel_correspondency_;
     const ssize_t num_grippers = occluded_worldstate.all_grippers_single_pose_.size();
 
@@ -431,9 +438,13 @@ const Eigen::Matrix3Xd TemplatesCollector::EstimateByProcrustesLeastAbsoluteDevi
 
     // Get optimal 1-norm coordinate
     const Eigen::VectorXd templates_weight
-            = minAbsoluteDeviation(
+            = minSquaredNormL1NormRegularization(
                 observable_templates,
-                EigenHelpers::EigenMatrix3XdToVectorXd(relocated_configuration));
+                EigenHelpers::EigenMatrix3XdToVectorXd(relocated_configuration),
+                last_estimate_coordinate_,
+                Eigen::MatrixXd::Ones(observable_templates.rows(), 1));
+
+    last_estimate_coordinate_ = templates_weight;
 
     // In the full matching base, each template contains all nodes and is rotated according to the rot alignment matrix
     const Eigen::MatrixXd full_matching_base = GetFullMatchingBase(all_rots_and_centers);
