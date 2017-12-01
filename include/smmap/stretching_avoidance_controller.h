@@ -124,6 +124,7 @@ namespace smmap
             const DeformableModel::Ptr model_;
 
             const double distance_to_obstacle_threshold_;
+            const double initial_grippers_distance_;
             double max_stretch_factor_;
             double stretching_cosine_threshold_;
 

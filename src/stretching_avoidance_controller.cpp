@@ -33,6 +33,7 @@ StretchingAvoidanceController::StretchingAvoidanceController(
     , task_type_(GetTaskType(nh))
     , model_(deformable_model)
     , distance_to_obstacle_threshold_(GetRobotGripperRadius())
+    , initial_grippers_distance_(robot.getGrippersInitialDistance())
     , max_stretch_factor_(GetMaxStretchFactor(ph))
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
@@ -108,21 +109,35 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
     // Checking the stretching status for current object configuration for once
     over_stretch_ = false;
 
+    // Catch cases where the grippers and the nodes don't align, this should still be flagged as large stretch
+    if (num_grippers == 2)
+    {
+        const auto gripper_delta =
+                current_world_state.all_grippers_single_pose_.at(0).translation()
+                - current_world_state.all_grippers_single_pose_.at(1).translation();
+        if (gripper_delta.norm() > initial_grippers_distance_ * max_stretch_factor_)
+        {
+            over_stretch_ = true;
+        }
+    }
+
     for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
     {
         for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
         {
             const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
-	    if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
-	    {
-	        over_stretch_ = true;
-	        break;
-	    }
-	}
+            if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
+            {
+                over_stretch_ = true;
+                break;
+            }
+        }
         if (over_stretch_)
         {
+            ROS_INFO_NAMED("stretching_avoidance_controller", "Stretching Detected!!!");
+            visualize_stretching_vector(current_world_state.object_configuration_);
             break;
-	}
+        }
     }
 #ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
     #pragma omp parallel for
@@ -232,23 +247,36 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
     // Check object current stretching status
     // Checking the stretching status for current object configuration for once
     over_stretch_ = false;
+    // Catch cases where the grippers and the nodes don't align, this should still be flagged as large stretch
+    if (num_grippers == 2)
+    {
+        const auto gripper_delta =
+                current_world_state.all_grippers_single_pose_.at(0).translation()
+                - current_world_state.all_grippers_single_pose_.at(1).translation();
+        if (gripper_delta.norm() > initial_grippers_distance_ * max_stretch_factor_)
+        {
+            over_stretch_ = true;
+        }
+    }
 
     for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
+    {
+        for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
         {
-            for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
+            const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
+            if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
             {
-                const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
-                if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
-                {
-                    over_stretch_ = true;
-                    break;
-                }
-            }
-            if (over_stretch_)
-            {
+                over_stretch_ = true;
                 break;
             }
         }
+        if (over_stretch_)
+        {
+            ROS_INFO_NAMED("stretching_avoidance_controller", "Stretching Detected");
+            visualize_stretching_vector(current_world_state.object_configuration_);
+            break;
+        }
+    }
 
     // Return value of objective function, cost = norm(p_dot_desired - p_dot_test)
     const std::function<double(const AllGrippersSinglePoseDelta&)> eval_error_cost_fn = [&] (

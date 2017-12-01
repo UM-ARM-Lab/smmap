@@ -161,6 +161,7 @@ namespace smmap
             const int collect_frequency_;
             int internal_counter_;
             const double similarity_threshold_;
+            const double l1_regularization_factor_;
 
             const EstimatotType estimator_type_;
             Eigen::VectorXd last_estimate_coordinate_;

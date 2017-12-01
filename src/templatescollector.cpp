@@ -37,6 +37,7 @@ TemplatesCollector::TemplatesCollector(
     , collect_frequency_(GetTemplatesCollectionFrequency(ph_))
     , internal_counter_(0)
     , similarity_threshold_(GetSimilarityThreshold(ph_))
+    , l1_regularization_factor_(GetL1RegularizationFactor(ph_))
     , estimator_type_(GetEstimatorType(ph_))
 
     , num_to_collect_(GetNumTemplatesToCollect(ph_))
@@ -395,6 +396,8 @@ const Eigen::Matrix3Xd TemplatesCollector::EstimateByProcrustesLeastSquares(
                 relocated_configuration,
                 observable_templates);
 
+    ROS_INFO_STREAM_NAMED("templates_collection", "Norm of the templates coordinates: " << templates_weight.norm() << " .");
+
     // In the full matching base, each template contains all nodes and is rotated according to the rot alignment matrix
     const Eigen::MatrixXd full_matching_base = GetFullMatchingBase(all_rots_and_centers);
 
@@ -444,7 +447,23 @@ const Eigen::Matrix3Xd TemplatesCollector::EstimateByProcrustesLeastSquaresL1Reg
                 last_estimate_coordinate_,
                 Eigen::MatrixXd::Ones(observable_templates.rows(), 1));
 
+    // TODO: check the L1 value, TOBE DELETED LATER
+    Eigen::Matrix3Xd occluded_estimation = EigenHelpers::EigenVectorXdToMatrix3Xd(observable_templates * templates_weight);
+    const double diff_estimation = CalculateSumOfPointDiff(
+                relocated_configuration,
+                occluded_estimation);
+    double diff_L1_value = 0;
+    const Eigen::VectorXd diff_L1 = last_estimate_coordinate_ - templates_weight;
+    for (int ind = 0; ind < diff_L1.rows(); ind++)
+    {
+        diff_L1_value += std::fabs(diff_L1.row(ind).norm());
+    }
+    ROS_INFO_STREAM_NAMED("templates_collection", "diff of estimation in L1 objection fn: " << diff_estimation << " .");
+    ROS_INFO_STREAM_NAMED("templates_collection", "diff of L1 term in L1 objection fn: " << diff_L1_value << " .");
+
+
     last_estimate_coordinate_ = templates_weight;
+    ROS_INFO_STREAM_NAMED("templates_collection", "Norm of the templates coordinates: " << templates_weight.norm() << " .");
 
     // In the full matching base, each template contains all nodes and is rotated according to the rot alignment matrix
     const Eigen::MatrixXd full_matching_base = GetFullMatchingBase(all_rots_and_centers);
