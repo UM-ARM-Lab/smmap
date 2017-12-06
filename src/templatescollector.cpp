@@ -461,6 +461,7 @@ const Eigen::Matrix3Xd TemplatesCollector::EstimateByProcrustesLeastSquaresL1Reg
     ROS_INFO_STREAM_NAMED("templates_collection", "diff of estimation in L1 objection fn: " << diff_estimation << " .");
     ROS_INFO_STREAM_NAMED("templates_collection", "diff of L1 term in L1 objection fn: " << diff_L1_value << " .");
 
+    PrintCoordinateHelper(templates_weight);
 
     last_estimate_coordinate_ = templates_weight;
     ROS_INFO_STREAM_NAMED("templates_collection", "Norm of the templates coordinates: " << templates_weight.norm() << " .");
@@ -718,6 +719,7 @@ const Eigen::MatrixXd TemplatesCollector::GetFullMatchingBase(
 // other helper functions
 //////////////////////////////////////////////////////////////////////////////
 
+// return the cluster configuration consist of the object configuration with the end-effectors positions
 const Eigen::Matrix3Xd TemplatesCollector::GetDataToBeMatched (
         const WorldState& occluded_world_state)
 {
@@ -770,6 +772,7 @@ const bool TemplatesCollector::HaveSimilarTemplate(const Eigen::Matrix3Xd& templ
 
     const Eigen::MatrixXd full_matching_base = GetFullMatchingBase(all_rots_and_centers);
 
+    // Check the independence of the new sample with respect to the existing templates
     Eigen::Matrix3Xd estimation = EigenHelpers::EigenVectorXdToMatrix3Xd(
                 full_matching_base
                 * templates_weight);
@@ -822,3 +825,41 @@ const bool TemplatesCollector::HaveSimilarTemplate(const Eigen::Matrix3Xd& templ
     */
 
 }
+
+void TemplatesCollector::PrintCoordinateHelper(const Eigen::VectorXd& coordinate)
+{
+    const int num_coord = coordinate.rows();
+
+    int count = 0;
+    // print 10 coords in a line
+    for (int ind = 0; ind *10 + 9 < num_coord; ind++)
+    {
+        ROS_INFO_STREAM_NAMED("templates_collection", "Estimate coordinate for the base matrix: "
+                              << coordinate(ind * 10 + 0, 0) << " ; "
+                              << coordinate(ind * 10 + 1, 0) << " ; "
+                              << coordinate(ind * 10 + 2, 0) << " ; "
+
+                              << coordinate(ind * 10 + 3, 0) << " ; "
+                              << coordinate(ind * 10 + 4, 0) << " ; "
+                              << coordinate(ind * 10 + 5, 0) << " ; "
+
+                              << coordinate(ind * 10 + 6, 0) << " ; "
+                              << coordinate(ind * 10 + 7, 0) << " ; "
+                              << coordinate(ind * 10 + 8, 0) << " ; "
+
+                              << coordinate(ind * 10 + 9, 0) << " ; ");
+        count = ind + 1;
+    }
+    for (int ind = count * 10; ind < num_coord; ind ++)
+    {
+        ROS_INFO_STREAM_NAMED("templates_collection", "Estimate coordinate for the base matrix: "
+                              << coordinate(ind, 0) << " ;");
+    }
+
+}
+
+
+
+
+
+

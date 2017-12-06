@@ -139,6 +139,20 @@ namespace smmap
                     const std::vector<std::pair<Eigen::MatrixXd, Eigen::Vector3d> >& all_rots_and_centers);
 
             //////////////////////////////////////////////////////////////////////////////
+            // functions to utilize observability information
+            //////////////////////////////////////////////////////////////////////////////
+            // The first vector store the # of nodes shouldn't be observed; The second vector list the indexes of
+            // the templates, from most reliable to the least reliable
+            std::pair<std::vector<int>, std::vector<int>> GetTemplatesObservability(
+                    const Eigen::Vector3d& current_geo_center,
+                    const WorldState& occluded_world_state);
+
+
+
+
+
+
+            //////////////////////////////////////////////////////////////////////////////
             // other helper functions
             //////////////////////////////////////////////////////////////////////////////
 
@@ -146,6 +160,7 @@ namespace smmap
 
             const bool HaveSimilarTemplate(const Eigen::Matrix3Xd& template_in);
 
+            void PrintCoordinateHelper(const Eigen::VectorXd& coordinate);
 
         private:
 
