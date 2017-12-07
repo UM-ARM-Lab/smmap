@@ -145,10 +145,13 @@ namespace smmap
             // the templates, from most reliable to the least reliable
             std::pair<std::vector<int>, std::vector<int>> GetTemplatesObservability(
                     const Eigen::Vector3d& current_geo_center,
+                    const std::pair<Eigen::MatrixXd, std::vector<std::pair<Eigen::MatrixXd, Eigen::Vector3d>>> base_and_rot,
                     const WorldState& occluded_world_state);
 
 
-
+            const std::pair<Eigen::MatrixXd, std::vector<std::pair<Eigen::MatrixXd, Eigen::Vector3d>>> GetMostReliableTemplatesbase(
+                    const std::pair<Eigen::MatrixXd, std::vector<std::pair<Eigen::MatrixXd, Eigen::Vector3d>>>& all_templates,
+                    const std::vector<int>& sorted_reliable_list);
 
 
 
@@ -183,6 +186,7 @@ namespace smmap
 
             const ssize_t num_to_collect_;
             const ssize_t max_num_in_collector_;
+            const ssize_t num_reliable_temps_;
             ssize_t num_pre_stored_;
             ssize_t num_templates_;
             std::vector<Eigen::Matrix3Xd> object_templates_;

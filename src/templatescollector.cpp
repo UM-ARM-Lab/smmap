@@ -42,6 +42,7 @@ TemplatesCollector::TemplatesCollector(
 
     , num_to_collect_(GetNumTemplatesToCollect(ph_))
     , max_num_in_collector_(1000)      // TODO: magic number to be replaced
+    , num_reliable_temps_(GetNumTemplatesToCollect(ph_))    // TODO: Add new Ros params to do so
     , num_pre_stored_(0)
     , num_templates_(0)
 {
@@ -716,6 +717,86 @@ const Eigen::MatrixXd TemplatesCollector::GetFullMatchingBase(
 
 
 //////////////////////////////////////////////////////////////////////////////
+// functions to utilize observability information
+//////////////////////////////////////////////////////////////////////////////
+
+// The first vector store the # of nodes should be observed while not observable; The second vector list the indexes of
+// the templates, from most reliable to the least reliable
+std::pair<std::vector<int>, std::vector<int>> TemplatesCollector::GetTemplatesObservability(
+        const Eigen::Vector3d& current_geo_center,
+        const std::pair<Eigen::MatrixXd, std::vector<std::pair<Eigen::MatrixXd, Eigen::Vector3d>>> base_and_rot,
+        const WorldState& occluded_world_state)
+{
+    const Eigen::MatrixXd& observable_templates = base_and_rot.first;
+    const std::vector<std::pair <Eigen::MatrixXd,Eigen::Vector3d>>& all_rots_and_centers = base_and_rot.second;
+
+    const ObservableIndexes& observable_indexes = occluded_world_state.observabel_correspondency_;
+    const ssize_t num_observable_nodes = observable_templates.cols();
+    assert (num_observable_nodes == observable_indexes.size());
+    const Eigen::Matrix3Xd relocation_matrix = current_geo_center * Eigen::MatrixXd::Ones(1, num_observable_nodes);
+
+    std::vector<int> list_num_violation;
+    std::vector<int> list_sorted_reliability;
+
+    for (int temp_ind = 0; temp_ind < object_templates_.size(); temp_ind++)
+    {
+        int num_violation = 0;
+        const Eigen::Matrix3Xd relocated_template = observable_templates + relocation_matrix;
+//        const Eigen::Matrix3Xd relocated_templates
+        for (ssize_t node_ind = 0; node_ind < num_observable_nodes; node_ind++)
+        {
+            const Eigen::Vector3d should_observed_point = relocated_template.col(observable_indexes.at(node_ind));
+            // TODO:: double check the useage here
+            if (observability_map_.EstimateDistance3d(should_observed_point).first < 0.0)
+            {
+                num_violation++;
+            }
+        }
+        list_num_violation.push_back(num_violation);
+        list_sorted_reliability.push_back(temp_ind);
+    }
+
+    for (int i = 0; i < num_observable_nodes; i++)
+    {
+        for (int j = i+1; j < num_observable_nodes; j++)
+        {
+            if (list_num_violation.at(i) > list_num_violation.at(j))
+            {
+                const int i_violation = list_num_violation.at(i);
+                const int i_index = list_sorted_reliability.at(i);
+                list_num_violation.at(i) = list_num_violation.at(j);
+                list_num_violation.at(j) = i_violation;
+                list_sorted_reliability.at(i) = list_sorted_reliability.at(j);
+                list_sorted_reliability.at(j) = i_index;
+            }
+        }
+    }
+    //return std::make_pair<std::vector<int>, std::vector<int>>(list_num_violation, list_sorted_reliability);
+    return std::make_pair(list_num_violation, list_sorted_reliability);
+}
+
+const std::pair<Eigen::MatrixXd, std::vector<std::pair<Eigen::MatrixXd, Eigen::Vector3d>>> TemplatesCollector::GetMostReliableTemplatesbase(
+        const std::pair<Eigen::MatrixXd, std::vector<std::pair<Eigen::MatrixXd, Eigen::Vector3d>>>& all_templates,
+        const std::vector<int>& sorted_reliable_list)
+{
+    const Eigen::MatrixXd& observable_templates = all_templates.first;
+    const std::vector<std::pair <Eigen::MatrixXd,Eigen::Vector3d>>& all_rots_and_centers = all_templates.second;
+
+    Eigen::MatrixXd reliable_templates = Eigen::MatrixXd::Zero(observable_templates.rows(), num_reliable_temps_);
+    std::vector<std::pair <Eigen::MatrixXd,Eigen::Vector3d>> reliable_rots_centers;
+
+    for (int temp_ind = 0; temp_ind < num_reliable_temps_; temp_ind++)
+    {
+        reliable_templates.col(temp_ind) = observable_templates.col(sorted_reliable_list.at(temp_ind));
+        reliable_rots_centers.push_back(all_rots_and_centers.at(sorted_reliable_list.at(temp_ind)));
+    }
+    return std::make_pair(reliable_templates, reliable_rots_centers);
+}
+
+
+
+
+//////////////////////////////////////////////////////////////////////////////
 // other helper functions
 //////////////////////////////////////////////////////////////////////////////
 
@@ -764,7 +845,7 @@ const bool TemplatesCollector::HaveSimilarTemplate(const Eigen::Matrix3Xd& templ
                 all_templates_matrix);
 
     const Eigen::MatrixXd& observable_templates = base_and_rot.first;
-    const std::vector<std::pair <Eigen::MatrixXd,Eigen::Vector3d>> all_rots_and_centers = base_and_rot.second;
+    const std::vector<std::pair <Eigen::MatrixXd,Eigen::Vector3d>>& all_rots_and_centers = base_and_rot.second;
 
     const Eigen::VectorXd templates_weight = GetTemplatesWeight(
                 relocated_configuration_in,

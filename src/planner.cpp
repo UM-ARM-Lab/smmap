@@ -1986,7 +1986,7 @@ void Planner::visualizeDesiredMotion(
         task_specification_->visualizeDeformableObject(
                 vis_,
                 DESIRED_DELTA_NS,
-                AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta / 10),
+                AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta / 40),
                 colors);
 
 
