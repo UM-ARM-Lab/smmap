@@ -481,9 +481,6 @@ const Eigen::Matrix3Xd TemplatesCollector::EstimateByProcrustesLeastSquaresL1Reg
 }
 
 
-
-
-
 /////////////////////////////////////////////////////////////////////////////
 // Translation and relocating geometric centra of gravity helpers
 /////////////////////////////////////////////////////////////////////////////
@@ -722,7 +719,7 @@ const Eigen::MatrixXd TemplatesCollector::GetFullMatchingBase(
 
 // The first vector store the # of nodes should be observed while not observable; The second vector list the indexes of
 // the templates, from most reliable to the least reliable
-std::pair<std::vector<int>, std::vector<int>> TemplatesCollector::GetTemplatesObservability(
+std::pair<std::vector<int>, std::vector<int>> TemplatesCollector::SortTemplatesReliability(
         const Eigen::Vector3d& current_geo_center,
         const std::pair<Eigen::MatrixXd, std::vector<std::pair<Eigen::MatrixXd, Eigen::Vector3d>>> base_and_rot,
         const WorldState& occluded_world_state)
@@ -825,9 +822,14 @@ const Eigen::Matrix3Xd TemplatesCollector::GetDataToBeMatched (
 // TODO: Keep this version or change the input of "addTemplate", use the "estimation" function as similarity check
 const bool TemplatesCollector::HaveSimilarTemplate(const Eigen::Matrix3Xd& template_in)
 {
-    if (object_templates_.size() > 1)
+
+    if (object_templates_.size() > 0)
     {
         assert(template_in.cols() == object_templates_.at(0).cols());
+    }
+    else
+    {
+        return false;
     }
     bool similarity_exists = false;
 
@@ -864,7 +866,7 @@ const bool TemplatesCollector::HaveSimilarTemplate(const Eigen::Matrix3Xd& templ
         const Eigen::Vector3d diff = estimation.col(node_ind) - relocated_configuration_in.col(node_ind);
         error += diff.norm();
     }
-    double min_error = 2;
+    double min_error = 0.5;
     if(error < min_error)
     {
         similarity_exists = true;

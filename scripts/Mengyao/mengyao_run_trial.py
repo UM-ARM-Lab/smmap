@@ -17,6 +17,10 @@ def mengyao_run_trial(experiment,
               use_adaptive_model = None,
               adaptive_model_learning_rate = None,
 
+              fully_observable = None,
+              recollect_all_templates = None,
+              collect_templates = None,
+
               use_diminishing_rigidity_model = None,
               use_constraint_model = None,
               use_diminishing_random_sample_model = None,
@@ -69,6 +73,15 @@ def mengyao_run_trial(experiment,
 
     if adaptive_model_learning_rate is not None:
         roslaunch_command.append('adaptive_model_learning_rate:=' + str(adaptive_model_learning_rate))
+
+    if fully_observable is not None:
+        roslaunch_command.append('fully_observable:=' + str(fully_observable))
+
+    if recollect_all_templates is not None:
+        roslaunch_command.append('recollect_all_templates:=' + str(recollect_all_templates))
+
+    if collect_templates is not None:
+        roslaunch_command.append('collect_templates:=' + str(collect_templates))
 
     if desired_down_scale is not None:
         roslaunch_command.append('desired_down_scale:=' + str(desired_down_scale))

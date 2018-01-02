@@ -143,7 +143,7 @@ namespace smmap
             //////////////////////////////////////////////////////////////////////////////
             // The first vector store the # of nodes shouldn't be observed; The second vector list the indexes of
             // the templates, from most reliable to the least reliable
-            std::pair<std::vector<int>, std::vector<int>> GetTemplatesObservability(
+            std::pair<std::vector<int>, std::vector<int>> SortTemplatesReliability(
                     const Eigen::Vector3d& current_geo_center,
                     const std::pair<Eigen::MatrixXd, std::vector<std::pair<Eigen::MatrixXd, Eigen::Vector3d>>> base_and_rot,
                     const WorldState& occluded_world_state);
