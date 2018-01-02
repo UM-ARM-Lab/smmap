@@ -111,7 +111,7 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
 
     // Move the object based on the movement of each gripper
     for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
-    {        
+    {
         // Assume that our Jacobian is correct, and predict where we will end up
         delta += J.block(0, 6 * (ssize_t)gripper_ind, J.rows(), 6) * grippers_pose_delta[gripper_ind];
     }
@@ -124,27 +124,19 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
             continue;
         }
         else
-        {            
-            Vector3d node_p_dot = delta.block(node_ind*3, 0, 3, 1);
-//            Vector3d node_p_dot = Vector3d::Map(node_p_dot_in_matrix, node_p_dot_in_matrix.size());
-            std::vector<double> sur_n
-                    = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
-            if(sur_n.size()>1)
+        {
+            const Vector3d& node_p_dot = delta.block<3, 1>(node_ind * 3, 0);
+            std::vector<double> sur_n = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
+            if (sur_n.size() > 1)
             {
-                Vector3d surface_normal= Vector3d::Map(sur_n.data(),sur_n.size());
-            //    double surface_vector_norm = std::sqrt(std::pow(surface_normal(0),2)+std::pow(surface_normal(1),2)+std::pow(surface_normal(2),2));
-            //    surface_normal = surface_normal/surface_vector_norm;
-                surface_normal = surface_normal/surface_normal.norm();
+                const Vector3d surface_normal = Vector3d::Map(sur_n.data(), sur_n.size()).normalized();
 
                 // if node is moving outward from obstacle, unmask.
-            //    double dot_result = 100*node_p_dot(0)*surface_normal(0)+100*node_p_dot(1)*surface_normal(1)+100*node_p_dot(2)*surface_normal(2);
-                double dot_result = node_p_dot.dot(surface_normal);
-                if (dot_result<0.0)
+                const double dot_result = node_p_dot.dot(surface_normal);
+                if (dot_result < 0.0)
                 {
-                    MatrixXd projected_node_p_dot = node_p_dot - dot_result * surface_normal;
-                //    const Matrix<double, 1, 3> surface_normal_inv = surface_normal.adjoint();
-                //    M.block<3,3>(node_ind*3,node_ind*3) = I3-surface_normal*surface_normal_inv;
-                    delta.block(node_ind*3, 0, 3, 1) = projected_node_p_dot;
+                    const auto projected_node_p_dot = node_p_dot - dot_result * surface_normal;
+                    delta.block<3, 1>(node_ind * 3, 0) = projected_node_p_dot;
                 }
             }
 
@@ -200,7 +192,6 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
         // P dot of the node on object, grasped gripper
         // Due to the assumption of free-flying grippers, I simply take it as the xyz motion of grippers
         // In the future, it should be the translational motion of end effector.
-        // const Vector3d& node_v = object_p_dot.segment<3>(nearest_node_on_gripper.second * 3); // planner
         const Vector3d& node_v = grippers_next_poses.at(gripper_ind).translation()
                 - grippers_current_poses.at(gripper_ind).translation();
 

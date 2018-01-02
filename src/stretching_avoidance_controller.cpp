@@ -126,18 +126,18 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
         for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
         {
             const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
-            if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
-            {
-                over_stretch_ = true;
-                break;
-            }
-        }
+	    if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
+	    {
+	        over_stretch_ = true;
+	        break;
+	    }
+	}
         if (over_stretch_)
         {
             ROS_INFO_NAMED("stretching_avoidance_controller", "Stretching Detected!!!");
             visualize_stretching_vector(current_world_state.object_configuration_);
             break;
-        }
+	}
     }
 #ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
     #pragma omp parallel for

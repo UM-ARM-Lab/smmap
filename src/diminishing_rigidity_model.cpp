@@ -89,7 +89,6 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToDeformableObjectJacob
 
     const ssize_t num_grippers = (ssize_t)grippers_pose.size();
     const ssize_t num_Jcols = num_grippers * 6;
-//    const ssize_t num_Jrows = num_nodes_ * 3;
     const ssize_t num_Jrows = current_configuration.cols() * 3;
     const ssize_t num_current_visible_nodes = current_configuration.cols();
 
@@ -101,7 +100,6 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToDeformableObjectJacob
         // Get all the data we need for a given gripper
         const Matrix3d& gripper_rot = grippers_pose[(size_t)gripper_ind].rotation();
 
-//        for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
         for (ssize_t node_ind = 0; node_ind < num_current_visible_nodes; node_ind++)
         {
             const double dist_to_gripper =

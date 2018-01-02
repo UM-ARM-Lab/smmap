@@ -281,13 +281,6 @@ void Planner::execute()
     }
 
     bool collect_template = templates_collector_->isCollectingTemplates();
-    /*
-    if (!collect_template)
-    {
-        collect_template = !templates_collector_->loadObjectTemplates();
-
-    }
-    */
     while (robot_.ok())
     {
         // TODO: Can I remove this extraneous world_state object? All it does is cache the value of world_feedback for
@@ -503,8 +496,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
             const ObjectPointSet estimate_configuration =
                     templates_collector_->GetEstimateConfiguration(occluded_world_state);
 
-            //TODO: replace the occluded object with the estimate one
-
             visualizeEstimateNodesOnObject(
                         estimate_configuration,
                         world_state.observable_nodes_,
@@ -544,11 +535,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 robot_.dt_);
 
     const ObjectPointSet current_true_object_configuration = world_state.object_configuration_;
-    //const ObjectPointSet current_object_configuration = occluded_world_state.object_configuration_;
-
     if (visualize_desired_motion_)
     {
-    //    visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_);
         visualizeDesiredMotion(occluded_world_state, model_input_data.desired_object_motion_);
     }
 
@@ -1982,20 +1970,18 @@ void Planner::visualizeDesiredMotion(
             colors[node_ind].b = 0.0f;
             colors[node_ind].a = desired_motion.weight((ssize_t)node_ind * 3) > 0 ? 1.0f : 0.0f;
         }
-
         task_specification_->visualizeDeformableObject(
                 vis_,
                 DESIRED_DELTA_NS,
                 AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta / 40),
                 colors);
 
-
         if (task_specification_->deformable_type_ == DeformableType::CLOTH)
         {
             vis_.visualizeObjectDelta(
                         DESIRED_DELTA_NS,
                         current_world_state.object_configuration_,
-                        AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta ),
+                        AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
                         Visualizer::Green());
         }
     }
@@ -2197,7 +2183,6 @@ void Planner::initializeControllerLogging()
                                        Log::Log(log_folder + "individual_computation_times.txt", false)));
     }
 }
-
 
 // Note that resulting_world_state may not be exactly indentical to individual_model_rewards[model_used]
 // because of the way forking words (and doesn't) in Bullet. They should be very close however.
@@ -2404,7 +2389,6 @@ WorldState Planner::occludedWorldState(const WorldState& world_state)
     {
         ssize_t occluded_ind = node_ind - count_occlusion;
 
-    //    if(node_ind > num_all_nodes / num_rows && node_ind < num_all_nodes * 2 / num_rows)
         if(!observable_nodes.at(node_ind))
         {
             ssize_t numCols = occluded_world_state.object_configuration_.cols()-1;

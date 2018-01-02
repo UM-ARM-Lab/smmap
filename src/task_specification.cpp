@@ -681,7 +681,6 @@ const DijkstrasCoverageTask::Correspondences& DijkstrasCoverageTask::getCoverPoi
 
             assert(current_correspondences_.uncovered_target_points_idxs_.size() == current_correspondences_.uncovered_target_points_distances_.size());
 
-        //    assert((ssize_t)current_correspondences_.correspondences_.size() == num_nodes_);
 
             assert((ssize_t)current_correspondences_.correspondences_.size() == num_current_visible_nodes);
             assert((ssize_t)current_correspondences_.correspondences_next_step_.size() == num_current_visible_nodes);
@@ -700,7 +699,6 @@ const DijkstrasCoverageTask::Correspondences& DijkstrasCoverageTask::getCoverPoi
                 total_correspondences += current_num_correspondences;
             }
             // Revised by Mengyao for occluded usage
-        //    assert((ssize_t)total_correspondences == num_cover_points_);
             assert((ssize_t)total_correspondences <= num_cover_points_);
 
             ROS_INFO_STREAM_NAMED("task_specification", "Calculated correspondences in        " << GlobalStopwatch(READ) << " seconds");
