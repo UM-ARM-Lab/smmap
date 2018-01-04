@@ -133,7 +133,7 @@ namespace smmap
      */
     inline double GetMinimumDistanceToGripper(
             const std::vector<long>& gripper_indices,
-            long node_index,
+            const long node_index,
             const Eigen::MatrixXd& object_initial_node_distance)
     {
         double min_dist = std::numeric_limits<double>::infinity();
@@ -149,21 +149,20 @@ namespace smmap
     // Return both min distance and grasped node index
     inline std::pair<double, long> GetMinimumDistanceIndexToGripper(
             const std::vector<long>& gripper_indices,
-            long node_index,
+            const long node_index,
             const Eigen::MatrixXd& object_initial_node_distance)
     {
         double min_dist = std::numeric_limits<double>::infinity();
-        double pre_min = min_dist;
         long min_ind = gripper_indices.front();
         for (long ind: gripper_indices)
         {
-            min_dist = std::min(min_dist, object_initial_node_distance(ind, node_index));
-            if (pre_min!=min_dist) {min_ind = ind; }
-            pre_min = min_dist;
+            if (min_dist > object_initial_node_distance(ind, node_index))
+            {
+                min_dist = object_initial_node_distance(ind, node_index);
+                min_ind = ind;
+            }
         }
-        std::pair<double,long> min_pair;
-        min_pair = std::make_pair(min_dist,min_ind);
-        return min_pair;
+        return {min_dist, min_ind};
     }
 
 

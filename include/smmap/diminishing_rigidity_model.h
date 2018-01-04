@@ -5,7 +5,6 @@
 
 namespace smmap
 {
-    // TODO: find a way to accept dynamic/online gripper re-grasping
     class DiminishingRigidityModel final : public JacobianModel
     {
         public:
