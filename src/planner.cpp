@@ -1347,7 +1347,6 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
     ConstraintJacobianModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
 
     const bool optimization_enabled = GetJacobianControllerOptimizationEnabled(ph_);
-
     const PlannerTrialType planner_trial_type = GetPlannerTrialType(ph_);
 
     switch (planner_trial_type)

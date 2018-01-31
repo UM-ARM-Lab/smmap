@@ -15,7 +15,7 @@ ClothColabFolding::ClothColabFolding(ros::NodeHandle& nh, ros::NodeHandle& ph)
 {}
 
 void ClothColabFolding::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
@@ -24,7 +24,7 @@ void ClothColabFolding::visualizeDeformableObject_impl(
 }
 
 void ClothColabFolding::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const
@@ -79,7 +79,7 @@ std::vector<ssize_t> ClothColabFolding::getNodeNeighbours_impl(const ssize_t nod
 
 PointReflector ClothColabFolding::createPointReflector(ros::NodeHandle& nh)
 {
-    ROS_INFO_NAMED("cloth_colab_folding_task" , "Getting mirror line");
+    ROS_INFO_NAMED("cloth_colab_folding" , "Getting mirror line");
 
     // Get the initial configuration of the object
     ros::ServiceClient mirror_line_client =
@@ -89,18 +89,18 @@ PointReflector ClothColabFolding::createPointReflector(ros::NodeHandle& nh)
 
     deformable_manipulation_msgs::GetMirrorLine mirror_line_data;
     mirror_line_client.call(mirror_line_data);
+    CHECK_FRAME_NAME("cloth_colab_folding", GetWorldFrameName(), mirror_line_data.response.header.frame_id);
 
     return PointReflector(mirror_line_data.response.mid_x,
-                           mirror_line_data.response.min_y,
-                           mirror_line_data.response.max_y);
+                          mirror_line_data.response.min_y,
+                          mirror_line_data.response.max_y);
 }
 
 std::map<long, long> ClothColabFolding::createMirrorMap(ros::NodeHandle& nh, const PointReflector& point_reflector)
 {
-    ObjectPointSet object_initial_configuration =
-        GetObjectInitialConfiguration(nh);
-
     ROS_INFO_NAMED("cloth_colab_folding", "Finding point correspondences");
+
+    const ObjectPointSet object_initial_configuration = GetObjectInitialConfiguration(nh);
 
     std::map<long, long> mirror_map;
     for (long node_ind = 0; node_ind < object_initial_configuration.cols(); node_ind++)
@@ -109,7 +109,7 @@ std::map<long, long> ClothColabFolding::createMirrorMap(ros::NodeHandle& nh, con
         // Note that nodes that have an x value > than mid_x are on the manual gripper side
         if (object_initial_configuration(0, node_ind) > point_reflector.get_mid_x())
         {
-            long mirror_ind = ClosestPointInSet(object_initial_configuration,
+            const long mirror_ind = ClosestPointInSet(object_initial_configuration,
                     point_reflector.reflect(object_initial_configuration.col(node_ind)));
 
             mirror_map[node_ind] = mirror_ind;
@@ -137,7 +137,7 @@ RopeCylinderCoverage::RopeCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle&
 {}
 
 void RopeCylinderCoverage::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
@@ -146,7 +146,7 @@ void RopeCylinderCoverage::visualizeDeformableObject_impl(
 }
 
 void RopeCylinderCoverage::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const
@@ -177,7 +177,7 @@ ClothCylinderCoverage::ClothCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandl
 }
 
 void ClothCylinderCoverage::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
@@ -186,7 +186,7 @@ void ClothCylinderCoverage::visualizeDeformableObject_impl(
 }
 
 void ClothCylinderCoverage::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const
@@ -215,7 +215,7 @@ ClothTableCoverage::ClothTableCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph)
 {}
 
 void ClothTableCoverage::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
@@ -224,7 +224,7 @@ void ClothTableCoverage::visualizeDeformableObject_impl(
 }
 
 void ClothTableCoverage::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const
@@ -253,7 +253,7 @@ ClothWAFR::ClothWAFR(ros::NodeHandle& nh, ros::NodeHandle& ph)
 {}
 
 void ClothWAFR::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
@@ -262,7 +262,7 @@ void ClothWAFR::visualizeDeformableObject_impl(
 }
 
 void ClothWAFR::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const
@@ -297,7 +297,7 @@ ClothWall::ClothWall(ros::NodeHandle& nh, ros::NodeHandle& ph)
 {}
 
 void ClothWall::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
@@ -306,7 +306,7 @@ void ClothWall::visualizeDeformableObject_impl(
 }
 
 void ClothWall::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const
@@ -337,7 +337,7 @@ ClothSinglePole::ClothSinglePole(ros::NodeHandle& nh, ros::NodeHandle& ph)
 {}
 
 void ClothSinglePole::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
@@ -346,7 +346,7 @@ void ClothSinglePole::visualizeDeformableObject_impl(
 }
 
 void ClothSinglePole::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const
@@ -375,7 +375,7 @@ ClothDoubleSlit::ClothDoubleSlit(ros::NodeHandle& nh, ros::NodeHandle& ph)
 {}
 
 void ClothDoubleSlit::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
@@ -384,7 +384,7 @@ void ClothDoubleSlit::visualizeDeformableObject_impl(
 }
 
 void ClothDoubleSlit::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const
@@ -423,7 +423,7 @@ RopeMaze::RopeMaze(ros::NodeHandle& nh, ros::NodeHandle& ph)
 }
 
 void RopeMaze::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
@@ -432,7 +432,7 @@ void RopeMaze::visualizeDeformableObject_impl(
 }
 
 void RopeMaze::visualizeDeformableObject_impl(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const

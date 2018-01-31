@@ -57,13 +57,13 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             void visualizeDeformableObject(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const;
 
             void visualizeDeformableObject(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const;
@@ -201,13 +201,13 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const = 0;
 
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const = 0;

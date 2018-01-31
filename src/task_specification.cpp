@@ -65,10 +65,12 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
             return std::make_shared<ClothDoubleSlit>(nh, ph);
 
         case TaskType::ROPE_MAZE:
-            return std::make_shared<RopeMaze>(nh, ph);
-
         case TaskType::ROPE_ZIG_MATCH:
             return std::make_shared<RopeMaze>(nh, ph);
+
+        case TaskType::CLOTH_PLACEMAT_LIVE_ROBOT:
+            assert(false && "TODO");
+//            return std::make_shared<ClothPlacemat>(nh, ph);
 
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
@@ -137,7 +139,7 @@ TaskSpecification::TaskSpecification(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void TaskSpecification::visualizeDeformableObject(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
@@ -146,7 +148,7 @@ void TaskSpecification::visualizeDeformableObject(
 }
 
 void TaskSpecification::visualizeDeformableObject(
-        Visualizer& vis,
+        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const
@@ -288,7 +290,11 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyC
             const double dist = object_current_node_distance(first_node, second_node);
             if (max_dist < dist)
             {
-                addStrechingCorrectionVector(stretching_correction, object_configuration, first_node, second_node, dist - object_initial_node_distance_(first_node, second_node));
+                addStrechingCorrectionVector(stretching_correction,
+                                             object_configuration,
+                                             first_node,
+                                             second_node,
+                                             dist - object_initial_node_distance_(first_node, second_node));
 
                 if (visualize)
                 {
@@ -334,7 +340,12 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaPairwi
                 const double dist = (object_configuration.col(second_node) - object_configuration.col(first_node)).norm();
                 if (max_dist < dist)
                 {
-                    addStrechingCorrectionVector(stretching_correction, object_configuration, first_node, second_node, dist - object_initial_node_distance_(first_node, second_node));
+                    addStrechingCorrectionVector(
+                                stretching_correction,
+                                object_configuration,
+                                first_node,
+                                second_node,
+                                dist - object_initial_node_distance_(first_node, second_node));
 
                     if (visualize)
                     {
@@ -1087,7 +1098,7 @@ std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::fin
         const ssize_t cover_idx) const
 {
     const Eigen::Vector3d& cover_point = cover_points_.col(cover_idx);
-    const auto& dijkstras_individual_result         = dijkstras_results_[(size_t)cover_idx];
+    const auto& dijkstras_individual_result = dijkstras_results_[(size_t)cover_idx];
 
     ssize_t closest_deformable_idx = -1;
     double min_dist = std::numeric_limits<double>::infinity();

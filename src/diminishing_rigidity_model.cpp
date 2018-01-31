@@ -48,7 +48,8 @@ DiminishingRigidityModel::DiminishingRigidityModel(
 {
     if (!static_data_initialized_.load())
     {
-        throw_arc_exception(std::runtime_error, "You must call SetInitialObjectConfiguration before constructing a DiminishingRigidityModel");
+        throw_arc_exception(std::runtime_error,
+                            "You must call SetInitialObjectConfiguration before constructing a DiminishingRigidityModel");
     }
 
     if (translation_deformability < 0)

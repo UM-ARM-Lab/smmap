@@ -10,6 +10,7 @@ using namespace smmap;
 
 RobotInterface::RobotInterface(ros::NodeHandle& nh)
     : nh_(nh)
+    , world_frame_name_(GetWorldFrameName())
     , grippers_data_(GetGrippersData(nh_))
     , gripper_collision_checker_(nh_)
     , execute_gripper_movement_client_(nh_.serviceClient<deformable_manipulation_msgs::ExecuteGripperMovement>(GetExecuteGrippersMovementTopic(nh_), true))
@@ -22,17 +23,17 @@ RobotInterface::RobotInterface(ros::NodeHandle& nh)
 
 RobotInterface::~RobotInterface()
 {
-    ROS_INFO_NAMED("task", "Terminating");
+    ROS_INFO_NAMED("robot_interface", "Terminating");
     spin_thread_.join();
 }
 
 WorldState RobotInterface::start()
 {
-    ROS_INFO_NAMED("robot_bridge", "Waiting for the robot gripper action server to be available");
+    ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper action server to be available");
     execute_gripper_movement_client_.waitForExistence();
     test_grippers_poses_client_.waitForServer();
 
-    ROS_INFO_NAMED("robot_bridge", "Kickstarting the planner with a no-op");
+    ROS_INFO_NAMED("robot_interface", "Kickstarting the planner with a no-op");
     return sendGrippersPoses_impl(noOpGripperMovement());
 }
 
@@ -69,8 +70,9 @@ const AllGrippersSinglePose RobotInterface::getGrippersPose()
         pose_srv_data.request.name = grippers_data_[gripper_ind].name_;
         if (!gripper_pose_client.call(pose_srv_data))
         {
-            ROS_FATAL_STREAM_NAMED("task", "Unabled to retrieve gripper pose: " << grippers_data_[gripper_ind].name_);
+            ROS_FATAL_STREAM_NAMED("robot_interface", "Unabled to retrieve gripper pose: " << grippers_data_[gripper_ind].name_);
         }
+        CHECK_FRAME_NAME("robot_interface", world_frame_name_, pose_srv_data.response.header.frame_id);
 
         grippers_pose[gripper_ind] =
                 EigenHelpersConversions::GeometryPoseToEigenIsometry3d(pose_srv_data.response.pose);
@@ -117,6 +119,7 @@ deformable_manipulation_msgs::ExecuteGripperMovementRequest RobotInterface::noOp
     movement_request.grippers_names = GetGripperNames(grippers_data_);
     movement_request.gripper_poses.resize(grippers_data_.size());
 
+    // TODO: resolve code duplication between here, getGrippersPose(), and toRosTestPosesGoal() etc.
     ros::ServiceClient gripper_pose_client =
         nh_.serviceClient<deformable_manipulation_msgs::GetGripperPose>(GetGripperPoseTopic(nh_));
     gripper_pose_client.waitForExistence();
@@ -126,11 +129,15 @@ deformable_manipulation_msgs::ExecuteGripperMovementRequest RobotInterface::noOp
         pose_srv_data.request.name = grippers_data_[gripper_ind].name_;
         if (!gripper_pose_client.call(pose_srv_data))
         {
-            ROS_FATAL_STREAM_NAMED("task", "Unabled to retrieve gripper pose: " << grippers_data_[gripper_ind].name_);
+            ROS_FATAL_STREAM_NAMED("robot_interface", "Unabled to retrieve gripper pose: " << grippers_data_[gripper_ind].name_);
         }
+        CHECK_FRAME_NAME("robot_interface", world_frame_name_, pose_srv_data.response.header.frame_id);
 
         movement_request.gripper_poses[gripper_ind] = pose_srv_data.response.pose;
     }
+
+    movement_request.header.frame_id = world_frame_name_;
+    movement_request.header.stamp = ros::Time::now();
     return movement_request;
 }
 
@@ -140,6 +147,8 @@ deformable_manipulation_msgs::ExecuteGripperMovementRequest RobotInterface::toRo
     deformable_manipulation_msgs::ExecuteGripperMovementRequest movement_request;
     movement_request.grippers_names = GetGripperNames(grippers_data_);
     movement_request.gripper_poses = EigenHelpersConversions::VectorIsometry3dToVectorGeometryPose(grippers_pose);
+    movement_request.header.frame_id = world_frame_name_;
+    movement_request.header.stamp = ros::Time::now();
     return movement_request;
 }
 
@@ -152,10 +161,12 @@ deformable_manipulation_msgs::TestGrippersPosesGoal RobotInterface::toRosTestPos
     goal.poses_to_test.resize(grippers_poses.size());
     for (size_t pose_ind = 0; pose_ind < grippers_poses.size(); pose_ind++)
     {
-        goal.poses_to_test[pose_ind].pose =
+        goal.poses_to_test[pose_ind].poses =
                 EigenHelpersConversions::VectorIsometry3dToVectorGeometryPose(grippers_poses[pose_ind]);
     }
 
+    goal.header.frame_id = world_frame_name_;
+    goal.header.stamp = ros::Time::now();
     return goal;
 }
 
@@ -165,16 +176,20 @@ WorldState RobotInterface::sendGrippersPoses_impl(
     deformable_manipulation_msgs::ExecuteGripperMovementResponse result;
     if (!execute_gripper_movement_client_.call(movement, result))
     {
-        ROS_FATAL_NAMED("planner", "Sending a gripper movement to the robot failed");
+        ROS_FATAL_NAMED("robot_interface", "Sending a gripper movement to the robot failed");
     }
+    CHECK_FRAME_NAME("robot_interface", world_frame_name_, result.sim_state.header.frame_id);
     return ConvertToEigenFeedback(result.sim_state);
 }
 
 
 
-void RobotInterface::internalTestPoseFeedbackCallback(const deformable_manipulation_msgs::TestGrippersPosesActionFeedbackConstPtr& feedback, const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback)
+void RobotInterface::internalTestPoseFeedbackCallback(
+        const deformable_manipulation_msgs::TestGrippersPosesActionFeedbackConstPtr& feedback,
+        const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback)
 {
     ROS_INFO_STREAM_NAMED("robot_interface", "Got feedback for test number " << feedback->feedback.test_id);
+    CHECK_FRAME_NAME("robot_interface", world_frame_name_, feedback->feedback.sim_state.header.frame_id);
     feedback_callback(feedback->feedback.test_id, ConvertToEigenFeedback(feedback->feedback.sim_state));
     if (feedback_recieved_[feedback->feedback.test_id] == false)
     {
@@ -194,12 +209,15 @@ bool RobotInterface::testGrippersPoses_impl(
     feedback_recieved_.resize(goal.poses_to_test.size(), false);
 
     ros::Subscriber internal_feedback_sub = nh_.subscribe<deformable_manipulation_msgs::TestGrippersPosesActionFeedback>(
-                GetTestGrippersPosesTopic(nh_) + "/feedback", 1000, boost::bind(&RobotInterface::internalTestPoseFeedbackCallback, this, _1, feedback_callback));
+                GetTestGrippersPosesTopic(nh_) + "/feedback",
+                1000,
+                boost::bind(&RobotInterface::internalTestPoseFeedbackCallback, this, _1, feedback_callback));
 
     test_grippers_poses_client_.sendGoal(goal);
 
+    // TODO: Why am I waitingForResult and checking the feedback counter?
+    // One possible reason is because messages can arrive out of order
     const bool result = test_grippers_poses_client_.waitForResult();
-
     while (feedback_counter_ > 0)
     {
         std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));

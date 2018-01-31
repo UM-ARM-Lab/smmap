@@ -49,12 +49,10 @@ namespace smmap
         WorldState feedback_eigen;
 
         feedback_eigen.object_configuration_ =
-                EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(
-                    feedback_ros.object_configuration);
+                EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(feedback_ros.object_configuration);
 
         feedback_eigen.all_grippers_single_pose_ =
-                EigenHelpersConversions::VectorGeometryPoseToVectorIsometry3d(
-                    feedback_ros.gripper_poses);
+                EigenHelpersConversions::VectorGeometryPoseToVectorIsometry3d(feedback_ros.gripper_poses);
 
         // TODO: modify the feedback to change this data ordering
         size_t num_grippers = feedback_ros.gripper_poses.size();

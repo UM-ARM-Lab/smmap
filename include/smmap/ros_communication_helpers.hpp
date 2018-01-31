@@ -11,6 +11,14 @@
 #include "smmap/grippers.hpp"
 #include "smmap/trajectory.hpp"
 
+#define CHECK_FRAME_NAME(logger, expected, given)                                                       \
+    if ((given) != (expected))                                                                          \
+    {                                                                                                   \
+        ROS_FATAL_STREAM_NAMED((logger), __func__ << " response data in incorrect frame. Expecting '"   \
+                               << (expected) << "', got '" << (given) << "'.");                         \
+        throw_arc_exception(std::invalid_argument, "Invalid frame name");                               \
+    }
+
 namespace smmap
 {
     inline std::vector<GripperData> GetGrippersData(ros::NodeHandle& nh)
@@ -116,6 +124,7 @@ namespace smmap
         object_initial_configuration_client.call(srv_data);
 
         ROS_INFO_NAMED("ros_comms_helpers" , "Number of points on object: %zu", srv_data.response.points.size());
+        CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), srv_data.response.header.frame_id);
 
         return EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(srv_data.response.points);
     }
@@ -136,6 +145,7 @@ namespace smmap
             EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(srv_data.response.points);
 
         ROS_INFO_NAMED("ros_comms_helpers" , "Number of cover points: %zu", srv_data.response.points.size());
+        CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), srv_data.response.header.frame_id);
 
         return cover_points;
     }
@@ -146,26 +156,30 @@ namespace smmap
 
         // Get the initial configuration of the object
         ros::ServiceClient cover_point_normal_vectors_client =
-            nh.serviceClient<deformable_manipulation_msgs::GetPointSet>(GetCoverPointNormalsTopic(nh));
+            nh.serviceClient<deformable_manipulation_msgs::GetVector3Set>(GetCoverPointNormalsTopic(nh));
 
         cover_point_normal_vectors_client.waitForExistence();
 
-        deformable_manipulation_msgs::GetPointSet srv_data;
+        deformable_manipulation_msgs::GetVector3Set srv_data;
         cover_point_normal_vectors_client.call(srv_data);
         ObjectPointSet cover_point_normals =
-            EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(srv_data.response.points);
+            EigenHelpersConversions::VectorGeometryVector3ToEigenMatrix3Xd(srv_data.response.vectors);
         for (ssize_t col_ind = 0; col_ind < cover_point_normals.cols(); ++col_ind)
         {
             cover_point_normals.col(col_ind).normalize();
         }
 
-        ROS_INFO_NAMED("ros_comms_helpers" , "Number of cover point normals: %zu", srv_data.response.points.size());
+        ROS_INFO_NAMED("ros_comms_helpers" , "Number of cover point normals: %zu", srv_data.response.vectors.size());
+        CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), srv_data.response.header.frame_id);
 
         return cover_point_normals;
     }
 
     // TODO: replace these out params with something else
-    inline void GetFreeSpaceGraph(ros::NodeHandle& nh, arc_dijkstras::Graph<Eigen::Vector3d>& free_space_graph, std::vector<int64_t>& cover_ind_to_free_space_graph_ind)
+    inline void GetFreeSpaceGraph(
+            ros::NodeHandle& nh,
+            arc_dijkstras::Graph<Eigen::Vector3d>& free_space_graph,
+            std::vector<int64_t>& cover_ind_to_free_space_graph_ind)
     {
         ROS_INFO_NAMED("ros_comms_helpers", "Getting free space graph");
 
@@ -177,6 +191,7 @@ namespace smmap
 
         deformable_manipulation_msgs::GetFreeSpaceGraph srv_data;
         free_space_graph_client.call(srv_data);
+        CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), srv_data.response.header.frame_id);
 
         // Next we deserialize the graph itself
         {
@@ -185,7 +200,7 @@ namespace smmap
             {
                 uint64_t current_position = current;
 
-                // Deserialze 3 floats, converting into doubles afterwards
+                // Deserialze 3 floats (btScalar type), converting into doubles afterwards
                 std::pair<float, uint64_t> x = arc_utilities::DeserializeFixedSizePOD<float>(buffer, current_position);
                 current_position += x.second;
                 std::pair<float, uint64_t> y = arc_utilities::DeserializeFixedSizePOD<float>(buffer, current_position);
@@ -227,6 +242,7 @@ namespace smmap
         // Then parse the message and return the result
         sdf_tools::SignedDistanceField sdf;
         sdf.LoadFromMessageRepresentation(srv_data.response.sdf);
+        CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), sdf.GetFrame());
         return sdf;
     }
 }

@@ -505,6 +505,7 @@ namespace smmap
     {
         public:
             GripperCollisionChecker(ros::NodeHandle& nh)
+                : world_frame_name_(GetWorldFrameName())
             {
                 collision_checker_client_ =
                     nh.serviceClient<deformable_manipulation_msgs::GetGripperCollisionReport>(GetGripperCollisionCheckTopic(nh));
@@ -516,12 +517,21 @@ namespace smmap
                     const AllGrippersSinglePose& gripper_poses)
             {
                 deformable_manipulation_msgs::GetGripperCollisionReport collision_report_ros;
+                collision_report_ros.request.header.frame_id = world_frame_name_;
                 collision_report_ros.request.pose =
                         EigenHelpersConversions::VectorIsometry3dToVectorGeometryPose(gripper_poses);
 
                 if (!collision_checker_client_.call(collision_report_ros))
                 {
-                    ROS_FATAL_NAMED("gripper collision check", "Unable to retrieve gripper collision report.");
+                    ROS_FATAL_NAMED("gripper_collision_check", "Unable to retrieve gripper collision report.");
+                }
+
+                // TODO: Can we find a reasonable way to use CHECK_FRAME_NAME from ros_comms_helpers.hpp?
+                if (collision_report_ros.response.header.frame_id != world_frame_name_)
+                {
+                    ROS_FATAL_STREAM_NAMED("robot_interface", "gripperCollisionCheck() response data in incorrect frame. Expecting '"
+                                           << world_frame_name_ << "', got '" << collision_report_ros.response.header.frame_id << "'.");
+                    throw_arc_exception(std::invalid_argument, "Invalid frame name");
                 }
 
                 std::vector<CollisionData> collision_report_eigen;
@@ -542,6 +552,7 @@ namespace smmap
             }
 
         private:
+            const std::string world_frame_name_;
             ros::ServiceClient collision_checker_client_;
     };
 

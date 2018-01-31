@@ -16,13 +16,13 @@ namespace smmap
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -59,13 +59,13 @@ namespace smmap
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -88,13 +88,13 @@ namespace smmap
 
         private:
             void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -118,13 +118,13 @@ namespace smmap
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -147,13 +147,13 @@ namespace smmap
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -176,13 +176,13 @@ namespace smmap
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -205,13 +205,13 @@ namespace smmap
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -234,13 +234,13 @@ namespace smmap
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -264,13 +264,13 @@ namespace smmap
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -281,6 +281,36 @@ namespace smmap
                     const WorldState& world_state) final;
 
             const LineNeighbours neighbours_;
+    };
+
+    /**
+     * @brief The ClothPlacemat class
+     */
+    class ClothPlacemat : public FixedCorrespondencesTask
+    {
+        public:
+            ClothPlacemat(ros::NodeHandle& nh, ros::NodeHandle& ph);
+
+        private:
+            virtual void visualizeDeformableObject_impl(
+                    const smmap_utilities::Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std_msgs::ColorRGBA& color) const final;
+
+            virtual void visualizeDeformableObject_impl(
+                    const smmap_utilities::Visualizer& vis,
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std::vector<std_msgs::ColorRGBA>& colors) const final;
+
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
+
+            virtual bool taskDone_impl(
+                    const WorldState& world_state) final;
+
+            // TODO: Not clear that this will be the case moving forward - are all nodes in a grid?
+            const Grid4Neighbours neighbours_;
     };
 }
 

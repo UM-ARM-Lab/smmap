@@ -44,6 +44,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             ros::NodeHandle nh_;
+            const std::string world_frame_name_; // Frame that all incomming data must be in
             const std::vector<GripperData> grippers_data_;
             GripperCollisionChecker gripper_collision_checker_;
             ros::ServiceClient execute_gripper_movement_client_;
