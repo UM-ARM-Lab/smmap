@@ -450,3 +450,52 @@ bool RopeMaze::taskDone_impl(
 {
     return calculateError(world_state) < error_threshold_task_done_;
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Rope maze
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+ClothPlacemat::ClothPlacemat(ros::NodeHandle& nh, ros::NodeHandle& ph)
+    : FixedCorrespondencesTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_PLACEMAT_LIVE_ROBOT)
+    // TODO: is this the correct stride?
+    , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
+{
+    assert(num_nodes_ == num_cover_points_);
+
+    correspondences_internal_fixed_.clear();
+    correspondences_internal_fixed_.reserve(num_nodes_);
+
+    for (ssize_t idx = 0; idx < num_nodes_; ++idx)
+    {
+        correspondences_internal_fixed_.push_back({idx});
+    }
+}
+
+void ClothPlacemat::visualizeDeformableObject_impl(
+        const Visualizer& vis,
+        const std::string& marker_name,
+        const ObjectPointSet& object_configuration,
+        const std_msgs::ColorRGBA& color) const
+{
+    vis.visualizeCloth(marker_name, object_configuration, color);
+}
+
+void ClothPlacemat::visualizeDeformableObject_impl(
+        const Visualizer& vis,
+        const std::string& marker_name,
+        const ObjectPointSet& object_configuration,
+        const std::vector<std_msgs::ColorRGBA>& colors) const
+{
+    vis.visualizeCloth(marker_name, object_configuration, colors);
+}
+
+std::vector<ssize_t> ClothPlacemat::getNodeNeighbours_impl(const ssize_t node) const
+{
+    return neighbours_.getNodeNeighbours(node);
+}
+
+bool ClothPlacemat::taskDone_impl(
+        const WorldState& world_state)
+{
+    return calculateError(world_state) < error_threshold_task_done_;
+}

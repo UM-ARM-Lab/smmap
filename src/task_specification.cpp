@@ -69,8 +69,7 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
             return std::make_shared<RopeMaze>(nh, ph);
 
         case TaskType::CLOTH_PLACEMAT_LIVE_ROBOT:
-            assert(false && "TODO");
-//            return std::make_shared<ClothPlacemat>(nh, ph);
+            return std::make_shared<ClothPlacemat>(nh, ph);
 
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
