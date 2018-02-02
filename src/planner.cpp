@@ -192,6 +192,7 @@ Planner::Planner(
     , visualize_desired_motion_(GetVisualizeObjectDesiredMotion(ph_))
     , visualize_gripper_motion_(GetVisualizerGripperMotion(ph_))
     , visualize_predicted_motion_(GetVisualizeObjectPredictedMotion(ph_))
+    , visualize_free_space_graph_(GetVisualizeFreeSpaceGraph(ph_))
 {
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
     initializePlannerLogging();
@@ -208,16 +209,19 @@ void Planner::execute()
     const double start_time = world_feedback.sim_time_;
     initializeModelAndControllerSet(world_feedback);
 
+    // Convert in general if possible, as this is usd elsewhere too
+    dijkstras_task_ = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
     if (enable_stuck_detection_)
     {
-        // Extract the maximum distance between the grippers
-        // This assumes that the starting position of the grippers is at the maximum "unstretched" distance
+        assert(dijkstras_task_ != nullptr);
+
+        // TODO: Assumptions in the implementation that need be addressed later
         assert(robot_.getGrippersData().size() == 2);
         assert(model_list_.size() == 1);
 
+        // Extract the maximum distance between the grippers
+        // This assumes that the starting position of the grippers is at the maximum "unstretched" distance
         const auto& grippers_starting_poses = world_feedback.all_grippers_single_pose_;
-        dijkstras_task_ = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
-        assert(dijkstras_task_ != nullptr);
         const double max_band_distance =
                 (grippers_starting_poses[0].translation() - grippers_starting_poses[1].translation()).norm()
                 * dijkstras_task_->maxStretchFactor();
@@ -272,6 +276,11 @@ void Planner::execute()
                         GetRRTMaxSmoothingIterations(ph_),
                         GetRRTMaxFailedSmoothingIterations(ph_),
                         !GetDisableAllVisualizations(ph_)));
+    }
+
+    if (visualize_free_space_graph_ && dijkstras_task_ != nullptr)
+    {
+        dijkstras_task_->visualizeFreeSpaceGraph();
     }
 
     while (robot_.ok())
@@ -911,7 +920,7 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
     //////////////////////////// Determine the cluster centers /////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    const auto correspondences = dijkstras_task_->getCoverPointCorrespondences(world_state);
+    const auto& correspondences = dijkstras_task_->getCoverPointCorrespondences(world_state);
     const auto& cover_point_indices_= correspondences.uncovered_target_points_idxs_;
 
     VectorVector3d cluster_targets;
@@ -1888,7 +1897,7 @@ void Planner::visualizeDesiredMotion(
 void Planner::visualizeGripperMotion(
         const AllGrippersSinglePose& current_gripper_pose,
         const AllGrippersSinglePoseDelta& gripper_motion,
-        const ssize_t model_ind)
+        const ssize_t model_ind) const
 {
     const auto grippers_test_poses = kinematics::applyTwist(current_gripper_pose, gripper_motion);
     EigenHelpers::VectorVector3d line_starts;

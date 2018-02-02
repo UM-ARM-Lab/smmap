@@ -171,7 +171,7 @@ namespace smmap
             void visualizeGripperMotion(
                     const AllGrippersSinglePose& current_gripper_pose,
                     const AllGrippersSinglePoseDelta& gripper_motion,
-                    const ssize_t model_ind);
+                    const ssize_t model_ind) const;
 
             void initializePlannerLogging();
 
@@ -201,6 +201,7 @@ namespace smmap
             const bool visualize_desired_motion_;
             const bool visualize_gripper_motion_;
             const bool visualize_predicted_motion_;
+            const bool visualize_free_space_graph_;
 
         public:
             // Topic names used for publishing visualization data

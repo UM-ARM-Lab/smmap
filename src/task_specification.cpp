@@ -623,6 +623,7 @@ DijkstrasCoverageTask::DijkstrasCoverageTask(
     , current_correspondences_calculated_(false)
     , current_correspondences_last_simtime_calced_(std::numeric_limits<double>::quiet_NaN())
     , current_correspondences_(num_nodes_)
+    , visualize_correspondences_(GetVisualizeCorrespondences(ph_))
 {
     GetFreeSpaceGraph(nh, free_space_graph_, cover_ind_to_free_space_graph_ind_);
     assert(cover_ind_to_free_space_graph_ind_.size() == (size_t)num_cover_points_);
@@ -675,7 +676,8 @@ const DijkstrasCoverageTask::Correspondences& DijkstrasCoverageTask::getCoverPoi
             GlobalStopwatch(RESET);
             current_correspondences_ = getCoverPointCorrespondences_impl(world_state);
 
-            assert(current_correspondences_.uncovered_target_points_idxs_.size() == current_correspondences_.uncovered_target_points_distances_.size());
+            assert(current_correspondences_.uncovered_target_points_idxs_.size()
+                   == current_correspondences_.uncovered_target_points_distances_.size());
 
             assert((ssize_t)current_correspondences_.correspondences_.size() == num_nodes_);
             assert((ssize_t)current_correspondences_.correspondences_next_step_.size() == num_nodes_);
@@ -696,6 +698,25 @@ const DijkstrasCoverageTask::Correspondences& DijkstrasCoverageTask::getCoverPoi
             assert((ssize_t)total_correspondences == num_cover_points_);
 
             ROS_INFO_STREAM_NAMED("task_specification", "Calculated correspondences in        " << GlobalStopwatch(READ) << " seconds");
+
+            if (visualize_correspondences_)
+            {
+                EigenHelpers::VectorVector3d start_points;
+                EigenHelpers::VectorVector3d end_points;
+                for (size_t deform_idx = 0; (ssize_t)deform_idx < num_nodes_; ++deform_idx)
+                {
+                    const Eigen::Vector3d& current_node_pos = world_state.object_configuration_.col((ssize_t)deform_idx);
+                    const auto& current_deform_idx_correspondences = current_correspondences_.correspondences_[deform_idx];
+                    for (size_t correspondence_idx = 0; correspondence_idx < current_deform_idx_correspondences.size(); ++correspondence_idx )
+                    {
+                        const ssize_t cover_point_idx = current_deform_idx_correspondences[correspondence_idx];
+
+                        start_points.push_back(current_node_pos);
+                        end_points.push_back(cover_points_.col(cover_point_idx));
+                    }
+                }
+                vis_.visualizeLines("correspondences", start_points, end_points, Visualizer::Yellow(), 1, 0.001);
+            }
 
             current_correspondences_last_simtime_calced_ = world_state.sim_time_;
             current_correspondences_calculated_.store(true);
@@ -817,6 +838,30 @@ std::vector<double> DijkstrasCoverageTask::averageDijkstrasDistanceBetweenGrippe
         average_distances[cluster_idx] = EigenHelpers::AverageStdVectorDouble(distances[cluster_idx]);
     }
     return average_distances;
+}
+
+void DijkstrasCoverageTask::visualizeFreeSpaceGraph() const
+{
+    EigenHelpers::VectorVector3d node_centers;
+    EigenHelpers::VectorVector3d start_points;
+    EigenHelpers::VectorVector3d end_points;
+
+    const auto& nodes = free_space_graph_.GetNodesImmutable();
+    for (const auto& node : nodes)
+    {
+        const auto& node_center = node.GetValueImmutable();
+        node_centers.push_back(node_center);
+
+        const auto& out_edges = node.GetOutEdgesImmutable();
+        for (const auto& edge : out_edges)
+        {
+            start_points.push_back(nodes[edge.GetFromIndex()].GetValueImmutable()); // Should be the same as start_points, but not verified
+            end_points.push_back(nodes[edge.GetToIndex()].GetValueImmutable());
+        }
+    }
+
+    vis_.visualizeSpheres("free_space_graph_nodes", node_centers, Visualizer::Orange(), 1, 0.002);
+    vis_.visualizeLines("free_space_graph_edges", start_points, end_points, Visualizer::Orange(), 1, 0.0002);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////

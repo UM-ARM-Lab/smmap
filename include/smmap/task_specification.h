@@ -291,7 +291,7 @@ namespace smmap
                     std::vector<ssize_t> uncovered_target_points_idxs_;     // Indices of the taget points that are uncovered
                     std::vector<double> uncovered_target_points_distances_; // Distance to the deformable object for each uncovered target point
 
-                    std::vector<std::vector<ssize_t>> correspondences_;                     // Vector of size num_nodes_, each entry is a list indices into the cover_points_ data
+                    std::vector<std::vector<ssize_t>> correspondences_;                     // Vector of size num_nodes_, each entry is a list of indices into the cover_points_ data
                     std::vector<EigenHelpers::VectorVector3d> correspondences_next_step_;   // Vector of size num_nodes_, each entry is a list of "next steps" if moving towards the corresponding target
                     std::vector<std::vector<double>> correspondences_distances_;            // Vector of size num_nodes_, each entry is a list of distances to the corresponding cover_point as listed in correspondences_
                     std::vector<std::vector<bool>> correspondences_is_covered_;             // Vector of size num_nodes_, each entry is a list which desecribes if the corresponding cover_point is already "covered"
@@ -327,6 +327,8 @@ namespace smmap
                     const std::vector<ssize_t>& cover_indices,
                     const std::vector<uint32_t>& cluster_labels,
                     const uint32_t num_clusters) const;
+
+            void visualizeFreeSpaceGraph() const;
 
         protected:
             /// Free space graph that creates a vector field for the deformable object to follow
@@ -374,6 +376,7 @@ namespace smmap
             std::mutex current_correspondences_mtx_;
             double current_correspondences_last_simtime_calced_;
             Correspondences current_correspondences_;
+            const bool visualize_correspondences_;
     };
 
 
