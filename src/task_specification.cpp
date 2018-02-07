@@ -125,7 +125,7 @@ TaskSpecification::TaskSpecification(
     , vis_(vis)
 
     , grippers_data_(GetGrippersData(nh_))
-    , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
+    , object_initial_node_distance_(EigenHelpers::CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
     , num_nodes_(object_initial_node_distance_.cols())
     , default_deformability_(GetDefaultDeformability(ph_))
     , collision_scaling_factor_(GetCollisionScalingFactor(ph_))
@@ -276,7 +276,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyC
 {
     ObjectDeltaAndWeight stretching_correction(num_nodes_ * 3);
     const double max_stretch_factor = maxStretchFactor();
-    const Eigen::MatrixXd object_current_node_distance = CalculateDistanceMatrix(object_configuration);
+    const Eigen::MatrixXd object_current_node_distance = EigenHelpers::CalculateDistanceMatrix(object_configuration);
 
     EigenHelpers::VectorVector3d vis_start_points;
     EigenHelpers::VectorVector3d vis_end_points;
@@ -490,17 +490,25 @@ CoverageTask::CoverageTask(
         const TaskType task_type,
         const bool is_dijkstras_type_task = false)
     : TaskSpecification(nh, ph, deformable_type, task_type, is_dijkstras_type_task)
-    , work_space_grid_(GetWorldXMin(nh), GetWorldXStep(nh), GetWorldXNumSteps(nh),
-                       GetWorldYMin(nh), GetWorldYStep(nh), GetWorldYNumSteps(nh),
-                       GetWorldZMin(nh), GetWorldZStep(nh), GetWorldZNumSteps(nh))
     , environment_sdf_(GetEnvironmentSDF(nh))
+    , work_space_grid_(environment_sdf_.GetOriginTransform(),
+                       environment_sdf_.GetFrame(),
+                       GetWorldXStep(nh),
+                       GetWorldYStep(nh),
+                       GetWorldZStep(nh),
+                       GetWorldXNumSteps(nh),
+                       GetWorldYNumSteps(nh),
+                       GetWorldZNumSteps(nh))
     , cover_points_(GetCoverPoints(nh))
     , cover_point_normals_(GetCoverPointNormals(nh))
     , num_cover_points_(cover_points_.cols())
     , error_threshold_along_normal_(GetErrorThresholdAlongNormal(ph))
     , error_threshold_distance_to_normal_(GetErrorThresholdDistanceToNormal(ph))
     , error_threshold_task_done_(GetErrorThresholdTaskDone(ph))
-{}
+{
+    assert(environment_sdf_.GetFrame() == GetWorldFrameName());
+    assert(work_space_grid_.getFrame() == GetWorldFrameName());
+}
 
 bool CoverageTask::pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d& test_point) const
 {
@@ -1212,13 +1220,21 @@ DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCo
     // For each node on the object, record the distance to the corresponding target points
     for (size_t deform_idx = 0; (ssize_t)deform_idx < num_nodes_; ++deform_idx)
     {
+        const Eigen::Vector3d& deformable_point         = world_state.object_configuration_.col(deform_idx);
+        const ssize_t nearest_idx_in_free_space_graph   = work_space_grid_.worldPosToGridIndexClamped(deformable_point);
+
+        std::cerr << "Deformable point:   " << deformable_point.transpose() << std::endl;
+        std::cerr << "Grid aligned point: " << work_space_grid_.roundToGrid(deformable_point).transpose() << std::endl;
+
+        std::cerr << "Max index in graph (grid only): " << work_space_grid_.getNumCells() - 1 << std::endl;
+        std::cerr << "Deformable index in graph:      " << nearest_idx_in_free_space_graph << std::endl;
+        std::cerr << "Num out edges in graph: " << free_space_graph_.GetNodeImmutable(nearest_idx_in_free_space_graph).GetOutEdgesImmutable().size() << std::endl;
+
         // Extract the correct part of each data structure
         const std::vector<ssize_t>& current_correspondences             = correspondences_external.correspondences_[deform_idx];
         EigenHelpers::VectorVector3d& current_correspondences_next_step = correspondences_external.correspondences_next_step_[deform_idx];
         std::vector<double>& current_correspondences_distances          = correspondences_external.correspondences_distances_[deform_idx];
         std::vector<bool>& current_correspondences_is_covered           = correspondences_external.correspondences_is_covered_[deform_idx];
-        const Eigen::Vector3d& deformable_point                         = world_state.object_configuration_.col(deform_idx);
-        const ssize_t deformable_point_idx_in_free_space_graph          = work_space_grid_.worldPosToGridIndexClamped(deformable_point);
 
         // Itterate through the correspondences, recording all the data needed for other parts of the system
         current_correspondences_next_step.reserve(current_correspondences.size());
@@ -1242,8 +1258,11 @@ DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCo
             {
                 // Collect the Dijkstras next step and distance
                 const auto& dijkstras_individual_result         = dijkstras_results_[(size_t)cover_idx];
-                const ssize_t target_ind_in_free_space_graph    = dijkstras_individual_result.first[(size_t)deformable_point_idx_in_free_space_graph];
-                const double dijkstras_distance                 = dijkstras_individual_result.second[(size_t)deformable_point_idx_in_free_space_graph];
+                const ssize_t target_ind_in_free_space_graph    = dijkstras_individual_result.first[(size_t)nearest_idx_in_free_space_graph];
+                const double dijkstras_distance                 = dijkstras_individual_result.second[(size_t)nearest_idx_in_free_space_graph];
+
+//                std::cerr << "Target ind in free space graph: " << target_ind_in_free_space_graph << std::endl;
+//                std::cerr << "Dijkstras_distance: " << dijkstras_distance << std::endl;
 
                 current_correspondences_next_step.push_back(free_space_graph_.GetNodeImmutable(target_ind_in_free_space_graph).GetValueImmutable());
                 current_correspondences_distances.push_back(dijkstras_distance);

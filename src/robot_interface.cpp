@@ -29,9 +29,11 @@ RobotInterface::~RobotInterface()
 
 WorldState RobotInterface::start()
 {
-    ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper action server to be available");
+    ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper movement service to be available");
     execute_gripper_movement_client_.waitForExistence();
-    test_grippers_poses_client_.waitForServer();
+    // TODO: Parameterize this ability to be enabled or not
+//    ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper test grippers poses to be available");
+//    test_grippers_poses_client_.waitForServer();
 
     ROS_INFO_NAMED("robot_interface", "Kickstarting the planner with a no-op");
     return sendGrippersPoses_impl(noOpGripperMovement());

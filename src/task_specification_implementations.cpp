@@ -109,7 +109,7 @@ std::map<long, long> ClothColabFolding::createMirrorMap(ros::NodeHandle& nh, con
         // Note that nodes that have an x value > than mid_x are on the manual gripper side
         if (object_initial_configuration(0, node_ind) > point_reflector.get_mid_x())
         {
-            const long mirror_ind = ClosestPointInSet(object_initial_configuration,
+            const long mirror_ind = EigenHelpers::ClosestPointInSet(object_initial_configuration,
                     point_reflector.reflect(object_initial_configuration.col(node_ind)));
 
             mirror_map[node_ind] = mirror_ind;

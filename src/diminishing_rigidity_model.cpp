@@ -27,7 +27,7 @@ void DiminishingRigidityModel::SetInitialObjectConfiguration(
         const ObjectPointSet& object_initial_configuration)
 {
     num_nodes_ = object_initial_configuration.cols();
-    object_initial_node_distance_ = CalculateDistanceMatrix(object_initial_configuration);
+    object_initial_node_distance_ = EigenHelpers::CalculateDistanceMatrix(object_initial_configuration);
     static_data_initialized_.store(true);
 }
 

@@ -112,70 +112,7 @@ namespace smmap
             start.col(point_ind) = start.col(point_ind) + delta.segment<3>(point_ind * 3);
         }
         return start;
-    }
-
-    /**
-     * @brief Computes the squared distance between each node in the given object
-     *
-     * @param obj The object to compute distances on
-     *
-     * @return The distances between each pair of nodes
-     */
-    // TODO: This is in the wrong spot
-    inline Eigen::MatrixXd CalculateSquaredDistanceMatrix(const ObjectPointSet& obj)
-    {
-        assert (obj.cols() > 0);
-        const ssize_t num_nodes = obj.cols();
-
-        Eigen::MatrixXd squared_dist(num_nodes, num_nodes);
-        #pragma omp parallel for
-        for (ssize_t i = 0; i < num_nodes; i++)
-        {
-            for (ssize_t j = i; j < num_nodes; j++)
-            {
-                const double sq_dist = (obj.col(i) - obj.col(j)).squaredNorm();
-                squared_dist(i, j) = sq_dist;
-                squared_dist(j, i) = sq_dist;
-            }
-        }
-
-        return squared_dist;
-    }
-
-    /**
-     * @brief Computes the distance between each node in the given object
-     *
-     * @param obj The object to compute distances on
-     *
-     * @return The distances between each pair of nodes
-     */
-    // TODO: This is in the wrong spot
-    inline Eigen::MatrixXd CalculateDistanceMatrix(const ObjectPointSet& obj)
-    {
-        return CalculateSquaredDistanceMatrix(obj).cwiseSqrt();
-    }
-
-    // TODO: This is in the wrong spot
-    inline Eigen::VectorXd CalculateSquaredDistanceToSet(const ObjectPointSet& obj, const Eigen::Vector3d& point)
-    {
-        return (obj.colwise() - point).colwise().squaredNorm();
-    }
-
-    // TODO: This is in the wrong spot
-    inline Eigen::VectorXd CalculateDistanceToSet(const ObjectPointSet& obj, const Eigen::Vector3d& point)
-    {
-        return CalculateSquaredDistanceToSet(obj, point).cwiseSqrt();
-    }
-
-    // TODO: use this for the coverage task error functions?
-    inline ssize_t ClosestPointInSet(const ObjectPointSet& obj, const Eigen::Vector3d& point)
-    {
-        assert (obj.cols() > 0);
-        ssize_t min_ind = 0;
-        const Eigen::VectorXd squared_dist = CalculateSquaredDistanceToSet(obj, point);
-        squared_dist.minCoeff(&min_ind);
-        return min_ind;
-    }
+    }   
 }
 
 #endif // TRAJECTORY_HPP

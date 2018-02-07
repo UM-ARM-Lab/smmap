@@ -21,7 +21,7 @@ StretchingAvoidanceController::StretchingAvoidanceController(
         GripperControllerType gripper_controller_type,
         const DeformableModel::Ptr& deformable_model,
         const int max_count)
-    : object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
+    : object_initial_node_distance_(EigenHelpers::CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
     , gripper_collision_checker_(nh)
     , grippers_data_(robot.getGrippersData())
     , enviroment_sdf_(sdf)
@@ -95,7 +95,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
     const ssize_t num_nodes = current_world_state.object_configuration_.cols();
 
     const Eigen::MatrixXd node_squared_distance =
-            CalculateSquaredDistanceMatrix(current_world_state.object_configuration_);
+            EigenHelpers::CalculateSquaredDistanceMatrix(current_world_state.object_configuration_);
 
     std::vector<std::pair<AllGrippersSinglePoseDelta, double>> per_thread_optimal_command(
 #ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
@@ -225,7 +225,7 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> StretchingAvoidanceControl
     const ssize_t num_nodes = current_world_state.object_configuration_.cols();
 
     const Eigen::MatrixXd node_squared_distance =
-            CalculateSquaredDistanceMatrix(current_world_state.object_configuration_);
+            EigenHelpers::CalculateSquaredDistanceMatrix(current_world_state.object_configuration_);
 
     AllGrippersSinglePoseDelta optimal_gripper_command;
 
