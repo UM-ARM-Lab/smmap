@@ -1223,13 +1223,6 @@ DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCo
         const Eigen::Vector3d& deformable_point         = world_state.object_configuration_.col(deform_idx);
         const ssize_t nearest_idx_in_free_space_graph   = work_space_grid_.worldPosToGridIndexClamped(deformable_point);
 
-        std::cerr << "Deformable point:   " << deformable_point.transpose() << std::endl;
-        std::cerr << "Grid aligned point: " << work_space_grid_.roundToGrid(deformable_point).transpose() << std::endl;
-
-        std::cerr << "Max index in graph (grid only): " << work_space_grid_.getNumCells() - 1 << std::endl;
-        std::cerr << "Deformable index in graph:      " << nearest_idx_in_free_space_graph << std::endl;
-        std::cerr << "Num out edges in graph: " << free_space_graph_.GetNodeImmutable(nearest_idx_in_free_space_graph).GetOutEdgesImmutable().size() << std::endl;
-
         // Extract the correct part of each data structure
         const std::vector<ssize_t>& current_correspondences             = correspondences_external.correspondences_[deform_idx];
         EigenHelpers::VectorVector3d& current_correspondences_next_step = correspondences_external.correspondences_next_step_[deform_idx];

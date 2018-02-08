@@ -884,34 +884,7 @@ void QuinlanRubberBand::storeBand() const
             throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_prefix from parameter server");
         }
 
-        // Get a time string formated as YYYY-MM-DD__HH-MM-SS-milliseconds
-
-
-
-        // https://stackoverflow.com/questions/24686846/get-current-time-in-milliseconds-or-hhmmssmmm-format
-        using namespace std::chrono;
-
-        // get current time
-        const auto now = system_clock::now();
-
-        // get number of milliseconds for the current second
-        // (remainder after division into seconds)
-        const auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
-
-        // convert to std::time_t in order to convert to std::tm (broken time)
-        const auto timer = system_clock::to_time_t(now);
-
-        // convert to broken time
-        std::tm bt = *std::localtime(&timer);
-
-        std::ostringstream oss;
-        oss << std::put_time(&bt, "%Y-%m-%d__%H-%M-%S");
-        oss << '-' << std::setfill('0') << std::setw(3) << ms.count();
-        const std::string file_name_suffix = oss.str();
-
-
-
-
+        const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsString();
         const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
         const std::string full_path = log_folder.GetImmutable() + file_name;
         ROS_DEBUG_STREAM("Saving band to " << full_path);
