@@ -210,9 +210,6 @@ void Planner::execute()
     const double start_time = world_feedback.sim_time_;
     initializeModelAndControllerSet(world_feedback);
 
-    std::cerr << "Is ros initialized? excute pre enable_stuck_detection check" << ros::isInitialized() << std::endl;
-    std::cerr << std::endl;
-
     if (enable_stuck_detection_)
     {
         assert(dijkstras_task_ != nullptr);
@@ -279,9 +276,6 @@ void Planner::execute()
                         GetRRTMaxFailedSmoothingIterations(ph_),
                         !GetDisableAllVisualizations(ph_)));
     }
-
-    std::cerr << "Is ros initialized? " << ros::isInitialized() << std::endl;
-    std::cerr << std::endl;
 
     if (visualize_free_space_graph_ && dijkstras_task_ != nullptr)
     {
@@ -451,14 +445,10 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 task_specification_->calculateDesiredDirection(world_state),
                 robot_.dt_);
 
-    std::cerr << "Visualing motion" << std::endl;
-
     if (visualize_desired_motion_)
     {
         visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_);
     }
-
-    std::cerr << "Probably never see this" << std::endl;
 
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
