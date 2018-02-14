@@ -7,8 +7,8 @@ using namespace smmap_utilities;
 // Colab folding
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothColabFolding::ClothColabFolding(ros::NodeHandle& nh, ros::NodeHandle& ph)
-    : TaskSpecification(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_COLAB_FOLDING)
+ClothColabFolding::ClothColabFolding(ros::NodeHandle& nh, ros::NodeHandle& ph, Visualizer& vis)
+    : TaskSpecification(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_COLAB_FOLDING)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
     , point_reflector_(createPointReflector(nh))
     , mirror_map_(createMirrorMap(nh, point_reflector_))
@@ -131,8 +131,8 @@ bool ClothColabFolding::taskDone_impl(
 // Rope cylinder coverage
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-RopeCylinderCoverage::RopeCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph)
-    : DirectCoverageTask(nh, ph, DeformableType::ROPE, TaskType::ROPE_CYLINDER_COVERAGE)
+RopeCylinderCoverage::RopeCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis)
+    : DirectCoverageTask(nh, ph, vis, DeformableType::ROPE, TaskType::ROPE_CYLINDER_COVERAGE)
     , neighbours_(num_nodes_)
 {}
 
@@ -169,8 +169,8 @@ bool RopeCylinderCoverage::taskDone_impl(
 // Cloth cylinder coverage - unused
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothCylinderCoverage::ClothCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph)
-    : DistanceBasedCorrespondencesTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_CYLINDER_COVERAGE)
+ClothCylinderCoverage::ClothCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis)
+    : DistanceBasedCorrespondencesTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_CYLINDER_COVERAGE)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {
     assert(false && "This task has not been looked at in over a year");
@@ -209,8 +209,8 @@ bool ClothCylinderCoverage::taskDone_impl(
 // Cloth table coverage
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothTableCoverage::ClothTableCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph)
-    : DirectCoverageTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_TABLE_COVERAGE)
+ClothTableCoverage::ClothTableCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, Visualizer& vis)
+    : DirectCoverageTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_TABLE_COVERAGE)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {}
 
@@ -247,8 +247,8 @@ bool ClothTableCoverage::taskDone_impl(
 // Cloth WAFR coverage
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothWAFR::ClothWAFR(ros::NodeHandle& nh, ros::NodeHandle& ph)
-    : DistanceBasedCorrespondencesTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_WAFR)
+ClothWAFR::ClothWAFR(ros::NodeHandle& nh, ros::NodeHandle& ph, Visualizer& vis)
+    : DistanceBasedCorrespondencesTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_WAFR)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {}
 
@@ -291,8 +291,8 @@ bool ClothWAFR::taskDone_impl(
 // Cloth wall
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothWall::ClothWall(ros::NodeHandle& nh, ros::NodeHandle& ph)
-    : DistanceBasedCorrespondencesTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_WALL)
+ClothWall::ClothWall(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis)
+    : DistanceBasedCorrespondencesTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_WALL)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {}
 
@@ -331,8 +331,8 @@ bool ClothWall::taskDone_impl(
 // Cloth Single Pole
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothSinglePole::ClothSinglePole(ros::NodeHandle& nh, ros::NodeHandle& ph)
-    : DistanceBasedCorrespondencesTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_SINGLE_POLE)
+ClothSinglePole::ClothSinglePole(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis)
+    : DistanceBasedCorrespondencesTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_SINGLE_POLE)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {}
 
@@ -369,8 +369,8 @@ bool ClothSinglePole::taskDone_impl(
 // Cloth double slit
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothDoubleSlit::ClothDoubleSlit(ros::NodeHandle& nh, ros::NodeHandle& ph)
-    : DistanceBasedCorrespondencesTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_DOUBLE_SLIT)
+ClothDoubleSlit::ClothDoubleSlit(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis)
+    : DistanceBasedCorrespondencesTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_DOUBLE_SLIT)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {}
 
@@ -407,8 +407,8 @@ bool ClothDoubleSlit::taskDone_impl(
 // Rope maze
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-RopeMaze::RopeMaze(ros::NodeHandle& nh, ros::NodeHandle& ph)
-    : FixedCorrespondencesTask(nh, ph, DeformableType::ROPE, TaskType::ROPE_MAZE)
+RopeMaze::RopeMaze(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis)
+    : FixedCorrespondencesTask(nh, ph, vis, DeformableType::ROPE, TaskType::ROPE_MAZE)
     , neighbours_(num_nodes_)
 {
     assert(num_nodes_ == num_cover_points_);
@@ -455,8 +455,8 @@ bool RopeMaze::taskDone_impl(
 // Rope maze
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothPlacemat::ClothPlacemat(ros::NodeHandle& nh, ros::NodeHandle& ph)
-    : FixedCorrespondencesTask(nh, ph, DeformableType::CLOTH, TaskType::CLOTH_PLACEMAT_LIVE_ROBOT)
+ClothPlacemat::ClothPlacemat(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis)
+    : FixedCorrespondencesTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_PLACEMAT_LIVE_ROBOT)
     // TODO: is this the correct stride?
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {

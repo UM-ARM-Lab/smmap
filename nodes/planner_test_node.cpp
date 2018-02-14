@@ -11,8 +11,8 @@ int main(int argc, char* argv[])
     smmap::RobotInterface robot(nh);
     smmap_utilities::Visualizer vis(nh, ph);
 
-    smmap::TaskSpecification::Ptr task_specification = smmap::TaskSpecification::MakeTaskSpecification(nh, ph);
-    smmap::Planner planner(robot, vis, task_specification);
+    smmap::TaskSpecification::Ptr task_specification = smmap::TaskSpecification::MakeTaskSpecification(nh, ph, vis);
+    smmap::Planner planner(nh, ph, robot, vis, task_specification);
     planner.execute();
 
     return 0;

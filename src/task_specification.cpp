@@ -33,7 +33,8 @@ using namespace arc_utilities;
 
 TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         ros::NodeHandle& nh,
-        ros::NodeHandle& ph)
+        ros::NodeHandle& ph,
+        Visualizer& vis)
 {
     const TaskType task_type = GetTaskType(nh);
 
@@ -41,35 +42,35 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
     {
         case TaskType::ROPE_CYLINDER_COVERAGE:
         case TaskType::ROPE_CYLINDER_COVERAGE_TWO_GRIPPERS:
-            return std::make_shared<RopeCylinderCoverage>(nh, ph);
+            return std::make_shared<RopeCylinderCoverage>(nh, ph, vis);
 
         case TaskType::CLOTH_TABLE_COVERAGE:
-            return std::make_shared<ClothTableCoverage>(nh, ph);
+            return std::make_shared<ClothTableCoverage>(nh, ph, vis);
 
         case TaskType::CLOTH_CYLINDER_COVERAGE:
-            return std::make_shared<ClothCylinderCoverage>(nh, ph);
+            return std::make_shared<ClothCylinderCoverage>(nh, ph, vis);
 
         case TaskType::CLOTH_COLAB_FOLDING:
-            return std::make_shared<ClothColabFolding>(nh, ph);
+            return std::make_shared<ClothColabFolding>(nh, ph, vis);
 
         case TaskType::CLOTH_WAFR:
-            return std::make_shared<ClothWAFR>(nh, ph);
+            return std::make_shared<ClothWAFR>(nh, ph, vis);
 
         case TaskType::CLOTH_SINGLE_POLE:
-            return std::make_shared<ClothSinglePole>(nh, ph);
+            return std::make_shared<ClothSinglePole>(nh, ph, vis);
 
         case TaskType::CLOTH_WALL:
-            return std::make_shared<ClothWall>(nh, ph);
+            return std::make_shared<ClothWall>(nh, ph, vis);
 
         case TaskType::CLOTH_DOUBLE_SLIT:
-            return std::make_shared<ClothDoubleSlit>(nh, ph);
+            return std::make_shared<ClothDoubleSlit>(nh, ph, vis);
 
         case TaskType::ROPE_MAZE:
         case TaskType::ROPE_ZIG_MATCH:
-            return std::make_shared<RopeMaze>(nh, ph);
+            return std::make_shared<RopeMaze>(nh, ph, vis);
 
         case TaskType::CLOTH_PLACEMAT_LIVE_ROBOT:
-            return std::make_shared<ClothPlacemat>(nh, ph);
+            return std::make_shared<ClothPlacemat>(nh, ph, vis);
 
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
@@ -84,22 +85,7 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
 TaskSpecification::TaskSpecification(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        const DeformableType deformable_type,
-        const TaskType task_type,
-        const bool is_dijkstras_type_task)
-    : TaskSpecification(
-          nh,
-          ph,
-          Visualizer(nh, ph),
-          deformable_type,
-          task_type,
-          is_dijkstras_type_task)
-{}
-
-TaskSpecification::TaskSpecification(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
-        Visualizer vis,
+        Visualizer& vis,
         const DeformableType deformable_type,
         const TaskType task_type,
         const bool is_dijkstras_type_task)
@@ -486,10 +472,11 @@ const std::vector<long>& TaskSpecification::getGripperAttachedNodesIndices(const
 CoverageTask::CoverageTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
+        Visualizer& vis,
         const DeformableType deformable_type,
         const TaskType task_type,
         const bool is_dijkstras_type_task = false)
-    : TaskSpecification(nh, ph, deformable_type, task_type, is_dijkstras_type_task)
+    : TaskSpecification(nh, ph, vis, deformable_type, task_type, is_dijkstras_type_task)
     , environment_sdf_(GetEnvironmentSDF(nh))
     , work_space_grid_(environment_sdf_.GetOriginTransform(),
                        environment_sdf_.GetFrame(),
@@ -529,9 +516,10 @@ bool CoverageTask::pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d
 DirectCoverageTask::DirectCoverageTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
+        Visualizer& vis,
         const DeformableType deformable_type,
         const TaskType task_type)
-    : CoverageTask(nh, ph, deformable_type, task_type)
+    : CoverageTask(nh, ph, vis, deformable_type, task_type)
 {}
 
 double DirectCoverageTask::calculateError_impl(const WorldState& world_state)
@@ -624,10 +612,10 @@ ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_imp
 DijkstrasCoverageTask::DijkstrasCoverageTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        const DeformableType
-        deformable_type,
+        Visualizer& vis,
+        const DeformableType deformable_type,
         const TaskType task_type)
-    : CoverageTask(nh, ph, deformable_type, task_type, true)
+    : CoverageTask(nh, ph, vis, deformable_type, task_type, true)
     , current_correspondences_calculated_(false)
     , current_correspondences_last_simtime_calced_(std::numeric_limits<double>::quiet_NaN())
     , current_correspondences_(num_nodes_)
@@ -1100,9 +1088,10 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
 DistanceBasedCorrespondencesTask::DistanceBasedCorrespondencesTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
+        Visualizer& vis,
         const DeformableType deformable_type,
         const TaskType task_type)
-    : DijkstrasCoverageTask(nh, ph, deformable_type, task_type)
+    : DijkstrasCoverageTask(nh, ph, vis, deformable_type, task_type)
 {}
 
 DijkstrasCoverageTask::Correspondences DistanceBasedCorrespondencesTask::getCoverPointCorrespondences_impl(
@@ -1206,9 +1195,10 @@ std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::fin
 FixedCorrespondencesTask::FixedCorrespondencesTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
+        Visualizer& vis,
         const DeformableType deformable_type,
         const TaskType task_type)
-    : DijkstrasCoverageTask(nh, ph, deformable_type, task_type)
+    : DijkstrasCoverageTask(nh, ph, vis, deformable_type, task_type)
 {}
 
 DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCorrespondences_impl(

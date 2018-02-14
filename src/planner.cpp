@@ -156,12 +156,14 @@ std::vector<uint32_t> numberOfPointsInEachCluster(
  * @param task_specification
  */
 Planner::Planner(
+        ros::NodeHandle& nh,
+        ros::NodeHandle& ph,
         RobotInterface& robot,
         Visualizer& vis,
         const std::shared_ptr<TaskSpecification>& task_specification)
     // Robot and task parameters
-    : nh_("")
-    , ph_("~")
+    : nh_(nh)
+    , ph_(ph)
     , seed_(GetPlannerSeed(ph_))
     , generator_(seed_)
     , robot_(robot)
@@ -277,6 +279,8 @@ void Planner::execute()
                         GetRRTMaxFailedSmoothingIterations(ph_),
                         !GetDisableAllVisualizations(ph_)));
     }
+
+    std::cerr << "\n\n\n\n\nAttempting to visualize free space graph." << std::endl << std::endl << std::endl << std::endl;
 
     if (visualize_free_space_graph_ && dijkstras_task_ != nullptr)
     {
@@ -446,10 +450,14 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 task_specification_->calculateDesiredDirection(world_state),
                 robot_.dt_);
 
+    std::cerr << "Visualing motion" << std::endl;
+
     if (visualize_desired_motion_)
     {
         visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_);
     }
+
+    std::cerr << "Probably never see this" << std::endl;
 
     // Pick an arm to use
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
@@ -502,6 +510,16 @@ WorldState Planner::sendNextCommandUsingLocalController(
         ROS_INFO_STREAM_NAMED("planner", "Collected data to calculate regret in " << stopwatch(READ) << " seconds");
     }
 
+    if (visualize_predicted_motion_)
+    {
+        const ObjectPointSet& object_delta = suggested_robot_commands[(size_t)model_to_use].second;
+        vis_.visualizeObjectDelta(
+                    PREDICTED_DELTA_NS,
+                    world_state.object_configuration_,
+                    world_state.object_configuration_ + object_delta,
+                    Visualizer::Blue());
+    }
+
     // Execute the command
     const AllGrippersSinglePoseDelta& selected_command = suggested_robot_commands[(size_t)model_to_use].first;
     ROS_INFO_STREAM_NAMED("planner", "Sending command to robot, action norm:  " << MultipleGrippersVelocity6dNorm(selected_command));
@@ -513,6 +531,9 @@ WorldState Planner::sendNextCommandUsingLocalController(
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
 
+
+
+
     if (visualize_gripper_motion_)
     {
         for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
@@ -521,17 +542,22 @@ WorldState Planner::sendNextCommandUsingLocalController(
                                    suggested_robot_commands[(size_t)model_ind].first,
                                    model_ind);
         }
+//        for (size_t gripper_idx = 0; gripper_idx < all_grippers_single_pose.size(); ++gripper_idx)
+//        {
+//            vis_.visualizeGripper("target_gripper_positions", all_grippers_single_pose[gripper_idx], Visualizer::Yellow(), (int)gripper_idx + 1);
+//        }
+
+        const size_t num_grippers = world_feedback.all_grippers_single_pose_.size();
+        for (size_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
+        {
+            std::cout << "Desired delta: " << selected_command[gripper_idx].head<3>().transpose() << std::endl;
+            std::cout << "Actual delta:  " << kinematics::calculateError(world_state.all_grippers_single_pose_[gripper_idx], world_feedback.all_grippers_single_pose_[gripper_idx]).head<3>().transpose() << std::endl;
+        }
+
     }
 
-    if (visualize_predicted_motion_)
-    {
-        const ObjectPointSet& object_delta = suggested_robot_commands[(size_t)model_to_use].second;
-        vis_.visualizeObjectDelta(
-                    PREDICTED_DELTA_NS,
-                    world_state.object_configuration_,
-                    world_state.object_configuration_ + object_delta,
-                    Visualizer::Blue());
-    }
+
+
 
     ROS_INFO_NAMED("planner", "Updating models");
     updateModels(world_state, model_input_data.desired_object_motion_, suggested_robot_commands, model_to_use, world_feedback);

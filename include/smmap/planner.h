@@ -24,7 +24,9 @@ namespace smmap
             // Constructor and the one function that gets called externally
             ////////////////////////////////////////////////////////////////////
 
-            Planner(RobotInterface& robot,
+            Planner(ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
+                    RobotInterface& robot,
                     smmap_utilities::Visualizer& vis,
                     const std::shared_ptr<TaskSpecification>& task_specification);
 

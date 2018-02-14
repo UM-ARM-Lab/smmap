@@ -35,7 +35,7 @@ set(Eigen3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 
 catkin_package(
     INCLUDE_DIRS    include
-#    LIBRARIES       ${PROJECT_NAME}
+    LIBRARIES       ${PROJECT_NAME}_UCB
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
     DEPENDS         Eigen3
 )
@@ -54,7 +54,8 @@ include_directories(include
 )
 
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -flto -O3 -g -Wall -Wextra -Wpedantic -Wconversion")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -Og -g -Wall -Wextra -Wpedantic -Wconversion")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O0 -g -Wall -Wextra -Wpedantic -Wconversion")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_PARALLEL_K_NEAREST_NEIGHBORS  -DENABLE_PARALLEL_ROADMAP -DENABLE_PARALLEL_DISTANCE_MATRIX")
 
 unset(USE_OPEN_MP CACHE)
 option(USE_OPEN_MP "Set to ON if we want to use OpenMP" ON)
@@ -67,18 +68,15 @@ else(USE_OPEN_MP)
 endif(USE_OPEN_MP)
 
 
-
-## Test file for random tests
-#add_executable(scratchpad nodes/scratchpad.cpp src/gurobi_solvers.cpp)
-#target_link_libraries(scratchpad ${GUROBI_LIBRARIES})
-#set_target_properties(scratchpad PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS}")
-
-
-
 ## Library file for the whole project
 FILE(GLOB hpp_SRC "include/${PROJECT_NAME}/*.hpp")
 FILE(GLOB h_SRC "include/${PROJECT_NAME}/*.h")
 FILE(GLOB cpp_SRC "src/*.cpp")
+
+add_library(${PROJECT_NAME}_UCB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
+add_dependencies(${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_UCB ${catkin_LIBRARIES})
+set_target_properties(${PROJECT_NAME}_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
 
 ## Simulator tests
 # TODO: Update other Bandit versions with correct names and linking
@@ -92,10 +90,10 @@ FILE(GLOB cpp_SRC "src/*.cpp")
 #target_link_libraries(${PROJECT_NAME}_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES})
 #set_target_properties(${PROJECT_NAME}_test_node_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
 
-add_executable(planner_test_node_UCB nodes/planner_test_node.cpp ${hpp_SRC} ${h_SRC} ${cpp_SRC})
-add_dependencies(planner_test_node_UCB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(planner_test_node_UCB ${catkin_LIBRARIES})
-set_target_properties(planner_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT -DENABLE_PARALLEL_K_NEAREST_NEIGHBORS  -DENABLE_PARALLEL_ROADMAP -DENABLE_PARALLEL_DISTANCE_MATRIX")
+add_executable(planner_test_node_UCB nodes/planner_test_node.cpp)
+add_dependencies(planner_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
+target_link_libraries(planner_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_LIBRARIES})
+set_target_properties(planner_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
 
 ## Synthethic trials
 #add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp src/cvxopt_solvers.cpp src/gurobi_solvers.cpp)

@@ -29,6 +29,7 @@ namespace smmap
         // Service client to get the names of each gripper
         ros::ServiceClient gripper_names_client =
             nh.serviceClient<deformable_manipulation_msgs::GetGripperNames>(GetGripperNamesTopic(nh));
+
         gripper_names_client.waitForExistence();
 
         deformable_manipulation_msgs::GetGripperNames names_srv_data;

@@ -693,22 +693,6 @@ void RRTHelper::clearBlacklist()
 
 bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const
 {
-//    static ros::NodeHandle nh;
-//    static Visualizer vis(nh, "first_order_visibility_visualization_marker", "dev_null");
-
-//    EigenHelpers::VectorVector3d collision_points;
-//    const bool visualize = false;
-//    if (visualization_enabled_ && visualize)
-//    {
-//        vis.visualizePoints(
-//                    "first_order_vis_collision",
-//                    collision_points,
-//                    Visualizer::Red(),
-//                    1,
-//                    1.0);
-//        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
-//    }
-
     for (size_t idx = 0; idx < blacklisted_goal_rubber_bands_.size(); idx++)
     {
         const EigenHelpers::VectorVector3d& blacklisted_path = blacklisted_goal_rubber_bands_[idx];

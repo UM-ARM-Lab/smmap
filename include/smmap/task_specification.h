@@ -29,7 +29,8 @@ namespace smmap
 
             static TaskSpecification::Ptr MakeTaskSpecification(
                     ros::NodeHandle& nh,
-                    ros::NodeHandle& ph);
+                    ros::NodeHandle& ph,
+                    smmap_utilities::Visualizer& vis);
 
         public:
 
@@ -40,14 +41,7 @@ namespace smmap
             TaskSpecification(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    const DeformableType deformable_type,
-                    const TaskType task_type,
-                    const bool is_dijkstras_type_task = false);
-
-            TaskSpecification(
-                    ros::NodeHandle& nh,
-                    ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer vis,
+                    smmap_utilities::Visualizer& vis,
                     const DeformableType deformable_type,
                     const TaskType task_type,
                     const bool is_dijkstras_type_task = false);
@@ -183,7 +177,7 @@ namespace smmap
 
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
-            smmap_utilities::Visualizer vis_;
+            smmap_utilities::Visualizer& vis_;
 
             const std::vector<GripperData> grippers_data_;
             const Eigen::MatrixXd object_initial_node_distance_;
@@ -230,6 +224,7 @@ namespace smmap
             CoverageTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
+                    smmap_utilities::Visualizer& vis,
                     const DeformableType deformable_type,
                     const TaskType task_type,
                     const bool is_dijkstras_type_task);
@@ -262,6 +257,7 @@ namespace smmap
             DirectCoverageTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
+                    smmap_utilities::Visualizer& vis,
                     const DeformableType deformable_type,
                     const TaskType task_type);
 
@@ -300,6 +296,7 @@ namespace smmap
             DijkstrasCoverageTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
+                    smmap_utilities::Visualizer& vis,
                     const DeformableType deformable_type,
                     const TaskType task_type);
 
@@ -386,6 +383,7 @@ namespace smmap
             DistanceBasedCorrespondencesTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
+                    smmap_utilities::Visualizer& vis,
                     const DeformableType deformable_type,
                     const TaskType task_type);
 
@@ -404,6 +402,7 @@ namespace smmap
             FixedCorrespondencesTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
+                    smmap_utilities::Visualizer& vis,
                     const DeformableType deformable_type,
                     const TaskType task_type);
 
