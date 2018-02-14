@@ -14,7 +14,7 @@ VirtualRubberBand::VirtualRubberBand(
         const Eigen::Vector3d& start_point,
         const Eigen::Vector3d& end_point,
         const std::shared_ptr<DijkstrasCoverageTask>& task,
-        const Visualizer& vis,
+        const Visualizer::Ptr vis,
         std::mt19937_64& generator)
     : VirtualRubberBand({start_point, end_point},
                         (end_point - start_point).norm() * task_->maxStretchFactor(),
@@ -27,7 +27,7 @@ VirtualRubberBand::VirtualRubberBand(
         const EigenHelpers::VectorVector3d starting_points,
         const double max_total_band_distance,
         const std::shared_ptr<DijkstrasCoverageTask>& task,
-        const Visualizer& vis,
+        const Visualizer::Ptr vis,
         std::mt19937_64& generator)
     : task_(task)
     , sdf_(task_->environment_sdf_)
@@ -137,11 +137,11 @@ void VirtualRubberBand::visualize(
     {
         if (isOverstretched())
         {
-            vis_.visualizeXYZTrajectory(marker_name, band_, overstretched_color, id);
+            vis_->visualizeXYZTrajectory(marker_name, band_, overstretched_color, id);
         }
         else
         {
-            vis_.visualizeXYZTrajectory(marker_name, band_, safe_color, id);
+            vis_->visualizeXYZTrajectory(marker_name, band_, safe_color, id);
         }
     }
 }
@@ -171,10 +171,10 @@ void VirtualRubberBand::resampleBand(const bool verbose)
         std::cerr << "Interp:    " << interpolated.transpose() << std::endl;
         std::cerr << "Projected: " << projected.transpose() << std::endl;
         std::cerr << "Next:      " << curr.transpose() << std::endl;
-        vis_.visualizePoints("band_test_resample_prev", {prev}, {Visualizer::Red()}, 1, 0.005);
-        vis_.visualizePoints("band_test_resample_curr", {curr}, {Visualizer::Blue()}, 1, 0.005);
-        vis_.visualizePoints("band_test_resample_interp", {interpolated}, {Visualizer::Cyan()}, 1, 0.004);
-        vis_.visualizePoints("band_test_resample_result", {projected}, {Visualizer::Green()}, 1, 0.004);
+        vis_->visualizePoints("band_test_resample_prev", {prev}, {Visualizer::Red()}, 1, 0.005);
+        vis_->visualizePoints("band_test_resample_curr", {curr}, {Visualizer::Blue()}, 1, 0.005);
+        vis_->visualizePoints("band_test_resample_interp", {interpolated}, {Visualizer::Cyan()}, 1, 0.004);
+        vis_->visualizePoints("band_test_resample_result", {projected}, {Visualizer::Green()}, 1, 0.004);
         return projected;
     };*/
 
@@ -261,7 +261,7 @@ void VirtualRubberBand::shortcutSmoothBand(const bool verbose)
 
         if (verbose)
         {
-            vis_.visualizeXYZTrajectory(BAND_POST_SHORTCUT_SMOOTHING_NS, band_, Visualizer::Red(), smoothing_iter);
+            vis_->visualizeXYZTrajectory(BAND_POST_SHORTCUT_SMOOTHING_NS, band_, Visualizer::Red(), smoothing_iter);
         }
 
         ++smoothing_iter;

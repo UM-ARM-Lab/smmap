@@ -158,7 +158,7 @@ Planner::Planner(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
         RobotInterface& robot,
-        Visualizer& vis,
+        Visualizer::Ptr vis,
         const std::shared_ptr<TaskSpecification>& task_specification)
     // Robot and task parameters
     : nh_(nh)
@@ -302,10 +302,10 @@ void Planner::execute()
             const double current_error = task_specification_->calculateError(world_feedback);
             ROS_INFO_STREAM_NAMED("planner", "   Planner/Task sim time " << world_feedback.sim_time_ << "\t Error: " << current_error);
 
-            vis_.deleteObjects(PROJECTED_BAND_NS, 1, 30);
-            vis_.clearVisualizationsBullet();
+            vis_->deleteObjects(PROJECTED_BAND_NS, 1, 30);
+            vis_->clearVisualizationsBullet();
             std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
-            vis_.clearVisualizationsBullet();
+            vis_->clearVisualizationsBullet();
             std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
             if (world_feedback.sim_time_ - start_time >= task_specification_->maxTime())
@@ -355,8 +355,8 @@ WorldState Planner::sendNextCommand(
             {
                 planning_needed = true;
 
-                vis_.deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
-                vis_.deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
+                vis_->deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
+                vis_->deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
 
                 ROS_WARN_NAMED("planner", "Invoking global planner as the current plan will overstretch the deformable object");
                 ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
@@ -378,15 +378,15 @@ WorldState Planner::sendNextCommand(
 
                 std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
-//                vis_.deleteObjects(DESIRED_DELTA_NS, 1, 100);
-//                vis_.deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
-//                vis_.deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
-//                vis_.deleteObjects(PROJECTED_POINT_PATH_NS,         1, 2);
-//                vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS,   1, 2);
+//                vis_->deleteObjects(DESIRED_DELTA_NS, 1, 100);
+//                vis_->deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
+//                vis_->deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
+//                vis_->deleteObjects(PROJECTED_POINT_PATH_NS,         1, 2);
+//                vis_->deleteObjects(PROJECTED_POINT_PATH_LINES_NS,   1, 2);
 
-                vis_.clearVisualizationsBullet();
+                vis_->clearVisualizationsBullet();
                 std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
-                vis_.clearVisualizationsBullet();
+                vis_->clearVisualizationsBullet();
 
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "planner", "Invoking global planner due to overstretch");
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "planner", "Invoking global planner due to collision");
@@ -514,7 +514,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     if (visualize_predicted_motion_)
     {
         const ObjectPointSet& object_delta = suggested_robot_commands[(size_t)model_to_use].second;
-        vis_.visualizeObjectDelta(
+        vis_->visualizeObjectDelta(
                     PREDICTED_DELTA_NS,
                     world_state.object_configuration_,
                     world_state.object_configuration_ + object_delta,
@@ -545,7 +545,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
         }
 //        for (size_t gripper_idx = 0; gripper_idx < all_grippers_single_pose.size(); ++gripper_idx)
 //        {
-//            vis_.visualizeGripper("target_gripper_positions", all_grippers_single_pose[gripper_idx], Visualizer::Yellow(), (int)gripper_idx + 1);
+//            vis_->visualizeGripper("target_gripper_positions", all_grippers_single_pose[gripper_idx], Visualizer::Yellow(), (int)gripper_idx + 1);
 //        }
 
         const size_t num_grippers = world_feedback.all_grippers_single_pose_.size();
@@ -596,13 +596,13 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
         error_history_.clear();
 
         std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
-        vis_.clearVisualizationsBullet();
+        vis_->clearVisualizationsBullet();
         std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
-        vis_.clearVisualizationsBullet();
+        vis_->clearVisualizationsBullet();
 
-//        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_A_NS,   1, 2);
-//        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_B_NS,   1, 2);
-//        vis_.deleteObjects(RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS, 1, 2);
+//        vis_->deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_A_NS,   1, 2);
+//        vis_->deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_B_NS,   1, 2);
+//        vis_->deleteObjects(RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS, 1, 2);
     }
 
     const std::vector<WorldState> fake_all_models_results(num_models_, world_feedback);
@@ -638,8 +638,8 @@ void Planner::visualizeProjectedPaths(
                 }
             }
         }
-        vis_.visualizePoints(PROJECTED_POINT_PATH_NS, points, Visualizer::Magenta(), 1);
-        vis_.visualizeLines(PROJECTED_POINT_PATH_LINES_NS, lines_start_points, lines_end_points, Visualizer::Magenta(), 1);
+        vis_->visualizePoints(PROJECTED_POINT_PATH_NS, points, Visualizer::Magenta(), 1);
+        vis_->visualizeLines(PROJECTED_POINT_PATH_LINES_NS, lines_start_points, lines_end_points, Visualizer::Magenta(), 1);
     }
 }
 
@@ -693,7 +693,7 @@ bool Planner::checkForClothStretchingViolations(
 
     if (visualization_enabled)
     {
-        vis_.visualizeLines(CONSTRAINT_VIOLATION_VERSION1_NS, vis_start_points, vis_end_points, Visualizer::Blue());
+        vis_->visualizeLines(CONSTRAINT_VIOLATION_VERSION1_NS, vis_start_points, vis_end_points, Visualizer::Blue());
     }
 
     return violations_exist;
@@ -715,12 +715,12 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectF
     const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
     const bool band_verbose = false;
 
-//    vis_.clearVisualizationsBullet();
+//    vis_->clearVisualizationsBullet();
 
-//    vis_.deleteObjects(PROJECTED_BAND_NS, 1, (int32_t)max_lookahead_steps_ + 10);
-//    vis_.deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
-//    vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
-//    vis_.deleteObjects(PROJECTED_GRIPPER_NS, 1, (int32_t)(4 * max_lookahead_steps_) + 10);
+//    vis_->deleteObjects(PROJECTED_BAND_NS, 1, (int32_t)max_lookahead_steps_ + 10);
+//    vis_->deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
+//    vis_->deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
+//    vis_->deleteObjects(PROJECTED_GRIPPER_NS, 1, (int32_t)(4 * max_lookahead_steps_) + 10);
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -750,16 +750,16 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectF
     };
 
 
-//    vis_.clearVisualizationsBullet();
+//    vis_->clearVisualizationsBullet();
 
     rubber_band_between_grippers_->visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
 
 
 
 
-//    vis_.deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
-//    vis_.deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
-//    vis_.deleteObjects(PROJECTED_GRIPPER_NS, 1, (int32_t)(4 * max_lookahead_steps_) + 10);
+//    vis_->deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
+//    vis_->deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
+//    vis_->deleteObjects(PROJECTED_GRIPPER_NS, 1, (int32_t)(4 * max_lookahead_steps_) + 10);
 
 
 
@@ -810,7 +810,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectF
 
         // Visualize
         rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
-        vis_.visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color, (int32_t)(4 * t) + 1);
+        vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color, (int32_t)(4 * t) + 1);
 
         // Finish collecting the gripper collision data
         world_state_copy.gripper_collision_data_ = collision_check_future.get();
@@ -931,7 +931,7 @@ bool Planner::predictStuckForGlobalPlannerResults(const bool visualization_enabl
 
         // Visualize
         rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
-        vis_.visualizeGrippers(PROJECTED_GRIPPER_NS, grippers_pose, gripper_color, (int32_t)(4 * t) + 1);
+        vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, grippers_pose, gripper_color, (int32_t)(4 * t) + 1);
     }
 
     return overstretch_predicted;
@@ -958,7 +958,7 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
         cluster_targets.push_back(dijkstras_task_->cover_points_.col(cover_idx));
     }
 
-    vis_.visualizePoints(CLUSTERING_TARGETS_NS, cluster_targets, Visualizer::Blue(), 1);
+    vis_->visualizePoints(CLUSTERING_TARGETS_NS, cluster_targets, Visualizer::Blue(), 1);
 
     const Matrix3Xd cluster_targets_as_matrix = VectorEigenVector3dToEigenMatrix3Xd(cluster_targets);
     const MatrixXd distance_matrix = CalculateSquaredDistanceMatrix(cluster_targets_as_matrix);
@@ -984,7 +984,7 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
     const uint32_t num_clusters = (uint32_t)cluster_centers.size();
     assert(num_clusters == 2);
 
-//    vis_.visualizeCubes(CLUSTERING_RESULTS_PRE_PROJECT_NS, cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Red(), 1);
+//    vis_->visualizeCubes(CLUSTERING_RESULTS_PRE_PROJECT_NS, cluster_centers, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Red(), 1);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////// Determine which gripper gets assigned which cluster center ////////////////////////////
@@ -1190,8 +1190,8 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
         assert(false && "Unhandled edge case in get gripper targets");
     }
 
-//    vis_.visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[0].translation(), target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
-//    vis_.visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[1].translation(), target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
+//    vis_->visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[0].translation(), target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
+//    vis_->visualizeCubes(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, {world_state.all_grippers_single_pose_[1].translation(), target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
 
     // Project the targets out of collision
     const double min_dist_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_) * GetRRTTargetMinDistanceScaleFactor(ph_);
@@ -1200,8 +1200,8 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
     target_gripper_poses[0].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(gripper0_position_pre_project, min_dist_to_obstacles);
     target_gripper_poses[1].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(gripper1_position_pre_project, min_dist_to_obstacles);
 
-//    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
-//    vis_.visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
+//    vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
+//    vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
 
     return target_gripper_poses;
 }
@@ -1254,7 +1254,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
 
     // Planning if we did not load a plan from file
     {
-        vis_.clearVisualizationsBullet();
+        vis_->clearVisualizationsBullet();
 
         RRTConfig start_config(
                     std::pair<Vector3d, Vector3d>(
@@ -1272,10 +1272,10 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
         const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
         const auto rrt_results = rrt_helper_->rrtPlan(start_config, rrt_grippers_goal, time_limit);
 
-//        vis_.deleteObjects(CLUSTERING_TARGETS_NS, 1, 2);
-        vis_.clearVisualizationsBullet();
+//        vis_->deleteObjects(CLUSTERING_TARGETS_NS, 1, 2);
+        vis_->clearVisualizationsBullet();
         std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
-        vis_.clearVisualizationsBullet();
+        vis_->clearVisualizationsBullet();
         std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         rrt_helper_->visualizePath(rrt_results);
         std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
@@ -1641,14 +1641,13 @@ void Planner::visualizeDesiredMotion(
             colors[node_ind].a = desired_motion.weight((ssize_t)node_ind * 3) > 0 ? 1.0f : 0.0f;
         }
         task_specification_->visualizeDeformableObject(
-                vis_,
                 DESIRED_DELTA_NS,
                 AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
                 colors);
 
         if (task_specification_->deformable_type_ == DeformableType::CLOTH)
         {
-            vis_.visualizeObjectDelta(
+            vis_->visualizeObjectDelta(
                         DESIRED_DELTA_NS,
                         current_world_state.object_configuration_,
                         AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
@@ -1676,7 +1675,7 @@ void Planner::visualizeGripperMotion(
     {
         case 0:
         {
-            vis_.visualizeLines("MM grippers motion",
+            vis_->visualizeLines("MM grippers motion",
                                 line_starts,
                                 line_ends,
                                 Visualizer::Black());
@@ -1687,7 +1686,7 @@ void Planner::visualizeGripperMotion(
         }
         case 1:
         {
-            vis_.visualizeLines("DM grippers motion",
+            vis_->visualizeLines("DM grippers motion",
                                 line_starts,
                                 line_ends,
                                 Visualizer::Silver());
@@ -1698,7 +1697,7 @@ void Planner::visualizeGripperMotion(
         }
         case 2:
         {
-            vis_.visualizeLines("DD grippers motion",
+            vis_->visualizeLines("DD grippers motion",
                                 line_starts,
                                 line_ends,
                                 Visualizer::Yellow());

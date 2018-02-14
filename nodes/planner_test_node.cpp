@@ -8,12 +8,16 @@ int main(int argc, char* argv[])
     ros::NodeHandle nh;
     ros::NodeHandle ph("~");
 
+    ROS_INFO("Creating utility objects");
     smmap::RobotInterface robot(nh);
-    smmap_utilities::Visualizer vis(nh, ph);
+    smmap_utilities::Visualizer::Ptr vis = std::make_shared<smmap_utilities::Visualizer>(nh, ph);
+    smmap::TaskSpecification::Ptr task_specification(smmap::TaskSpecification::MakeTaskSpecification(nh, ph, vis));
 
-    smmap::TaskSpecification::Ptr task_specification = smmap::TaskSpecification::MakeTaskSpecification(nh, ph, vis);
+    ROS_INFO("Creating and executing planner");
     smmap::Planner planner(nh, ph, robot, vis, task_specification);
     planner.execute();
+
+    ROS_INFO("Disposing planner...");
 
     return 0;
 }

@@ -34,7 +34,7 @@ using namespace arc_utilities;
 TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer& vis)
+        Visualizer::Ptr vis)
 {
     const TaskType task_type = GetTaskType(nh);
 
@@ -85,7 +85,7 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
 TaskSpecification::TaskSpecification(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer& vis,
+        Visualizer::Ptr vis,
         const DeformableType deformable_type,
         const TaskType task_type,
         const bool is_dijkstras_type_task)
@@ -124,21 +124,19 @@ TaskSpecification::TaskSpecification(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void TaskSpecification::visualizeDeformableObject(
-        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
 {
-    visualizeDeformableObject_impl(vis, marker_name, object_configuration, color);
+    visualizeDeformableObject_impl(marker_name, object_configuration, color);
 }
 
 void TaskSpecification::visualizeDeformableObject(
-        const Visualizer& vis,
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const
 {
-    visualizeDeformableObject_impl(vis, marker_name, object_configuration, colors);
+    visualizeDeformableObject_impl(marker_name, object_configuration, colors);
 }
 
 double TaskSpecification::calculateError(const WorldState& world_state)
@@ -292,7 +290,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaFullyC
 
     if (visualize)
     {
-        vis_.visualizeLines("stretching_lines", vis_start_points, vis_end_points, Visualizer::Blue());
+        vis_->visualizeLines("stretching_lines", vis_start_points, vis_end_points, Visualizer::Blue());
     }
 
     return stretching_correction;
@@ -344,7 +342,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDeltaPairwi
 
     if (visualize)
     {
-        vis_.visualizeLines("stretching_lines", vis_start_points, vis_end_points, Visualizer::Blue());
+        vis_->visualizeLines("stretching_lines", vis_start_points, vis_end_points, Visualizer::Blue());
     }
 
     return stretching_correction;
@@ -472,7 +470,7 @@ const std::vector<long>& TaskSpecification::getGripperAttachedNodesIndices(const
 CoverageTask::CoverageTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer& vis,
+        Visualizer::Ptr vis,
         const DeformableType deformable_type,
         const TaskType task_type,
         const bool is_dijkstras_type_task = false)
@@ -516,7 +514,7 @@ bool CoverageTask::pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d
 DirectCoverageTask::DirectCoverageTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer& vis,
+        Visualizer::Ptr vis,
         const DeformableType deformable_type,
         const TaskType task_type)
     : CoverageTask(nh, ph, vis, deformable_type, task_type)
@@ -612,7 +610,7 @@ ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_imp
 DijkstrasCoverageTask::DijkstrasCoverageTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer& vis,
+        Visualizer::Ptr vis,
         const DeformableType deformable_type,
         const TaskType task_type)
     : CoverageTask(nh, ph, vis, deformable_type, task_type, true)
@@ -711,7 +709,7 @@ const DijkstrasCoverageTask::Correspondences& DijkstrasCoverageTask::getCoverPoi
                         end_points.push_back(cover_points_.col(cover_point_idx));
                     }
                 }
-                vis_.visualizeLines("correspondences", start_points, end_points, Visualizer::Yellow(), 1, 0.001);
+                vis_->visualizeLines("correspondences", start_points, end_points, Visualizer::Yellow(), 1, 0.001);
             }
 
             current_correspondences_last_simtime_calced_ = world_state.sim_time_;
@@ -857,10 +855,10 @@ void DijkstrasCoverageTask::visualizeFreeSpaceGraph() const
     }
 
     std::cerr << "\n\n\n\n\nAttempting to visualize free space graph." << std::endl;
-    std::cerr << "Is ros initialized? Outside of vis_.visualizeSpheres call" << ros::isInitialized() << std::endl;
+    std::cerr << "Is ros initialized? Outside of vis_->visualizeSpheres call" << ros::isInitialized() << std::endl;
 
-    vis_.visualizeSpheres("free_space_graph_nodes", node_centers, Visualizer::Orange(), 1, 0.002);
-    vis_.visualizeLines("free_space_graph_edges", start_points, end_points, Visualizer::Orange(), 1, 0.0002);
+    vis_->visualizeSpheres("free_space_graph_nodes", node_centers, Visualizer::Orange(), 1, 0.002);
+    vis_->visualizeLines("free_space_graph_edges", start_points, end_points, Visualizer::Orange(), 1, 0.0002);
 
     std::cerr << "\n\n\n\n\nDone visualizing free space graph." << std::endl;
 }
@@ -1093,7 +1091,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
 DistanceBasedCorrespondencesTask::DistanceBasedCorrespondencesTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer& vis,
+        Visualizer::Ptr vis,
         const DeformableType deformable_type,
         const TaskType task_type)
     : DijkstrasCoverageTask(nh, ph, vis, deformable_type, task_type)
@@ -1200,7 +1198,7 @@ std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::fin
 FixedCorrespondencesTask::FixedCorrespondencesTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer& vis,
+        Visualizer::Ptr vis,
         const DeformableType deformable_type,
         const TaskType task_type)
     : DijkstrasCoverageTask(nh, ph, vis, deformable_type, task_type)

@@ -18,14 +18,14 @@ namespace smmap
                     const Eigen::Vector3d& start_point,
                     const Eigen::Vector3d& end_point,
                     const std::shared_ptr<DijkstrasCoverageTask>& task,
-                    const smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer::Ptr vis,
                     std::mt19937_64& generator);
 
             VirtualRubberBand(
                     EigenHelpers::VectorVector3d starting_points,
                     const double max_total_band_distance,
                     const std::shared_ptr<DijkstrasCoverageTask>& task,
-                    const smmap_utilities::Visualizer& vis,
+                    const smmap_utilities::Visualizer::Ptr vis,
                     std::mt19937_64& generator);
 
             VirtualRubberBand& operator=(const VirtualRubberBand& other);
@@ -60,7 +60,7 @@ namespace smmap
 
             const std::shared_ptr<DijkstrasCoverageTask> task_;
             const sdf_tools::SignedDistanceField& sdf_;
-            const smmap_utilities::Visualizer& vis_;
+            const smmap_utilities::Visualizer::Ptr vis_;
 
         public:
             const double max_integration_step_size_;

@@ -20,14 +20,14 @@ namespace smmap
                 const Eigen::Vector3d& start_point,
                 const Eigen::Vector3d& end_point,
                 const std::shared_ptr<DijkstrasCoverageTask>& task,
-                const smmap_utilities::Visualizer& vis,
+                const smmap_utilities::Visualizer::Ptr vis,
                 std::mt19937_64& generator);
 
         QuinlanRubberBand(
                 EigenHelpers::VectorVector3d starting_points,
                 const double max_total_band_distance,
                 const std::shared_ptr<DijkstrasCoverageTask>& task,
-                const smmap_utilities::Visualizer& vis,
+                const smmap_utilities::Visualizer::Ptr vis,
                 std::mt19937_64& generator);
 
         QuinlanRubberBand& operator=(const QuinlanRubberBand& other);
@@ -67,7 +67,7 @@ namespace smmap
         ros::NodeHandle ph_;
         const std::shared_ptr<DijkstrasCoverageTask> task_;
         const sdf_tools::SignedDistanceField& sdf_;
-        const smmap_utilities::Visualizer& vis_;
+        const smmap_utilities::Visualizer::Ptr vis_;
 
         EigenHelpers::VectorVector3d band_;
 

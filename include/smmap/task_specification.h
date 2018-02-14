@@ -30,7 +30,7 @@ namespace smmap
             static TaskSpecification::Ptr MakeTaskSpecification(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer& vis);
+                    smmap_utilities::Visualizer::Ptr vis);
 
         public:
 
@@ -41,7 +41,7 @@ namespace smmap
             TaskSpecification(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer& vis,
+                    smmap_utilities::Visualizer::Ptr vis,
                     const DeformableType deformable_type,
                     const TaskType task_type,
                     const bool is_dijkstras_type_task = false);
@@ -51,13 +51,11 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             void visualizeDeformableObject(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const;
 
             void visualizeDeformableObject(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const;
@@ -177,7 +175,7 @@ namespace smmap
 
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
-            smmap_utilities::Visualizer& vis_;
+            smmap_utilities::Visualizer::Ptr vis_;
 
             const std::vector<GripperData> grippers_data_;
             const Eigen::MatrixXd object_initial_node_distance_;
@@ -195,13 +193,11 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const = 0;
 
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const = 0;
@@ -224,7 +220,7 @@ namespace smmap
             CoverageTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer& vis,
+                    smmap_utilities::Visualizer::Ptr vis,
                     const DeformableType deformable_type,
                     const TaskType task_type,
                     const bool is_dijkstras_type_task);
@@ -257,7 +253,7 @@ namespace smmap
             DirectCoverageTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer& vis,
+                    smmap_utilities::Visualizer::Ptr vis,
                     const DeformableType deformable_type,
                     const TaskType task_type);
 
@@ -296,7 +292,7 @@ namespace smmap
             DijkstrasCoverageTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer& vis,
+                    smmap_utilities::Visualizer::Ptr vis,
                     const DeformableType deformable_type,
                     const TaskType task_type);
 
@@ -383,7 +379,7 @@ namespace smmap
             DistanceBasedCorrespondencesTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer& vis,
+                    smmap_utilities::Visualizer::Ptr vis,
                     const DeformableType deformable_type,
                     const TaskType task_type);
 
@@ -402,7 +398,7 @@ namespace smmap
             FixedCorrespondencesTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer& vis,
+                    smmap_utilities::Visualizer::Ptr vis,
                     const DeformableType deformable_type,
                     const TaskType task_type);
 

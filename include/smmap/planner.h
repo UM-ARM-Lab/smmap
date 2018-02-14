@@ -27,7 +27,7 @@ namespace smmap
             Planner(ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
                     RobotInterface& robot,
-                    smmap_utilities::Visualizer& vis,
+                    smmap_utilities::Visualizer::Ptr vis,
                     const std::shared_ptr<TaskSpecification>& task_specification);
 
             void execute();
@@ -199,7 +199,7 @@ namespace smmap
             std::unordered_map<std::string, Log::Log> loggers_;
             std::unordered_map<std::string, Log::Log> controller_loggers_;
 
-            smmap_utilities::Visualizer& vis_;
+            smmap_utilities::Visualizer::Ptr vis_;
             const bool visualize_desired_motion_;
             const bool visualize_gripper_motion_;
             const bool visualize_predicted_motion_;

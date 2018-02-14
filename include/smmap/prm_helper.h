@@ -19,9 +19,8 @@ namespace smmap
             static constexpr auto PRM_RANDOM_PATH_NS = "prm_random_path";
 
 
-            PRMHelper(
-                    const sdf_tools::SignedDistanceField& environment_sdf,
-                    const smmap_utilities::Visualizer& vis,
+            PRMHelper(const sdf_tools::SignedDistanceField& environment_sdf,
+                    smmap_utilities::Visualizer::Ptr vis,
                     std::mt19937_64& generator,
                     const Eigen::Vector3d planning_world_lower_limits,
                     const Eigen::Vector3d planning_world_upper_limits,
@@ -43,7 +42,7 @@ namespace smmap
             std::mt19937_64& generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
             const sdf_tools::SignedDistanceField& environment_sdf_;
-            const smmap_utilities::Visualizer& vis_;
+            smmap_utilities::Visualizer::Ptr vis_;
             const bool visualization_enabled_globally_;
 
             arc_dijkstras::Graph<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> roadmap_;

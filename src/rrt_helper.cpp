@@ -158,7 +158,7 @@ std::size_t std::hash<smmap::RRTConfig>::operator()(const smmap::RRTConfig& rrt_
 
 RRTHelper::RRTHelper(
         const sdf_tools::SignedDistanceField& environment_sdf,
-        Visualizer& vis,
+        Visualizer::Ptr vis,
         std::mt19937_64& generator,
         const std::shared_ptr<PRMHelper>& prm_helper,
         const Eigen::Vector3d planning_world_lower_limits,
@@ -366,7 +366,7 @@ bool RRTHelper::goalReached(const RRTConfig& node)
     {
         if (visualization_enabled_globally_)
         {
-            vis_.visualizeLineStrip(RRT_GOAL_TESTING_NS, node.getBand().getVectorRepresentation(), Visualizer::White(), 1, 0.01);
+            vis_->visualizeLineStrip(RRT_GOAL_TESTING_NS, node.getBand().getVectorRepresentation(), Visualizer::White(), 1, 0.01);
             ros::spinOnce();
             std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         }
@@ -415,13 +415,13 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
 
     if (visualization_enabled_globally_ && visualization_enabled_locally && target_is_goal_config && false)
     {
-        vis_.visualizeCubes(
+        vis_->visualizeCubes(
                     RRT_FORWARD_PROP_START_NS,
                     {starting_grippers_position.first},
                     Eigen::Vector3d(0.01, 0.01, 0.01),
                     Visualizer::Magenta(),
                     1);
-        vis_.visualizeCubes(
+        vis_->visualizeCubes(
                     RRT_FORWARD_PROP_START_NS,
                     {starting_grippers_position.second},
                     Eigen::Vector3d(0.01, 0.01, 0.01),
@@ -435,20 +435,20 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
                     10,
                     true);
 
-        vis_.visualizeCubes(
+        vis_->visualizeCubes(
                     RRT_SAMPLE_NS,
                     {target_grippers_position.first},
                     Eigen::Vector3d(0.01, 0.01, 0.01),
                     Visualizer::Magenta(),
                     1);
-        vis_.visualizeCubes(
+        vis_->visualizeCubes(
                     RRT_SAMPLE_NS,
                     {target_grippers_position.second},
                     Eigen::Vector3d(0.01, 0.01, 0.01),
                     Visualizer::Cyan(),
                     5);
 
-        vis_.deleteObjects(RRT_FORWARD_PROP_STEPS_NS, 1, 2);
+        vis_->deleteObjects(RRT_FORWARD_PROP_STEPS_NS, 1, 2);
     }
 
     // Allocate space for potential children
@@ -534,7 +534,7 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
 
             if (num_bands_in_visualize_list >= 20 || target_is_goal_config)
             {
-                vis_.visualizeLines(RRT_FORWARD_PROP_STEPS_NS, band_visualization_line_start_points, band_visualization_line_end_points, Visualizer::Blue(), 1);
+                vis_->visualizeLines(RRT_FORWARD_PROP_STEPS_NS, band_visualization_line_start_points, band_visualization_line_end_points, Visualizer::Blue(), 1);
                 band_visualization_line_start_points.clear();
                 band_visualization_line_end_points.clear();
                 num_bands_in_visualize_list = 0;
@@ -563,8 +563,8 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
 
             if (gripper_a_tree_start_points.size() >= 100 || target_is_goal_config)
             {
-                vis_.visualizeLines(RRT_TREE_GRIPPER_A_NS, gripper_a_tree_start_points, gripper_a_tree_end_points, Visualizer::Magenta(), marker_id);
-                vis_.visualizeLines(RRT_TREE_GRIPPER_B_NS, gripper_b_tree_start_points, gripper_b_tree_end_points, Visualizer::Cyan(), marker_id);
+                vis_->visualizeLines(RRT_TREE_GRIPPER_A_NS, gripper_a_tree_start_points, gripper_a_tree_end_points, Visualizer::Magenta(), marker_id);
+                vis_->visualizeLines(RRT_TREE_GRIPPER_B_NS, gripper_b_tree_start_points, gripper_b_tree_end_points, Visualizer::Cyan(), marker_id);
                 gripper_a_tree_start_points.clear();
                 gripper_b_tree_start_points.clear();
                 gripper_a_tree_end_points.clear();
@@ -649,7 +649,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
 
     if (visualization_enabled_globally_)
     {
-        vis_.clearVisualizationsBullet();
+        vis_->clearVisualizationsBullet();
     }
 
     statistics_["planning0_sampling_time                                 "] = total_sampling_time_;
@@ -669,7 +669,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
 
     if (visualization_enabled_globally_)
     {
-        vis_.deleteObjects(RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
+        vis_->deleteObjects(RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
     }
 
     std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
@@ -710,7 +710,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVe
 
 //            if (visualize)
 //            {
-//                vis_.visualizeLineStrip("first_order_vis_check", {first_node, second_node}, Visualizer::White(), 2);
+//                vis_->visualizeLineStrip("first_order_vis_check", {first_node, second_node}, Visualizer::White(), 2);
 //            }
 
             const ssize_t num_steps = (ssize_t)std::ceil((second_node - first_node).norm() / environment_sdf_.GetResolution());
@@ -996,7 +996,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
         if (visualization_enabled_globally_ && visualization_enabled_locally)
         {
-            vis_.deleteObjects(RRT_FORWARD_PROP_STEPS_NS, 1, 2);
+            vis_->deleteObjects(RRT_FORWARD_PROP_STEPS_NS, 1, 2);
         }
 
         ///////////////////// Determine which nodes to try to shortcut between /////////////////////////////////////////
@@ -1052,8 +1052,8 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 //                const RRTGrippersRepresentation& start_band_endpoints = smoothing_start_config.getBand().getEndpoints();
 //                const RRTGrippersRepresentation& end_band_endpoints = smoothing_target_end_config.getBand().getEndpoints();
 
-//                vis_.visualizeCubes(RRT_SHORTCUT_FIRST_GRIPPER_NS, {start_band_endpoints.first, end_band_endpoints.first}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 10);
-//                vis_.visualizeCubes(RRT_SHORTCUT_SECOND_GRIPPER_NS, {start_band_endpoints.second, end_band_endpoints.second}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Cyan(), 10);
+//                vis_->visualizeCubes(RRT_SHORTCUT_FIRST_GRIPPER_NS, {start_band_endpoints.first, end_band_endpoints.first}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 10);
+//                vis_->visualizeCubes(RRT_SHORTCUT_SECOND_GRIPPER_NS, {start_band_endpoints.second, end_band_endpoints.second}, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Cyan(), 10);
 //                ros::spinOnce();
 //                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
 //            }
@@ -1122,8 +1122,8 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
 //            if (visualization_enabled_globally_ && visualization_enabled_locally)
 //            {
-//                vis_.visualizeCubes(RRT_SHORTCUT_FIRST_GRIPPER_NS, target_waypoints_first_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 10);
-//                vis_.visualizeCubes(RRT_SHORTCUT_SECOND_GRIPPER_NS, target_waypoints_second_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Cyan(), 10);
+//                vis_->visualizeCubes(RRT_SHORTCUT_FIRST_GRIPPER_NS, target_waypoints_first_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Magenta(), 10);
+//                vis_->visualizeCubes(RRT_SHORTCUT_SECOND_GRIPPER_NS, target_waypoints_second_gripper, Eigen::Vector3d(0.01, 0.01, 0.01), Visualizer::Cyan(), 10);
 //                ros::spinOnce();
 //                std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
 //            }
@@ -1146,7 +1146,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
 //                if (visualization_enabled_globally_)
 //                {
-//                    vis_.visualizeCubes(RRT_SHORTCUT_START_NS, {interm_start_config.getGrippers().first, interm_start_config.getGrippers().second, forward_prop_target_config.getGrippers().first, forward_prop_target_config.getGrippers().second}, Eigen::Vector3d(0.02, 0.02, 0.02), Visualizer::Yellow(), 5);
+//                    vis_->visualizeCubes(RRT_SHORTCUT_START_NS, {interm_start_config.getGrippers().first, interm_start_config.getGrippers().second, forward_prop_target_config.getGrippers().first, forward_prop_target_config.getGrippers().second}, Eigen::Vector3d(0.02, 0.02, 0.02), Visualizer::Yellow(), 5);
 //                    ros::spinOnce();
 //                    std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
 //                }
@@ -1180,7 +1180,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
 //            if (visualization_enabled_globally_)
 //            {
-//                vis_.deleteObjects(RRT_SHORTCUT_START_NS, 5, 6);
+//                vis_->deleteObjects(RRT_SHORTCUT_START_NS, 5, 6);
 //                ros::spinOnce();
 //                std::this_thread::sleep_for(std::chrono::duration<double>(0.1));
 //            }
@@ -1247,10 +1247,10 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
 //    if (visualization_enabled_globally_ && visualization_enabled_locally)
 //    {
-//        vis_.deleteObjects(RRT_SHORTCUT_FIRST_GRIPPER_NS, 1, 21);
-//        vis_.deleteObjects(RRT_SHORTCUT_SECOND_GRIPPER_NS, 1, 21);
+//        vis_->deleteObjects(RRT_SHORTCUT_FIRST_GRIPPER_NS, 1, 21);
+//        vis_->deleteObjects(RRT_SHORTCUT_SECOND_GRIPPER_NS, 1, 21);
 //    }
-//    vis_.clearVisualizationsBullet();
+//    vis_->clearVisualizationsBullet();
 
     // Record the statistics and return the result
     const double smoothing_time = function_wide_stopwatch(READ);
@@ -1298,13 +1298,13 @@ void RRTHelper::visualizePath(const std::vector<RRTConfig, RRTAllocator>& path) 
             }
         }
 
-        vis_.visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 1);
+        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 1);
         ros::spinOnce();
         std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
-        vis_.visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Cyan(), 1);
+        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Eigen::Vector3d(0.005, 0.005, 0.005), Visualizer::Cyan(), 1);
         ros::spinOnce();
         std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
-//        vis_.visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
+//        vis_->visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
         ros::spinOnce();
         std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
     }
@@ -1325,5 +1325,5 @@ void RRTHelper::visualizeBlacklist() const
         }
     }
 
-    vis_.visualizeLines(RRT_BLACKLISTED_GOAL_BANDS_NS, line_start_points, line_end_points, Visualizer::Red(), 1, 0.01);
+    vis_->visualizeLines(RRT_BLACKLISTED_GOAL_BANDS_NS, line_start_points, line_end_points, Visualizer::Red(), 1, 0.01);
 }

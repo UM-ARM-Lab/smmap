@@ -12,7 +12,7 @@ QuinlanRubberBand::QuinlanRubberBand(
         const Eigen::Vector3d& start_point,
         const Eigen::Vector3d& end_point,
         const std::shared_ptr<DijkstrasCoverageTask>& task,
-        const Visualizer& vis,
+        const Visualizer::Ptr vis,
         std::mt19937_64& generator)
     : QuinlanRubberBand({start_point, end_point},
                         (end_point - start_point).norm() * task_->maxStretchFactor(),
@@ -25,7 +25,7 @@ QuinlanRubberBand::QuinlanRubberBand(
         const EigenHelpers::VectorVector3d starting_points,
         const double max_total_band_distance,
         const std::shared_ptr<DijkstrasCoverageTask>& task,
-        const Visualizer& vis,
+        const Visualizer::Ptr vis,
         std::mt19937_64& generator)
     : ph_("~/band")
     , task_(task)
@@ -179,14 +179,14 @@ void QuinlanRubberBand::visualize(
 {
     if (visualization_enabled)
     {
-//        vis_.visualizePoints(marker_name + "_points", band_, Visualizer::Green(), 1, 0.002);
+//        vis_->visualizePoints(marker_name + "_points", band_, Visualizer::Green(), 1, 0.002);
         if (isOverstretched())
         {
-            vis_.visualizeXYZTrajectory(marker_name, band_, overstretched_color, id);
+            vis_->visualizeXYZTrajectory(marker_name, band_, overstretched_color, id);
         }
         else
         {
-            vis_.visualizeXYZTrajectory(marker_name, band_, safe_color, id);
+            vis_->visualizeXYZTrajectory(marker_name, band_, safe_color, id);
         }
     }
 }
@@ -205,7 +205,7 @@ void QuinlanRubberBand::visualizeWithBubbles(
         // Delete all sphere, markers, probably from just this publisher, and then republish
 #if ENABLE_DEBUGGING
         {
-            vis_.deleteObjects(marker_name + "_bubbles", 1, 305);
+            vis_->deleteObjects(marker_name + "_bubbles", 1, 305);
             std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
 
             std::vector<double> bubble_sizes(band_.size());
@@ -219,7 +219,7 @@ void QuinlanRubberBand::visualizeWithBubbles(
                             (float)(band_.size() - 1 - idx) / (float)(band_.size() - 1),
                             0.3f);
             }
-            vis_.visualizeSpheres(marker_name + "_bubbles", band_, colors, id, bubble_sizes);
+            vis_->visualizeSpheres(marker_name + "_bubbles", band_, colors, id, bubble_sizes);
             std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
         }
 #endif
@@ -287,7 +287,7 @@ Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& l
 double QuinlanRubberBand::getBubbleSize(const Eigen::Vector3d& location) const
 {
 #if ENABLE_DEBUGGING
-    vis_.visualizePoints("get_bubble_size_test_location", {location}, Visualizer::Orange(), 1, 0.005);
+    vis_->visualizePoints("get_bubble_size_test_location", {location}, Visualizer::Orange(), 1, 0.005);
 //    std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
 #endif
 
@@ -432,16 +432,16 @@ void QuinlanRubberBand::interpolateBetweenPoints(
                       << "Interp: " << interpolated_point.transpose() << std::endl
                       << "Test:   " << test_point.transpose() << std::endl
                       << std::endl;
-            vis_.visualizePoints( "interpolate_outer_debugging_curr_point",    {curr},                Visualizer::Red(1.0f),     1, 0.005);
-            vis_.visualizeSpheres("interpolate_outer_debugging_curr_sphere",   {curr},                Visualizer::Red(0.2f),     2, curr_bubble_size);
-            vis_.visualizePoints( "interpolate_outer_debugging_interp_point",  {interpolated_point},  Visualizer::Green(1.0f),   1, 0.005);
-            vis_.visualizeSpheres("interpolate_outer_debugging_interp_sphere", {interpolated_point},  Visualizer::Green(0.2f),   2, interpolated_point_bubble_size);
-            vis_.visualizePoints( "interpolate_outer_debugging_test_point",    {test_point},          Visualizer::Cyan(1.0f),    1, 0.005);
-            vis_.visualizeSpheres("interpolate_outer_debugging_test_sphere",   {test_point},          Visualizer::Cyan(0.2f),    2, test_point_bubble_size);
-            vis_.visualizePoints( "interpolate_outer_debugging_target_point",  {target},              Visualizer::Blue(1.0f),    1, 0.005);
-            vis_.visualizeSpheres("interpolate_outer_debugging_target_sphere", {target},              Visualizer::Blue(0.2f),    2, target_bubble_size);
+            vis_->visualizePoints( "interpolate_outer_debugging_curr_point",    {curr},                Visualizer::Red(1.0f),     1, 0.005);
+            vis_->visualizeSpheres("interpolate_outer_debugging_curr_sphere",   {curr},                Visualizer::Red(0.2f),     2, curr_bubble_size);
+            vis_->visualizePoints( "interpolate_outer_debugging_interp_point",  {interpolated_point},  Visualizer::Green(1.0f),   1, 0.005);
+            vis_->visualizeSpheres("interpolate_outer_debugging_interp_sphere", {interpolated_point},  Visualizer::Green(0.2f),   2, interpolated_point_bubble_size);
+            vis_->visualizePoints( "interpolate_outer_debugging_test_point",    {test_point},          Visualizer::Cyan(1.0f),    1, 0.005);
+            vis_->visualizeSpheres("interpolate_outer_debugging_test_sphere",   {test_point},          Visualizer::Cyan(0.2f),    2, test_point_bubble_size);
+            vis_->visualizePoints( "interpolate_outer_debugging_target_point",  {target},              Visualizer::Blue(1.0f),    1, 0.005);
+            vis_->visualizeSpheres("interpolate_outer_debugging_target_sphere", {target},              Visualizer::Blue(0.2f),    2, target_bubble_size);
 
-            vis_.deleteObjects("null", 1, 10);
+            vis_->deleteObjects("null", 1, 10);
         }
 #endif
 
@@ -461,14 +461,14 @@ void QuinlanRubberBand::interpolateBetweenPoints(
                 getBubbleSize(target);
                 std::cout << std::endl;
 
-                vis_.visualizePoints( "interpolate_inner_debugging_curr_point",    {curr},                Visualizer::Red(1.0f),     1, 0.005);
-                vis_.visualizeSpheres("interpolate_inner_debugging_curr_sphere",   {curr},                Visualizer::Red(0.2f),     2, curr_bubble_size);
-                vis_.visualizePoints( "interpolate_inner_debugging_interp_point",  {interpolated_point},  Visualizer::Green(1.0f),   1, 0.005);
-                vis_.visualizeSpheres("interpolate_inner_debugging_interp_sphere", {interpolated_point},  Visualizer::Green(0.2f),   2, interpolated_point_bubble_size);
-                vis_.visualizePoints( "interpolate_inner_debugging_test_point",    {test_point},          Visualizer::Cyan(1.0f),    1, 0.005);
-                vis_.visualizeSpheres("interpolate_inner_debugging_test_sphere",   {test_point},          Visualizer::Cyan(0.2f),    2, test_point_bubble_size);
-                vis_.visualizePoints( "interpolate_inner_debugging_target_point",  {target},              Visualizer::Blue(1.0f),    1, 0.005);
-                vis_.visualizeSpheres("interpolate_inner_debugging_target_sphere", {target},              Visualizer::Blue(0.2f),    2, target_bubble_size);
+                vis_->visualizePoints( "interpolate_inner_debugging_curr_point",    {curr},                Visualizer::Red(1.0f),     1, 0.005);
+                vis_->visualizeSpheres("interpolate_inner_debugging_curr_sphere",   {curr},                Visualizer::Red(0.2f),     2, curr_bubble_size);
+                vis_->visualizePoints( "interpolate_inner_debugging_interp_point",  {interpolated_point},  Visualizer::Green(1.0f),   1, 0.005);
+                vis_->visualizeSpheres("interpolate_inner_debugging_interp_sphere", {interpolated_point},  Visualizer::Green(0.2f),   2, interpolated_point_bubble_size);
+                vis_->visualizePoints( "interpolate_inner_debugging_test_point",    {test_point},          Visualizer::Cyan(1.0f),    1, 0.005);
+                vis_->visualizeSpheres("interpolate_inner_debugging_test_sphere",   {test_point},          Visualizer::Cyan(0.2f),    2, test_point_bubble_size);
+                vis_->visualizePoints( "interpolate_inner_debugging_target_point",  {target},              Visualizer::Blue(1.0f),    1, 0.005);
+                vis_->visualizeSpheres("interpolate_inner_debugging_target_sphere", {target},              Visualizer::Blue(0.2f),    2, target_bubble_size);
 
                 std::cerr << std::setprecision(12)
                           << "Curr:   " << curr.transpose() << std::endl
@@ -483,7 +483,7 @@ void QuinlanRubberBand::interpolateBetweenPoints(
                           << "dist + min:         " << distance_between_curr_and_test_point + min_overlap_distance_ << std::endl
                           << std::endl;
 
-                vis_.deleteObjects("null", 1, 10);
+                vis_->deleteObjects("null", 1, 10);
             }
 #endif
 
@@ -578,8 +578,8 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
     forward_pass.reserve(band_.size());
     forward_pass.push_back(band_.front());
 #if ENABLE_DEBUGGING
-    vis_.visualizePoints( "remove_extra_test_points_kept_points",  {forward_pass.back()}, Visualizer::Cyan(1.0f), (int32_t)forward_pass.size(), 0.002);
-    vis_.visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, Visualizer::Cyan(0.2f), (int32_t)forward_pass.size(), getBubbleSize(forward_pass.back()));
+    vis_->visualizePoints( "remove_extra_test_points_kept_points",  {forward_pass.back()}, Visualizer::Cyan(1.0f), (int32_t)forward_pass.size(), 0.002);
+    vis_->visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, Visualizer::Cyan(0.2f), (int32_t)forward_pass.size(), getBubbleSize(forward_pass.back()));
 #endif
 
     for (size_t curr_idx = 1; curr_idx + 1 < band_.size(); ++curr_idx)
@@ -629,9 +629,9 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
         {
 //                std::cout << "Backtrack detected\n";
 
-//                vis_.visualizePoints("prev", {prev}, Visualizer::Blue(), 1, 0.01);
-//                vis_.visualizePoints("curr", {curr}, Visualizer::Magenta(), 1, 0.01);
-//                vis_.visualizePoints("next", {next}, Visualizer::Red(), 1, 0.01);
+//                vis_->visualizePoints("prev", {prev}, Visualizer::Blue(), 1, 0.01);
+//                vis_->visualizePoints("curr", {curr}, Visualizer::Magenta(), 1, 0.01);
+//                vis_->visualizePoints("next", {next}, Visualizer::Red(), 1, 0.01);
 
 //                std::cout << prev.transpose() << std::endl;
 //                std::cout << curr.transpose() << std::endl;
@@ -644,12 +644,12 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
 #if ENABLE_DEBUGGING
         if (verbose)
         {
-            vis_.visualizePoints( "remove_extra_test_prev", {prev}, Visualizer::Red(1.0f),   1, 0.002);
-            vis_.visualizeSpheres("remove_extra_test_prev", {prev}, Visualizer::Red(0.2f),   2, prev_bubble_size);
-            vis_.visualizePoints( "remove_extra_test_curr", {curr}, Visualizer::Green(1.0f), 1, 0.002);
-            vis_.visualizeSpheres("remove_extra_test_curr", {curr}, Visualizer::Green(0.2f), 2, curr_bubble_size);
-            vis_.visualizePoints( "remove_extra_test_next", {next}, Visualizer::Blue(1.0f),  1, 0.002);
-            vis_.visualizeSpheres("remove_extra_test_next", {next}, Visualizer::Blue(0.2f),  2, next_bubble_size);
+            vis_->visualizePoints( "remove_extra_test_prev", {prev}, Visualizer::Red(1.0f),   1, 0.002);
+            vis_->visualizeSpheres("remove_extra_test_prev", {prev}, Visualizer::Red(0.2f),   2, prev_bubble_size);
+            vis_->visualizePoints( "remove_extra_test_curr", {curr}, Visualizer::Green(1.0f), 1, 0.002);
+            vis_->visualizeSpheres("remove_extra_test_curr", {curr}, Visualizer::Green(0.2f), 2, curr_bubble_size);
+            vis_->visualizePoints( "remove_extra_test_next", {next}, Visualizer::Blue(1.0f),  1, 0.002);
+            vis_->visualizeSpheres("remove_extra_test_next", {next}, Visualizer::Blue(0.2f),  2, next_bubble_size);
             std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
 
 
@@ -665,14 +665,14 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
         // If no item said we should delete this item, then keep it
         forward_pass.push_back(curr);
 #if ENABLE_DEBUGGING
-        vis_.visualizePoints( "remove_extra_test_points_kept_points",  {forward_pass.back()}, Visualizer::Cyan(1.0f), (int32_t)forward_pass.size(), 0.002);
-        vis_.visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, Visualizer::Cyan(0.2f), (int32_t)forward_pass.size(), getBubbleSize(forward_pass.back()));
+        vis_->visualizePoints( "remove_extra_test_points_kept_points",  {forward_pass.back()}, Visualizer::Cyan(1.0f), (int32_t)forward_pass.size(), 0.002);
+        vis_->visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, Visualizer::Cyan(0.2f), (int32_t)forward_pass.size(), getBubbleSize(forward_pass.back()));
 #endif
     }
     forward_pass.push_back(band_.back());
 #if ENABLE_DEBUGGING
-    vis_.visualizePoints( "remove_extra_test_points_kept_points",  {forward_pass.back()}, Visualizer::Cyan(1.0f), (int32_t)forward_pass.size(), 0.002);
-    vis_.visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, Visualizer::Cyan(0.2f), (int32_t)forward_pass.size(), getBubbleSize(forward_pass.back()));
+    vis_->visualizePoints( "remove_extra_test_points_kept_points",  {forward_pass.back()}, Visualizer::Cyan(1.0f), (int32_t)forward_pass.size(), 0.002);
+    vis_->visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, Visualizer::Cyan(0.2f), (int32_t)forward_pass.size(), getBubbleSize(forward_pass.back()));
 #endif
 
     band_ = forward_pass;
@@ -747,16 +747,16 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 
             if (verbose)
             {
-                vis_.visualizePoints( "smoothing_test_prev",      {prev},      Visualizer::Red(1.0f),     1, 0.002);
-                vis_.visualizeSpheres("smoothing_test_prev",      {prev},      Visualizer::Red(0.2f),     2, prev_bubble_size);
-                vis_.visualizePoints( "smoothing_test_curr",      {curr},      Visualizer::Green(1.0f),   1, 0.002);
-                vis_.visualizeSpheres("smoothing_test_curr",      {curr},      Visualizer::Green(0.2f),   2, curr_bubble_size);
-                vis_.visualizePoints( "smoothing_test_prime",     {prime},     Visualizer::Cyan(1.0f),    1, 0.002);
-                vis_.visualizeSpheres("smoothing_test_prime",     {prime},     Visualizer::Cyan(0.2f),    2, prime_bubble_size);
-                vis_.visualizePoints( "smoothing_test_projected", {projected}, Visualizer::Magenta(1.0f), 1, 0.002);
-                vis_.visualizeSpheres("smoothing_test_projected", {projected}, Visualizer::Magenta(0.2f), 2, projected_bubble_size);
-                vis_.visualizePoints( "smoothing_test_next",      {next},      Visualizer::Blue(1.0f),    1, 0.002);
-                vis_.visualizeSpheres("smoothing_test_next",      {next},      Visualizer::Blue(0.2f),    2, next_bubble_size);
+                vis_->visualizePoints( "smoothing_test_prev",      {prev},      Visualizer::Red(1.0f),     1, 0.002);
+                vis_->visualizeSpheres("smoothing_test_prev",      {prev},      Visualizer::Red(0.2f),     2, prev_bubble_size);
+                vis_->visualizePoints( "smoothing_test_curr",      {curr},      Visualizer::Green(1.0f),   1, 0.002);
+                vis_->visualizeSpheres("smoothing_test_curr",      {curr},      Visualizer::Green(0.2f),   2, curr_bubble_size);
+                vis_->visualizePoints( "smoothing_test_prime",     {prime},     Visualizer::Cyan(1.0f),    1, 0.002);
+                vis_->visualizeSpheres("smoothing_test_prime",     {prime},     Visualizer::Cyan(0.2f),    2, prime_bubble_size);
+                vis_->visualizePoints( "smoothing_test_projected", {projected}, Visualizer::Magenta(1.0f), 1, 0.002);
+                vis_->visualizeSpheres("smoothing_test_projected", {projected}, Visualizer::Magenta(0.2f), 2, projected_bubble_size);
+                vis_->visualizePoints( "smoothing_test_next",      {next},      Visualizer::Blue(1.0f),    1, 0.002);
+                vis_->visualizeSpheres("smoothing_test_next",      {next},      Visualizer::Blue(0.2f),    2, next_bubble_size);
                 std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
 
                 std::cout << std::setprecision(12)

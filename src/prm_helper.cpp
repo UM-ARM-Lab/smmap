@@ -10,7 +10,7 @@ using namespace smmap_utilities;
 
 PRMHelper::PRMHelper(
         const sdf_tools::SignedDistanceField& environment_sdf,
-        const Visualizer& vis,
+        Visualizer::Ptr vis,
         std::mt19937_64& generator,
         const Eigen::Vector3d planning_world_lower_limits,
         const Eigen::Vector3d planning_world_upper_limits,
@@ -101,8 +101,8 @@ void PRMHelper::visualize(const bool visualization_enabled)
             }
         }
 
-        vis_.visualizePoints(PRM_NODES_NS, node_points, Visualizer::Green(), 1, 0.005);
-        vis_.visualizeLines(PRM_EDGES_NS, line_start_points, line_end_points, Visualizer::Green(), 1, 0.001);
+        vis_->visualizePoints(PRM_NODES_NS, node_points, Visualizer::Green(), 1, 0.005);
+        vis_->visualizeLines(PRM_EDGES_NS, line_start_points, line_end_points, Visualizer::Green(), 1, 0.001);
     }
 }
 

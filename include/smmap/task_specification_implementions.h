@@ -12,17 +12,15 @@ namespace smmap
     class ClothColabFolding : public TaskSpecification
     {
         public:
-            ClothColabFolding(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis);
+            ClothColabFolding(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -55,17 +53,15 @@ namespace smmap
     class RopeCylinderCoverage : public DirectCoverageTask
     {
         public:
-            RopeCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis);
+            RopeCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -84,17 +80,15 @@ namespace smmap
     class ClothTableCoverage : public DirectCoverageTask
     {
         public:
-            ClothTableCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis);
+            ClothTableCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
-            void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
+            virtual void visualizeDeformableObject_impl(
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -114,17 +108,15 @@ namespace smmap
     class ClothCylinderCoverage : public DistanceBasedCorrespondencesTask
     {
         public:
-            ClothCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis);
+            ClothCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -143,17 +135,15 @@ namespace smmap
     class ClothWAFR : public DistanceBasedCorrespondencesTask
     {
         public:
-            ClothWAFR(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis);
+            ClothWAFR(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -172,17 +162,15 @@ namespace smmap
     class ClothWall : public DistanceBasedCorrespondencesTask
     {
         public:
-            ClothWall(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis);
+            ClothWall(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -201,17 +189,15 @@ namespace smmap
     class ClothSinglePole : public DistanceBasedCorrespondencesTask
     {
         public:
-            ClothSinglePole(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis);
+            ClothSinglePole(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -230,17 +216,15 @@ namespace smmap
     class ClothDoubleSlit : public DistanceBasedCorrespondencesTask
     {
         public:
-            ClothDoubleSlit(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis);
+            ClothDoubleSlit(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -260,17 +244,15 @@ namespace smmap
     class RopeMaze : public FixedCorrespondencesTask
     {
         public:
-            RopeMaze(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis);
+            RopeMaze(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
@@ -289,17 +271,15 @@ namespace smmap
     class ClothPlacemat : public FixedCorrespondencesTask
     {
         public:
-            ClothPlacemat(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer& vis);
+            ClothPlacemat(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color) const final;
 
             virtual void visualizeDeformableObject_impl(
-                    const smmap_utilities::Visualizer& vis,
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors) const final;
