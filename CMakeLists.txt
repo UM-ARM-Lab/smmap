@@ -12,9 +12,6 @@ set(CATKIN_PACKAGES
     deformable_manipulation_experiment_params
 )
 
-## Add our local cmake modules to the list that can be found
-# list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
-
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 

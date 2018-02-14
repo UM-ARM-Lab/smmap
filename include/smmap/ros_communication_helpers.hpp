@@ -44,67 +44,21 @@ namespace smmap
             nh.serviceClient<deformable_manipulation_msgs::GetGripperAttachedNodeIndices>(GetGripperAttachedNodeIndicesTopic(nh));
         gripper_node_indices_client.waitForExistence();
 
-        switch (GetDeformableType(nh))
+
+        grippers_data.reserve(gripper_names.size());
+        for (size_t gripper_ind = 0; gripper_ind < gripper_names.size(); gripper_ind++)
         {
-            case DeformableType::CLOTH:
+            deformable_manipulation_msgs::GetGripperAttachedNodeIndices node_indices_srv_data;
+            node_indices_srv_data.request.name = gripper_names[gripper_ind];
+
+            if (gripper_node_indices_client.call(node_indices_srv_data))
             {
-                // Service client to get stretching vector information --- Added by Mengyao
-                ros::ServiceClient gripper_stretching_vector_info_client =
-                        nh.serviceClient<deformable_manipulation_msgs::GetGripperStretchingVectorInfo>(GetGripperStretchingVectorInfoTopic(nh));
-                gripper_stretching_vector_info_client.waitForExistence();
-
-                grippers_data.reserve(gripper_names.size());
-                for (size_t gripper_ind = 0; gripper_ind < gripper_names.size(); gripper_ind++)
-                {
-                    deformable_manipulation_msgs::GetGripperAttachedNodeIndices node_indices_srv_data;
-                    node_indices_srv_data.request.name = gripper_names[gripper_ind];
-
-                    deformable_manipulation_msgs::GetGripperStretchingVectorInfo stretching_vector_info_srv_data;
-                    stretching_vector_info_srv_data.request.name = gripper_names[gripper_ind];
-
-                    if (gripper_stretching_vector_info_client.call(stretching_vector_info_srv_data)
-                            && gripper_node_indices_client.call(node_indices_srv_data))
-                    {
-                        grippers_data.push_back(GripperData(gripper_names[gripper_ind],
-                                                            VectorAnytypeToVectorLong(node_indices_srv_data.response.indices),
-                                                            stretching_vector_info_srv_data.response.to_gripper_name,
-                                                            VectorAnytypeToVectorLong(stretching_vector_info_srv_data.response.attatched_indices),
-                                                            VectorAnytypeToVectorLong(stretching_vector_info_srv_data.response.neighbor_indices),
-                                                            stretching_vector_info_srv_data.response.contributions));
-                    }
-                    else
-                    {
-                        ROS_ERROR_STREAM_NAMED("ros_comms_helpers",
-                                               "Unable to retrieve node_indices and stretching vector info for gripper: "
-                                               << gripper_names[gripper_ind]);
-                    }
-                }
-                break;
+                grippers_data.push_back(GripperData(gripper_names[gripper_ind],
+                                                    VectorAnytypeToVectorLong(node_indices_srv_data.response.indices)));
             }
-            case DeformableType::ROPE:
+            else
             {
-                grippers_data.reserve(gripper_names.size());
-                for (size_t gripper_ind = 0; gripper_ind < gripper_names.size(); gripper_ind++)
-                {
-                    deformable_manipulation_msgs::GetGripperAttachedNodeIndices node_indices_srv_data;
-                    node_indices_srv_data.request.name = gripper_names[gripper_ind];
-
-                    if (gripper_node_indices_client.call(node_indices_srv_data))
-                    {
-                        grippers_data.push_back(GripperData(gripper_names[gripper_ind],
-                                                            VectorAnytypeToVectorLong(node_indices_srv_data.response.indices)));
-                    }
-                    else
-                    {
-                        ROS_ERROR_STREAM_NAMED("ros_comms_helpers", "Unable to retrieve node indices for gripper: " << gripper_names[gripper_ind]);
-                    }
-                }
-                break;
-            }
-            default:
-            {
-                assert(false && "not cloth or rope, fail to get gripper data in ros communicationhelper.hpp");
-                break;
+                ROS_ERROR_STREAM_NAMED("ros_comms_helpers", "Unable to retrieve node indices for gripper: " << gripper_names[gripper_ind]);
             }
         }
 
