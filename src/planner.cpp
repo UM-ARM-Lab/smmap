@@ -167,7 +167,7 @@ Planner::Planner(
     , generator_(seed_)
     , robot_(robot)
     , task_specification_(task_specification)
-    , dijkstras_task_(nullptr)
+    , dijkstras_task_(std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_)) // If possible, this will be done, if not, it will be NULL (nullptr?)
     // Multi-model and regret based model selection parameters
     , collect_results_for_all_models_(GetCollectResultsForAllModels(ph_))
     , reward_std_dev_scale_factor_(REWARD_STANDARD_DEV_SCALING_FACTOR_START)
@@ -210,8 +210,9 @@ void Planner::execute()
     const double start_time = world_feedback.sim_time_;
     initializeModelAndControllerSet(world_feedback);
 
-    // Convert in general if possible, as this is usd elsewhere too
-    dijkstras_task_ = std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_);
+    std::cerr << "Is ros initialized? excute pre enable_stuck_detection check" << ros::isInitialized() << std::endl;
+    std::cerr << std::endl;
+
     if (enable_stuck_detection_)
     {
         assert(dijkstras_task_ != nullptr);
@@ -279,7 +280,8 @@ void Planner::execute()
                         !GetDisableAllVisualizations(ph_)));
     }
 
-    std::cerr << "\n\n\n\n\nAttempting to visualize free space graph." << std::endl << std::endl << std::endl << std::endl;
+    std::cerr << "Is ros initialized? " << ros::isInitialized() << std::endl;
+    std::cerr << std::endl;
 
     if (visualize_free_space_graph_ && dijkstras_task_ != nullptr)
     {
@@ -549,8 +551,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
         const size_t num_grippers = world_feedback.all_grippers_single_pose_.size();
         for (size_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
         {
-            std::cout << "Desired delta: " << selected_command[gripper_idx].head<3>().transpose() << std::endl;
-            std::cout << "Actual delta:  " << kinematics::calculateError(world_state.all_grippers_single_pose_[gripper_idx], world_feedback.all_grippers_single_pose_[gripper_idx]).head<3>().transpose() << std::endl;
+            std::cerr << "Desired delta: " << selected_command[gripper_idx].head<3>().transpose() << std::endl;
+            std::cerr << "Actual delta:  " << kinematics::calculateError(world_state.all_grippers_single_pose_[gripper_idx], world_feedback.all_grippers_single_pose_[gripper_idx]).head<3>().transpose() << std::endl;
         }
 
     }
@@ -1678,7 +1680,7 @@ void Planner::visualizeGripperMotion(
                                 line_starts,
                                 line_ends,
                                 Visualizer::Black());
-            std::cout << "0 first gripper motion norm: "
+            std::cerr << "0 first gripper motion norm: "
                       << gripper_motion.at(0).norm()
                       << std::endl;
             break;
@@ -1689,7 +1691,7 @@ void Planner::visualizeGripperMotion(
                                 line_starts,
                                 line_ends,
                                 Visualizer::Silver());
-            std::cout << "1 first gripper motion norm: "
+            std::cerr << "1 first gripper motion norm: "
                       << gripper_motion.at(0).norm()
                       << std::endl;
             break;
@@ -1700,7 +1702,7 @@ void Planner::visualizeGripperMotion(
                                 line_starts,
                                 line_ends,
                                 Visualizer::Yellow());
-            std::cout << "2 first gripper motion norm: "
+            std::cerr << "2 first gripper motion norm: "
                       << gripper_motion.at(0).norm()
                       << std::endl;
             break;

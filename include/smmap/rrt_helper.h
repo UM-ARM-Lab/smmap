@@ -83,7 +83,7 @@ namespace smmap
 
             RRTHelper(
                     const sdf_tools::SignedDistanceField& environment_sdf,
-                    const smmap_utilities::Visualizer& vis,
+                    smmap_utilities::Visualizer& vis,
                     std::mt19937_64& generator,
                     const std::shared_ptr<PRMHelper>& prm_helper,
                     const Eigen::Vector3d planning_world_lower_limits,
@@ -189,7 +189,7 @@ namespace smmap
 
             std::mt19937_64& generator_;
             const sdf_tools::SignedDistanceField& environment_sdf_;
-            const smmap_utilities::Visualizer& vis_;
+            smmap_utilities::Visualizer& vis_;
             const bool visualization_enabled_globally_;
             const std_msgs::ColorRGBA band_safe_color_;
             const std_msgs::ColorRGBA band_overstretched_color_;

@@ -158,7 +158,7 @@ std::size_t std::hash<smmap::RRTConfig>::operator()(const smmap::RRTConfig& rrt_
 
 RRTHelper::RRTHelper(
         const sdf_tools::SignedDistanceField& environment_sdf,
-        const Visualizer& vis,
+        Visualizer& vis,
         std::mt19937_64& generator,
         const std::shared_ptr<PRMHelper>& prm_helper,
         const Eigen::Vector3d planning_world_lower_limits,

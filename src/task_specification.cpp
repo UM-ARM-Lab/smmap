@@ -856,8 +856,13 @@ void DijkstrasCoverageTask::visualizeFreeSpaceGraph() const
         }
     }
 
+    std::cerr << "\n\n\n\n\nAttempting to visualize free space graph." << std::endl;
+    std::cerr << "Is ros initialized? Outside of vis_.visualizeSpheres call" << ros::isInitialized() << std::endl;
+
     vis_.visualizeSpheres("free_space_graph_nodes", node_centers, Visualizer::Orange(), 1, 0.002);
     vis_.visualizeLines("free_space_graph_edges", start_points, end_points, Visualizer::Orange(), 1, 0.0002);
+
+    std::cerr << "\n\n\n\n\nDone visualizing free space graph." << std::endl;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
