@@ -31,12 +31,20 @@ namespace smmap
             // This function assumes only 2 grippers, and it is called before the grippers are moved by sendGrippersPoses
             double getGrippersInitialDistance();
 
-            WorldState sendGrippersPoses(const AllGrippersSinglePose& grippers_pose);
+            WorldState commandRobotMotion(
+                    const AllGrippersSinglePose& target_grippers_poses,
+                    const Eigen::VectorXd& target_robot_configuration,
+                    const bool robot_configuration_valid);
 
-            bool testGrippersPoses(const std::vector<AllGrippersSinglePose>& grippers_pose,
-                                   const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback);
+            bool testRobotMotion(
+                    const std::vector<AllGrippersSinglePose>& test_grippers_poses,
+                    const std::vector<Eigen::VectorXd>& test_robot_configurations,
+                    const bool robot_configuration_valid,
+                    const TestRobotMotionFeedbackCallbackFunctionType& feedback_callback);
 
             std::vector<CollisionData> checkGripperCollision(const AllGrippersSinglePose& grippers_pose);
+
+            Eigen::MatrixXd getGrippersJacobian(const Eigen::VectorXd& robot_configuration);
 
         private:
             ////////////////////////////////////////////////////////////////////
@@ -48,7 +56,7 @@ namespace smmap
             const std::vector<GripperData> grippers_data_;
             GripperCollisionChecker gripper_collision_checker_;
             ros::ServiceClient execute_gripper_movement_client_;
-            actionlib::SimpleActionClient<deformable_manipulation_msgs::TestGrippersPosesAction> test_grippers_poses_client_;
+            actionlib::SimpleActionClient<deformable_manipulation_msgs::TestRobotMotionAction> test_grippers_poses_client_;
 
         // TODO: comments, and placement, and stuff
         public:
@@ -58,27 +66,33 @@ namespace smmap
         private:
             std::thread spin_thread_;
 
-            WorldState sendGrippersPoses_impl(const deformable_manipulation_msgs::ExecuteGripperMovementRequest& movement);
+            WorldState commandRobotMotion_impl(
+                    const deformable_manipulation_msgs::ExecuteRobotMotionRequest& movement);
 
-            deformable_manipulation_msgs::ExecuteGripperMovementRequest noOpGripperMovement();
-            deformable_manipulation_msgs::ExecuteGripperMovementRequest toRosGrippersPoses(const AllGrippersSinglePose& grippers_pose) const;
+            deformable_manipulation_msgs::ExecuteRobotMotionRequest noOpGripperMovement();
+            deformable_manipulation_msgs::ExecuteRobotMotionRequest toRosMovementRequest(
+                    const AllGrippersSinglePose& grippers_poses,
+                    const Eigen::VectorXd& robot_configuration,
+                    const bool robot_configuration_valid) const;
 
             ////////////////////////////////////////////////////////////////////
             // Testing specific gripper movements
             ////////////////////////////////////////////////////////////////////
 
-            size_t feedback_counter_;
+            volatile size_t feedback_counter_;
             std::vector<bool> feedback_recieved_;
             void internalTestPoseFeedbackCallback(
-                    const deformable_manipulation_msgs::TestGrippersPosesActionFeedbackConstPtr& feedback,
-                    const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback);
+                    const deformable_manipulation_msgs::TestRobotMotionActionFeedbackConstPtr& feedback,
+                    const TestRobotMotionFeedbackCallbackFunctionType& feedback_callback);
 
-            bool testGrippersPoses_impl(
-                    const deformable_manipulation_msgs::TestGrippersPosesGoal& goal,
-                    const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback);
+            bool testRobotMotion_impl(
+                    const deformable_manipulation_msgs::TestRobotMotionGoal& goal,
+                    const TestRobotMotionFeedbackCallbackFunctionType& feedback_callback);
 
-            deformable_manipulation_msgs::TestGrippersPosesGoal toRosTestPosesGoal(
-                    const std::vector<AllGrippersSinglePose>& grippers_poses) const;
+            deformable_manipulation_msgs::TestRobotMotionGoal toRosTestPosesGoal(
+                    const std::vector<AllGrippersSinglePose>& grippers_poses,
+                    const std::vector<Eigen::VectorXd>& robot_configurations,
+                    const bool robot_configurations_valid) const;
     };
 }
 

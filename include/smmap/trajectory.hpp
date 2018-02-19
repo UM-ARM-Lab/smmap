@@ -34,17 +34,19 @@ namespace smmap
     {
         ObjectPointSet object_configuration_;
         AllGrippersSinglePose all_grippers_single_pose_;
+        Eigen::VectorXd robot_configuration_;
+        bool robot_configuration_valid_;
         std::vector<CollisionData> gripper_collision_data_;
         double sim_time_;
     };
 
     /**
-     * @brief computeNextFeedback
-     * @param next_feedback_ros
+     * @brief ConvertToEigenFeedback
+     * @param feedback_ros
      * @return
      */
     inline WorldState ConvertToEigenFeedback(
-            const deformable_manipulation_msgs::SimulatorFeedback& feedback_ros)
+            const deformable_manipulation_msgs::WorldState& feedback_ros)
     {
         WorldState feedback_eigen;
 
@@ -54,7 +56,10 @@ namespace smmap
         feedback_eigen.all_grippers_single_pose_ =
                 EigenHelpersConversions::VectorGeometryPoseToVectorIsometry3d(feedback_ros.gripper_poses);
 
-        // TODO: modify the feedback to change this data ordering
+        feedback_eigen.robot_configuration_ =
+                EigenHelpersConversions::StdVectorToEigenVectorX(feedback_ros.robot_configuration);
+        feedback_eigen.robot_configuration_valid_ = feedback_ros.robot_configuration_valid;
+
         size_t num_grippers = feedback_ros.gripper_poses.size();
         feedback_eigen.gripper_collision_data_.reserve(num_grippers);
         for (size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)

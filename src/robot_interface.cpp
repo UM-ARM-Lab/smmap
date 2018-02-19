@@ -13,8 +13,8 @@ RobotInterface::RobotInterface(ros::NodeHandle& nh)
     , world_frame_name_(GetWorldFrameName())
     , grippers_data_(GetGrippersData(nh_))
     , gripper_collision_checker_(nh_)
-    , execute_gripper_movement_client_(nh_.serviceClient<deformable_manipulation_msgs::ExecuteGripperMovement>(GetExecuteGrippersMovementTopic(nh_), true))
-    , test_grippers_poses_client_(nh_, GetTestGrippersPosesTopic(nh_), false)
+    , execute_gripper_movement_client_(nh_.serviceClient<deformable_manipulation_msgs::ExecuteRobotMotion>(GetExecuteRobotMotionTopic(nh_), true))
+    , test_grippers_poses_client_(nh_, GetTestRobotMotionTopic(nh_), false)
     , dt_(GetRobotControlPeriod(nh_))
     , max_gripper_velocity_(GetMaxGripperVelocity(nh_))
     // TODO: remove this hardcoded spin rate
@@ -36,7 +36,7 @@ WorldState RobotInterface::start()
 //    test_grippers_poses_client_.waitForServer();
 
     ROS_INFO_NAMED("robot_interface", "Kickstarting the planner with a no-op");
-    return sendGrippersPoses_impl(noOpGripperMovement());
+    return commandRobotMotion_impl(noOpGripperMovement());
 }
 
 bool RobotInterface::ok() const
@@ -92,16 +92,25 @@ double RobotInterface::getGrippersInitialDistance()
     return (gripper0_translation - gripper1_translation).norm();
 }
 
-WorldState RobotInterface::sendGrippersPoses(const AllGrippersSinglePose& grippers_poses)
+WorldState RobotInterface::commandRobotMotion(
+        const AllGrippersSinglePose& target_grippers_poses,
+        const Eigen::VectorXd& target_robot_configuration,
+        const bool robot_configuration_valid)
 {
-    return sendGrippersPoses_impl(toRosGrippersPoses(grippers_poses));
+    return commandRobotMotion_impl(
+                toRosMovementRequest(target_grippers_poses, target_robot_configuration, robot_configuration_valid));
 }
 
-bool RobotInterface::testGrippersPoses(
-        const std::vector<AllGrippersSinglePose>& grippers_poses,
-        const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback)
+bool RobotInterface::testRobotMotion(
+        const std::vector<AllGrippersSinglePose>& test_grippers_poses,
+        const std::vector<Eigen::VectorXd>& test_robot_configurations,
+        const bool robot_configuration_valid,
+        const TestRobotMotionFeedbackCallbackFunctionType& feedback_callback)
 {
-    return testGrippersPoses_impl(toRosTestPosesGoal(grippers_poses), feedback_callback);
+    return testRobotMotion_impl(
+                toRosTestPosesGoal(test_grippers_poses,
+                                   test_robot_configurations,
+                                   robot_configuration_valid), feedback_callback);
 }
 
 std::vector<CollisionData> RobotInterface::checkGripperCollision(
@@ -115,15 +124,15 @@ std::vector<CollisionData> RobotInterface::checkGripperCollision(
 // ROS objects and helpers
 ////////////////////////////////////////////////////////////////////
 
-deformable_manipulation_msgs::ExecuteGripperMovementRequest RobotInterface::noOpGripperMovement()
+deformable_manipulation_msgs::ExecuteRobotMotionRequest RobotInterface::noOpGripperMovement()
 {
-    deformable_manipulation_msgs::ExecuteGripperMovementRequest movement_request;
+    deformable_manipulation_msgs::ExecuteRobotMotionRequest movement_request;
     movement_request.grippers_names = GetGripperNames(grippers_data_);
     movement_request.gripper_poses.resize(grippers_data_.size());
 
     // TODO: resolve code duplication between here, getGrippersPose(), and toRosTestPosesGoal() etc.
     ros::ServiceClient gripper_pose_client =
-        nh_.serviceClient<deformable_manipulation_msgs::GetGripperPose>(GetGripperPoseTopic(nh_));
+            nh_.serviceClient<deformable_manipulation_msgs::GetGripperPose>(GetGripperPoseTopic(nh_));
     gripper_pose_client.waitForExistence();
     for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
     {
@@ -138,61 +147,86 @@ deformable_manipulation_msgs::ExecuteGripperMovementRequest RobotInterface::noOp
         movement_request.gripper_poses[gripper_ind] = pose_srv_data.response.pose;
     }
 
+    ros::ServiceClient robot_configuration_client =
+            nh_.serviceClient<deformable_manipulation_msgs::GetRobotConfiguration>(GetRobotConfigurationTopic(nh_));
+    robot_configuration_client.waitForExistence();
+    deformable_manipulation_msgs::GetRobotConfiguration robot_config_srv_data;
+    robot_configuration_client.call(robot_config_srv_data);
+    movement_request.robot_configuration = robot_config_srv_data.response.configuration;
+    movement_request.robot_configuration_valid = robot_config_srv_data.response.valid;
+
     movement_request.header.frame_id = world_frame_name_;
     movement_request.header.stamp = ros::Time::now();
     return movement_request;
 }
 
-deformable_manipulation_msgs::ExecuteGripperMovementRequest RobotInterface::toRosGrippersPoses(
-        const AllGrippersSinglePose& grippers_pose) const
+deformable_manipulation_msgs::ExecuteRobotMotionRequest RobotInterface::toRosMovementRequest(
+        const AllGrippersSinglePose& grippers_poses,
+        const Eigen::VectorXd& robot_configuration,
+        const bool robot_configuration_valid) const
 {
-    deformable_manipulation_msgs::ExecuteGripperMovementRequest movement_request;
+    deformable_manipulation_msgs::ExecuteRobotMotionRequest movement_request;
     movement_request.grippers_names = GetGripperNames(grippers_data_);
-    movement_request.gripper_poses = EigenHelpersConversions::VectorIsometry3dToVectorGeometryPose(grippers_pose);
+    movement_request.gripper_poses = EigenHelpersConversions::VectorIsometry3dToVectorGeometryPose(grippers_poses);
+    movement_request.robot_configuration = EigenHelpersConversions::EigenVectorXToStdVector(robot_configuration);
+    movement_request.robot_configuration_valid = robot_configuration_valid;
     movement_request.header.frame_id = world_frame_name_;
     movement_request.header.stamp = ros::Time::now();
     return movement_request;
 }
 
-deformable_manipulation_msgs::TestGrippersPosesGoal RobotInterface::toRosTestPosesGoal(
-        const std::vector<AllGrippersSinglePose>& grippers_poses) const
+deformable_manipulation_msgs::TestRobotMotionGoal RobotInterface::toRosTestPosesGoal(
+        const std::vector<AllGrippersSinglePose>& grippers_poses,
+        const std::vector<Eigen::VectorXd>& robot_configurations,
+        const bool robot_configurations_valid) const
 {
-    deformable_manipulation_msgs::TestGrippersPosesGoal goal;
+    assert(!robot_configurations_valid ||
+           robot_configurations.size() == grippers_poses.size());
+
+    deformable_manipulation_msgs::TestRobotMotionGoal goal;
     goal.gripper_names = GetGripperNames(grippers_data_);
 
     goal.poses_to_test.resize(grippers_poses.size());
-    for (size_t pose_ind = 0; pose_ind < grippers_poses.size(); pose_ind++)
+    for (size_t pose_ind = 0; pose_ind < grippers_poses.size(); ++pose_ind)
     {
         goal.poses_to_test[pose_ind].poses =
                 EigenHelpersConversions::VectorIsometry3dToVectorGeometryPose(grippers_poses[pose_ind]);
     }
+
+    goal.configurations_to_test.resize(robot_configurations.size());
+    for (size_t config_ind = 0; config_ind < robot_configurations.size(); ++config_ind)
+    {
+        goal.configurations_to_test[config_ind].configuration =
+                EigenHelpersConversions::EigenVectorXToStdVector(robot_configurations[config_ind]);
+    }
+    goal.robot_configurations_valid = robot_configurations_valid;
 
     goal.header.frame_id = world_frame_name_;
     goal.header.stamp = ros::Time::now();
     return goal;
 }
 
-WorldState RobotInterface::sendGrippersPoses_impl(
-        const deformable_manipulation_msgs::ExecuteGripperMovementRequest& movement)
+WorldState RobotInterface::commandRobotMotion_impl(
+        const deformable_manipulation_msgs::ExecuteRobotMotionRequest& movement)
 {
-    deformable_manipulation_msgs::ExecuteGripperMovementResponse result;
+    deformable_manipulation_msgs::ExecuteRobotMotionResponse result;
     if (!execute_gripper_movement_client_.call(movement, result))
     {
         ROS_FATAL_NAMED("robot_interface", "Sending a gripper movement to the robot failed");
     }
-    CHECK_FRAME_NAME("robot_interface", world_frame_name_, result.sim_state.header.frame_id);
-    return ConvertToEigenFeedback(result.sim_state);
+    CHECK_FRAME_NAME("robot_interface", world_frame_name_, result.world_state.header.frame_id);
+    return ConvertToEigenFeedback(result.world_state);
 }
 
 
 
 void RobotInterface::internalTestPoseFeedbackCallback(
-        const deformable_manipulation_msgs::TestGrippersPosesActionFeedbackConstPtr& feedback,
-        const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback)
+        const deformable_manipulation_msgs::TestRobotMotionActionFeedbackConstPtr& feedback,
+        const TestRobotMotionFeedbackCallbackFunctionType& feedback_callback)
 {
     ROS_INFO_STREAM_NAMED("robot_interface", "Got feedback for test number " << feedback->feedback.test_id);
-    CHECK_FRAME_NAME("robot_interface", world_frame_name_, feedback->feedback.sim_state.header.frame_id);
-    feedback_callback(feedback->feedback.test_id, ConvertToEigenFeedback(feedback->feedback.sim_state));
+    CHECK_FRAME_NAME("robot_interface", world_frame_name_, feedback->feedback.world_state.header.frame_id);
+    feedback_callback(feedback->feedback.test_id, ConvertToEigenFeedback(feedback->feedback.world_state));
     if (feedback_recieved_[feedback->feedback.test_id] == false)
     {
         feedback_recieved_[feedback->feedback.test_id] = true;
@@ -201,17 +235,17 @@ void RobotInterface::internalTestPoseFeedbackCallback(
 }
 
 
-bool RobotInterface::testGrippersPoses_impl(
-        const deformable_manipulation_msgs::TestGrippersPosesGoal& goal,
-        const TestGrippersPosesFeedbackCallbackFunctionType& feedback_callback)
+bool RobotInterface::testRobotMotion_impl(
+        const deformable_manipulation_msgs::TestRobotMotionGoal& goal,
+        const TestRobotMotionFeedbackCallbackFunctionType& feedback_callback)
 {
 
     feedback_counter_ = goal.poses_to_test.size();
     feedback_recieved_.clear();
     feedback_recieved_.resize(goal.poses_to_test.size(), false);
 
-    ros::Subscriber internal_feedback_sub = nh_.subscribe<deformable_manipulation_msgs::TestGrippersPosesActionFeedback>(
-                GetTestGrippersPosesTopic(nh_) + "/feedback",
+    ros::Subscriber internal_feedback_sub = nh_.subscribe<deformable_manipulation_msgs::TestRobotMotionActionFeedback>(
+                GetTestRobotMotionTopic(nh_) + "/feedback",
                 1000,
                 boost::bind(&RobotInterface::internalTestPoseFeedbackCallback, this, _1, feedback_callback));
 

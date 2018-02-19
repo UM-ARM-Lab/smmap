@@ -21,7 +21,7 @@ namespace smmap
             const size_t test_id,
             const WorldState& resulting_world_state
             )>
-    TestGrippersPosesFeedbackCallbackFunctionType;
+    TestRobotMotionFeedbackCallbackFunctionType;
 }
 
 #endif // TASK_FUNCTION_POINTER_TYPES_H

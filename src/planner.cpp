@@ -496,7 +496,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
         {
             poses_to_test[model_ind] = kinematics::applyTwist(world_state.all_grippers_single_pose_, suggested_robot_commands[model_ind].first);
         }
-        robot_.testGrippersPoses(poses_to_test, test_feedback_fn);
+        robot_.testRobotMotion(poses_to_test, test_feedback_fn);
 
         ROS_INFO_STREAM_NAMED("planner", "Collected data to calculate regret in " << stopwatch(READ) << " seconds");
     }
@@ -518,7 +518,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     // Measure execution time
     stopwatch(RESET);
     arc_helpers::DoNotOptimize(all_grippers_single_pose);
-    const WorldState world_feedback = robot_.sendGrippersPoses(all_grippers_single_pose);
+    const WorldState world_feedback = robot_.commandRobotMotion(all_grippers_single_pose);
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
 
@@ -574,7 +574,7 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
     assert(executing_global_gripper_trajectory_);
     assert(global_plan_current_timestep_ < global_plan_gripper_trajectory_.size());
 
-    const WorldState world_feedback = robot_.sendGrippersPoses(global_plan_gripper_trajectory_[global_plan_current_timestep_]);
+    const WorldState world_feedback = robot_.commandRobotMotion(global_plan_gripper_trajectory_[global_plan_current_timestep_]);
 
     ++global_plan_current_timestep_;
     if (global_plan_current_timestep_ == global_plan_gripper_trajectory_.size())
