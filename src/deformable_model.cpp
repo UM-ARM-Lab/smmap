@@ -65,8 +65,8 @@ void DeformableModel::updateModel(
 }
 
 ObjectPointSet DeformableModel::getObjectDelta(
-        const DeformableModelInputData& input_data,
+        const WorldState& world_state,
         const AllGrippersSinglePoseDelta& grippers_pose_delta)
 {
-    return getObjectDelta_impl(input_data, grippers_pose_delta);
+    return getObjectDelta_impl(world_state, grippers_pose_delta);
 }

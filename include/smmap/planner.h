@@ -10,7 +10,7 @@
 #include "smmap/task_specification.h"
 #include "smmap/robot_interface.hpp"
 #include "smmap/deformable_model.h"
-#include "smmap/deformable_controller.hpp"
+#include "smmap/deformable_controller.h"
 #include "smmap/rubber_band.hpp"
 #include "smmap/rrt_helper.h"
 #include "smmap/prm_helper.h"
@@ -26,7 +26,7 @@ namespace smmap
 
             Planner(ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    RobotInterface& robot,
+                    const RobotInterface::Ptr& robot,
                     smmap_utilities::Visualizer::Ptr vis,
                     const std::shared_ptr<TaskSpecification>& task_specification);
 
@@ -42,7 +42,7 @@ namespace smmap
             const unsigned long seed_;
             std::mt19937_64 generator_;
 
-            RobotInterface& robot_;
+            RobotInterface::Ptr robot_;
             std::shared_ptr<TaskSpecification> task_specification_;
             std::shared_ptr<DijkstrasCoverageTask> dijkstras_task_;
 
@@ -129,12 +129,12 @@ namespace smmap
             void updateModels(
                     const WorldState& starting_world_state,
                     const ObjectDeltaAndWeight& task_desired_motion,
-                    const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands,
+                    const std::vector<DeformableController::OutputData>& suggested_commands,
                     const ssize_t model_used,
                     const WorldState& world_feedback);
 
             Eigen::MatrixXd calculateProcessNoise(
-                    const std::vector<std::pair<AllGrippersSinglePoseDelta, ObjectPointSet>>& suggested_commands) const;
+                    const std::vector<DeformableController::OutputData>& suggested_commands) const;
 
             ////////////////////////////////////////////////////////////////////
             // Constraint violation and global planner data
@@ -191,7 +191,7 @@ namespace smmap
                     const WorldState& initial_world_state,
                     const WorldState& resulting_world_state,
                     const std::vector<WorldState>& individual_model_results,
-                    const DeformableModel::DeformableModelInputData& model_input_data,
+                    const DeformableController::InputData& controller_input_data,
                     const std::vector<double>& individual_computation_times);
 
             const bool planner_logging_enabled_;

@@ -48,7 +48,7 @@ namespace smmap
                     const WorldState& next) final override;
 
             virtual ObjectPointSet getObjectDelta_impl(
-                    const DeformableModelInputData& input_data,
+                    const WorldState& world_state,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta) const final override;
 
             ////////////////////////////////////////////////////////////////////
@@ -103,7 +103,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             Eigen::MatrixXd computeGrippersToDeformableObjectJacobian(
-                    const DeformableModelInputData& input_data,
+                    const WorldState& world_state,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta) const;
 
             // Null Projection

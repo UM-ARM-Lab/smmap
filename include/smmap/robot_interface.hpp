@@ -2,6 +2,7 @@
 #define ROBOT_INTERFACE_HPP
 
 #include <thread>
+#include <functional>
 
 #include <ros/ros.h>
 #include <actionlib/client/simple_action_client.h>
@@ -16,6 +17,8 @@ namespace smmap
     class RobotInterface
     {
         public:
+            typedef std::shared_ptr<RobotInterface> Ptr;
+
             RobotInterface(ros::NodeHandle& nh);
             ~RobotInterface();
 
@@ -44,7 +47,23 @@ namespace smmap
 
             std::vector<CollisionData> checkGripperCollision(const AllGrippersSinglePose& grippers_pose);
 
+
+            // This a Jacobian between the movement of the grippers (in the gripper body frame)
+            // and the movement of the robot's DOF
             Eigen::MatrixXd getGrippersJacobian(const Eigen::VectorXd& robot_configuration);
+
+            // This looks up the points of interest as reporeted by the external robot (i.e. OpenRAVE)
+            // then querrys Bullet for the data needed to do collision avoidance, and querrys OpenRAVE for the Jacobian
+            // of the movement of the point relative to the robot DOF movement.
+            //
+            // This includes the grippers.
+            std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> getPointsOfInterestCollisionData(
+                    const Eigen::VectorXd& configuration);
+
+            void setCallbackFunctions(
+                    std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)> get_grippers_jacobian_fn,
+                    std::function<EigenHelpers::VectorVector3d(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn,
+                    std::function<std::vector<Eigen::Matrix3Xd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn);
 
         private:
             ////////////////////////////////////////////////////////////////////
@@ -61,10 +80,17 @@ namespace smmap
         // TODO: comments, and placement, and stuff
         public:
             const double dt_;
-            const double max_gripper_velocity_;
+            const double max_gripper_velocity_norm_;
+            const double max_dof_velocity_norm_;
+            const double min_controller_distance_to_obstacles_;
 
         private:
             std::thread spin_thread_;
+
+            // Function pointers that allow for generic(ish) external robots, without explicit inheritance
+            std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)> get_grippers_jacobian_fn_;
+            std::function<EigenHelpers::VectorVector3d(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn_;
+            std::function<std::vector<Eigen::Matrix3Xd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn_;
 
             WorldState commandRobotMotion_impl(
                     const deformable_manipulation_msgs::ExecuteRobotMotionRequest& movement);

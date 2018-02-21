@@ -13,9 +13,11 @@ using namespace EigenHelpers;
 
 LeastSquaresControllerWithObjectAvoidance::LeastSquaresControllerWithObjectAvoidance(
         const DeformableModel::Ptr& model,
+        const RobotInterface::Ptr& robot,
         const double obstacle_avoidance_scale,
         const bool optimize)
-    : model_(model)
+    : DeformableController(robot)
+    , model_(model)
     , obstacle_avoidance_scale_(obstacle_avoidance_scale)
     , optimize_(optimize)
 {
@@ -23,15 +25,14 @@ LeastSquaresControllerWithObjectAvoidance::LeastSquaresControllerWithObjectAvoid
     assert(std::dynamic_pointer_cast<JacobianModel>(model_) != nullptr && "Invalid model type passed to constructor");
 }
 
-std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerWithObjectAvoidance::getGripperMotion_impl(
-        const DeformableModel::DeformableModelInputData& input_data,
-        const double max_gripper_velocity)
+DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getGripperMotion_impl(
+        const InputData& input_data)
 {
     const auto& grippers_data = DeformableModel::GetGrippersData();
 
-    const double max_step_size = max_gripper_velocity * input_data.dt_;
     const size_t num_grippers = grippers_data.size();
     const ssize_t num_nodes = input_data.world_current_state_.object_configuration_.cols();
+    const ssize_t num_robot_dof = input_data.robot_jacobian_valid_ ? input_data.robot_jacobian_.cols() : 0;
 
     ////////////////////////////////////////////////////////////////////////
     // Find the velocities of each part of the algorithm
@@ -42,52 +43,113 @@ std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> LeastSquaresControllerWith
             input_data.desired_object_motion_;
 
     // Recalculate the jacobian at each timestep, because of rotations being non-linear
-    const auto test = std::static_pointer_cast<JacobianModel>(model_);
-    const MatrixXd jacobian = test->computeGrippersToDeformableObjectJacobian(input_data);
+    const auto jacobian_based_model = std::dynamic_pointer_cast<JacobianModel>(model_);
+    const MatrixXd grippers_poses_to_object_jacobian =
+            jacobian_based_model->computeGrippersToDeformableObjectJacobian(input_data.world_current_state_);
 
-    // Find the least-squares fitting to the desired object velocity
-    VectorXd grippers_delta_achieve_goal;
-    if (optimize_)
+    // Zero initialize the output
+    OutputData suggested_robot_motion(num_grippers, num_nodes, num_robot_dof);
+    // Remapped data array
+    Map<VectorXd> object_delta_as_vector(
+                suggested_robot_motion.object_motion_.data(), suggested_robot_motion.object_motion_.size());
+
+    if (input_data.robot_jacobian_valid_)
     {
-        grippers_delta_achieve_goal =
-                minSquaredNormSE3VelocityConstraints(jacobian, desired_object_velocity.delta, max_step_size, desired_object_velocity.weight);
+        const double max_robot_dof_step_size = robot_->max_dof_velocity_norm_ * robot_->dt_;
+
+        // Build the robot DOF to deformable object jacobian
+        const MatrixXd& robot_dof_to_grippers_poses_jacobian = input_data.robot_jacobian_;
+        const MatrixXd robot_dof_to_deformable_object_jacobian =
+                grippers_poses_to_object_jacobian * robot_dof_to_grippers_poses_jacobian;
+
+        // Build the constraints for the gippers and other points of interest on the robot - includes the grippers
+        std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data =
+                robot_->getPointsOfInterestCollisionData(input_data.world_current_state_.robot_configuration_);
+
+        const size_t num_poi = poi_collision_data.size();
+        std::vector<RowVectorXd> linear_constraints_linear_terms(num_poi);
+        std::vector<double> linear_constraints_affine_terms(num_poi);
+        for (size_t poi_ind = 0; poi_ind < num_poi; ++poi_ind)
+        {
+            const CollisionData& collision_data = poi_collision_data[poi_ind].first;
+            const MatrixXd& poi_jacobian = poi_collision_data[poi_ind].second;
+            linear_constraints_linear_terms[poi_ind] =
+                    -collision_data.obstacle_surface_normal_.transpose() * poi_jacobian;
+
+            linear_constraints_affine_terms[poi_ind] =
+                    collision_data.distance_to_obstacle_ - robot_->min_controller_distance_to_obstacles_;
+        }
+
+        // TODO: weights on robot DOF in velocity norm
+        suggested_robot_motion.robot_dof_motion_ = minSquaredNormLinearConstraints(
+                    robot_dof_to_deformable_object_jacobian,
+                    desired_object_velocity.delta,
+                    max_robot_dof_step_size,
+                    desired_object_velocity.weight,
+                    linear_constraints_linear_terms,
+                    linear_constraints_affine_terms);
+
+        // Assemble the output
+        object_delta_as_vector = robot_dof_to_deformable_object_jacobian * suggested_robot_motion.robot_dof_motion_;
+
+        const Eigen::VectorXd grippers_motion = robot_dof_to_grippers_poses_jacobian * suggested_robot_motion.robot_dof_motion_;
+        for (size_t gripper_ind = 0; gripper_ind < num_grippers; ++gripper_ind)
+        {
+            suggested_robot_motion.grippers_motion_[gripper_ind] = grippers_motion.segment<6>(gripper_ind * 3);
+        }
     }
     else
     {
-        grippers_delta_achieve_goal =
-            ClampGripperPoseDeltas(
-                WeightedLeastSquaresSolver(jacobian, desired_object_velocity.delta, desired_object_velocity.weight, LEAST_SQUARES_DAMPING_THRESHOLD, LEAST_SQUARES_DAMPING_VALUE),
-                max_step_size);
+        const double max_grippers_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
+
+        // Find the least-squares fitting to the desired object velocity
+        VectorXd grippers_delta_achieve_goal;
+        if (optimize_)
+        {
+            grippers_delta_achieve_goal =
+                    minSquaredNormSE3VelocityConstraints(
+                        grippers_poses_to_object_jacobian,
+                        desired_object_velocity.delta,
+                        max_grippers_step_size,
+                        desired_object_velocity.weight);
+        }
+        else
+        {
+            grippers_delta_achieve_goal =
+                ClampGripperPoseDeltas(
+                    WeightedLeastSquaresSolver(
+                            grippers_poses_to_object_jacobian,
+                            desired_object_velocity.delta,
+                            desired_object_velocity.weight,
+                            LEAST_SQUARES_DAMPING_THRESHOLD,
+                            LEAST_SQUARES_DAMPING_VALUE),
+                    max_grippers_step_size);
+        }
+
+        // Find the collision avoidance data that we'll need
+        const std::vector<CollisionAvoidanceResult> grippers_collision_avoidance_result =
+                ComputeGripperObjectAvoidance(
+                    input_data.world_current_state_.gripper_collision_data_,
+                    input_data.world_current_state_.all_grippers_single_pose_,
+                    max_grippers_step_size);
+
+        ////////////////////////////////////////////////////////////////////////
+        // Combine the velocities into a single command velocity
+        ////////////////////////////////////////////////////////////////////////
+
+        for (size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+        {
+            suggested_robot_motion.grippers_motion_[gripper_ind] =
+                    CombineDesiredAndObjectAvoidance(
+                        grippers_delta_achieve_goal.segment<6>((ssize_t)gripper_ind * 6),
+                        grippers_collision_avoidance_result[gripper_ind],
+                    obstacle_avoidance_scale_);
+
+            object_delta_as_vector +=
+                    grippers_poses_to_object_jacobian.block(0, 6 * (ssize_t)gripper_ind, num_nodes * 3, 6) *
+                    suggested_robot_motion.grippers_motion_[gripper_ind];
+        }
     }
 
-    // Find the collision avoidance data that we'll need
-    const std::vector<CollisionAvoidanceResult> grippers_collision_avoidance_result =
-            ComputeGripperObjectAvoidance(
-                input_data.world_current_state_.gripper_collision_data_,
-                input_data.world_current_state_.all_grippers_single_pose_,
-                max_step_size);
-
-    ////////////////////////////////////////////////////////////////////////
-    // Combine the velocities into a single command velocity
-    ////////////////////////////////////////////////////////////////////////
-
-    std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> suggested_grippers_command(
-                AllGrippersSinglePoseDelta(num_grippers),
-                ObjectPointSet::Zero(3, num_nodes));
-
-    // Remapped data array
-    Map<VectorXd> object_delta_as_vector(suggested_grippers_command.second.data(), suggested_grippers_command.second.size());
-
-    for (size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
-    {
-        suggested_grippers_command.first[gripper_ind] =
-                CombineDesiredAndObjectAvoidance(
-                    grippers_delta_achieve_goal.segment<6>((ssize_t)gripper_ind * 6),
-                    grippers_collision_avoidance_result[gripper_ind],
-                obstacle_avoidance_scale_);
-
-        object_delta_as_vector += jacobian.block(0, 6 * (ssize_t)gripper_ind, num_nodes * 3, 6) * suggested_grippers_command.first[gripper_ind];
-    }
-
-    return suggested_grippers_command;
+    return suggested_robot_motion;
 }

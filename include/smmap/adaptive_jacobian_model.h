@@ -30,7 +30,7 @@ namespace smmap
                     const WorldState& previous, const WorldState& next) override final;
 
             virtual Eigen::MatrixXd computeGrippersToDeformableObjectJacobian_impl(
-                    const DeformableModelInputData &input_data) const override final;
+                    const WorldState& world_state) const override final;
 
             ////////////////////////////////////////////////////////////////////
             // Private members

@@ -56,9 +56,9 @@ void AdaptiveJacobianModel::updateModel_impl(const WorldState& previous, const W
 }
 
 Eigen::MatrixXd AdaptiveJacobianModel::computeGrippersToDeformableObjectJacobian_impl(
-        const DeformableModelInputData &input_data) const
+        const WorldState& world_state) const
 {
-    (void)input_data;
+    (void)world_state;
     return current_jacobian_;
 }
 

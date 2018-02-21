@@ -83,10 +83,10 @@ void DiminishingRigidityModel::updateModel_impl(
  * @param grippers_data
  */
 Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToDeformableObjectJacobian_impl(
-        const DeformableModelInputData &input_data) const
+        const WorldState& world_state) const
 {
-    const AllGrippersSinglePose& grippers_pose = input_data.world_current_state_.all_grippers_single_pose_;
-    const ObjectPointSet& current_configuration = input_data.world_current_state_.object_configuration_;
+    const AllGrippersSinglePose& grippers_pose = world_state.all_grippers_single_pose_;
+    const ObjectPointSet& current_configuration = world_state.object_configuration_;
 
     const ssize_t num_grippers = (ssize_t)grippers_pose.size();
     const ssize_t num_Jcols = num_grippers * 6;

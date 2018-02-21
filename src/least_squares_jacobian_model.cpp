@@ -73,9 +73,8 @@ void LeastSquaresJacobianModel::updateModel_impl(const WorldState& previous, con
 // Computation helpers
 ////////////////////////////////////////////////////////////////////
 
-Eigen::MatrixXd LeastSquaresJacobianModel::computeGrippersToDeformableObjectJacobian_impl(
-        const DeformableModelInputData &input_data) const
+Eigen::MatrixXd LeastSquaresJacobianModel::computeGrippersToDeformableObjectJacobian_impl(const WorldState& world_state) const
 {
-    (void)input_data;
+    (void)world_state;
     return current_jacobian_;
 }

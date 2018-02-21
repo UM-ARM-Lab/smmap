@@ -96,13 +96,13 @@ void ConstraintJacobianModel::updateModel_impl(const WorldState& previous, const
 }
 
 ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
-        const DeformableModelInputData& input_data,
+        const WorldState& world_state,
         const AllGrippersSinglePoseDelta& grippers_pose_delta) const
 {
-    const MatrixXd J = computeGrippersToDeformableObjectJacobian(input_data, grippers_pose_delta);
-    const ObjectPointSet &current_configuration = input_data.world_current_state_.object_configuration_;
+    const MatrixXd J = computeGrippersToDeformableObjectJacobian(world_state, grippers_pose_delta);
+    const ObjectPointSet& current_configuration = world_state.object_configuration_;
 
-    MatrixXd delta = MatrixXd::Zero(input_data.world_current_state_.object_configuration_.cols() * 3, 1);
+    MatrixXd delta = MatrixXd::Zero(world_state.object_configuration_.cols() * 3, 1);
 
     // Move the object based on the movement of each gripper
     for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
@@ -139,7 +139,7 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
     }
 
     // Resize delta to a 3xn vector
-    delta.resizeLike(input_data.world_current_state_.object_configuration_);
+    delta.resizeLike(world_state.object_configuration_);
     return delta;
 }
 
@@ -159,10 +159,9 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
 // Mask Version
 
 Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobian(
-        const DeformableModelInputData& input_data,
+        const WorldState& world_state,
         const AllGrippersSinglePoseDelta &grippers_pose_delta) const
 {
-    const WorldState& world_state = input_data.world_current_state_;
     const AllGrippersSinglePose& grippers_current_poses = world_state.all_grippers_single_pose_;
     const ObjectPointSet& current_configuration = world_state.object_configuration_;
 

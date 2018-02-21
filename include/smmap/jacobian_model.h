@@ -15,7 +15,7 @@ namespace smmap
             JacobianModel();
 
             Eigen::MatrixXd computeGrippersToDeformableObjectJacobian(
-                    const DeformableModelInputData& input_data) const;
+                    const WorldState& world_state) const;
 
         protected:
             ////////////////////////////////////////////////////////////////////
@@ -30,14 +30,14 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             virtual Eigen::MatrixXd computeGrippersToDeformableObjectJacobian_impl(
-                    const DeformableModelInputData& input_data) const = 0;
+                    const WorldState& world_state) const = 0;
 
             ////////////////////////////////////////////////////////////////////
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
             virtual ObjectPointSet getObjectDelta_impl(
-                    const DeformableModelInputData& input_data,
+                    const WorldState& world_state,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta) const override final;
     };
 }

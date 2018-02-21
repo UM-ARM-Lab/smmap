@@ -13,23 +13,6 @@ namespace smmap
         public:
             typedef std::shared_ptr<DeformableModel> Ptr;
 
-            struct DeformableModelInputData
-            {
-                public:
-                    DeformableModelInputData(
-                            const WorldState& world_current_state,
-                            const ObjectDeltaAndWeight& desired_object_motion,
-                            const double dt)
-                        : world_current_state_(world_current_state)
-                        , desired_object_motion_(desired_object_motion)
-                        , dt_(dt)
-                    {}
-
-                    const WorldState& world_current_state_;
-                    const ObjectDeltaAndWeight desired_object_motion_;
-                    const double dt_;
-            };
-
             DeformableModel();
 
             ////////////////////////////////////////////////////////////////////
@@ -39,7 +22,7 @@ namespace smmap
             void updateModel(const WorldState& previous, const WorldState& next);
 
             ObjectPointSet getObjectDelta(
-                    const DeformableModelInputData& input_data,
+                    const WorldState& world_state,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta);
 
             ////////////////////////////////////////////////////////////////////
@@ -77,7 +60,7 @@ namespace smmap
             virtual void updateModel_impl(const WorldState& previous, const WorldState& next) = 0;
 
             virtual ObjectPointSet getObjectDelta_impl(
-                    const DeformableModelInputData& input_data,
+                    const WorldState& world_state,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta) const = 0;
     };
 }

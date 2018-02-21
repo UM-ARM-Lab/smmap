@@ -16,9 +16,14 @@ RobotInterface::RobotInterface(ros::NodeHandle& nh)
     , execute_gripper_movement_client_(nh_.serviceClient<deformable_manipulation_msgs::ExecuteRobotMotion>(GetExecuteRobotMotionTopic(nh_), true))
     , test_grippers_poses_client_(nh_, GetTestRobotMotionTopic(nh_), false)
     , dt_(GetRobotControlPeriod(nh_))
-    , max_gripper_velocity_(GetMaxGripperVelocity(nh_))
-    // TODO: remove this hardcoded spin rate
-    , spin_thread_(ROSHelpers::Spin, 1000)
+    , max_gripper_velocity_norm_(GetMaxGripperVelocityNorm(nh_))
+    , max_dof_velocity_norm_(GetMaxDOFVelocityNorm(nh_))
+    , min_controller_distance_to_obstacles_(GetControllerMinDistanceToObstacles(nh_))
+    // TODO: remove this hardcoded spin period
+    , spin_thread_(ROSHelpers::Spin, 0.01)
+    , get_grippers_jacobian_fn_(nullptr)
+    , get_collision_points_of_interest_fn_(nullptr)
+    , get_collision_points_of_interest_jacobians_fn_(nullptr)
 {}
 
 RobotInterface::~RobotInterface()
@@ -29,6 +34,10 @@ RobotInterface::~RobotInterface()
 
 WorldState RobotInterface::start()
 {
+    assert(get_grippers_jacobian_fn_ != nullptr && "Function pointers must be initialized");
+    assert(get_collision_points_of_interest_fn_ != nullptr && "Function pointers must be initialized");
+    assert(get_collision_points_of_interest_jacobians_fn_ != nullptr && "Function pointers must be initialized");
+
     ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper movement service to be available");
     execute_gripper_movement_client_.waitForExistence();
     // TODO: Parameterize this ability to be enabled or not
@@ -117,6 +126,56 @@ std::vector<CollisionData> RobotInterface::checkGripperCollision(
         const AllGrippersSinglePose& grippers_poses)
 {
     return gripper_collision_checker_.gripperCollisionCheck(grippers_poses);
+}
+
+
+// This a Jacobian between the movement of the grippers (in the gripper body frame)
+// and the movement of the robot's DOF
+Eigen::MatrixXd RobotInterface::getGrippersJacobian(const Eigen::VectorXd& robot_configuration)
+{
+    return get_grippers_jacobian_fn_(robot_configuration);
+}
+
+// This looks up the points of interest as reporeted by the external robot (i.e. OpenRAVE)
+// then querrys Bullet for the data needed to do collision avoidance, and querrys OpenRAVE for the Jacobian
+// of the movement of the point relative to the robot DOF movement.
+//
+// This includes the grippers.
+std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> RobotInterface::getPointsOfInterestCollisionData(
+        const Eigen::VectorXd& configuration)
+{
+    const EigenHelpers::VectorVector3d poi = get_collision_points_of_interest_fn_(configuration);
+    const std::vector<Eigen::Matrix3Xd> poi_jacobians = get_collision_points_of_interest_jacobians_fn_(configuration);
+    assert(poi.size() == poi_jacobians.size());
+
+    AllGrippersSinglePose poses_to_test(poi.size(), Eigen::Isometry3d::Identity());
+    for (size_t ind = 0; ind < poi.size(); ++ind)
+    {
+        poses_to_test[ind].translation() = poi[ind];
+    }
+    // TODO: address the fact that we're using checkGripperCollision for everything, even non-grippers
+    const std::vector<CollisionData> poi_collision_data = checkGripperCollision(poses_to_test);
+
+
+    std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> results;
+    results.reserve(poi.size());
+
+    for (size_t ind = 0; ind < poi.size(); ++ind)
+    {
+        results.push_back({poi_collision_data[ind], poi_jacobians[ind]});
+    }
+
+    return results;
+}
+
+void RobotInterface::setCallbackFunctions(
+        std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)> get_grippers_jacobian_fn,
+        std::function<EigenHelpers::VectorVector3d(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn,
+        std::function<std::vector<Eigen::Matrix3Xd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn)
+{
+    get_grippers_jacobian_fn_ = get_grippers_jacobian_fn;
+    get_collision_points_of_interest_fn_ = get_collision_points_of_interest_fn;
+    get_collision_points_of_interest_jacobians_fn_ = get_collision_points_of_interest_jacobians_fn;
 }
 
 
