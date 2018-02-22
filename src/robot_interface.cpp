@@ -144,8 +144,8 @@ Eigen::MatrixXd RobotInterface::getGrippersJacobian(const Eigen::VectorXd& robot
 std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> RobotInterface::getPointsOfInterestCollisionData(
         const Eigen::VectorXd& configuration)
 {
-    const EigenHelpers::VectorVector3d poi = get_collision_points_of_interest_fn_(configuration);
-    const std::vector<Eigen::Matrix3Xd> poi_jacobians = get_collision_points_of_interest_jacobians_fn_(configuration);
+    const std::vector<Eigen::Vector3d> poi = get_collision_points_of_interest_fn_(configuration);
+    const std::vector<Eigen::MatrixXd> poi_jacobians = get_collision_points_of_interest_jacobians_fn_(configuration);
     assert(poi.size() == poi_jacobians.size());
 
     AllGrippersSinglePose poses_to_test(poi.size(), Eigen::Isometry3d::Identity());
@@ -170,8 +170,8 @@ std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> RobotInterface::getPoint
 
 void RobotInterface::setCallbackFunctions(
         std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)> get_grippers_jacobian_fn,
-        std::function<EigenHelpers::VectorVector3d(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn,
-        std::function<std::vector<Eigen::Matrix3Xd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn)
+        std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn,
+        std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn)
 {
     get_grippers_jacobian_fn_ = get_grippers_jacobian_fn;
     get_collision_points_of_interest_fn_ = get_collision_points_of_interest_fn;

@@ -439,10 +439,14 @@ WorldState Planner::sendNextCommandUsingLocalController(
     Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
 
-    DeformableController::InputData model_input_data(
+    // Temporaries needed here bercause model_input_data takes things by reference
+    const ObjectDeltaAndWeight desired_object_manipulation_direction = task_specification_->calculateDesiredDirection(world_state);
+    const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian(world_state.robot_configuration_);
+    const DeformableController::InputData model_input_data(
                 world_state,
-                task_specification_->calculateDesiredDirection(world_state),
-                robot_->getGrippersJacobian(world_state.robot_configuration_),
+                desired_object_manipulation_direction,
+                robot_,
+                robot_dof_to_grippers_poses_jacobian,
                 world_state.robot_configuration_valid_);
 
     if (visualize_desired_motion_)
@@ -476,7 +480,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
             ROS_INFO_STREAM_NAMED("planner", model_ind << "th Controller get suggested motion in          " << controller_computation_time[model_ind] << " seconds");
         }
     }
-
     // Measure the time it took to pick a model
     ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in  " << stopwatch(READ) << " seconds");
 
@@ -532,29 +535,27 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
 
 
-
-    if (visualize_gripper_motion_)
-    {
-        for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
-        {
-            visualizeGripperMotion(world_state.all_grippers_single_pose_,
-                                   suggested_robot_commands[(size_t)model_ind].grippers_motion_,
-                                   model_ind);
-        }
+//    if (visualize_gripper_motion_)
+//    {
+//        for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
+//        {
+//            visualizeGripperMotion(world_state.all_grippers_single_pose_,
+//                                   suggested_robot_commands[(size_t)model_ind].grippers_motion_,
+//                                   model_ind);
+//        }
 //        for (size_t gripper_idx = 0; gripper_idx < all_grippers_single_pose.size(); ++gripper_idx)
 //        {
 //            vis_->visualizeGripper("target_gripper_positions", all_grippers_single_pose[gripper_idx], Visualizer::Yellow(), (int)gripper_idx + 1);
 //        }
 
-        const size_t num_grippers = world_feedback.all_grippers_single_pose_.size();
-        for (size_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
-        {
-            std::cerr << "Desired delta: " << selected_command.grippers_motion_[gripper_idx].head<3>().transpose() << std::endl;
-            std::cerr << "Actual delta:  " << kinematics::calculateError(world_state.all_grippers_single_pose_[gripper_idx], world_feedback.all_grippers_single_pose_[gripper_idx]).head<3>().transpose() << std::endl;
-        }
+//        const size_t num_grippers = world_feedback.all_grippers_single_pose_.size();
+//        for (size_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
+//        {
+//            std::cerr << "Desired delta: " << selected_command.grippers_motion_[gripper_idx].head<3>().transpose() << std::endl;
+//            std::cerr << "Actual delta:  " << kinematics::calculateError(world_state.all_grippers_single_pose_[gripper_idx], world_feedback.all_grippers_single_pose_[gripper_idx]).head<3>().transpose() << std::endl;
+//        }
 
-    }
-
+//    }
 
 
 

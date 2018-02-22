@@ -39,11 +39,11 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
     ////////////////////////////////////////////////////////////////////////
 
     // Retrieve the desired object velocity (p_dot)
-    const ObjectDeltaAndWeight desired_object_velocity =
-            input_data.desired_object_motion_;
+    const ObjectDeltaAndWeight desired_object_motion = input_data.desired_object_motion_;
 
     // Recalculate the jacobian at each timestep, because of rotations being non-linear
-    const auto jacobian_based_model = std::dynamic_pointer_cast<JacobianModel>(model_);
+    // We can use a static pointer cast here because we check the input on construction
+    const auto jacobian_based_model = std::static_pointer_cast<JacobianModel>(model_);
     const MatrixXd grippers_poses_to_object_jacobian =
             jacobian_based_model->computeGrippersToDeformableObjectJacobian(input_data.world_current_state_);
 
@@ -63,7 +63,7 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
                 grippers_poses_to_object_jacobian * robot_dof_to_grippers_poses_jacobian;
 
         // Build the constraints for the gippers and other points of interest on the robot - includes the grippers
-        std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data =
+        const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data =
                 robot_->getPointsOfInterestCollisionData(input_data.world_current_state_.robot_configuration_);
 
         const size_t num_poi = poi_collision_data.size();
@@ -83,9 +83,9 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
         // TODO: weights on robot DOF in velocity norm
         suggested_robot_motion.robot_dof_motion_ = minSquaredNormLinearConstraints(
                     robot_dof_to_deformable_object_jacobian,
-                    desired_object_velocity.delta,
+                    desired_object_motion.delta,
                     max_robot_dof_step_size,
-                    desired_object_velocity.weight,
+                    desired_object_motion.weight,
                     linear_constraints_linear_terms,
                     linear_constraints_affine_terms);
 
@@ -109,9 +109,9 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
             grippers_delta_achieve_goal =
                     minSquaredNormSE3VelocityConstraints(
                         grippers_poses_to_object_jacobian,
-                        desired_object_velocity.delta,
+                        desired_object_motion.delta,
                         max_grippers_step_size,
-                        desired_object_velocity.weight);
+                        desired_object_motion.weight);
         }
         else
         {
@@ -119,8 +119,8 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
                 ClampGripperPoseDeltas(
                     WeightedLeastSquaresSolver(
                             grippers_poses_to_object_jacobian,
-                            desired_object_velocity.delta,
-                            desired_object_velocity.weight,
+                            desired_object_motion.delta,
+                            desired_object_motion.weight,
                             LEAST_SQUARES_DAMPING_THRESHOLD,
                             LEAST_SQUARES_DAMPING_VALUE),
                     max_grippers_step_size);

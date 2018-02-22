@@ -11,16 +11,20 @@ namespace smmap
         public:
             typedef std::shared_ptr<DeformableController> Ptr;
 
+            // TODO: Solve problem that constructor can be passed a temporary, which then gets
+            // destructed as soon as the ctor exits
             struct InputData
             {
                 public:
                     InputData(
                             const WorldState& world_current_state,
                             const ObjectDeltaAndWeight& desired_object_motion,
+                            const RobotInterface::Ptr& robot,
                             const Eigen::MatrixXd& robot_jacobian,
                             const bool robot_jacobian_valid)
                         : world_current_state_(world_current_state)
                         , desired_object_motion_(desired_object_motion)
+                        , robot_(robot)
                         , robot_jacobian_(robot_jacobian)
                         , robot_jacobian_valid_(robot_jacobian_valid)
                     {}
@@ -28,7 +32,7 @@ namespace smmap
                     const WorldState& world_current_state_;
                     const ObjectDeltaAndWeight& desired_object_motion_;
                     const RobotInterface::Ptr robot_;
-                    const Eigen::MatrixXd robot_jacobian_;
+                    const Eigen::MatrixXd& robot_jacobian_;
                     const bool robot_jacobian_valid_;
             };
 

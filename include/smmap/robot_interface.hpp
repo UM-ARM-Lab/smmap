@@ -62,8 +62,8 @@ namespace smmap
 
             void setCallbackFunctions(
                     std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)> get_grippers_jacobian_fn,
-                    std::function<EigenHelpers::VectorVector3d(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn,
-                    std::function<std::vector<Eigen::Matrix3Xd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn);
+                    std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn,
+                    std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn);
 
         private:
             ////////////////////////////////////////////////////////////////////
@@ -89,8 +89,8 @@ namespace smmap
 
             // Function pointers that allow for generic(ish) external robots, without explicit inheritance
             std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)> get_grippers_jacobian_fn_;
-            std::function<EigenHelpers::VectorVector3d(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn_;
-            std::function<std::vector<Eigen::Matrix3Xd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn_;
+            std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn_;
+            std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn_;
 
             WorldState commandRobotMotion_impl(
                     const deformable_manipulation_msgs::ExecuteRobotMotionRequest& movement);
