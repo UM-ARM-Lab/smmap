@@ -80,6 +80,9 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
                     collision_data.distance_to_obstacle_ - robot_->min_controller_distance_to_obstacles_;
         }
 
+        const Eigen::VectorXd min_joint_delta = input_data.robot_->joint_lower_limits_ - input_data.world_current_state_.robot_configuration_;
+        const Eigen::VectorXd max_joint_delta = input_data.robot_->joint_upper_limits_ - input_data.world_current_state_.robot_configuration_;
+
         // TODO: weights on robot DOF in velocity norm
         suggested_robot_motion.robot_dof_motion_ = minSquaredNormLinearConstraints(
                     robot_dof_to_deformable_object_jacobian,
@@ -87,7 +90,9 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
                     max_robot_dof_step_size,
                     desired_object_motion.weight,
                     linear_constraints_linear_terms,
-                    linear_constraints_affine_terms);
+                    linear_constraints_affine_terms,
+                    min_joint_delta,
+                    max_joint_delta);
 
         // Assemble the output
         object_delta_as_vector = robot_dof_to_deformable_object_jacobian * suggested_robot_motion.robot_dof_motion_;

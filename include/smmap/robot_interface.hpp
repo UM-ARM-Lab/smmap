@@ -83,6 +83,8 @@ namespace smmap
             const double max_gripper_velocity_norm_;
             const double max_dof_velocity_norm_;
             const double min_controller_distance_to_obstacles_;
+            const Eigen::VectorXd joint_lower_limits_;
+            const Eigen::VectorXd joint_upper_limits_;
 
         private:
             std::thread spin_thread_;

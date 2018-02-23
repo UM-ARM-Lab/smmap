@@ -8,6 +8,26 @@
 
 using namespace smmap;
 
+inline Eigen::VectorXd GetJointLowerLimits() // radians
+{
+    #warning "Magic number for robot joint limits in code"
+    Eigen::VectorXd lower_limits(14);
+    lower_limits << -168.0, -118.0, -168.0, -118.0, -168.0, -118.0, -173.0,
+                    -168.0, -118.0, -168.0, -118.0, -168.0, -118.0, -173.0;
+    lower_limits *= M_PI / 180.0;
+    return lower_limits;
+}
+
+inline Eigen::VectorXd GetJointUpperLimits() // radians
+{
+    #warning message "Magic number for robot joint limits in code"
+    Eigen::VectorXd lower_limits(14);
+    lower_limits << 168.0, 118.0, 168.0, 118.0, 168.0, 118.0, 173.0,
+                    168.0, 118.0, 168.0, 118.0, 168.0, 118.0, 173.0;
+    lower_limits *= M_PI / 180.0;
+    return lower_limits;
+}
+
 RobotInterface::RobotInterface(ros::NodeHandle& nh)
     : nh_(nh)
     , world_frame_name_(GetWorldFrameName())
@@ -19,6 +39,8 @@ RobotInterface::RobotInterface(ros::NodeHandle& nh)
     , max_gripper_velocity_norm_(GetMaxGripperVelocityNorm(nh_))
     , max_dof_velocity_norm_(GetMaxDOFVelocityNorm(nh_))
     , min_controller_distance_to_obstacles_(GetControllerMinDistanceToObstacles(nh_))
+    , joint_lower_limits_(GetJointLowerLimits())
+    , joint_upper_limits_(GetJointUpperLimits())
     // TODO: remove this hardcoded spin period
     , spin_thread_(ROSHelpers::Spin, 0.01)
     , get_grippers_jacobian_fn_(nullptr)
