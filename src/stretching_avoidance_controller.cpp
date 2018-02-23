@@ -23,6 +23,7 @@ StretchingAvoidanceController::StretchingAvoidanceController(
         const int max_count)
     : DeformableController(robot)
     , gripper_collision_checker_(nh)
+    , robot_min_distance_to_obstacles_(GetControllerMinDistanceToObstacles(nh))
     , grippers_data_(robot->getGrippersData())
     , enviroment_sdf_(sdf)
     , generator_(generator)
@@ -67,7 +68,6 @@ DeformableController::OutputData StretchingAvoidanceController::getGripperMotion
     };
 }
 
-
 /////////////////////////////////////////////////////////////////////////////////
 // Private optimization function
 /////////////////////////////////////////////////////////////////////////////////
@@ -86,15 +86,12 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByRandomSa
 
 DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(const InputData& input_data)
 {
-    const double max_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
     const WorldState& current_world_state = input_data.world_current_state_;
+    const ssize_t num_grippers = (ssize_t)(current_world_state.all_grippers_single_pose_.size());
+    assert(num_grippers == 2 && "This function is only intended to be used with 2 grippers");
 
-    const Eigen::VectorXd& desired_object_p_dot =
-            input_data.desired_object_motion_.delta;
-    const Eigen::VectorXd& desired_p_dot_weight =
-            input_data.desired_object_motion_.weight;
-
-    const size_t num_grippers = current_world_state.all_grippers_single_pose_.size();
+    const Eigen::VectorXd& desired_object_p_dot = input_data.desired_object_motion_.delta;
+    const Eigen::VectorXd& desired_p_dot_weight = input_data.desired_object_motion_.weight;
 
     const Eigen::MatrixXd node_squared_distance =
             EigenHelpers::CalculateSquaredDistanceMatrix(current_world_state.object_configuration_);
@@ -103,103 +100,251 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
     // Checking the stretching status for current object configuration for once
     over_stretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
 
-    // Return value of objective function, cost = norm(p_dot_desired - p_dot_test)
-    const std::function<double(const AllGrippersSinglePoseDelta&)> eval_error_cost_fn = [&] (
-            const AllGrippersSinglePoseDelta& test_gripper_motion)
+    if (input_data.robot_jacobian_valid_)
     {
-        const ObjectPointSet predicted_object_p_dot = model_->getObjectDelta(
-                    input_data.world_current_state_,
-                    test_gripper_motion);
+        const double max_step_size = robot_->max_dof_velocity_norm_ * robot_->dt_;
+        const ssize_t num_dof = input_data.world_current_state_.robot_configuration_.size();
+        const Eigen::VectorXd min_joint_delta = input_data.robot_->joint_lower_limits_ - input_data.world_current_state_.robot_configuration_;
+        const Eigen::VectorXd max_joint_delta = input_data.robot_->joint_upper_limits_ - input_data.world_current_state_.robot_configuration_;
 
-        return errorOfControlByPrediction(predicted_object_p_dot,
-                                          desired_object_p_dot,
-                                          desired_p_dot_weight);
-    };
+        // Return value of objective function, cost = norm(p_dot_desired - p_dot_test)
+        const std::function<double(const Eigen::VectorXd&)> eval_error_cost_fn = [&] (
+                const Eigen::VectorXd& test_robot_motion)
+        {
+            const Eigen::VectorXd grippers_motion_as_single_vector =
+                    input_data.robot_jacobian_ * test_robot_motion;
 
-    // Return the min distance of gripper to obstacle, minus the gripper radius
-    const double gripper_radius = GetRobotGripperRadius();
-    const std::function<double(const AllGrippersSinglePoseDelta&)> collision_constraint_fn = [&] (
-            const AllGrippersSinglePoseDelta& test_gripper_motion)
-    {
-        const double min_dis_to_obstacle = gripperCollisionCheckHelper(
-                    current_world_state.all_grippers_single_pose_,
-                    test_gripper_motion);
+            if (grippers_motion_as_single_vector.size() != num_grippers * 6)
+            {
+                assert(false && "num of grippers not match");
+            }
 
-        return gripper_radius - min_dis_to_obstacle;;
-    };
+            AllGrippersSinglePoseDelta test_gripper_motion(num_grippers);
+            for (ssize_t ind = 0; ind < num_grippers; ++ind)
+            {
+                test_gripper_motion[ind] = grippers_motion_as_single_vector.segment<6>(ind * 6);
+            }
 
-    // Return the sum of cos (an indicator of direction) gripper motion to stretching vector
-    const std::function<double(const AllGrippersSinglePoseDelta&)> stretching_constraint_fn = [&] (
-            const AllGrippersSinglePoseDelta& test_gripper_motion)
-    {
-        if (test_gripper_motion.size()!= 2 || test_gripper_motion.size() != num_grippers)
+            const ObjectPointSet predicted_object_p_dot = model_->getObjectDelta(
+                        input_data.world_current_state_,
+                        test_gripper_motion);
+
+            return errorOfControlByPrediction(predicted_object_p_dot,
+                                              desired_object_p_dot,
+                                              desired_p_dot_weight);
+        };
+
+        // Return the min distance of the points of interest to the obstacles, minus the required clearance
+        const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> poi_collision_data =
+                robot_->getPointsOfInterestCollisionData(input_data.world_current_state_.robot_configuration_);
+        const double required_obstacle_clearance = robot_min_distance_to_obstacles_;
+        const std::function<double(const Eigen::VectorXd&)> collision_constraint_fn = [&] (
+                const Eigen::VectorXd& test_robot_motion)
+        {
+            double min_poi_distance = std::numeric_limits<double>::max();
+            for (size_t poi_ind = 0; poi_ind < poi_collision_data.size(); ++poi_ind)
+            {
+                const CollisionData& collision_data = poi_collision_data[poi_ind].first;
+                const Eigen::MatrixXd& poi_jacobian = poi_collision_data[poi_ind].second;
+                const double initial_distance = poi_collision_data[poi_ind].first.distance_to_obstacle_;
+
+                const double current_distance = initial_distance -
+                        collision_data.obstacle_surface_normal_.transpose() * poi_jacobian * test_robot_motion;
+
+                min_poi_distance = std::min(min_poi_distance, current_distance);
+            }
+
+            return required_obstacle_clearance - min_poi_distance;
+        };
+
+        // Return the sum of cos (an indicator of direction) gripper motion to stretching vector
+        const std::function<double(const Eigen::VectorXd&)> stretching_constraint_fn = [&] (
+                const Eigen::VectorXd& test_robot_motion)
+        {
+            const Eigen::VectorXd grippers_motion_as_single_vector =
+                    input_data.robot_jacobian_ * test_robot_motion;
+
+            if (grippers_motion_as_single_vector.size() != num_grippers * 6)
+            {
+                assert(false && "num of grippers not match");
+            }
+
+            AllGrippersSinglePoseDelta test_gripper_motion(num_grippers);
+            for (ssize_t ind = 0; ind < num_grippers; ++ind)
+            {
+                test_gripper_motion[ind] = grippers_motion_as_single_vector.segment<6>(ind * 6);
+            }
+
+            switch (deformable_type_)
+            {
+                case ROPE:
+                {
+                    return stretching_cosine_threshold_ - ropeTwoGripperStretchingHelper(
+                                input_data,
+                                test_gripper_motion);
+                }
+                case CLOTH:
+                {
+                    return stretching_cosine_threshold_ - clothTwoGripperStretchingHelper(
+                                input_data,
+                                test_gripper_motion);
+                }
+                default:
+                {
+                    assert(false && "deformable_type is neither rope nor cloth");
+                    return 0.0;
+                }
+            }
+        };
+
+        // Prevents the robot from moving too quickly
+        const std::function<double(const Eigen::VectorXd&)> robot_motion_constraint_fn = [&] (
+                const Eigen::VectorXd& test_robot_motion)
+        {
+            return test_robot_motion.norm() - max_step_size;
+        };
+
+        const Eigen::VectorXd optimal_robot_motion =
+                smmap_utilities::minFunctionPointerDirectRobotDOF(
+                    log_file_path_,
+                    fix_step_,
+                    max_count_,
+                    num_dof,
+                    min_joint_delta,
+                    max_joint_delta,
+                    generator_,
+                    uniform_unit_distribution_,
+                    eval_error_cost_fn,
+                    collision_constraint_fn,
+                    stretching_constraint_fn,
+                    robot_motion_constraint_fn);
+
+        const Eigen::VectorXd grippers_motion_as_single_vector =
+                input_data.robot_jacobian_ * optimal_robot_motion;
+
+        if (grippers_motion_as_single_vector.size() != num_grippers * 6)
         {
             assert(false && "num of grippers not match");
         }
 
-        switch (deformable_type_)
+        AllGrippersSinglePoseDelta optimal_gripper_motion(num_grippers);
+        for (ssize_t ind = 0; ind < num_grippers; ++ind)
         {
-            case ROPE:
-            {
-                return stretching_cosine_threshold_ - ropeTwoGripperStretchingHelper(
-                            input_data,
-                            test_gripper_motion);
-            }
-            case CLOTH:
-            {
-                return stretching_cosine_threshold_ - clothTwoGripperStretchingHelper(
-                            input_data,
-                            test_gripper_motion);
-            }
-            default:
-            {
-                assert(false && "deformable_type is neither rope nor cloth");
-                return 0.0;
-            }
+            optimal_gripper_motion[ind] = grippers_motion_as_single_vector.segment<6>(ind * 6);
         }
-    };
 
-    const std::function<double(const AllGrippersSinglePoseDelta&)> gripper_motion_constraint_fn = [&] (
-            const AllGrippersSinglePoseDelta& test_gripper_motion)
+        const ObjectPointSet object_motion = model_->getObjectDelta(
+                    input_data.world_current_state_,
+                    optimal_gripper_motion);
+
+        const OutputData suggested_robot_command(
+                    optimal_gripper_motion,
+                    object_motion,
+                    optimal_robot_motion);
+
+        return suggested_robot_command;
+    }
+    else
     {
-        double max_value = 0.0;
-        for (size_t gripper_ind = 0; gripper_ind < test_gripper_motion.size(); gripper_ind += 6)
+        const double max_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
+
+        // Return value of objective function, cost = norm(p_dot_desired - p_dot_test)
+        const std::function<double(const AllGrippersSinglePoseDelta&)> eval_error_cost_fn = [&] (
+                const AllGrippersSinglePoseDelta& test_gripper_motion)
         {
-            const double velocity_norm = GripperVelocity6dNorm(test_gripper_motion.at(gripper_ind));
-            if (velocity_norm > max_value)
+            const ObjectPointSet predicted_object_p_dot = model_->getObjectDelta(
+                        input_data.world_current_state_,
+                        test_gripper_motion);
+
+            return errorOfControlByPrediction(predicted_object_p_dot,
+                                              desired_object_p_dot,
+                                              desired_p_dot_weight);
+        };
+
+        // Return the min distance of gripper to obstacle, minus the gripper radius
+        const double required_obstacle_clearance = GetRobotGripperRadius();
+        const std::function<double(const AllGrippersSinglePoseDelta&)> collision_constraint_fn = [&] (
+                const AllGrippersSinglePoseDelta& test_gripper_motion)
+        {
+            const double min_dis_to_obstacle = gripperCollisionCheckHelper(
+                        current_world_state.all_grippers_single_pose_,
+                        test_gripper_motion);
+
+            return required_obstacle_clearance - min_dis_to_obstacle;
+        };
+
+        // Return the sum of cos (an indicator of direction) gripper motion to stretching vector
+        const std::function<double(const AllGrippersSinglePoseDelta&)> stretching_constraint_fn = [&] (
+                const AllGrippersSinglePoseDelta& test_gripper_motion)
+        {
+            if (test_gripper_motion.size() != 2 || (ssize_t)(test_gripper_motion.size()) != num_grippers)
             {
-                max_value = velocity_norm;
+                assert(false && "num of grippers not match");
             }
-        }
-        return max_value - max_step_size;
 
-    };
+            switch (deformable_type_)
+            {
+                case ROPE:
+                {
+                    return stretching_cosine_threshold_ - ropeTwoGripperStretchingHelper(
+                                input_data,
+                                test_gripper_motion);
+                }
+                case CLOTH:
+                {
+                    return stretching_cosine_threshold_ - clothTwoGripperStretchingHelper(
+                                input_data,
+                                test_gripper_motion);
+                }
+                default:
+                {
+                    assert(false && "deformable_type is neither rope nor cloth");
+                    return 0.0;
+                }
+            }
+        };
 
-    const AllGrippersSinglePoseDelta optimal_gripper_motion =
-            smmap_utilities::minFunctionPointerSE3Delta(
-                log_file_path_,
-                fix_step_,
-                max_count_,
-                num_grippers,
-                max_step_size,
-                generator_,
-                uniform_unit_distribution_,
-                eval_error_cost_fn,
-                collision_constraint_fn,
-                stretching_constraint_fn,
-                gripper_motion_constraint_fn);
+        // Prevents the grippers from moving too quickly
+        const std::function<double(const AllGrippersSinglePoseDelta&)> gripper_motion_constraint_fn = [&] (
+                const AllGrippersSinglePoseDelta& test_gripper_motion)
+        {
+            double max_value = 0.0;
+            for (size_t gripper_ind = 0; gripper_ind < test_gripper_motion.size(); gripper_ind += 6)
+            {
+                const double velocity_norm = GripperVelocity6dNorm(test_gripper_motion.at(gripper_ind));
+                if (velocity_norm > max_value)
+                {
+                    max_value = velocity_norm;
+                }
+            }
+            return max_value - max_step_size;
+        };
 
-    const ObjectPointSet object_motion = model_->getObjectDelta(
-                input_data.world_current_state_,
-                optimal_gripper_motion);
+        const AllGrippersSinglePoseDelta optimal_gripper_motion =
+                smmap_utilities::minFunctionPointerSE3Delta(
+                    log_file_path_,
+                    fix_step_,
+                    max_count_,
+                    num_grippers,
+                    max_step_size,
+                    generator_,
+                    uniform_unit_distribution_,
+                    eval_error_cost_fn,
+                    collision_constraint_fn,
+                    stretching_constraint_fn,
+                    gripper_motion_constraint_fn);
 
-    const OutputData suggested_grippers_command(
-                optimal_gripper_motion,
-                object_motion,
-                Eigen::VectorXd());
+        const ObjectPointSet object_motion = model_->getObjectDelta(
+                    input_data.world_current_state_,
+                    optimal_gripper_motion);
 
-    return suggested_grippers_command;
+        const OutputData suggested_robot_command(
+                    optimal_gripper_motion,
+                    object_motion,
+                    Eigen::VectorXd());
 
+        return suggested_robot_command;
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////////

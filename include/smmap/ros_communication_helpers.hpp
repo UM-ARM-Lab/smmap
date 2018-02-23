@@ -77,15 +77,17 @@ namespace smmap
                     }
                     else
                     {
-                        ROS_ERROR_STREAM_NAMED("ros_comms_helpers",
+                        ROS_FATAL_STREAM_NAMED("ros_comms_helpers",
                                                "Unable to retrieve stretching vector info for gripper: "
                                                << gripper_names[gripper_ind]);
+                        assert(false);
                     }
                 }
             }
             else
             {
                 ROS_ERROR_STREAM_NAMED("ros_comms_helpers", "Unable to retrieve node indices for gripper: " << gripper_names[gripper_ind]);
+                assert(false);
             }
         }
 
