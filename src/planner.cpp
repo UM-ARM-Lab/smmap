@@ -1573,12 +1573,12 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                 controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                                nh_,
                                                ph_,
+                                               model_list_.back(),
                                                robot_,
                                                environment_sdf,
                                                generator_,
                                                vis_,
                                                GetGripperControllerType(ph_),
-                                               model_list_.back(),
                                                GetMaxSamplingCounts(ph_)));
             }
 
@@ -1609,12 +1609,12 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                 controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                                nh_,
                                                ph_,
+                                               model_list_.back(),
                                                robot_,
                                                environment_sdf,
                                                generator_,
                                                vis_,
                                                GetGripperControllerType(ph_),
-                                               model_list_.back(),
                                                GetMaxSamplingCounts(ph_)));
             }
 

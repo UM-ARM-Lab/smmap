@@ -43,8 +43,6 @@ namespace smmap
 
             AllGrippersSinglePoseDelta allGripperPoseDeltaSampler(const ssize_t num_grippers, const double max_delta);
 
-            AllGrippersSinglePoseDelta setAllGripperPoseDeltaZero(const ssize_t num_grippers);
-
             double errorOfControlByPrediction(const ObjectPointSet predicted_object_p_dot,
                                               const Eigen::VectorXd &desired_object_p_dot,
                                               const Eigen::VectorXd &desired_p_dot_weight) const;
@@ -96,7 +94,6 @@ namespace smmap
                     const AllGrippersSinglePoseDelta& test_gripper_motion);
 
         private:	    
-            const Eigen::MatrixXd object_initial_node_distance_;
             GripperCollisionChecker gripper_collision_checker_;
 
             const std::vector<GripperData> grippers_data_;
@@ -112,8 +109,9 @@ namespace smmap
             const TaskType task_type_;
             const DeformableModel::Ptr model_;
 
+            const Eigen::MatrixXd max_node_distance_;
+            const Eigen::MatrixXd max_node_squared_distance_;
             const double distance_to_obstacle_threshold_;
-            double max_stretch_factor_;
             double stretching_cosine_threshold_;
 
             const int max_count_;

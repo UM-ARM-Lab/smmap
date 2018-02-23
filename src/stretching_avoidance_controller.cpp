@@ -22,7 +22,6 @@ StretchingAvoidanceController::StretchingAvoidanceController(
         const GripperControllerType gripper_controller_type,
         const int max_count)
     : DeformableController(robot)
-    , object_initial_node_distance_(EigenHelpers::CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
     , gripper_collision_checker_(nh)
     , grippers_data_(robot->getGrippersData())
     , enviroment_sdf_(sdf)
@@ -33,8 +32,9 @@ StretchingAvoidanceController::StretchingAvoidanceController(
     , deformable_type_(GetDeformableType(nh))
     , task_type_(GetTaskType(nh))
     , model_(deformable_model)
+    , max_node_distance_(GetMaxStretchFactor(ph) * EigenHelpers::CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
+    , max_node_squared_distance_(max_node_distance_.cwiseProduct(max_node_distance_))
     , distance_to_obstacle_threshold_(GetRobotGripperRadius())
-    , max_stretch_factor_(GetMaxStretchFactor(ph))
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
     , max_count_(max_count)
     , sample_count_(-1)
@@ -76,125 +76,9 @@ DeformableController::OutputData StretchingAvoidanceController::getGripperMotion
 
 DeformableController::OutputData StretchingAvoidanceController::solvedByRandomSampling(const InputData& input_data)
 {
-    const double max_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
-    const WorldState& current_world_state = input_data.world_current_state_;
-
-    const Eigen::VectorXd& desired_object_p_dot = input_data.desired_object_motion_.delta;
-    const Eigen::VectorXd& desired_p_dot_weight = input_data.desired_object_motion_.weight;
-
-    const ssize_t num_grippers = current_world_state.all_grippers_single_pose_.size();
-    const ssize_t num_nodes = current_world_state.object_configuration_.cols();
-
-    const Eigen::MatrixXd node_squared_distance =
-            EigenHelpers::CalculateSquaredDistanceMatrix(current_world_state.object_configuration_);
-
-    std::vector<std::pair<AllGrippersSinglePoseDelta, double>> per_thread_optimal_command(
-#ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
-                arc_helpers::GetNumOMPThreads(),
-#else
-                1,
-#endif
-                std::make_pair(AllGrippersSinglePoseDelta(), std::numeric_limits<double>::infinity()));
-
-    // Checking the stretching status for current object configuration for once
-    over_stretch_ = false;
-
-    for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
-    {
-        for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
-        {
-            const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
-	    if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
-	    {
-	        over_stretch_ = true;
-	        break;
-	    }
-	}
-        if (over_stretch_)
-        {
-            break;
-	}
-    }
-#ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
-    #pragma omp parallel for
-#endif
-    for (int64_t ind_count = 0; ind_count < max_count_; ind_count++)
-    {
-        AllGrippersSinglePoseDelta grippers_motion_sample = allGripperPoseDeltaSampler(num_grippers, max_step_size);
-
-#ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
-        const size_t thread_num = (size_t)omp_get_thread_num();
-#else
-        const size_t thread_num = 0;
-#endif
-
-        // Use constraint_violation checker for gripper collosion
-        // Constraint violation checking here
-        const bool collision_violation = gripperCollisionCheckResult(
-                    current_world_state.all_grippers_single_pose_,
-                    grippers_motion_sample);
-
-        bool stretching_violation = stretchingDetection(
-                    input_data,
-                    grippers_motion_sample);
-
-        // If no constraint violation
-        if (!collision_violation && !stretching_violation)
-        {
-            std::pair<AllGrippersSinglePoseDelta, double>& current_thread_optimal = per_thread_optimal_command[thread_num];
-
-            // get predicted object motion
-            ObjectPointSet predicted_object_p_dot = model_->getObjectDelta(
-                        input_data.world_current_state_,
-                        grippers_motion_sample);
-
-            double sample_error = errorOfControlByPrediction(predicted_object_p_dot,
-                                                             desired_object_p_dot,
-                                                             desired_p_dot_weight);
-
-            // Compare if the sample grippers motion is better than the best to now
-            if (sample_error < current_thread_optimal.second)
-            {
-                current_thread_optimal.first = grippers_motion_sample;
-                current_thread_optimal.second = sample_error;
-            }
-        }
-    }
-
-    // Aggreate the results from each thread into a single best command
-    double best_error = std::numeric_limits<double>::infinity();
-    AllGrippersSinglePoseDelta optimal_gripper_command;
-    for (size_t thread_idx = 0; thread_idx < per_thread_optimal_command.size(); thread_idx++)
-    {
-        if (per_thread_optimal_command[thread_idx].second < best_error)
-        {
-            optimal_gripper_command = per_thread_optimal_command[thread_idx].first;
-            best_error = per_thread_optimal_command[thread_idx].second;
-        }
-    }
-
-    std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> suggested_grippers_command(
-                optimal_gripper_command,
-                ObjectPointSet::Zero(3, num_nodes));
-
-    if (sample_count_ >= 0)
-    {
-        sample_count_++;
-        if (sample_count_ >= num_grippers)
-        {
-            sample_count_=0;
-        }
-    }
-    if (!(suggested_grippers_command.first.size() > 0))
-    {
-        suggested_grippers_command.first = setAllGripperPoseDeltaZero(num_grippers);
-    }
-
-    suggested_grippers_command.second = model_->getObjectDelta(
-                input_data.world_current_state_,
-                suggested_grippers_command.first);
-
-    return suggested_grippers_command;
+    (void)input_data;
+    assert(false && "This function is not used any more");
+    return OutputData();
 }
 
 //#undef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
@@ -211,33 +95,13 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
             input_data.desired_object_motion_.weight;
 
     const size_t num_grippers = current_world_state.all_grippers_single_pose_.size();
-    const ssize_t num_nodes = current_world_state.object_configuration_.cols();
 
     const Eigen::MatrixXd node_squared_distance =
             EigenHelpers::CalculateSquaredDistanceMatrix(current_world_state.object_configuration_);
 
-    AllGrippersSinglePoseDelta optimal_gripper_command;
-
     // Check object current stretching status
     // Checking the stretching status for current object configuration for once
-    over_stretch_ = false;
-
-    for (ssize_t first_node = 0; first_node < num_nodes; ++first_node)
-        {
-            for (ssize_t second_node = first_node + 1; second_node < num_nodes; ++second_node)
-            {
-                const double max_distance = max_stretch_factor_ * object_initial_node_distance_(first_node, second_node);
-                if (node_squared_distance(first_node, second_node) > max_distance * max_distance)
-                {
-                    over_stretch_ = true;
-                    break;
-                }
-            }
-            if (over_stretch_)
-            {
-                break;
-            }
-        }
+    over_stretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
 
     // Return value of objective function, cost = norm(p_dot_desired - p_dot_test)
     const std::function<double(const AllGrippersSinglePoseDelta&)> eval_error_cost_fn = [&] (
@@ -311,104 +175,35 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
 
     };
 
-    // TODO: figure out a way to deal with logging, for now leave extra code here for reference
-    ofstream out(log_file_path_.c_str(), ios::out);
-    // NOMAD::Display out (std::cout);
-    out.precision (NOMAD::DISPLAY_PRECISION_STD);
+    const AllGrippersSinglePoseDelta optimal_gripper_motion =
+            smmap_utilities::minFunctionPointerSE3Delta(
+                log_file_path_,
+                fix_step_,
+                max_count_,
+                num_grippers,
+                max_step_size,
+                generator_,
+                uniform_unit_distribution_,
+                eval_error_cost_fn,
+                collision_constraint_fn,
+                stretching_constraint_fn,
+                gripper_motion_constraint_fn);
 
-    try
-    {
-        // NOMAD initializations:
-        NOMAD::begin(0, nullptr);
-
-        // parameters creation:
-        NOMAD::Parameters p(out);
-//        NOMAD::Parameters p;
-        p.set_DIMENSION((int)(6 * num_grippers));  // number of variables
-
-        vector<NOMAD::bb_output_type> bbot (4); // definition of
-        bbot[0] = NOMAD::OBJ;                   // output types
-        // TODO: might need to decide which kind of constraint to use
-        bbot[1] = NOMAD::PB;
-        bbot[2] = NOMAD::PB;
-        bbot[3] = NOMAD::PB;
-
-        if (fix_step_)
-        {
-            bbot.push_back(NOMAD::EB);
-        }
-
-        p.set_BB_OUTPUT_TYPE(bbot);
-
-        const int x_dim = (int)(6 * num_grippers);
-        const int size_of_initial_batch = 5;
-
-        for (int sample_ind = 0; sample_ind < size_of_initial_batch; sample_ind++)
-        {
-            NOMAD::Point x0 = NOMAD::Point(x_dim, 0.0);
-            for (int coord_ind = 0; coord_ind < x_dim; coord_ind++)
-            {
-                x0.set_coord(coord_ind, EigenHelpers::Interpolate(-max_step_size, max_step_size, uniform_unit_distribution_(generator_)));
-            }
-            p.set_X0(x0);
-        }
-
-        p.set_LOWER_BOUND(NOMAD::Point((int)(6 * num_grippers), -max_step_size));
-        p.set_UPPER_BOUND(NOMAD::Point((int)(6 * num_grippers), max_step_size));
-
-        p.set_MAX_BB_EVAL(max_count_);     // the algorithm terminates after max_count_ black-box evaluations
-        p.set_DISPLAY_DEGREE(2);
-        //p.set_SGTELIB_MODEL_DISPLAY("");
-        p.set_SOLUTION_FILE("sol.txt");
-
-        // parameters validation:
-        p.check();
-
-        // custom evaluator creation:
-        smmap_utilities::GripperMotionNomadEvaluator ev(p,
-                                                        num_grippers,
-                                                        eval_error_cost_fn,
-                                                        collision_constraint_fn,
-                                                        stretching_constraint_fn,
-                                                        gripper_motion_constraint_fn,
-                                                        fix_step_);
-
-        // algorithm creation and execution:
-        NOMAD::Mads mads(p, &ev);
-        mads.run();
-
-        const NOMAD::Eval_Point* best_x = mads.get_best_feasible();
-
-        optimal_gripper_command = ev.evalPointToGripperPoseDelta(*best_x);
-    }
-    catch (exception& e)
-    {
-        cerr << "\nNOMAD has been interrupted (" << e.what() << ")\n\n";
-    }
-
-    NOMAD::Slave::stop_slaves(out);
-    NOMAD::end();
-
-    std::pair<AllGrippersSinglePoseDelta, ObjectPointSet> suggested_grippers_command(
-                optimal_gripper_command,
-                ObjectPointSet::Zero(3, num_nodes));
-
-    if (suggested_grippers_command.first.size() == 0)
-    {
-        suggested_grippers_command.first = setAllGripperPoseDeltaZero(num_grippers);
-    }
-
-    suggested_grippers_command.second = model_->getObjectDelta(
+    const ObjectPointSet object_motion = model_->getObjectDelta(
                 input_data.world_current_state_,
-                suggested_grippers_command.first);
+                optimal_gripper_motion);
+
+    const OutputData suggested_grippers_command(
+                optimal_gripper_motion,
+                object_motion,
+                Eigen::VectorXd());
 
     return suggested_grippers_command;
 
 }
 
-
 //////////////////////////////////////////////////////////////////////////////////
-// Helper function
+// Helper functions
 //////////////////////////////////////////////////////////////////////////////////
 
 kinematics::Vector6d StretchingAvoidanceController::singleGripperPoseDeltaSampler(const double max_delta)
@@ -482,13 +277,6 @@ AllGrippersSinglePoseDelta StretchingAvoidanceController::allGripperPoseDeltaSam
     {
         assert(false && "This code should not be reachable");
     }
-}
-
-AllGrippersSinglePoseDelta StretchingAvoidanceController::setAllGripperPoseDeltaZero(const ssize_t num_grippers)
-{
-    const kinematics::Vector6d no_movement = kinematics::Vector6d::Zero();
-    const AllGrippersSinglePoseDelta grippers_motion_sample(num_grippers, no_movement);
-    return grippers_motion_sample;
 }
 
 double StretchingAvoidanceController::errorOfControlByPrediction(
