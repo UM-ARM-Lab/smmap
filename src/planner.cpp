@@ -20,6 +20,7 @@
 #include "smmap/constraint_jacobian_model.h"
 
 #include "smmap/least_squares_controller_with_object_avoidance.h"
+#include "smmap/stretching_avoidance_controller.h"
 
 using namespace smmap;
 using namespace smmap_utilities;
@@ -1431,6 +1432,72 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                            optimization_enabled));
             break;
         }
+        case CONSTRAINT_SINGLE_MODEL_CONSTRAINT_CONTROLLER:
+        {
+            ROS_INFO_NAMED("planner", "Using constraint model and random sampling controller");
+
+            const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
+            const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
+            const double rotation_deformability = GetConstraintRotational(ph_);
+
+            const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+            model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                  translation_dir_deformability,
+                                  translation_dis_deformability,
+                                  rotation_deformability,
+                                  environment_sdf));
+
+            controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+                                           nh_,
+                                           ph_,
+                                           model_list_.back(),
+                                           robot_,
+                                           environment_sdf,
+                                           generator_,
+                                           vis_,
+                                           GetGripperControllerType(ph_),
+                                           GetMaxSamplingCounts(ph_)));
+            break;
+        }
+        case DIMINISHING_RIGIDITY_SINGLE_MODEL_CONSTRAINT_CONTROLLER:
+        {
+            ROS_INFO_NAMED("planner", "Using dminishing model and random sampling controller");
+
+            double translational_deformability, rotational_deformability;
+            const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+            if (ph_.getParam("translational_deformability", translational_deformability) &&
+                     ph_.getParam("rotational_deformability", rotational_deformability))
+            {
+                ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                                       << translational_deformability << " "
+                                       << rotational_deformability);
+            }
+            else
+            {
+                translational_deformability = task_specification_->defaultDeformability();
+                rotational_deformability = task_specification_->defaultDeformability();
+                ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                                       << task_specification_->defaultDeformability());
+            }
+
+            model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                      translational_deformability,
+                                      rotational_deformability));
+
+            controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+                                           nh_,
+                                           ph_,
+                                           model_list_.back(),
+                                           robot_,
+                                           environment_sdf,
+                                           generator_,
+                                           vis_,
+                                           GetGripperControllerType(ph_),
+                                           GetMaxSamplingCounts(ph_)));
+            break;
+        }
         case MULTI_MODEL_BANDIT_TEST:
         {
             ////////////////////////////////////////////////////////////////////////
@@ -1483,6 +1550,102 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
             }
             ROS_INFO_STREAM_NAMED("planner", "Num adaptive Jacobian models: "
                                    << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
+            break;
+        }
+        case MULTI_MODEL_CONTROLLER_TEST:
+        {
+            ROS_INFO_NAMED("planner", "Using multiple model-controller sets");
+
+            // Constraint Model with New Controller. (MM)
+            {
+                const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+                const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
+                const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
+                const double rotation_deformability = GetConstraintRotational(ph_);
+
+                model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                      translation_dir_deformability,
+                                      translation_dis_deformability,
+                                      rotation_deformability,
+                                      environment_sdf));
+
+                controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+                                               nh_,
+                                               ph_,
+                                               robot_,
+                                               environment_sdf,
+                                               generator_,
+                                               vis_,
+                                               GetGripperControllerType(ph_),
+                                               model_list_.back(),
+                                               GetMaxSamplingCounts(ph_)));
+            }
+
+            // Dminishing Model with New Controller. (DM)
+            {
+                double translational_deformability, rotational_deformability;
+                const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+                if (ph_.getParam("translational_deformability", translational_deformability) &&
+                         ph_.getParam("rotational_deformability", rotational_deformability))
+                {
+                    ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                                           << translational_deformability << " "
+                                           << rotational_deformability);
+                }
+                else
+                {
+                    translational_deformability = task_specification_->defaultDeformability();
+                    rotational_deformability = task_specification_->defaultDeformability();
+                    ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                                           << task_specification_->defaultDeformability());
+                }
+
+                model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                          translational_deformability,
+                                          rotational_deformability));
+
+                controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+                                               nh_,
+                                               ph_,
+                                               robot_,
+                                               environment_sdf,
+                                               generator_,
+                                               vis_,
+                                               GetGripperControllerType(ph_),
+                                               model_list_.back(),
+                                               GetMaxSamplingCounts(ph_)));
+            }
+
+            // Dminishing Model with Old Controller. (DD)
+            {
+                double translational_deformability, rotational_deformability;
+                if (ph_.getParam("translational_deformability", translational_deformability) &&
+                         ph_.getParam("rotational_deformability", rotational_deformability))
+                {
+                    ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                                           << translational_deformability << " "
+                                           << rotational_deformability);
+                }
+                else
+                {
+                    translational_deformability = task_specification_->defaultDeformability();
+                    rotational_deformability = task_specification_->defaultDeformability();
+                    ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                                           << task_specification_->defaultDeformability());
+                }
+
+                model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                          translational_deformability,
+                                          rotational_deformability));
+
+                controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                               model_list_.back(),
+                                               robot_,
+                                               task_specification_->collisionScalingFactor(),
+                                               optimization_enabled));
+            }
             break;
         }
         default:
@@ -1841,7 +2004,8 @@ void Planner::logPlannerData(
 
 // Note that resulting_world_state may not be exactly indentical to individual_model_rewards[model_used]
 // because of the way forking words (and doesn't) in Bullet. They should be very close however.
-void Planner::controllerLogData(const WorldState& initial_world_state,
+void Planner::controllerLogData(
+        const WorldState& initial_world_state,
         const WorldState& resulting_world_state,
         const std::vector<WorldState>& individual_model_results,
         const DeformableController::InputData& controller_input_data,

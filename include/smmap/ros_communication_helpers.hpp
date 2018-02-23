@@ -44,7 +44,6 @@ namespace smmap
             nh.serviceClient<deformable_manipulation_msgs::GetGripperAttachedNodeIndices>(GetGripperAttachedNodeIndicesTopic(nh));
         gripper_node_indices_client.waitForExistence();
 
-
         grippers_data.reserve(gripper_names.size());
         for (size_t gripper_ind = 0; gripper_ind < gripper_names.size(); gripper_ind++)
         {
@@ -53,8 +52,36 @@ namespace smmap
 
             if (gripper_node_indices_client.call(node_indices_srv_data))
             {
+                // All types of deforable objects get the basic gripper info
                 grippers_data.push_back(GripperData(gripper_names[gripper_ind],
                                                     VectorAnytypeToVectorLong(node_indices_srv_data.response.indices)));
+
+                // Cloth also gets Geo info used by the StretchingAvoidanceController
+                if (GetDeformableType(nh) == DeformableType::CLOTH)
+                {
+                    ros::ServiceClient gripper_stretching_vector_info_client =
+                            nh.serviceClient<deformable_manipulation_msgs::GetGripperStretchingVectorInfo>(
+                                GetGripperStretchingVectorInfoTopic(nh));
+                    gripper_stretching_vector_info_client.waitForExistence();
+
+                    deformable_manipulation_msgs::GetGripperStretchingVectorInfo stretching_vector_info_srv_data;
+                    stretching_vector_info_srv_data.request.name = gripper_names[gripper_ind];
+
+                    if (gripper_stretching_vector_info_client.call(stretching_vector_info_srv_data))
+                    {
+                        grippers_data.back().stretching_vector_info_ = StretchingVectorInfo(
+                                    stretching_vector_info_srv_data.response.to_gripper_name,
+                                    VectorAnytypeToVectorLong(stretching_vector_info_srv_data.response.attatched_indices),
+                                    VectorAnytypeToVectorLong(stretching_vector_info_srv_data.response.neighbor_indices),
+                                    stretching_vector_info_srv_data.response.contributions);
+                    }
+                    else
+                    {
+                        ROS_ERROR_STREAM_NAMED("ros_comms_helpers",
+                                               "Unable to retrieve stretching vector info for gripper: "
+                                               << gripper_names[gripper_ind]);
+                    }
+                }
             }
             else
             {
