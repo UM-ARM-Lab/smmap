@@ -12,6 +12,7 @@
 #include <arc_utilities/get_neighbours.hpp>
 #include <arc_utilities/shortcut_smoothing.hpp>
 #include <arc_utilities/timing.hpp>
+#include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
 
 #include "smmap/diminishing_rigidity_model.h"
@@ -32,6 +33,9 @@ using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
 #pragma message "Magic number - reward scaling factor starting value"
 #define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
+
+#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 1
+//#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 0
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal helpers
@@ -435,8 +439,19 @@ WorldState Planner::sendNextCommand(
  * @return
  */
 WorldState Planner::sendNextCommandUsingLocalController(
-        const WorldState& world_state)
+        WorldState world_state)
 {
+#if ENABLE_LOCAL_CONTROLLER_LOAD_SAVE
+    if (useStoredWorldState())
+    {
+        loadStoredWorldState(world_state);
+    }
+    else
+    {
+        storeWorldState(world_state);
+    }
+#endif
+
     Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
 
@@ -2110,4 +2125,70 @@ void Planner::controllerLogData(
         LOG(controller_loggers_.at("individual_computation_times"),
             PrettyPrint::PrettyPrint(individual_computation_times, false, " "));
     }
+}
+
+
+
+
+void Planner::storeWorldState(const WorldState& world_state)
+{
+    try
+    {
+        const auto log_folder = GetLogFolder(nh_);
+        arc_utilities::CreateDirectory(log_folder);
+        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "world_state_file_name_prefix", __func__);
+        if (!file_name_prefix.Valid())
+        {
+            throw_arc_exception(std::invalid_argument, "Unable to load world_state_file_name_prefix from parameter server");
+        }
+
+        const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsStringWithMilliseconds(); //arc_helpers::GetCurrentTimeAsString();
+        const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
+        const std::string full_path = log_folder + file_name;
+        ROS_DEBUG_STREAM("Saving world_state to " << full_path);
+
+        std::vector<uint8_t> buffer;
+        world_state.serialize(buffer);
+        ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
+    }
+    catch (const std::exception& e)
+    {
+        ROS_ERROR_STREAM("Failed to store world_state: "  <<  e.what());
+    }
+}
+
+void Planner::loadStoredWorldState(WorldState& world_state)
+{
+    try
+    {
+        const auto log_folder = GetLogFolder(nh_);
+        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "world_state_file_name_prefix", __func__);
+        if (!file_name_prefix.Valid())
+        {
+            throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_prefix from parameter server");
+        }
+        const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "world_state_file_name_suffix_to_load", __func__);
+        if (!file_name_suffix.Valid())
+        {
+            throw_arc_exception(std::invalid_argument, "Unable to load world_state_file_name_suffix_to_load from parameter server");
+        }
+
+        const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix.GetImmutable() + ".compressed";
+        const std::string full_path = log_folder + file_name;
+        ROS_INFO_STREAM("Loading world state from " << full_path);
+
+        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(full_path);
+        const auto deserialized_results = WorldState::Deserialize(buffer, 0);
+        world_state = deserialized_results.first;
+
+    }
+    catch (const std::exception& e)
+    {
+        ROS_ERROR_STREAM("Failed to load stored world_state: "  <<  e.what());
+    }
+}
+
+bool Planner::useStoredWorldState() const
+{
+    return ROSHelpers::GetParamDebugLog<bool>(ph_, "use_stored_world_state", false);
 }

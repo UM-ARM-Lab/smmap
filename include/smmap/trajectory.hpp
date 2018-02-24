@@ -3,6 +3,7 @@
 
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
+#include <arc_utilities/serialization_eigen.hpp>
 #include <kinematics_toolbox/kinematics.h>
 #include <deformable_manipulation_msgs/messages.h>
 
@@ -38,6 +39,51 @@ namespace smmap
         bool robot_configuration_valid_;
         std::vector<CollisionData> gripper_collision_data_;
         double sim_time_;
+
+        inline uint64_t serialize(std::vector<uint8_t>& buffer) const
+        {
+            const size_t starting_bytes = buffer.size();
+            arc_utilities::SerializeEigenType(object_configuration_, buffer);
+            SerializeAllGrippersSinglePose(all_grippers_single_pose_, buffer);
+            arc_utilities::SerializeEigenType(robot_configuration_, buffer);
+            arc_utilities::SerializeFixedSizePOD(robot_configuration_valid_, buffer);
+            SerializeCollisionDataVector(gripper_collision_data_, buffer);
+            arc_utilities::SerializeFixedSizePOD(sim_time_, buffer);
+            const size_t ending_bytes = buffer.size();
+            return ending_bytes - starting_bytes;
+        }
+
+        static inline std::pair<WorldState, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            uint64_t bytes_read = 0;
+            WorldState result;
+
+            const auto deserialized_object = arc_utilities::DeserializeEigenType<ObjectPointSet>(buffer, current + bytes_read);
+            result.object_configuration_ = deserialized_object.first;
+            bytes_read += deserialized_object.second;
+
+            const auto deserialized_grippers = DeserializeAllGrippersSinglePose(buffer, current + bytes_read);
+            result.all_grippers_single_pose_ = deserialized_grippers.first;
+            bytes_read += deserialized_grippers.second;
+
+            const auto deserialized_robot_config = arc_utilities::DeserializeEigenType<Eigen::VectorXd>(buffer, current + bytes_read);
+            result.robot_configuration_ = deserialized_robot_config.first;
+            bytes_read += deserialized_robot_config.second;
+
+            const auto deserialized_robot_config_valid = arc_utilities::DeserializeFixedSizePOD<bool>(buffer, current + bytes_read);
+            result.robot_configuration_valid_ = deserialized_robot_config_valid.first;
+            bytes_read += deserialized_robot_config_valid.second;
+
+            const auto deserialized_collision_data = DeserializeCollisionDataVector(buffer, current + bytes_read);
+            result.gripper_collision_data_ = deserialized_collision_data.first;
+            bytes_read += deserialized_collision_data.second;
+
+            const auto deserialized_sim_time = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current + bytes_read);
+            result.sim_time_ = deserialized_sim_time.first;
+            bytes_read += deserialized_sim_time.second;
+
+            return {result, bytes_read};
+        }
     };
 
     /**

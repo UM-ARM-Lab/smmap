@@ -54,7 +54,7 @@ namespace smmap
                     const WorldState& current_world_state);
 
             WorldState sendNextCommandUsingLocalController(
-                    const WorldState& current_world_state);
+                    WorldState current_world_state);
 
             WorldState sendNextCommandUsingGlobalGripperPlannerResults(
                     const WorldState& current_world_state);
@@ -193,6 +193,10 @@ namespace smmap
                     const std::vector<WorldState>& individual_model_results,
                     const DeformableController::InputData& controller_input_data,
                     const std::vector<double>& individual_computation_times);
+
+            void storeWorldState(const WorldState& world_state);
+            void loadStoredWorldState(WorldState& world_state);
+            bool useStoredWorldState() const;
 
             const bool planner_logging_enabled_;
             const bool controller_logging_enabled_;

@@ -10,6 +10,7 @@
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/serialization.hpp>
+#include <arc_utilities/serialization_eigen.hpp>
 #include <arc_utilities/pretty_print.hpp>
 #include <kinematics_toolbox/kinematics.h>
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
@@ -478,6 +479,45 @@ namespace smmap
             Eigen::Vector3d nearest_point_to_obstacle_;
             Eigen::Vector3d obstacle_surface_normal_;
             double distance_to_obstacle_;
+
+            static uint64_t SerializedSize()
+            {
+                return 2 * arc_utilities::SerializedSizeEigenType<Eigen::Vector3d>() + sizeof(distance_to_obstacle_);
+            }
+
+            uint64_t serialize(std::vector<uint8_t>& buffer) const
+            {
+                const size_t starting_bytes = buffer.size();
+                arc_utilities::SerializeEigenType(nearest_point_to_obstacle_, buffer);
+                arc_utilities::SerializeEigenType(obstacle_surface_normal_, buffer);
+                arc_utilities::SerializeFixedSizePOD(distance_to_obstacle_, buffer);
+                const size_t ending_bytes = buffer.size();
+                return ending_bytes - starting_bytes;
+            }
+
+            static std::pair<CollisionData, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
+            {
+                // Make sure there is enough data left
+                assert(current + SerializedSize() <= buffer.size());
+
+                // Do the deserialization itself
+                uint64_t bytes_read = 0;
+                const auto nearest_deserialized = arc_utilities::DeserializeEigenType<Eigen::Vector3d>(buffer, current + bytes_read);
+                bytes_read += nearest_deserialized.second;
+                const auto normal_deserialized = arc_utilities::DeserializeEigenType<Eigen::Vector3d>(buffer, current + bytes_read);
+                bytes_read += normal_deserialized.second;
+                const auto distance_deserailzied = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current + bytes_read);
+                bytes_read += distance_deserailzied.second;
+
+                // Error checking
+                assert(bytes_read == SerializedSize());
+
+                // Build and return the result
+                return std::make_pair(CollisionData(nearest_deserialized.first,
+                                                    normal_deserialized.first,
+                                                    distance_deserailzied.first),
+                                      bytes_read);
+            }
     };
 
     inline std::ostream& operator<<(std::ostream& os, const smmap::CollisionData& data)
@@ -685,6 +725,7 @@ namespace smmap
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
 
+    // TODO: update to use arc_utilities/serialization_eigen.hpp
     inline uint64_t SerializeAllGrippersSinglePose(const AllGrippersSinglePose& poses, std::vector<uint8_t>& buffer)
     {
         const std::function<uint64_t(const Eigen::Isometry3d&, std::vector<uint8_t>&)> item_serializer = [] (const Eigen::Isometry3d& pose, std::vector<uint8_t>& buffer)
@@ -748,6 +789,26 @@ namespace smmap
                 (const std::vector<uint8_t>& buffer, const uint64_t current)
         {
             return DeserializeAllGrippersSinglePose(buffer, current);
+        };
+        return arc_utilities::DeserializeVector(buffer, current, item_deserializer);
+    }
+
+    inline uint64_t SerializeCollisionDataVector(const std::vector<CollisionData>& data, std::vector<uint8_t>& buffer)
+    {
+        const std::function<uint64_t(const CollisionData&, std::vector<uint8_t>&)> item_serializer = []
+                (const CollisionData& data, std::vector<uint8_t>& buffer)
+        {
+            return data.serialize(buffer);
+        };
+        return arc_utilities::SerializeVector(data, buffer, item_serializer);
+    }
+
+    inline std::pair<std::vector<CollisionData>, uint64_t> DeserializeCollisionDataVector(const std::vector<uint8_t>& buffer, const uint64_t current)
+    {
+        const std::function<std::pair<CollisionData, uint64_t>(const std::vector<uint8_t>&, const uint64_t)> item_deserializer = []
+                (const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            return CollisionData::Deserialize(buffer, current);
         };
         return arc_utilities::DeserializeVector(buffer, current, item_deserializer);
     }
