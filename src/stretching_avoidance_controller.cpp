@@ -102,10 +102,21 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
 
     if (input_data.robot_jacobian_valid_)
     {
-        const double max_step_size = robot_->max_dof_velocity_norm_ * robot_->dt_;
+        std::cerr << "Using direct robot joint velocity version of optimization" << std::endl;
+
         const ssize_t num_dof = input_data.world_current_state_.robot_configuration_.size();
-        const Eigen::VectorXd min_joint_delta = input_data.robot_->joint_lower_limits_ - input_data.world_current_state_.robot_configuration_;
-        const Eigen::VectorXd max_joint_delta = input_data.robot_->joint_upper_limits_ - input_data.world_current_state_.robot_configuration_;
+
+        // Determine the search space for NOMAD, at least in terms of the decision variables only
+        const double max_step_size = robot_->max_dof_velocity_norm_ * robot_->dt_;
+        const Eigen::VectorXd distance_to_lower_joint_limits =
+                input_data.robot_->joint_lower_limits_ - input_data.world_current_state_.robot_configuration_;
+        const Eigen::VectorXd min_joint_delta =
+                distance_to_lower_joint_limits.unaryExpr([&max_step_size] (const double x) {return std::max(x, -max_step_size);});
+
+        const Eigen::VectorXd distance_to_upper_joint_limits =
+                input_data.robot_->joint_upper_limits_ - input_data.world_current_state_.robot_configuration_;
+        const Eigen::VectorXd max_joint_delta =
+                distance_to_upper_joint_limits.unaryExpr([&max_step_size] (const double x) {return std::min(x, max_step_size);});
 
         // Return value of objective function, cost = norm(p_dot_desired - p_dot_test)
         const std::function<double(const Eigen::VectorXd&)> eval_error_cost_fn = [&] (
@@ -204,6 +215,8 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
             return test_robot_motion.norm() - max_step_size;
         };
 
+        std::cerr << "Invoking NOMAD wrapper" << std::endl;
+
         const Eigen::VectorXd optimal_robot_motion =
                 smmap_utilities::minFunctionPointerDirectRobotDOF(
                     log_file_path_,
@@ -246,6 +259,8 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
     }
     else
     {
+        std::cerr << "Using pure tan(SE3) velocity version of optimization" << std::endl;
+
         const double max_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
 
         // Return value of objective function, cost = norm(p_dot_desired - p_dot_test)
@@ -319,6 +334,8 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
             }
             return max_value - max_step_size;
         };
+
+        std::cerr << "Invoking NOMAD wrapper" << std::endl;
 
         const AllGrippersSinglePoseDelta optimal_gripper_motion =
                 smmap_utilities::minFunctionPointerSE3Delta(
