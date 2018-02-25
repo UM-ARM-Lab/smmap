@@ -56,9 +56,9 @@ RobotInterface::~RobotInterface()
 
 WorldState RobotInterface::start()
 {
-    assert(get_grippers_jacobian_fn_ != nullptr && "Function pointers must be initialized");
-    assert(get_collision_points_of_interest_fn_ != nullptr && "Function pointers must be initialized");
-    assert(get_collision_points_of_interest_jacobians_fn_ != nullptr && "Function pointers must be initialized");
+//    assert(get_grippers_jacobian_fn_ != nullptr && "Function pointers must be initialized");
+//    assert(get_collision_points_of_interest_fn_ != nullptr && "Function pointers must be initialized");
+//    assert(get_collision_points_of_interest_jacobians_fn_ != nullptr && "Function pointers must be initialized");
 
     ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper movement service to be available");
     execute_gripper_movement_client_.waitForExistence();
@@ -155,6 +155,11 @@ std::vector<CollisionData> RobotInterface::checkGripperCollision(
 // and the movement of the robot's DOF
 Eigen::MatrixXd RobotInterface::getGrippersJacobian(const Eigen::VectorXd& robot_configuration)
 {
+    if (get_grippers_jacobian_fn_ == nullptr)
+    {
+        ROS_ERROR_NAMED("robot_interface", "Asked for robot jacobian, but function pointer is null");
+        return Eigen::MatrixXd();
+    }
     return get_grippers_jacobian_fn_(robot_configuration);
 }
 
@@ -166,6 +171,12 @@ Eigen::MatrixXd RobotInterface::getGrippersJacobian(const Eigen::VectorXd& robot
 std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> RobotInterface::getPointsOfInterestCollisionData(
         const Eigen::VectorXd& configuration)
 {
+    if (get_collision_points_of_interest_fn_ == nullptr || get_collision_points_of_interest_jacobians_fn_ == nullptr)
+    {
+        ROS_ERROR_NAMED("robot_interface", "Asked for POI collision data, but function pointer is null");
+        return std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>>();
+    }
+
     const std::vector<Eigen::Vector3d> poi = get_collision_points_of_interest_fn_(configuration);
     const std::vector<Eigen::MatrixXd> poi_jacobians = get_collision_points_of_interest_jacobians_fn_(configuration);
     assert(poi.size() == poi_jacobians.size());
