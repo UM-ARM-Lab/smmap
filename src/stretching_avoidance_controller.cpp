@@ -76,9 +76,124 @@ DeformableController::OutputData StretchingAvoidanceController::getGripperMotion
 
 DeformableController::OutputData StretchingAvoidanceController::solvedByRandomSampling(const InputData& input_data)
 {
-    (void)input_data;
-    assert(false && "This function is not used any more");
-    return OutputData();
+    const WorldState& current_world_state = input_data.world_current_state_;
+    const ssize_t num_grippers = (ssize_t)(current_world_state.all_grippers_single_pose_.size());
+//    const ssize_t num_nodes = current_world_state.object_configuration_.cols();
+    assert(num_grippers == 2 && "This function is only intended to be used with 2 grippers");
+
+    const Eigen::VectorXd& desired_object_p_dot = input_data.desired_object_motion_.delta;
+    const Eigen::VectorXd& desired_p_dot_weight = input_data.desired_object_motion_.weight;
+
+    const Eigen::MatrixXd node_squared_distance =
+            EigenHelpers::CalculateSquaredDistanceMatrix(current_world_state.object_configuration_);
+
+    // Check object current stretching status
+    // Checking the stretching status for current object configuration for once
+    over_stretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
+
+    if (input_data.robot_jacobian_valid_)
+    {
+        assert(false && "Not implemented");
+    }
+    else
+    {
+        const double max_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
+
+        std::vector<std::pair<AllGrippersSinglePoseDelta, double>> per_thread_optimal_command(
+        #ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
+                    arc_helpers::GetNumOMPThreads(),
+        #else
+                    1,
+        #endif
+                    std::make_pair(AllGrippersSinglePoseDelta(), std::numeric_limits<double>::infinity()));
+
+        // Check object current stretching status
+        // Checking the stretching status for current object configuration for once
+        over_stretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
+
+        #ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
+            #pragma omp parallel for
+        #endif
+        for (int64_t ind_count = 0; ind_count < max_count_; ind_count++)
+        {
+            AllGrippersSinglePoseDelta grippers_motion_sample = allGripperPoseDeltaSampler(num_grippers, max_step_size);
+
+            #ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
+                const size_t thread_num = (size_t)omp_get_thread_num();
+            #else
+                const size_t thread_num = 0;
+            #endif
+
+            // Use constraint_violation checker for gripper collosion
+            // Constraint violation checking here
+            const bool collision_violation = gripperCollisionCheckResult(
+                        current_world_state.all_grippers_single_pose_,
+                        grippers_motion_sample);
+
+            const bool stretching_violation = stretchingDetection(
+                        input_data,
+                        grippers_motion_sample);
+
+            // If no constraint violation
+            if (!collision_violation && !stretching_violation)
+            {
+                std::pair<AllGrippersSinglePoseDelta, double>& current_thread_optimal = per_thread_optimal_command[thread_num];
+
+                // get predicted object motion
+                ObjectPointSet predicted_object_p_dot = model_->getObjectDelta(
+                            input_data.world_current_state_,
+                            grippers_motion_sample);
+
+                const double sample_error = errorOfControlByPrediction(predicted_object_p_dot,
+                                                                 desired_object_p_dot,
+                                                                 desired_p_dot_weight);
+
+                // Compare if the sample grippers motion is better than the best to now
+                if (sample_error < current_thread_optimal.second)
+                {
+                    current_thread_optimal.first = grippers_motion_sample;
+                    current_thread_optimal.second = sample_error;
+                }
+            }
+        }
+
+        // Aggreate the results from each thread into a single best command
+        double best_error = std::numeric_limits<double>::infinity();
+        AllGrippersSinglePoseDelta optimal_gripper_motion;
+        for (size_t thread_idx = 0; thread_idx < per_thread_optimal_command.size(); thread_idx++)
+        {
+            if (per_thread_optimal_command[thread_idx].second < best_error)
+            {
+                optimal_gripper_motion = per_thread_optimal_command[thread_idx].first;
+                best_error = per_thread_optimal_command[thread_idx].second;
+            }
+        }
+
+        if (sample_count_ >= 0)
+        {
+            sample_count_++;
+            if(sample_count_ >= num_grippers)
+            {
+                sample_count_ = 0;
+            }
+        }
+        if ((optimal_gripper_motion.size() == 0))
+        {
+            const kinematics::Vector6d no_movement = kinematics::Vector6d::Zero();
+            optimal_gripper_motion = AllGrippersSinglePoseDelta(num_grippers, no_movement);
+        }
+
+        const ObjectPointSet object_motion = model_->getObjectDelta(
+                    input_data.world_current_state_,
+                    optimal_gripper_motion);
+
+        const OutputData suggested_robot_command(
+                    optimal_gripper_motion,
+                    object_motion,
+                    Eigen::VectorXd());
+
+        return suggested_robot_command;
+    }
 }
 
 //#undef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
@@ -624,7 +739,6 @@ bool StretchingAvoidanceController::stretchingDetection(
         {
             return ropeTwoGrippersStretchingDetection(input_data, test_gripper_motion);
         }
-
         case CLOTH:
         {
             return clothTwoGrippersStretchingDetection(input_data, test_gripper_motion);
@@ -754,25 +868,32 @@ double StretchingAvoidanceController::clothTwoGripperStretchingHelper(
         const InputData& input_data,
         const AllGrippersSinglePoseDelta& test_gripper_motion)
 {
+    // Assume knowing there are two grippers.
+    assert(grippers_data_.size() == 2 || "grippers size is not 2, stretching vector visualization not developed");
+
     const ObjectPointSet& object_configuration = input_data.world_current_state_.object_configuration_;
-    const AllGrippersSinglePose& current_gripper_pose = input_data.world_current_state_.all_grippers_single_pose_;
+    const AllGrippersSinglePose& current_grippers_pose = input_data.world_current_state_.all_grippers_single_pose_;
+    const AllGrippersSinglePose grippers_test_poses = kinematics::applyTwist(current_grippers_pose, test_gripper_motion);
+    const Eigen::Isometry3d& gripper0_current_pose = current_grippers_pose[0];
+    const Eigen::Isometry3d& gripper1_current_pose = current_grippers_pose[1];
+    const Eigen::Isometry3d& gripper0_test_pose = grippers_test_poses[0];
+    const Eigen::Isometry3d& gripper1_test_pose = grippers_test_poses[1];
+
     double stretching_sum = 0.0;
     double stretching_cos = 1.0;
 
+    // If the object is not overstretched already, then the constraint is not active, indicited by a value of 1.0
     if (!over_stretch_)
     {
         return stretching_cos;
     }
 
-    // Assume knowing there are two grippers.
-    assert(grippers_data_.size()==2 || "grippers size is not 2, stretching vector visualization not developed");
-
-    const StretchingVectorInfo& first_stretching_vector_info = grippers_data_.at(0).stretching_vector_info_;
+    const StretchingVectorInfo& first_stretching_vector_info = grippers_data_[0].stretching_vector_info_;
     const std::vector<long>& first_from_nodes = first_stretching_vector_info.from_nodes_;
     const std::vector<long>& first_to_nodes = first_stretching_vector_info.to_nodes_;
     const std::vector<double>& first_contribution = first_stretching_vector_info.node_contribution_;
 
-    const StretchingVectorInfo& second_stretching_vector_info = grippers_data_.at(1).stretching_vector_info_;
+    const StretchingVectorInfo& second_stretching_vector_info = grippers_data_[1].stretching_vector_info_;
     const std::vector<long>& second_from_nodes = second_stretching_vector_info.from_nodes_;
     const std::vector<long>& second_to_nodes = second_stretching_vector_info.to_nodes_;
     const std::vector<double>& second_contribution = second_stretching_vector_info.node_contribution_;
@@ -783,64 +904,41 @@ double StretchingAvoidanceController::clothTwoGripperStretchingHelper(
     Eigen::Vector3d first_correction_vector = Eigen::MatrixXd::Zero(3,1);
     for (size_t stretching_ind = 0; stretching_ind < first_from_nodes.size(); stretching_ind++)
     {
-        first_correction_vector +=
-                first_contribution.at(stretching_ind) *
-                (object_configuration.block<3, 1>(0, first_to_nodes.at(stretching_ind))
-                 - object_configuration.block<3, 1>(0, first_from_nodes.at(stretching_ind)));
+        first_correction_vector += first_contribution.[stretching_ind] * (object_configuration.block<3, 1>(0, first_to_nodes.at(stretching_ind)) - object_configuration.block<3, 1>(0, first_from_nodes.at(stretching_ind)));
 
-        point_on_first_gripper +=
-                first_contribution.at(stretching_ind) *
-                object_configuration.block<3, 1>(0, first_from_nodes.at(stretching_ind));
+        point_on_first_gripper += first_contribution[stretching_ind] * object_configuration.block<3, 1>(0, first_from_nodes.at(stretching_ind));
     }
     if (first_correction_vector.norm() > 0)
     {
         first_correction_vector = first_correction_vector / first_correction_vector.norm();
     }
-    point_on_first_gripper = point_on_first_gripper - current_gripper_pose.at(0).translation();
+    point_on_first_gripper = point_on_first_gripper - gripper0_current_pose.translation();
 
     Eigen::Vector3d second_correction_vector = Eigen::MatrixXd::Zero(3,1);
     for (size_t stretching_ind = 0; stretching_ind < second_from_nodes.size(); stretching_ind++)
     {
-        second_correction_vector +=
-                second_contribution.at(stretching_ind) *
-                (object_configuration.block<3, 1>(0, second_to_nodes.at(stretching_ind))
-                 - object_configuration.block<3, 1>(0, second_from_nodes.at(stretching_ind)));
+        second_correction_vector += second_contribution.at(stretching_ind) * (object_configuration.block<3, 1>(0, second_to_nodes.at(stretching_ind)) - object_configuration.block<3, 1>(0, second_from_nodes.at(stretching_ind)));
 
-        point_on_second_gripper +=
-                second_contribution.at(stretching_ind) *
-                object_configuration.block<3, 1>(0, second_from_nodes.at(stretching_ind));
+        point_on_second_gripper += second_contribution.at(stretching_ind) * object_configuration.block<3, 1>(0, second_from_nodes.at(stretching_ind));
 
     }
     if (second_correction_vector.norm() > 0)
     {
-        second_correction_vector = second_correction_vector / second_correction_vector.norm();
+        second_correction_vector.normalize();
     }
-    point_on_second_gripper = point_on_second_gripper - current_gripper_pose.at(1).translation();
-
-    const auto grippers_test_poses = kinematics::applyTwist(current_gripper_pose, test_gripper_motion);
+    point_on_second_gripper = point_on_second_gripper - gripper1_current_pose.translation();
 
     // Get track the point on edge of the gripper; stretching offset by geometric shape
-    Eigen::Vector3d point_in_gripper_tm_first = current_gripper_pose.at(0).linear().inverse()
-            * point_on_first_gripper;
-
-    Eigen::Vector3d point_in_gripper_tm_second = current_gripper_pose.at(1).linear().inverse()
-            * point_on_second_gripper;
-
-    Eigen::Vector3d point_on_first_gripper_after = grippers_test_poses.at(0).linear()
-            * point_in_gripper_tm_first;
-
-    Eigen::Vector3d point_on_second_gripper_after = grippers_test_poses.at(1).linear()
-            * point_in_gripper_tm_second;
+    const Eigen::Vector3d point_in_gripper_tm_first     = gripper0_current_pose.linear().inverse() * point_on_first_gripper;
+    const Eigen::Vector3d point_in_gripper_tm_second    = gripper1_current_pose.linear().inverse() * point_on_second_gripper;
+    const Eigen::Vector3d point_on_first_gripper_after  = gripper0_test_pose.linear() * point_in_gripper_tm_first;
+    const Eigen::Vector3d point_on_second_gripper_after = gripper1_test_pose.linear() * point_in_gripper_tm_second;
 
     std::vector<Eigen::Vector3d> points_moving;
-    points_moving.push_back((grippers_test_poses.at(0).translation()
-                             + point_on_first_gripper_after)
-                             - (current_gripper_pose.at(0).translation()
-                                +point_on_first_gripper));
-    points_moving.push_back((grippers_test_poses.at(1).translation()
-                             + point_on_second_gripper_after)
-                             - (current_gripper_pose.at(1).translation()
-                                +point_on_second_gripper));
+    points_moving.push_back((gripper0_test_pose.translation()    + point_on_first_gripper_after) -
+                            (gripper0_current_pose.translation() + point_on_first_gripper));
+    points_moving.push_back((gripper1_test_pose.translation()    + point_on_second_gripper_after) -
+                            (gripper1_current_pose.translation() + point_on_second_gripper));
 
     double sum_resulting_motion_norm = 0.0;
 
@@ -862,14 +960,12 @@ double StretchingAvoidanceController::clothTwoGripperStretchingHelper(
     }
     else
     {
-        for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
+        for (size_t gripper_ind = 0; gripper_ind < current_grippers_pose.size(); gripper_ind++)
         {
-            Eigen::Vector3d resulting_gripper_motion = grippers_test_poses.at(gripper_ind).translation()
-                    - current_gripper_pose.at(gripper_ind).translation();
-            stretching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind))
-                    / resulting_gripper_motion.norm();
+            Eigen::Vector3d resulting_gripper_motion = grippers_test_poses.at(gripper_ind).translation() - current_grippers_pose.at(gripper_ind).translation();
+            stretching_sum += resulting_gripper_motion.dot(stretching_correction_vector.at(gripper_ind)) / resulting_gripper_motion.norm();
         }
-        stretching_cos = stretching_sum / (double)(current_gripper_pose.size());
+        stretching_cos = stretching_sum / (double)(current_grippers_pose.size());
     }
 
     return stretching_cos;
@@ -880,14 +976,13 @@ bool StretchingAvoidanceController::clothTwoGrippersStretchingDetection(
         const InputData& input_data,
         const AllGrippersSinglePoseDelta& test_gripper_motion)
 {
-    assert(grippers_data_.size()==2 || "grippers size is not 2, stretching vector visualization not developed");
+    assert(grippers_data_.size() == 2 || "grippers size is not 2, stretching vector visualization not developed");
     bool motion_induced_streching = false;
 
     if (over_stretch_)
     {
-        double stretching_sum = clothTwoGripperStretchingHelper(input_data,
-                                                               test_gripper_motion);
-        if (stretching_sum <= stretching_cosine_threshold_)
+        const double stretching_sum = clothTwoGripperStretchingHelper(input_data, test_gripper_motion);
+        if (stretching_sum < stretching_cosine_threshold_)
         {
             motion_induced_streching = true;
         }
