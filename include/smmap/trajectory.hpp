@@ -103,7 +103,7 @@ namespace smmap
                 EigenHelpersConversions::VectorGeometryPoseToVectorIsometry3d(feedback_ros.gripper_poses);
 
         feedback_eigen.robot_configuration_ =
-                EigenHelpersConversions::StdVectorToEigenVectorX(feedback_ros.robot_configuration);
+                EigenHelpers::StdVectorToEigenVectorX(feedback_ros.robot_configuration);
         feedback_eigen.robot_configuration_valid_ = feedback_ros.robot_configuration_valid;
 
         size_t num_grippers = feedback_ros.gripper_poses.size();

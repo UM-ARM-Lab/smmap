@@ -5,6 +5,7 @@
 
 using namespace smmap;
 using namespace Eigen;
+using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
 
 ////////////////////////////////////////////////////////////////////////////////

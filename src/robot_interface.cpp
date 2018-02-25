@@ -249,7 +249,7 @@ deformable_manipulation_msgs::ExecuteRobotMotionRequest RobotInterface::toRosMov
     deformable_manipulation_msgs::ExecuteRobotMotionRequest movement_request;
     movement_request.grippers_names = GetGripperNames(grippers_data_);
     movement_request.gripper_poses = EigenHelpersConversions::VectorIsometry3dToVectorGeometryPose(grippers_poses);
-    movement_request.robot_configuration = EigenHelpersConversions::EigenVectorXToStdVector(robot_configuration);
+    movement_request.robot_configuration = EigenHelpers::EigenVectorXToStdVector(robot_configuration);
     movement_request.robot_configuration_valid = robot_configuration_valid;
     movement_request.header.frame_id = world_frame_name_;
     movement_request.header.stamp = ros::Time::now();
@@ -278,7 +278,7 @@ deformable_manipulation_msgs::TestRobotMotionGoal RobotInterface::toRosTestPoses
     for (size_t config_ind = 0; config_ind < robot_configurations.size(); ++config_ind)
     {
         goal.configurations_to_test[config_ind].configuration =
-                EigenHelpersConversions::EigenVectorXToStdVector(robot_configurations[config_ind]);
+                EigenHelpers::EigenVectorXToStdVector(robot_configurations[config_ind]);
     }
     goal.robot_configurations_valid = robot_configurations_valid;
 

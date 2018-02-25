@@ -34,7 +34,7 @@ void LeastSquaresJacobianModel::updateModel_impl(const WorldState& previous, con
             CalculateGrippersPoseDelta(previous.all_grippers_single_pose_,
                                        next.all_grippers_single_pose_);
 
-    const VectorXd grippers_delta = EigenHelpersConversions::VectorEigenVectorToEigenVectorX(grippers_pose_deltas);
+    const VectorXd grippers_delta = EigenHelpers::VectorEigenVectorToEigenVectorX(grippers_pose_deltas);
 
     if (grippers_delta.squaredNorm() < 1e-6)
     {

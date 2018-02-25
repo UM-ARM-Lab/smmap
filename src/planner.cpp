@@ -455,6 +455,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
     Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
 
+//    vis_->visualizeCloth("input_cloth", world_state.object_configuration_, Visualizer::Blue(), 1);
+
     // Temporaries needed here bercause model_input_data takes things by reference
     const ObjectDeltaAndWeight desired_object_manipulation_direction = task_specification_->calculateDesiredDirection(world_state);
     const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian(world_state.robot_configuration_);
@@ -468,6 +470,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     if (visualize_desired_motion_)
     {
         visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_);
+//        std::this_thread::sleep_for(std::chrono::duration<double>(2.0));
     }
 
     // Pick an arm to use
