@@ -551,8 +551,8 @@ double StretchingAvoidanceController::errorOfControlByPrediction(
         const Eigen::VectorXd& desired_p_dot_weight) const
 {
     const Eigen::Map<const Eigen::VectorXd> prediction_as_vector(predicted_object_p_dot.data(), desired_object_p_dot.size());
-    const auto error = (prediction_as_vector- desired_object_p_dot).cwiseAbs2();
-    return error.dot(desired_p_dot_weight);
+    const auto individual_error = (prediction_as_vector- desired_object_p_dot).cwiseAbs2();
+    return std::sqrt(individual_error.dot(desired_p_dot_weight));
 
 //    double sum_of_error = 0;
 
