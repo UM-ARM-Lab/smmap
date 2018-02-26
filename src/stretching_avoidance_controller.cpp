@@ -19,13 +19,13 @@ StretchingAvoidanceController::StretchingAvoidanceController(
         const sdf_tools::SignedDistanceField& sdf,
         std::mt19937_64& generator,
         const smmap_utilities::Visualizer::Ptr& vis,
-        const GripperControllerType gripper_controller_type,
+        const StretchingAvoidanceControllerSolverType gripper_controller_type,
         const int max_count)
     : DeformableController(robot)
     , gripper_collision_checker_(nh)
     , robot_min_distance_to_obstacles_(GetControllerMinDistanceToObstacles(nh))
     , grippers_data_(robot->getGrippersData())
-    , enviroment_sdf_(sdf)
+    , environment_sdf_(sdf)
     , generator_(generator)
     , uniform_unit_distribution_(0.0, 1.0)
     , vis_(vis)
@@ -54,11 +54,11 @@ DeformableController::OutputData StretchingAvoidanceController::getGripperMotion
 {
     switch (gripper_controller_type_)
     {
-        case GripperControllerType::RANDOM_SAMPLING:
+        case StretchingAvoidanceControllerSolverType::RANDOM_SAMPLING:
             return solvedByRandomSampling(input_data);
             break;
 
-        case GripperControllerType::NOMAD_OPTIMIZATION:
+        case StretchingAvoidanceControllerSolverType::NOMAD_OPTIMIZATION:
             return solvedByNomad(input_data);
             break;
 
@@ -172,13 +172,14 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByRandomSa
         if (sample_count_ >= 0)
         {
             sample_count_++;
-            if(sample_count_ >= num_grippers)
+            if (sample_count_ >= num_grippers)
             {
                 sample_count_ = 0;
             }
         }
         if ((optimal_gripper_motion.size() == 0))
         {
+            ROS_WARN("No valid samples generated, setting motion to zero.");
             const kinematics::Vector6d no_movement = kinematics::Vector6d::Zero();
             optimal_gripper_motion = AllGrippersSinglePoseDelta(num_grippers, no_movement);
         }
@@ -483,7 +484,8 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
 // Helper functions
 //////////////////////////////////////////////////////////////////////////////////
 
-kinematics::Vector6d StretchingAvoidanceController::singleGripperPoseDeltaSampler(const double max_delta)
+kinematics::Vector6d StretchingAvoidanceController::singleGripperPoseDeltaSampler(
+        const double max_delta)
 {
     const double x_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
     const double y_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
@@ -495,13 +497,13 @@ kinematics::Vector6d StretchingAvoidanceController::singleGripperPoseDeltaSample
 
     kinematics::Vector6d random_sample;
 
-    double raw_norm = std::sqrt(std::pow(x_trans,2) + std::pow(y_trans,2) + std::pow(z_trans,2));
+    double raw_norm = std::sqrt(std::pow(x_trans, 2) + std::pow(y_trans, 2) + std::pow(z_trans, 2));
 
-    if ( raw_norm > 0.000001 && (fix_step_ || raw_norm > max_delta))
+    if (raw_norm > 0.000001 && (fix_step_ || raw_norm > max_delta))
     {
-        random_sample(0) = x_trans/raw_norm * max_delta;
-        random_sample(1) = y_trans/raw_norm * max_delta;
-        random_sample(2) = z_trans/raw_norm * max_delta;
+        random_sample(0) = x_trans / raw_norm * max_delta;
+        random_sample(1) = y_trans / raw_norm * max_delta;
+        random_sample(2) = z_trans / raw_norm * max_delta;
     }
     else
     {
@@ -521,64 +523,55 @@ AllGrippersSinglePoseDelta StretchingAvoidanceController::allGripperPoseDeltaSam
         const ssize_t num_grippers,
         const double max_delta)
 {
-    AllGrippersSinglePoseDelta grippers_motion_sample;
+    AllGrippersSinglePoseDelta grippers_motion_sample(num_grippers, kinematics::Vector6d::Zero());
 
     // if sample_count_ < 0, return all-sampled motion, otherwise, return one-for-each-time sample
     if (sample_count_ < 0)
     {
-        for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
+        for (ssize_t ind = 0; ind < num_grippers; ind++)
         {
-            // Eigen::Isometry3d single_gripper_motion_sample = EigenHelpers::ExpTwist(singleGripperPoseDeltaSampler(), 1.0);
-            grippers_motion_sample.push_back(singleGripperPoseDeltaSampler(max_delta));
+            grippers_motion_sample[ind] = singleGripperPoseDeltaSampler(max_delta);
         }
-        return grippers_motion_sample;
     }
     else if (sample_count_ < num_grippers)
     {
-        for (ssize_t ind_gripper = 0; ind_gripper < num_grippers; ind_gripper++)
-        {
-            if (ind_gripper == sample_count_)
-            {
-                grippers_motion_sample.push_back(singleGripperPoseDeltaSampler(max_delta));
-            }
-            else
-            {
-                kinematics::Vector6d no_sample = Eigen::MatrixXd::Zero(6,1);
-                grippers_motion_sample.push_back(no_sample);
-            }
-        }
-
-        return grippers_motion_sample;
+        grippers_motion_sample[sample_count_] = singleGripperPoseDeltaSampler(max_delta);
     }
     else
     {
         assert(false && "This code should not be reachable");
     }
+    return grippers_motion_sample;
 }
+
 
 double StretchingAvoidanceController::errorOfControlByPrediction(
         const ObjectPointSet predicted_object_p_dot,
         const Eigen::VectorXd& desired_object_p_dot,
         const Eigen::VectorXd& desired_p_dot_weight) const
 {
-    ssize_t num_nodes = predicted_object_p_dot.cols();
-    double sum_of_error = 0;
+    const Eigen::Map<const Eigen::VectorXd> prediction_as_vector(predicted_object_p_dot.data(), desired_object_p_dot.size());
+    const auto error = (prediction_as_vector- desired_object_p_dot).cwiseAbs2();
+    return error.dot(desired_p_dot_weight);
 
-    for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
-    {
-        Eigen::Vector3d node_predicted_p_dot = predicted_object_p_dot.col(node_ind);
-        Eigen::Vector3d node_desired_p_dot = desired_object_p_dot.segment<3>(node_ind * 3);
+//    double sum_of_error = 0;
 
-        // Only none_zero desired p dot is considered.
-        if (desired_p_dot_weight(node_ind * 3) > 0)
-        {
-            double node_p_dot_error = (node_predicted_p_dot - node_desired_p_dot).norm();
-            sum_of_error += node_p_dot_error * desired_p_dot_weight(node_ind *3);
-        }
-    }
+//    for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
+//    {
+//        Eigen::Vector3d node_predicted_p_dot = predicted_object_p_dot.col(node_ind);
+//        Eigen::Vector3d node_desired_p_dot = desired_object_p_dot.segment<3>(node_ind * 3);
 
-    return sum_of_error;
+//        // Only none_zero desired p dot is considered.
+//        if (desired_p_dot_weight(node_ind * 3) > 0)
+//        {
+//            double node_p_dot_error = (node_predicted_p_dot - node_desired_p_dot).norm();
+//            sum_of_error += node_p_dot_error * desired_p_dot_weight(node_ind *3);
+//        }
+//    }
+
+//    return sum_of_error;
 }
+
 
 void StretchingAvoidanceController::visualize_stretching_vector(
         const ObjectPointSet& object_configuration)
@@ -709,7 +702,9 @@ double StretchingAvoidanceController::gripperCollisionCheckHelper(
 
     for (size_t gripper_idx = 0; gripper_idx < grippers_test_poses.size(); ++gripper_idx)
     {
-        const auto collision_result = enviroment_sdf_.EstimateDistance3d(grippers_test_poses[gripper_idx].translation());
+        const auto tmp = grippers_test_poses[gripper_idx].translation();
+        const Eigen::Vector4d test_point(tmp.x(), tmp.y(), tmp.z(), 1.0);
+        const auto collision_result = environment_sdf_.EstimateDistance4dLegacy(test_point);
         if (collision_result.first < min_collision_distance)
         {
             min_collision_distance = collision_result.first;
@@ -788,7 +783,7 @@ double StretchingAvoidanceController::ropeTwoGripperStretchingHelper(
 
         switch (gripper_controller_type_)
         {
-            case GripperControllerType::RANDOM_SAMPLING:
+            case StretchingAvoidanceControllerSolverType::RANDOM_SAMPLING:
             {
                 if (sample_count_ > -1)
                 {
@@ -817,7 +812,7 @@ double StretchingAvoidanceController::ropeTwoGripperStretchingHelper(
                }
                 break;
             }
-            case GripperControllerType::NOMAD_OPTIMIZATION:
+            case StretchingAvoidanceControllerSolverType::NOMAD_OPTIMIZATION:
             {
                 for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
                 {
@@ -936,7 +931,7 @@ double StretchingAvoidanceController::clothTwoGripperStretchingHelper(
     double sum_resulting_motion_norm = 0.0;
 
     // sample_count_ > -1 means only sample one gripper each time
-    if ((sample_count_ > -1) && (gripper_controller_type_ == GripperControllerType::RANDOM_SAMPLING))
+    if ((sample_count_ > -1) && (gripper_controller_type_ == StretchingAvoidanceControllerSolverType::RANDOM_SAMPLING))
     {
         assert(sample_count_ < (int)(per_gripper_stretching_correction_vector.size()));
         const Eigen::Vector3d resulting_gripper_motion = points_moving[sample_count_];

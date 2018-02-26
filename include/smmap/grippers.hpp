@@ -198,6 +198,7 @@ namespace smmap
             const kinematics::Vector6d& vel1,
             const kinematics::Vector6d& vel2)
     {
+        #pragma message "SE(3) velocity weight hard coded here"
         kinematics::Vector6d weight = kinematics::Vector6d::Ones();
         weight(3) = 1.0/20.0;
         weight(4) = 1.0/20.0;

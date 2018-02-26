@@ -730,10 +730,10 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectF
     std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 
     // TODO: Move to class wide location, currently in 2 locations in this file
-    const static std_msgs::ColorRGBA gripper_color = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
+//    const static std_msgs::ColorRGBA gripper_color = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
     const static std_msgs::ColorRGBA rubber_band_safe_color = Visualizer::Black();
     const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
-    const bool band_verbose = false;
+//    const bool band_verbose = false;
 
 //    vis_->clearVisualizationsBullet();
 
@@ -1474,7 +1474,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                            environment_sdf,
                                            generator_,
                                            vis_,
-                                           GetGripperControllerType(ph_),
+                                           GetStretchingAvoidanceControllerSolverType(ph_),
                                            GetMaxSamplingCounts(ph_)));
             break;
         }
@@ -1512,7 +1512,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                            environment_sdf,
                                            generator_,
                                            vis_,
-                                           GetGripperControllerType(ph_),
+                                           GetStretchingAvoidanceControllerSolverType(ph_),
                                            GetMaxSamplingCounts(ph_)));
             break;
         }
@@ -1596,7 +1596,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                                environment_sdf,
                                                generator_,
                                                vis_,
-                                               GetGripperControllerType(ph_),
+                                               GetStretchingAvoidanceControllerSolverType(ph_),
                                                GetMaxSamplingCounts(ph_)));
             }
 
@@ -1632,7 +1632,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                                environment_sdf,
                                                generator_,
                                                vis_,
-                                               GetGripperControllerType(ph_),
+                                               GetStretchingAvoidanceControllerSolverType(ph_),
                                                GetMaxSamplingCounts(ph_)));
             }
 

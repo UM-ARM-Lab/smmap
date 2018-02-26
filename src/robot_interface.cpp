@@ -305,6 +305,7 @@ WorldState RobotInterface::commandRobotMotion_impl(
     if (!execute_gripper_movement_client_.call(movement, result))
     {
         ROS_FATAL_NAMED("robot_interface", "Sending a gripper movement to the robot failed");
+        assert(false && "Unable to send command to robot");
     }
     CHECK_FRAME_NAME("robot_interface", world_frame_name_, result.world_state.header.frame_id);
     return ConvertToEigenFeedback(result.world_state);
