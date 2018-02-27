@@ -482,7 +482,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     stopwatch(RESET);
     std::vector<DeformableController::OutputData> suggested_robot_commands(num_models_);
     std::vector<double> controller_computation_time(num_models_, 0.0);
-    #pragma omp parallel for
+//    #pragma omp parallel for
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
     {
         if (collect_results_for_all_models_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)

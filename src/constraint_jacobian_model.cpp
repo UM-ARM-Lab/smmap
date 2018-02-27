@@ -102,26 +102,25 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
     const MatrixXd J = computeGrippersToDeformableObjectJacobian(world_state, grippers_pose_delta);
     const ObjectPointSet& current_configuration = world_state.object_configuration_;
 
-    MatrixXd delta = MatrixXd::Zero(world_state.object_configuration_.cols() * 3, 1);
+    const Eigen::VectorXd grippers_delta =
+            EigenHelpers::VectorEigenVectorToEigenVectorX(grippers_pose_delta);
 
     // Move the object based on the movement of each gripper
-    for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
-    {
-        // Assume that our Jacobian is correct, and predict where we will end up
-        delta += J.block(0, 6 * (ssize_t)gripper_ind, J.rows(), 6) * grippers_pose_delta[gripper_ind];
-    }
+    MatrixXd object_delta = J * grippers_delta;
 
+    #pragma omp parallel for
     for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
     {
+        const auto node = current_configuration.col(node_ind);
         // Do nothing if we are not in collision
-        if (environment_sdf_.EstimateDistance3d(current_configuration.col(node_ind)).first > obstacle_threshold_)
+        if (environment_sdf_.EstimateDistance4dLegacy(Eigen::Vector4d(node.x(), node.y(), node.z(), 1.0)).first > obstacle_threshold_)
         {
             continue;
         }
         else
         {
-            const Vector3d& node_p_dot = delta.block<3, 1>(node_ind * 3, 0);
-            std::vector<double> sur_n = environment_sdf_.GetGradient3d(current_configuration.col(node_ind));
+            const Vector3d& node_p_dot = object_delta.block<3, 1>(node_ind * 3, 0);
+            std::vector<double> sur_n = environment_sdf_.GetGradient3d(node);
             if (sur_n.size() > 1)
             {
                 const Vector3d surface_normal = Vector3d::Map(sur_n.data(), sur_n.size()).normalized();
@@ -131,7 +130,7 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
                 if (dot_result < 0.0)
                 {
                     const auto projected_node_p_dot = node_p_dot - dot_result * surface_normal;
-                    delta.block<3, 1>(node_ind * 3, 0) = projected_node_p_dot;
+                    object_delta.block<3, 1>(node_ind * 3, 0) = projected_node_p_dot;
                 }
             }
 
@@ -139,8 +138,8 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
     }
 
     // Resize delta to a 3xn vector
-    delta.resizeLike(world_state.object_configuration_);
-    return delta;
+    object_delta.resizeLike(world_state.object_configuration_);
+    return object_delta;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -194,19 +193,10 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
                         grippers_data_[(size_t)gripper_ind].node_indices_,
                         node_ind, object_initial_node_distance_);
 
-            // Calculate the cross product between the grippers x, y, and z axes
-            // and the vector from the gripper to the node, for rotation utilization
-
-            const Vector3d gripper_to_node =
-                    current_configuration.col(node_ind) -
-                    current_configuration.col(nearest_node_on_gripper.second);
-
-            /*
             // Get dist_rest, get node velocity
             // Dist_real_vec is vector form, it is for translation rigidity utilization
             // Dist_real is the distance between two nodes on objects
             // Gripper_to_node is the radius of rotation, one node may not on object
-            */
             const Vector3d dist_real_vec =
                     current_configuration.col(nearest_node_on_gripper.second)-
                     current_configuration.col(node_ind) ; // in .hpp file ;
@@ -220,11 +210,18 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
             // Beta inputs are distance vector, node velocity
             */
             const Matrix3d rigidity_translation =
-                    disLinearModel(dist_real, nearest_node_on_gripper.first)*
+                    disLinearModel(dist_real, nearest_node_on_gripper.first) *
                     dirPropotionalModel(dist_real_vec, node_v);
 
-            J.block<3, 3>(node_ind * 3, gripper_ind * 6) =
-                     rigidity_translation *J_trans;
+            J.block<3, 3>(node_ind * 3, gripper_ind * 6) = rigidity_translation * J_trans;
+
+
+            // Calculate the cross product between the grippers x, y, and z axes
+            // and the vector from the gripper to the node, for rotation utilization
+
+            const Vector3d gripper_to_node =
+                    current_configuration.col(node_ind) -
+                    current_configuration.col(nearest_node_on_gripper.second);
 
             Matrix3d J_rot;
             J_rot.col(0) = gripper_rot.col(0).cross(gripper_to_node);
@@ -250,6 +247,8 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
         const ObjectPointSet &current_configuration,
         const MatrixXd &object_p_dot) const
 {
+    assert(false && "This is not used right now");
+
     const ssize_t num_lines = num_nodes_ * 3;
     MatrixXd M(num_lines, num_lines);
     M.setIdentity(num_lines,num_lines);

@@ -33,15 +33,12 @@ ObjectPointSet JacobianModel::getObjectDelta_impl(
 {
     const MatrixXd J = computeGrippersToDeformableObjectJacobian_impl(world_state);
 
-    MatrixXd delta = MatrixXd::Zero(world_state.object_configuration_.cols() * 3, 1);
+    const Eigen::VectorXd grippers_delta =
+            EigenHelpers::VectorEigenVectorToEigenVectorX(grippers_pose_delta);
 
     // Move the object based on the movement of each gripper
-    for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
-    {
-        // Assume that our Jacobian is correct, and predict where we will end up
-        delta += J.block(0, 6 * (ssize_t)gripper_ind, J.rows(), 6) * grippers_pose_delta[gripper_ind];
-    }
+    MatrixXd object_delta = J * grippers_delta;
 
-    delta.resizeLike(world_state.object_configuration_);
-    return delta;
+    object_delta.resizeLike(world_state.object_configuration_);
+    return object_delta;
 }

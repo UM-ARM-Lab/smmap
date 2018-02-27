@@ -35,6 +35,8 @@ namespace smmap
 
             OutputData solvedByNomad(const InputData& input_data);
 
+            OutputData solvedByGradientDescent(const InputData& input_data);
+
             /////////////////////////////////////////////////////////////////////////////////////////
             // Helper functions
             /////////////////////////////////////////////////////////////////////////////////////////
@@ -74,6 +76,10 @@ namespace smmap
             /////////////////////////////////////////////////////////////////////////////////////////
 
             bool stretchingDetection(
+                    const InputData& input_data,
+                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+
+            double stretchingFunctionEvaluation(
                     const InputData& input_data,
                     const AllGrippersSinglePoseDelta& test_gripper_motion);
 
