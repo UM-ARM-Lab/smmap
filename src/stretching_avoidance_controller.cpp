@@ -524,47 +524,34 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
         AllGrippersSinglePoseDelta robot_motion(num_grippers, kinematics::Vector6d::Zero());
         ObjectPointSet current_object_delta = model_->getObjectDelta(current_world_state, robot_motion);
         double current_error = errorOfControlByPrediction(current_object_delta, desired_object_p_dot, desired_p_dot_weight);
-        double current_stretching_constraint = stretchingFunctionEvaluation(input_data, robot_motion);
 
         while (!converged)
         {
-            std::cout << "Start of loop motion:  " << print(robot_motion) << std::endl;
-            std::cout << "Start of loop error:   " << current_error << std::endl;
-            std::cout << "Start of stretching:   " << current_stretching_constraint << std::endl;
+//            std::cout << "Start of loop motion:  " << print(robot_motion) << std::endl;
+//            std::cout << "Start of loop error:   " << current_error << std::endl;
+//            std::cout << "Start of stretching:   " << current_stretching_constraint << std::endl;
 
-            std::vector<AllGrippersSinglePoseDelta> test_robot_motion(num_grippers * 6, robot_motion);
-            std::vector<ObjectPointSet> predicted_object_movement(num_grippers * 6);
             Eigen::VectorXd error_numerical_gradient(num_grippers * 6);
-            Eigen::VectorXd stretching_constraint_numerical_gradient(num_grippers * 6);
-
             for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; ++gripper_ind)
             {
                 for (size_t single_gripper_dir_ind = 0; single_gripper_dir_ind < 6; ++single_gripper_dir_ind)
                 {
                     const auto test_input_ind = gripper_ind * 6 + single_gripper_dir_ind;
 
-                    AllGrippersSinglePoseDelta& local_test_motion = test_robot_motion[test_input_ind];
+                    AllGrippersSinglePoseDelta local_test_motion = robot_motion;
                     local_test_motion[gripper_ind](single_gripper_dir_ind) += differencing_step_size;
 
-                    predicted_object_movement[test_input_ind] = model_->getObjectDelta(current_world_state, local_test_motion);
-
+                    const auto predicted_object_delta = model_->getObjectDelta(current_world_state, local_test_motion);
                     error_numerical_gradient(test_input_ind) =
                             (errorOfControlByPrediction(
-                                 predicted_object_movement[test_input_ind],
+                                 predicted_object_delta,
                                  desired_object_p_dot,
                                  desired_p_dot_weight) - current_error)
-                            / differencing_step_size;
-
-                    stretching_constraint_numerical_gradient(test_input_ind) =
-                            (stretchingFunctionEvaluation(
-                                 input_data,
-                                 local_test_motion) - current_stretching_constraint)
                             / differencing_step_size;
                 }
             }
 
-            std::cout << "Error Gradient:      " << error_numerical_gradient.transpose() << std::endl;
-            std::cout << "Stretching Gradient: " << stretching_constraint_numerical_gradient.transpose() << std::endl;
+//            std::cout << "Error Gradient:      " << error_numerical_gradient.transpose() << std::endl;
 
             double error_gradient_step_size = -initial_gradient_step_size;
             auto error_downhill_step = stepInDirection(robot_motion, error_numerical_gradient, error_gradient_step_size);
@@ -583,37 +570,57 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
                 next_downhill_error = errorOfControlByPrediction(predicted_object_delta, desired_object_p_dot, desired_p_dot_weight);
             }
 
-            std::cout << "Post downhill motion:  " << print(max_movement_projected_step) << std::endl;
+//            std::cout << "Post downhill motion:  " << print(max_movement_projected_step) << std::endl;
 
-            double constraint_gradient_step_size = -initial_gradient_step_size / 10.0;
+            double constraint_gradient_step_size = -initial_gradient_step_size / 100.0;
             auto stretching_constraint_correction_result = max_movement_projected_step;
             double new_constraint_value = stretchingFunctionEvaluation(input_data, stretching_constraint_correction_result);
 
             int constraint_satisfaction_ind = 0;
             while (new_constraint_value > 0.0 && constraint_satisfaction_ind < 10)
             {
-                ++constraint_satisfaction_ind;
+                Eigen::VectorXd stretching_constraint_numerical_gradient(num_grippers * 6);
+                for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; ++gripper_ind)
+                {
+                    for (size_t single_gripper_dir_ind = 0; single_gripper_dir_ind < 6; ++single_gripper_dir_ind)
+                    {
+                        const auto test_input_ind = gripper_ind * 6 + single_gripper_dir_ind;
 
-                std::cout << "Stretching  Pre:  " << print(stretching_constraint_correction_result) << std::endl;
+                        AllGrippersSinglePoseDelta local_test_motion = stretching_constraint_correction_result;
+                        local_test_motion[gripper_ind](single_gripper_dir_ind) += differencing_step_size;
+
+                        stretching_constraint_numerical_gradient(test_input_ind) =
+                                (stretchingFunctionEvaluation(
+                                     input_data,
+                                     local_test_motion) - new_constraint_value)
+                                / differencing_step_size;
+                    }
+                }
+
+//                std::cout << "Stretching Pre:        " << print(stretching_constraint_correction_result) << std::endl;
+//                std::cout << "Stretching Gradient: " << stretching_constraint_numerical_gradient.transpose() << std::endl;
 
                 stretching_constraint_correction_result =
                         projectToMaxDeltaConstraint(
                             stepInDirection(stretching_constraint_correction_result, stretching_constraint_numerical_gradient, constraint_gradient_step_size),
                             max_step_size);
 
-                std::cout << "Stretching Post: " << print(stretching_constraint_correction_result) << std::endl;
+//                std::cout << "Stretching Post:       " << print(stretching_constraint_correction_result) << std::endl;
 
                 new_constraint_value = stretchingFunctionEvaluation(input_data, stretching_constraint_correction_result);
 
-                constraint_gradient_step_size -= initial_gradient_step_size / 10.0;
+                constraint_gradient_step_size -= initial_gradient_step_size / 100.0;
+                ++constraint_satisfaction_ind;
             }
 
-            std::cout << "Post stretching tweak: " << print(stretching_constraint_correction_result) << std::endl;
+//            std::cout << "Post stretching tweak: " << print(stretching_constraint_correction_result) << std::endl;
 
             const auto loop_final_robot_motion = stretching_constraint_correction_result;
             const auto loop_final_predicted_object_delta = model_->getObjectDelta(current_world_state, loop_final_robot_motion);
             const double loop_final_downhill_error = errorOfControlByPrediction(loop_final_predicted_object_delta, desired_object_p_dot, desired_p_dot_weight);
-            const double loop_final_constraint_value = new_constraint_value;
+
+//            std::cout << "End of loop error:      " << loop_final_downhill_error << std::endl;
+//            std::cout << "End of loop stretching: " << loop_final_constraint_value << std::endl;
 
             // If we could not make progress, then return whatever the last valid movement we had was
             if (new_constraint_value > 0.0 || loop_final_downhill_error > current_error)
@@ -628,7 +635,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
                 robot_motion = loop_final_robot_motion;
                 current_object_delta = loop_final_predicted_object_delta;
                 current_error = loop_final_downhill_error;
-                current_stretching_constraint = loop_final_constraint_value;
             }
         }
 
