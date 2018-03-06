@@ -8,6 +8,7 @@
 #include "smmap/ros_communication_helpers.hpp"
 #include "smmap/grippers.hpp"
 
+// Needed due to rounding problems
 #define GRIPPER_COLLISION_REPULSION_MARGIN 0.0001
 
 using namespace smmap;
@@ -25,7 +26,7 @@ StretchingAvoidanceController::StretchingAvoidanceController(
         const int max_count)
     : DeformableController(robot)
     , gripper_collision_checker_(nh)
-    , robot_min_distance_to_obstacles_(GetControllerMinDistanceToObstacles(nh))
+    , robot_min_distance_to_obstacles_(GetControllerMinDistanceToObstacles(ph))
     , grippers_data_(robot->getGrippersData())
     , environment_sdf_(sdf)
     , generator_(generator)
@@ -266,6 +267,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
                                               desired_p_dot_weight);
         };
 
+        // Note that NOMAD wants all constraints in the form c(x) <= 0
         // Return the min distance of the points of interest to the obstacles, minus the required clearance
         const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> poi_collision_data =
                 robot_->getPointsOfInterestCollisionData(input_data.world_current_state_.robot_configuration_);
@@ -286,9 +288,10 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
                 min_poi_distance = std::min(min_poi_distance, current_distance);
             }
 
-            return required_obstacle_clearance - min_poi_distance;
+            return min_poi_distance - required_obstacle_clearance;
         };
 
+        // Note that NOMAD wants all constraints in the form c(x) <= 0
         // Return the sum of cos (an indicator of direction) gripper motion to stretching vector
         const std::function<double(const Eigen::VectorXd&)> stretching_constraint_fn = [&] (
                 const Eigen::VectorXd& test_robot_motion)
@@ -486,60 +489,189 @@ inline AllGrippersSinglePoseDelta stepInDirection(
     return stepInDirection(start, dir_as_eigen, step_size);
 }
 
-inline AllGrippersSinglePoseDelta projectToMaxDeltaConstraint(
-        const AllGrippersSinglePoseDelta& start,
+// Note that this assumes that the projectino is needed, and is already on the boundary of the collision constraint
+inline kinematics::Vector6d projectToCornerOfCollisionAndMaxDeltaConstraints(
+        const kinematics::Vector6d & delta,
+        const Eigen::Matrix<double, 3, 6>& collision_jacobian,
         const double max_step_size)
 {
-    // Each gripper is handled independently
-    AllGrippersSinglePoseDelta result(start.size());
-    for (size_t ind = 0; ind < start.size(); ++ind)
+    const Eigen::Matrix<double, 6, 3> collision_jacobian_inv = EigenHelpers::Pinv(collision_jacobian, EigenHelpers::SuggestedRcond());
+    const auto nullspace_projector = Eigen::Matrix<double, 6, 6>::Identity() - collision_jacobian_inv * collision_jacobian;
+
+    const auto unnormalized_direction_along_line = nullspace_projector * delta;
+    const double direction_norm = GripperVelocity6dNorm(unnormalized_direction_along_line);
+    assert(direction_norm > 0.0);
+    const auto direction_along_line = unnormalized_direction_along_line / direction_norm;
+    const auto& point_on_line = delta;
+
+    // Math taken from here: https://en.wikipedia.org/wiki/Line%E2%80%93sphere_intersection
+    // They have an error in the simplification, but definition of a, b, and c is correct
+//    const double a = 1.0;
+    const auto b = 2.0 * GripperVelocityDotProduct(direction_along_line, point_on_line);
+    const auto c = GripperVelocity6dSquaredNorm(point_on_line) - max_step_size * max_step_size;
+    const auto discriminant = std::max(0.0, b * b - 4 * c);
+
+//    std::cout << "b: " << b << std::endl;
+//    std::cout << "c: " << c << std::endl;
+//    std::cout << "d: " << discriminant << std::endl;
+
+    const auto distance_along_line_plus = (-b + std::sqrt(discriminant)) / 2.0;
+    const auto distance_along_line_minus = (-b - std::sqrt(discriminant)) / 2.0;
+
+//    std::cout << "minus: " << distance_along_line_minus << std::endl;
+//    std::cout << "plus: " << distance_along_line_plus << std::endl;
+//    std::cout << "b*b - 4*c: " << b * b - 4 * c << std::endl;
+
+    // Accept the motion that is smaller (i.e. closer to the start point)
+    if (std::abs(distance_along_line_plus) < std::abs(distance_along_line_minus))
     {
-        const double norm = GripperVelocity6dNorm(start[ind]);
-        if (norm <= max_step_size)
-        {
-            result[ind] = start[ind];
-        }
-        else
-        {
-            result[ind] = start[ind] * (max_step_size / norm);
-        }
+        return delta + distance_along_line_plus * direction_along_line;
     }
-    return result;
+    else
+    {
+        return delta + distance_along_line_minus * direction_along_line;
+    }
 }
 
-inline kinematics::Vector6d projectToCollisionConstraint(
+inline kinematics::Vector6d projectToCollisionAndMaxDeltaConstraints(
         const Eigen::Isometry3d& starting_pose,
         const kinematics::Vector6d& delta,
         const CollisionData& collision_data,
-        const double min_distance)
+        const double min_distance,
+        const double max_step_size)
 {
+//    std::cout << "\n\n\n\n";
+
     const Eigen::Matrix<double, 3, 6> J_collision =
             ComputeCollisionToGripperJacobian(
                 collision_data.nearest_point_to_obstacle_, starting_pose);
 
-    const auto J_displacement = -collision_data.obstacle_surface_normal_.transpose() * J_collision;
-    const double displacement_towards_obstacle =  J_displacement * delta;
-    if (collision_data.distance_to_obstacle_ + displacement_towards_obstacle >= min_distance)
+    // Gripper DOF direction to increase distance from the obstacle
+    const auto J_distance = collision_data.obstacle_surface_normal_.transpose() * J_collision;
+    const auto J_distance_pinv = EigenHelpers::Pinv(J_distance, EigenHelpers::SuggestedRcond());
+
+//    std::cout << J_distance * J_distance_pinv << std::endl;
+
+    // First check if the intersection of valid motion is empty; if it is empty;
+    // take the least violating motion (max speed, directly away from collision) as the result of projection
     {
-        return delta;
+        // If the distance is already far enough away, then we are already satisfying the constraint with zero movement,
+        // thus the valid motion region cannot be empty
+        const double current_distance = collision_data.distance_to_obstacle_;
+        const double current_distance_change_needed = std::max(0.0, min_distance + GRIPPER_COLLISION_REPULSION_MARGIN - current_distance);
+        const auto min_gripper_delta_to_satisfy_collision_constraint = J_distance_pinv * current_distance_change_needed;
+        const double norm = GripperVelocity6dNorm(min_gripper_delta_to_satisfy_collision_constraint);
+
+//        std::cout << "surface normal: " << collision_data.obstacle_surface_normal_.transpose() << std::endl;
+
+//        std::cout << "J_collision:\n" << J_collision << std::endl;
+//        std::cout << "J_distance:\n" << J_distance << std::endl;
+//        std::cout << "J_distance_pinv:\n" << J_distance_pinv << std::endl;
+
+//        std::cout << "min dist:        " << min_distance << std::endl;
+//        std::cout << "curr dist:       " << collision_data.distance_to_obstacle_ << std::endl;
+//        std::cout << "min to move:     " << current_distance_change_needed << std::endl;
+//        std::cout << "min delta to satisfy: " << min_gripper_delta_to_satisfy_collision_constraint.transpose() << std::endl;
+//        std::cout << "Norm: " << norm << std::endl;
+
+        if (norm > max_step_size)
+        {
+            return min_gripper_delta_to_satisfy_collision_constraint * (max_step_size / norm);
+        }
     }
-    else
+
+    // Second option, project to the delta ball first.
+    // If, after projecting, we are violating the collision constraint,
+    // then we need to find the "corner" between the circle and the half plane
     {
-        const double min_movement_away = min_distance - collision_data.distance_to_obstacle_ + GRIPPER_COLLISION_REPULSION_MARGIN;
-        const auto J_displacement_pinv = EigenHelpers::Pinv(J_displacement, EigenHelpers::SuggestedRcond());
-        const auto new_delta = J_displacement_pinv * min_movement_away;
-        const auto new_displacement = J_displacement * new_delta;
-        assert(new_displacement.size() == 1);
-        assert(collision_data.distance_to_obstacle_ + new_displacement(0) >= min_distance);
-        return new_delta;
+        const double delta_norm = GripperVelocity6dNorm(delta);
+        if (delta_norm > max_step_size)
+        {
+            const auto max_motion_constrained_delta = delta * (max_step_size / delta_norm);
+            const double displacement_towards_obstacle =  J_distance * max_motion_constrained_delta;
+            const double current_distance = collision_data.distance_to_obstacle_ + displacement_towards_obstacle;
+            if (current_distance >= min_distance)
+            {
+                return max_motion_constrained_delta;
+            }
+            else
+            {
+                const double current_distance_change_needed = min_distance + GRIPPER_COLLISION_REPULSION_MARGIN - current_distance;
+                const auto collision_constrained_delta_update = J_distance_pinv * current_distance_change_needed;
+                const auto collision_constrained_delta = max_motion_constrained_delta + collision_constrained_delta_update;
+                const auto collision_constrained_displacement = J_distance * collision_constrained_delta;
+
+//                std::cout << std::setprecision(12) << std::endl;
+//                std::cout << "min dist:        " << min_distance << std::endl;
+//                std::cout << "curr dist:       " << current_distance << std::endl;
+//                std::cout << "min to move:     " << current_distance_change_needed << std::endl;
+//                std::cout << "delta moved:     " << J_distance * collision_constrained_delta_update << std::endl;
+//                std::cout << "new curr dist:   " << collision_data.distance_to_obstacle_ + collision_constrained_displacement(0) << std::endl;
+
+//                std::cout << "\nStart: " << delta.transpose() << std::endl;
+//                std::cout << "update:  " << collision_constrained_delta_update.transpose() << std::endl;
+//                std::cout << "sum      " << collision_constrained_delta.transpose() << std::endl;
+
+                assert(collision_constrained_displacement.size() == 1);
+                assert(collision_data.distance_to_obstacle_ + collision_constrained_displacement(0) >= min_distance);
+
+                return projectToCornerOfCollisionAndMaxDeltaConstraints(
+                            collision_constrained_delta,
+                            J_collision,
+                            max_step_size);
+            }
+        }
     }
+
+    // We did not need to project to the delta ball, so project to the collision constraint.
+    // If, after projecting, we are violating the max delta constraint
+    // then we need to find the "corner" between the circle and the half plane
+    {
+        const double displacement_towards_obstacle =  J_distance * delta;
+        const double current_distance = collision_data.distance_to_obstacle_ + displacement_towards_obstacle;
+        if (current_distance < min_distance)
+        {
+            const double current_distance_change_needed = min_distance + GRIPPER_COLLISION_REPULSION_MARGIN - current_distance;
+            const auto collision_constrained_delta = J_distance_pinv * current_distance_change_needed + delta;
+            const auto collision_constrained_displacement = J_distance * collision_constrained_delta;
+
+//            std::cout << "starting distance:            " << collision_data.distance_to_obstacle_ << std::endl;
+//            std::cout << "min dist:                     " << min_distance << std::endl;
+//            std::cout << "min_movement_away:            " << min_movement_away << std::endl;
+//            std::cout << "starting dist + movement:     " << collision_data.distance_to_obstacle_ + displacement_towards_obstacle << std::endl;
+//            std::cout << "starting dist + new movement: " << collision_data.distance_to_obstacle_ + new_displacement(0) << std::endl;
+
+//            std::cout << "starting motion: " << delta.transpose() << std::endl;
+//            std::cout << "ending motion:   " << new_delta.transpose() << std::endl;
+
+            assert(collision_constrained_displacement.size() == 1);
+            assert(collision_data.distance_to_obstacle_ + collision_constrained_displacement(0) >= min_distance);
+
+            const double delta_norm = GripperVelocity6dNorm(collision_constrained_delta);
+            if (delta_norm <= max_step_size)
+            {
+                return collision_constrained_delta;
+            }
+            else
+            {
+                return projectToCornerOfCollisionAndMaxDeltaConstraints(
+                            collision_constrained_delta,
+                            J_collision,
+                            max_step_size);
+            }
+        }
+    }
+
+    // If no constraints are violated, then return the original value unchanged
+    return delta;
 }
 
-inline AllGrippersSinglePoseDelta projectToCollisionConstraint(
+inline AllGrippersSinglePoseDelta projectToCollisionAndMaxDeltaConstraints(
         const AllGrippersSinglePose& starting_poses,
         const AllGrippersSinglePoseDelta& delta,
         const std::vector<CollisionData>& collision_data,
-        const double min_distance)
+        const double min_distance,
+        const double max_step_size)
 {
     assert(delta.size() == starting_poses.size());
     assert(delta.size() == collision_data.size());
@@ -547,11 +679,12 @@ inline AllGrippersSinglePoseDelta projectToCollisionConstraint(
     AllGrippersSinglePoseDelta result(delta.size());
     for (size_t ind = 0; ind < delta.size(); ++ind)
     {
-        result[ind] = projectToCollisionConstraint(starting_poses[ind], delta[ind], collision_data[ind], min_distance);
+        result[ind] = projectToCollisionAndMaxDeltaConstraints(starting_poses[ind], delta[ind], collision_data[ind], min_distance, max_step_size);
     }
     return result;
 }
 
+#warning "Magic numbers all throughout this function"
 DeformableController::OutputData StretchingAvoidanceController::solvedByGradientDescent(const InputData& input_data)
 {
     const WorldState& current_world_state = input_data.world_current_state_;
@@ -576,7 +709,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
     {
         const double max_individual_gripper_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
         const double differencing_step_size = max_individual_gripper_step_size / 100.0;
-        const double initial_gradient_step_size = max_individual_gripper_step_size / 5.0;
+        const double initial_gradient_step_size = max_individual_gripper_step_size / 10.0;
 
         bool converged = false;
         AllGrippersSinglePoseDelta robot_motion(num_grippers, kinematics::Vector6d::Zero());
@@ -589,7 +722,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 //            std::cout << "Current step: " << GripperVelocity6dNorm(robot_motion[0]) << " " << GripperVelocity6dNorm(robot_motion[1]) << std::endl;
 //            std::cout << "Start of loop motion:  " << print(robot_motion) << std::endl;
 //            std::cout << "Start of loop error:   " << current_error << std::endl;
-//            std::cout << "Start of stretching:   " << current_stretching_constraint << std::endl;
 
             Eigen::VectorXd error_numerical_gradient(num_grippers * 6);
             for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; ++gripper_ind)
@@ -624,8 +756,16 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
                 do
                 {
                     error_minimization_downhill_step = stepInDirection(robot_motion, error_numerical_gradient, error_gradient_step_size);
-                    auto collision_projected_step = projectToCollisionConstraint(current_world_state.all_grippers_single_pose_, error_minimization_downhill_step, input_data.world_current_state_.gripper_collision_data_, robot_min_distance_to_obstacles_);
-                    error_minimization_downhill_step = projectToMaxDeltaConstraint(collision_projected_step, max_individual_gripper_step_size);
+//                    std::cout << "Pre collision proj:    " << print(error_minimization_downhill_step) << std::endl;
+                    error_minimization_downhill_step = projectToCollisionAndMaxDeltaConstraints(
+                                current_world_state.all_grippers_single_pose_,
+                                error_minimization_downhill_step,
+                                input_data.world_current_state_.gripper_collision_data_,
+                                robot_min_distance_to_obstacles_,
+                                max_individual_gripper_step_size);
+
+//                    std::cout << "Post collision proj:   " << print(error_minimization_downhill_step) << std::endl;
+
                     auto predicted_object_delta = model_->getObjectDelta(current_world_state, error_minimization_downhill_step);
                     next_downhill_error = errorOfControlByPrediction(predicted_object_delta, desired_object_p_dot, desired_p_dot_weight);
 
@@ -667,11 +807,16 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 //                std::cout << "Stretching Pre:        " << print(stretching_constraint_correction_result) << std::endl;
 //                std::cout << "Stretching Gradient: " << stretching_constraint_numerical_gradient.transpose() << std::endl;
 
-                const auto stretching_constraint_step = stepInDirection(stretching_constraint_correction_result, stretching_constraint_numerical_gradient, constraint_gradient_step_size);
-                const auto collision_projected_step = projectToCollisionConstraint(current_world_state.all_grippers_single_pose_, stretching_constraint_step, input_data.world_current_state_.gripper_collision_data_, robot_min_distance_to_obstacles_);
-                stretching_constraint_correction_result = projectToMaxDeltaConstraint(collision_projected_step, max_individual_gripper_step_size);
+                stretching_constraint_correction_result = stepInDirection(stretching_constraint_correction_result, stretching_constraint_numerical_gradient, constraint_gradient_step_size);
 
 //                std::cout << "Stretching Post:       " << print(stretching_constraint_correction_result) << std::endl;
+                stretching_constraint_correction_result = projectToCollisionAndMaxDeltaConstraints(
+                                                current_world_state.all_grippers_single_pose_,
+                                                stretching_constraint_correction_result,
+                                                input_data.world_current_state_.gripper_collision_data_,
+                                                robot_min_distance_to_obstacles_,
+                                                max_individual_gripper_step_size);
+
 
                 new_constraint_value = stretchingFunctionEvaluation(input_data, stretching_constraint_correction_result);
 
@@ -686,7 +831,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
             const double loop_final_downhill_error = errorOfControlByPrediction(loop_final_predicted_object_delta, desired_object_p_dot, desired_p_dot_weight);
 
 //            std::cout << "End of loop error:      " << loop_final_downhill_error << std::endl;
-//            std::cout << "End of loop stretching: " << loop_final_constraint_value << std::endl;
+//            std::cout << "End of loop stretching: " << new_constraint_value << std::endl;
 
             // If we could not make progress, then return whatever the last valid movement we had was
             if (new_constraint_value > 0.0 || loop_final_downhill_error > current_error)
@@ -703,6 +848,10 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
                 current_error = loop_final_downhill_error;
             }
         }
+
+
+        std::cout << "Final motion: " << print(robot_motion) << std::endl;
+//        std::cout << "Norms: " << GripperVelocity6dNorm(robot_motion[0]) << " " << GripperVelocity6dNorm(robot_motion[1]) << std::endl;
 
         return OutputData(robot_motion, current_object_delta, Eigen::VectorXd());
     }
@@ -960,6 +1109,9 @@ bool StretchingAvoidanceController::stretchingDetection(
     return (stretchingFunctionEvaluation(input_data, test_gripper_motion) > 0.0);
 }
 
+// Note that NOMAD wants all constraints in the form c(x) <= 0
+// If the calc'd value is larger than the threshold, then the gripper motion is sufficently pointed
+// in the direction needed to reduce/not cause more stretching
 double StretchingAvoidanceController::stretchingFunctionEvaluation(
         const InputData& input_data,
         const AllGrippersSinglePoseDelta& test_gripper_motion)
@@ -991,6 +1143,8 @@ double StretchingAvoidanceController::ropeTwoGripperStretchingHelper(
         const InputData& input_data,
         const AllGrippersSinglePoseDelta& test_gripper_motion)
 {
+    assert(false && "Verify no NaNs etc in this math");
+
     double stretching_sum = 0.0;
     double stretching_cos = 1.0; // return a value > stretching_cos_threshold
 
