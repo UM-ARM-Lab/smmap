@@ -19,7 +19,7 @@ namespace smmap
         public:
             typedef std::shared_ptr<RobotInterface> Ptr;
 
-            RobotInterface(ros::NodeHandle& nh);
+            RobotInterface(ros::NodeHandle& nh, ros::NodeHandle& ph);
             ~RobotInterface();
 
             WorldState start();
@@ -71,6 +71,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             ros::NodeHandle nh_;
+            ros::NodeHandle ph_;
             const std::string world_frame_name_; // Frame that all incomming data must be in
             const std::vector<GripperData> grippers_data_;
             GripperCollisionChecker gripper_collision_checker_;

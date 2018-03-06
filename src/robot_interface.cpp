@@ -28,8 +28,9 @@ inline Eigen::VectorXd GetJointUpperLimits() // radians
     return lower_limits;
 }
 
-RobotInterface::RobotInterface(ros::NodeHandle& nh)
+RobotInterface::RobotInterface(ros::NodeHandle& nh, ros::NodeHandle& ph)
     : nh_(nh)
+    , ph_(ph)
     , world_frame_name_(GetWorldFrameName())
     , grippers_data_(GetGrippersData(nh_))
     , gripper_collision_checker_(nh_)
@@ -38,7 +39,7 @@ RobotInterface::RobotInterface(ros::NodeHandle& nh)
     , dt_(GetRobotControlPeriod(nh_))
     , max_gripper_velocity_norm_(GetMaxGripperVelocityNorm(nh_))
     , max_dof_velocity_norm_(GetMaxDOFVelocityNorm(nh_))
-    , min_controller_distance_to_obstacles_(GetControllerMinDistanceToObstacles(nh_))
+    , min_controller_distance_to_obstacles_(GetControllerMinDistanceToObstacles(ph_))
     , joint_lower_limits_(GetJointLowerLimits())
     , joint_upper_limits_(GetJointUpperLimits())
     // TODO: remove this hardcoded spin period
@@ -63,8 +64,11 @@ WorldState RobotInterface::start()
     ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper movement service to be available");
     execute_gripper_movement_client_.waitForExistence();
     // TODO: Parameterize this ability to be enabled or not
-//    ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper test grippers poses to be available");
-//    test_grippers_poses_client_.waitForServer();
+    ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper test grippers poses to be available");
+    test_grippers_poses_client_.waitForServer();
+
+    // Wait for a moment to allow everything to start up correctly before sending a command
+    arc_helpers::Sleep(0.1);
 
     ROS_INFO_NAMED("robot_interface", "Kickstarting the planner with a no-op");
     return commandRobotMotion_impl(noOpGripperMovement());

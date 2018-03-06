@@ -9,7 +9,7 @@ int main(int argc, char* argv[])
     ros::NodeHandle ph("~");
 
     ROS_INFO("Creating utility objects");
-    smmap::RobotInterface::Ptr robot = std::make_shared<smmap::RobotInterface>(nh);
+    smmap::RobotInterface::Ptr robot = std::make_shared<smmap::RobotInterface>(nh, ph);
     robot->setCallbackFunctions(
                 nullptr,
                 nullptr,
