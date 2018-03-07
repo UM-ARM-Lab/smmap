@@ -34,8 +34,8 @@ using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 #pragma message "Magic number - reward scaling factor starting value"
 #define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
 
-//#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 1
-#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 0
+#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 1
+//#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 0
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal helpers
@@ -479,6 +479,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
 
     // Querry each model for it's best gripper delta
+    ROS_INFO_STREAM_NAMED("planner", "Generatining model suggestions");
     stopwatch(RESET);
     std::vector<DeformableController::OutputData> suggested_robot_commands(num_models_);
     std::vector<double> controller_computation_time(num_models_, 0.0);
