@@ -1601,6 +1601,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
             }
 
             // Dminishing Model with New Controller. (DM)
+            /*
             {
                 double translational_deformability, rotational_deformability;
                 const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
@@ -1635,6 +1636,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                                GetStretchingAvoidanceControllerSolverType(ph_),
                                                GetMaxSamplingCounts(ph_)));
             }
+            */
 
             // Dminishing Model with Old Controller. (DD)
             {
