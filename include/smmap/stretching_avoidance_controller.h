@@ -101,7 +101,6 @@ namespace smmap
 
         private:	    
             GripperCollisionChecker gripper_collision_checker_;
-            const double robot_min_distance_to_obstacles_;
 
             const std::vector<GripperData> grippers_data_;
 

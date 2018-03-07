@@ -34,8 +34,8 @@ using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 #pragma message "Magic number - reward scaling factor starting value"
 #define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
 
-#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 1
-//#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 0
+//#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 1
+#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 0
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal helpers
@@ -500,7 +500,17 @@ WorldState Planner::sendNextCommandUsingLocalController(
         }
     }
     // Measure the time it took to pick a model
+    const DeformableController::OutputData& selected_command = suggested_robot_commands[(size_t)model_to_use];
     ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in  " << stopwatch(READ) << " seconds");
+    if (world_state.robot_configuration_valid_)
+    {
+        ROS_INFO_STREAM_NAMED("planner", "Robot DOF motion: " << selected_command.robot_dof_motion_.transpose());
+    }
+    for (size_t ind = 0; ind < selected_command.grippers_motion_.size(); ++ind)
+    {
+        ROS_INFO_STREAM_NAMED("planner", "Gripper " << ind << " motion: " << selected_command.grippers_motion_[ind].transpose());
+    }
+    ROS_INFO_STREAM_NAMED("planner", "Selected command gripper action norm:  " << MultipleGrippersVelocity6dNorm(selected_command.grippers_motion_));
 
     // Collect feedback data for logging purposes
     std::vector<WorldState> individual_model_results(num_models_);
@@ -538,8 +548,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     }
 
     // Execute the command
-    const DeformableController::OutputData& selected_command = suggested_robot_commands[(size_t)model_to_use];
-    ROS_INFO_STREAM_NAMED("planner", "Sending command to robot, action norm:  " << MultipleGrippersVelocity6dNorm(selected_command.grippers_motion_));
+    ROS_INFO_STREAM_NAMED("planner", "Sending command to robot");
     const auto all_grippers_single_pose = kinematics::applyTwist(world_state.all_grippers_single_pose_, selected_command.grippers_motion_);
     const auto robot_configuration = world_state.robot_configuration_ + selected_command.robot_dof_motion_;
     // Measure execution time
