@@ -13,7 +13,7 @@
 //#define STRETCHING_COSINE_THRESHOLD_MARGIN 0.001
 
 #define BARRIER_INNER_LOOP_CONVERGENCE_LIMIT 1e-6
-#define BARRIER_CONVERGENCE_LIMIT 1e-4
+#define BARRIER_OUTER_LOOP_CONVERGENCE_LIMIT 1e-6
 #define BARRIER_UPDATE_RATE 10.0
 #define BARRIER_VIOLATED_LARGE_COST 1e3
 
@@ -40,13 +40,13 @@ inline std::string print(const AllGrippersSinglePoseDelta& delta)
 // or cone_direction.transpose() * r_normalized >= min_normalized_dot_product
 // It is assumed that cone_direction is already normalized
 // Returns the normal vectors that point out of a pyramid approximation of the cone
-EigenHelpers::VectorVector3d convertConeToPyramid(const Eigen::Vector3d& cone_direction, const double min_normalized_dot_product)
-{
-    assert(false && "This function is not currently used");
-    // First find vectors perpendicular to the cone direction
-    Eigen::FullPivLU<Eigen::Vector3d> lu_decomp(cone_direction.transpose());
-    const auto basis = lu_decomp.kernel();
-//    const Eigen::Vector3d p1 = basis.col(0);
+//EigenHelpers::VectorVector3d convertConeToPyramid(const Eigen::Vector3d& cone_direction, const double min_normalized_dot_product)
+//{
+//    assert(false && "This function is not currently used");
+//    // First find vectors perpendicular to the cone direction
+//    Eigen::FullPivLU<Eigen::Vector3d> lu_decomp(cone_direction.transpose());
+//    const auto basis = lu_decomp.kernel();
+//    const Eigen::Vector3d p1 = basis.col(0); assert(false && "This is wrong, need to move a specific distance in various directions based on min_normalized_dot_product");
 //    const Eigen::Vector3d p2 = basis.col(1);
 //    const Eigen::Vector3d p3 = -p1;
 //    const Eigen::Vector3d p4 = -p2;
@@ -58,7 +58,7 @@ EigenHelpers::VectorVector3d convertConeToPyramid(const Eigen::Vector3d& cone_di
 //    normals[3] = p4.cross(p1).normalized();
 
 //    return normals;
-}
+//}
 
 
 
@@ -877,8 +877,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
         /////////// Construct the augmented objective function /////////////////
         const auto constraint_barrier_fn = [&] (const AllGrippersSinglePoseDelta& gripper_motion)
         {
-            std::cout << "Constraint eval:  " << print(gripper_motion) << std::endl;
-
             Eigen::Matrix<double, 6, 1> raw_constraints(6);
 
             raw_constraints(0) = collision_constraint_fn_g0(gripper_motion[0]);
@@ -887,8 +885,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
             raw_constraints(3) = stretching_constraint_fn_g1(gripper_motion[1]);
             raw_constraints(4) = individual_max_vel_constraint_fn(gripper_motion[0]);
             raw_constraints(5) = individual_max_vel_constraint_fn(gripper_motion[1]);
-
-            std::cout << "Raw constraints inside barrier calc: " << raw_constraints.transpose() << std::endl;
 
             Eigen::Matrix<double, 6, 1> result;
             result(0) = barrier(raw_constraints(0));
@@ -899,8 +895,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
             // Note that we are artificially downweighting the max vel constraints to allow us to move much closer to the max velocity
             result(4) = barrier(raw_constraints(4)) / 50.0;
             result(5) = barrier(raw_constraints(5)) / 50.0;
-
-            std::cout << "Barrier results inside barrier calc: " << result.transpose() << std::endl;
 
             return result;
         };
@@ -919,7 +913,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
         /////////// Gradient descent variables and function pointers ////////////
         const double differencing_step_size = max_individual_gripper_step_size / 100.0;
         const double initial_gradient_step_size = max_individual_gripper_step_size / 2.0;
-        double barrier_t = 40.0;
+        double barrier_t = 4.0;
         auto gripper_motion = feasible_starting_gripper_motion;
         auto object_delta = model_->getObjectDelta(world_state, gripper_motion);
         auto constraint_error = constraint_barrier_fn(gripper_motion);
@@ -952,7 +946,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
             std::cout << "Barrier functions: " << constraint_error.transpose() << std::endl;
         }
 
-
+        /////////// Do the actuall gradient descent barrier method here ////////
         do
         {
             std::cout << "Start of outer loop, objective val = " << combined_error << std::endl;
@@ -1034,7 +1028,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
                     ++downhill_attempt_ind;
                     objective_gradient_step_size *= 0.7;
                 }
-                while (next_combined_error > combined_error && downhill_attempt_ind < 10);
+                while (next_combined_error > combined_error && downhill_attempt_ind < 12);
 
                 // Check convergence
                 inner_loop_converged = (combined_error - next_combined_error) < std::abs(combined_error) * barrier_t * BARRIER_INNER_LOOP_CONVERGENCE_LIMIT;
@@ -1054,6 +1048,11 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
                     std::cout << "\t\tUnable to find downhill motion" << std::endl;
                 }
 
+                if (inner_loop_converged)
+                {
+                    std::cout << "\t\tConverged, exiting inner loop" << std::endl;
+                }
+
                 std::cout << "\tEnd of inner loop,objective val =   " << combined_error << std::endl;
             }
             while (!inner_loop_converged);
@@ -1065,7 +1064,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 
             std::cout << "Updated barrier t, objective val =   " << combined_error << " Barrier t: " << barrier_t << std::endl;
         }
-        while ((double)(constraint_error.size()) / barrier_t >= BARRIER_CONVERGENCE_LIMIT);
+        while ((double)(constraint_error.size()) / barrier_t >= BARRIER_OUTER_LOOP_CONVERGENCE_LIMIT);
 
         return OutputData(gripper_motion, object_delta, Eigen::VectorXd());
     }
@@ -1567,39 +1566,6 @@ kinematics::Vector6d StretchingAvoidanceController::getConstraintAwareGripperDel
         valid_sample = collision_satisfied && stretching_satisified;
     }
 
-/*
-    const auto stretching_constraint_fn_outside = [&] (const kinematics::Vector6d& gripper_delta)
-    {
-        if (!over_stretch_)
-        {
-            return -1000.0;
-        }
-        else
-        {
-            const Eigen::Vector3d r_dot = gripper_delta.head<3>() + gripper_delta.tail<3>().cross(vector_from_gripper_to_translation_point);
-            const double r_dot_norm = r_dot.norm();
-            if (r_dot_norm < 1e-6)
-            {
-                return stretching_cosine_threshold_ - 1.0;
-            }
-            else
-            {
-                const double cos_angle = stretching_reduction_vector.dot(r_dot) / r_dot_norm;
-                return stretching_cosine_threshold_ - cos_angle;
-            }
-        }
-    };
-
-    std::cout << sample.transpose() << std::endl;
-
-//    if (stretching_constraint_fn_outside(sample) >= 0.0)
-//    {
-        std::cout << "Internal result: " << stretching_constraint_fn(sample) << std::endl;
-        std::cout << "Outside  result: " << stretching_constraint_fn_outside(sample) << std::endl;
-//        assert(false);
-//    }
-    assert(stretching_constraint_fn_outside(sample) < 0.0);
-*/
     return sample;
 }
 
@@ -1616,23 +1582,6 @@ double StretchingAvoidanceController::errorOfControlByPrediction(
     const Eigen::Map<const Eigen::VectorXd> prediction_as_vector(predicted_object_p_dot.data(), desired_object_p_dot.size());
     const auto individual_error = (prediction_as_vector- desired_object_p_dot).cwiseAbs2();
     return std::sqrt(individual_error.dot(desired_p_dot_weight));
-
-//    double sum_of_error = 0;
-
-//    for (ssize_t node_ind = 0; node_ind < num_nodes; node_ind++)
-//    {
-//        Eigen::Vector3d node_predicted_p_dot = predicted_object_p_dot.col(node_ind);
-//        Eigen::Vector3d node_desired_p_dot = desired_object_p_dot.segment<3>(node_ind * 3);
-
-//        // Only none_zero desired p dot is considered.
-//        if (desired_p_dot_weight(node_ind * 3) > 0)
-//        {
-//            double node_p_dot_error = (node_predicted_p_dot - node_desired_p_dot).norm();
-//            sum_of_error += node_p_dot_error * desired_p_dot_weight(node_ind *3);
-//        }
-//    }
-
-//    return sum_of_error;
 }
 
 
