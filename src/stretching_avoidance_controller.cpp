@@ -10,7 +10,7 @@
 
 // Needed due to rounding problems
 #define GRIPPER_COLLISION_REPULSION_MARGIN 0.0001
-#define STRETCHING_COSINE_THRESHOLD_MARGIN 0.001
+//#define STRETCHING_COSINE_THRESHOLD_MARGIN 0.001
 
 #define BARRIER_INNER_LOOP_CONVERGENCE_LIMIT 1e-6
 #define BARRIER_CONVERGENCE_LIMIT 1e-4
@@ -861,51 +861,11 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
         // to indicate that the constraint is as satisfied as it can possibly be
         const auto stretching_constraint_fn_g0 = [&] (const kinematics::Vector6d& gripper_delta)
         {
-            const auto& stretching_reduction_vector              = stretching_constraint_data[0].first;
-            const auto& vector_from_gripper_to_translation_point = stretching_constraint_data[0].second;
-
-            if (!over_stretch_)
-            {
-                return -1000.0;
-            }
-            else
-            {
-                auto r_dot = gripper_delta.head<3>() + gripper_delta.tail<3>().cross(vector_from_gripper_to_translation_point);
-                auto r_dot_norm = r_dot.norm();
-                if (r_dot_norm < 1e-6)
-                {
-                    return stretching_cosine_threshold_ - 1.0;
-                }
-                else
-                {
-                    const auto cos_angle = stretching_reduction_vector.dot(r_dot) / r_dot_norm;
-                    return  stretching_cosine_threshold_ - cos_angle;
-                }
-            }
+            return evaluateStretchingConstraint(stretching_constraint_data[0], gripper_delta);
         };
         const auto stretching_constraint_fn_g1 = [&] (const kinematics::Vector6d& gripper_delta)
         {
-            const auto& stretching_reduction_vector              = stretching_constraint_data[1].first;
-            const auto& vector_from_gripper_to_translation_point = stretching_constraint_data[1].second;
-
-            if (!over_stretch_)
-            {
-                return -1000.0;
-            }
-            else
-            {
-                const auto r_dot = gripper_delta.head<3>() + gripper_delta.tail<3>().cross(vector_from_gripper_to_translation_point);
-                const auto r_dot_norm = r_dot.norm();
-                if (r_dot_norm < 1e-6)
-                {
-                    return stretching_cosine_threshold_ - 1.0;
-                }
-                else
-                {
-                    const auto cos_angle = stretching_reduction_vector.dot(r_dot) / r_dot_norm;
-                    return  stretching_cosine_threshold_ - cos_angle;
-                }
-            }
+            return evaluateStretchingConstraint(stretching_constraint_data[1], gripper_delta);
         };
 
         /////////// Construct the max vel constraint function //////////////////
@@ -917,37 +877,30 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
         /////////// Construct the augmented objective function /////////////////
         const auto constraint_barrier_fn = [&] (const AllGrippersSinglePoseDelta& gripper_motion)
         {
-//            Eigen::VectorXd raw_constraints(6);
+            std::cout << "Constraint eval:  " << print(gripper_motion) << std::endl;
 
-//            raw_constraints(0) = collision_constraint_fn_g0(gripper_motion[0]);
-//            raw_constraints(1) = collision_constraint_fn_g1(gripper_motion[1]);
-//            raw_constraints(2) = stretching_constraint_fn_g0(gripper_motion[0]);
-//            raw_constraints(3) = stretching_constraint_fn_g1(gripper_motion[1]);
+            Eigen::Matrix<double, 6, 1> raw_constraints(6);
 
-//            // Note that we are artificially downweighting the max vel constraints to allow us to move much closer to the max velocity
-//            raw_constraints(4) = individual_max_vel_constraint_fn(gripper_motion[0]);
-//            raw_constraints(5) = individual_max_vel_constraint_fn(gripper_motion[1]);
+            raw_constraints(0) = collision_constraint_fn_g0(gripper_motion[0]);
+            raw_constraints(1) = collision_constraint_fn_g1(gripper_motion[1]);
+            raw_constraints(2) = stretching_constraint_fn_g0(gripper_motion[0]);
+            raw_constraints(3) = stretching_constraint_fn_g1(gripper_motion[1]);
+            raw_constraints(4) = individual_max_vel_constraint_fn(gripper_motion[0]);
+            raw_constraints(5) = individual_max_vel_constraint_fn(gripper_motion[1]);
 
-//            std::cout << "Raw constraints inside barrier calc: " << raw_constraints.transpose() << std::endl;
-
-            const auto collision_constraint_g0_barrier_val = barrier(collision_constraint_fn_g0(gripper_motion[0]));
-            const auto collision_constraint_g1_barrier_val = barrier(collision_constraint_fn_g1(gripper_motion[1]));
-            const auto stretching_constraint_g0_barrier_val = barrier(stretching_constraint_fn_g0(gripper_motion[0]));
-            const auto stretching_constraint_g1_barrier_val = barrier(stretching_constraint_fn_g1(gripper_motion[1]));
-
-            // Note that we are artificially downweighting the max vel constraints to allow us to move much closer to the max velocity
-            const auto max_delta_g0_barrier_val = barrier(individual_max_vel_constraint_fn(gripper_motion[0])) / 50.0;
-            const auto max_delta_g1_barrier_val = barrier(individual_max_vel_constraint_fn(gripper_motion[1])) / 50.0;
+            std::cout << "Raw constraints inside barrier calc: " << raw_constraints.transpose() << std::endl;
 
             Eigen::Matrix<double, 6, 1> result;
-            result(0) = collision_constraint_g0_barrier_val;
-            result(1) = collision_constraint_g1_barrier_val;
-            result(2) = stretching_constraint_g0_barrier_val;
-            result(3) = stretching_constraint_g1_barrier_val;
-            result(4) = max_delta_g0_barrier_val;
-            result(5) = max_delta_g1_barrier_val;
+            result(0) = barrier(raw_constraints(0));
+            result(1) = barrier(raw_constraints(1));
+            result(2) = barrier(raw_constraints(2));
+            result(3) = barrier(raw_constraints(3));
 
-//            std::cout << "Barrier results inside barrier calc: " << result.transpose() << std::endl;
+            // Note that we are artificially downweighting the max vel constraints to allow us to move much closer to the max velocity
+            result(4) = barrier(raw_constraints(4)) / 50.0;
+            result(5) = barrier(raw_constraints(5)) / 50.0;
+
+            std::cout << "Barrier results inside barrier calc: " << result.transpose() << std::endl;
 
             return result;
         };
@@ -959,8 +912,8 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
         std::cout << "Generating valid initial feasible point" << std::endl;
         const AllGrippersSinglePoseDelta feasible_starting_gripper_motion =
         {
-            getConstraintAwareGripperDeltaSample(grippers_poses[0], collision_data[0], max_individual_gripper_step_size, stretching_constraint_data[0].first, stretching_constraint_data[0].second),
-            getConstraintAwareGripperDeltaSample(grippers_poses[1], collision_data[1], max_individual_gripper_step_size, stretching_constraint_data[1].first, stretching_constraint_data[1].second)
+            getConstraintAwareGripperDeltaSample(grippers_poses[0], collision_data[0], max_individual_gripper_step_size, stretching_constraint_data[0]),
+            getConstraintAwareGripperDeltaSample(grippers_poses[1], collision_data[1], max_individual_gripper_step_size, stretching_constraint_data[1])
         };
 
         /////////// Gradient descent variables and function pointers ////////////
@@ -985,8 +938,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
             raw_constraints(1) = collision_constraint_fn_g1(gripper_motion[1]);
             raw_constraints(2) = stretching_constraint_fn_g0(gripper_motion[0]);
             raw_constraints(3) = stretching_constraint_fn_g1(gripper_motion[1]);
-
-            // Note that we are artificially downweighting the max vel constraints to allow us to move much closer to the max velocity
             raw_constraints(4) = individual_max_vel_constraint_fn(gripper_motion[0]);
             raw_constraints(5) = individual_max_vel_constraint_fn(gripper_motion[1]);
 
@@ -1593,8 +1544,7 @@ kinematics::Vector6d StretchingAvoidanceController::getConstraintAwareGripperDel
                     const Eigen::Isometry3d& gripper_pose,
                     const CollisionData& collision_data,
                     const double max_delta,
-                    const Eigen::Vector3d& stretching_reduction_vector,
-                    const Eigen::Vector3d& vector_from_gripper_to_translation_point)
+                    const std::pair<Eigen::Vector3d, Eigen::Vector3d>& stretching_correction_data)
 {
     const auto J_collision = ComputeGripperMotionToPointMotionJacobian(collision_data.nearest_point_to_obstacle_, gripper_pose);
     const auto J_distance = collision_data.obstacle_surface_normal_.transpose() * J_collision;
@@ -1605,7 +1555,20 @@ kinematics::Vector6d StretchingAvoidanceController::getConstraintAwareGripperDel
                 - collision_data.distance_to_obstacle_ - J_distance * gripper_delta;
     };
 
-    const auto stretching_constraint_fn = [&] (const kinematics::Vector6d& gripper_delta)
+    kinematics::Vector6d sample = singleGripperPoseDeltaSampler(max_delta * 0.8);
+    bool collision_satisfied = (collision_constraint_fn(sample) < 0.0);
+    bool stretching_satisified = (evaluateStretchingConstraint(stretching_correction_data, sample) < 0.0);
+    bool valid_sample =  collision_satisfied && stretching_satisified;
+    while (!valid_sample)
+    {
+        sample = singleGripperPoseDeltaSampler(max_delta * 0.8);
+        collision_satisfied = (collision_constraint_fn(sample) < 0.0);
+        stretching_satisified = (evaluateStretchingConstraint(stretching_correction_data, sample) < 0.0);
+        valid_sample = collision_satisfied && stretching_satisified;
+    }
+
+/*
+    const auto stretching_constraint_fn_outside = [&] (const kinematics::Vector6d& gripper_delta)
     {
         if (!over_stretch_)
         {
@@ -1613,35 +1576,30 @@ kinematics::Vector6d StretchingAvoidanceController::getConstraintAwareGripperDel
         }
         else
         {
-            const auto r_dot = gripper_delta.head<3>() + gripper_delta.tail<3>().cross(vector_from_gripper_to_translation_point);
-            const auto r_dot_norm = r_dot.norm();
+            const Eigen::Vector3d r_dot = gripper_delta.head<3>() + gripper_delta.tail<3>().cross(vector_from_gripper_to_translation_point);
+            const double r_dot_norm = r_dot.norm();
             if (r_dot_norm < 1e-6)
             {
                 return stretching_cosine_threshold_ - 1.0;
             }
             else
             {
-                const auto cos_angle = stretching_reduction_vector.dot(r_dot) / r_dot_norm;
-                return  stretching_cosine_threshold_ - cos_angle;
+                const double cos_angle = stretching_reduction_vector.dot(r_dot) / r_dot_norm;
+                return stretching_cosine_threshold_ - cos_angle;
             }
         }
     };
 
-    kinematics::Vector6d sample = singleGripperPoseDeltaSampler(max_delta * 0.8);
-    bool collision_satisfied = (collision_constraint_fn(sample) < 0.0);
-    bool stretching_satisified = (stretching_constraint_fn(sample) < 0.0);
-    bool valid_sample =  collision_satisfied && stretching_satisified;
-    while (!valid_sample)
-    {
-        sample = singleGripperPoseDeltaSampler(max_delta * 0.8);
-        collision_satisfied = (collision_constraint_fn(sample) < 0.0);
-        stretching_satisified = (stretching_constraint_fn(sample) < 0.0);
-        valid_sample = collision_satisfied && stretching_satisified;
-    }
+    std::cout << sample.transpose() << std::endl;
 
-    assert(collision_satisfied);
-    assert(stretching_satisified);
-
+//    if (stretching_constraint_fn_outside(sample) >= 0.0)
+//    {
+        std::cout << "Internal result: " << stretching_constraint_fn(sample) << std::endl;
+        std::cout << "Outside  result: " << stretching_constraint_fn_outside(sample) << std::endl;
+//        assert(false);
+//    }
+    assert(stretching_constraint_fn_outside(sample) < 0.0);
+*/
     return sample;
 }
 
@@ -2105,6 +2063,30 @@ double StretchingAvoidanceController::clothTwoGripperStretchingHelper(
 
 
 
+double StretchingAvoidanceController::evaluateStretchingConstraint(const std::pair<Eigen::Vector3d, Eigen::Vector3d>& stretching_constraint_data, const kinematics::Vector6d& gripper_delta) const
+{
+    const auto& stretching_reduction_vector              = stretching_constraint_data.first;
+    const auto& vector_from_gripper_to_translation_point = stretching_constraint_data.second;
+
+    if (!over_stretch_)
+    {
+        return -1000.0;
+    }
+    else
+    {
+        const Eigen::Vector3d r_dot = gripper_delta.head<3>() + gripper_delta.tail<3>().cross(vector_from_gripper_to_translation_point);
+        const double r_dot_norm = r_dot.norm();
+        if (r_dot_norm < 1e-6)
+        {
+            return stretching_cosine_threshold_ - 1.0;
+        }
+        else
+        {
+            const double cos_angle = stretching_reduction_vector.dot(r_dot) / r_dot_norm;
+            return stretching_cosine_threshold_ - cos_angle;
+        }
+    }
+}
 
 std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> StretchingAvoidanceController::stretchingCorrectionVectorsAndPoints(const InputData& input_data) const
 {

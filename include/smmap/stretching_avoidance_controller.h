@@ -50,8 +50,7 @@ namespace smmap
                     const Eigen::Isometry3d& gripper_pose,
                     const CollisionData& collision_data,
                     const double max_delta,
-                    const Eigen::Vector3d& stretching_reduction_vector,
-                    const Eigen::Vector3d& vector_from_gripper_to_translation_point);
+                    const std::pair<Eigen::Vector3d, Eigen::Vector3d>& stretching_correction_data);
 
             /*
             template <typename T1, typename T2>
@@ -152,6 +151,7 @@ namespace smmap
                     const InputData& input_data,
                     const AllGrippersSinglePoseDelta& test_gripper_motion);
 
+            double evaluateStretchingConstraint(const std::pair<Eigen::Vector3d, Eigen::Vector3d>& stretching_constraint_data, const kinematics::Vector6d& gripper_delta) const;
             std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> stretchingCorrectionVectorsAndPoints(const InputData& input_data) const;
             std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> ropeTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const;
             std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> clothTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const;
