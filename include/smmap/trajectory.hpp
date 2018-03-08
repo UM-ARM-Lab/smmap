@@ -30,6 +30,14 @@ namespace smmap
             Eigen::VectorXd weight;
     };
 
+    struct DesiredDirection
+    {
+        public:
+            ObjectDeltaAndWeight error_correction_;
+            ObjectDeltaAndWeight stretching_correction_;
+            ObjectDeltaAndWeight combined_correction_;
+    };
+
     /// World state structure for a single time step
     struct WorldState
     {

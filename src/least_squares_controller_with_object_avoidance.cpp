@@ -39,7 +39,7 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
     ////////////////////////////////////////////////////////////////////////
 
     // Retrieve the desired object velocity (p_dot)
-    const ObjectDeltaAndWeight desired_object_motion = input_data.desired_object_motion_;
+    const ObjectDeltaAndWeight desired_object_motion = input_data.desired_object_motion_.combined_correction_;
 
     // Recalculate the jacobian at each timestep, because of rotations being non-linear
     // We can use a static pointer cast here because we check the input on construction

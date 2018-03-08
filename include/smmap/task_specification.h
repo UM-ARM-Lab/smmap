@@ -129,7 +129,7 @@ namespace smmap
                     const ObjectDeltaAndWeight& stretching_correction) const;
 
 
-            ObjectDeltaAndWeight calculateDesiredDirection(const WorldState& world_state);
+            DesiredDirection calculateDesiredDirection(const WorldState& world_state);
 
             std::vector<ssize_t> getNodeNeighbours(const ssize_t node) const;
 
@@ -140,18 +140,13 @@ namespace smmap
             std::atomic_bool first_step_calculated_;
             std::mutex first_step_mtx_;
             double first_step_last_simtime_calced_;
-            ObjectDeltaAndWeight first_step_desired_motion_;
-            ObjectDeltaAndWeight first_step_error_correction_;
-            ObjectDeltaAndWeight first_step_stretching_correction_;
+            DesiredDirection first_step_desired_motion_;
 
             // Data needed to avoid re-calculating the current error repeatedly
             std::atomic_bool current_error_calculated_;
             std::mutex current_error_mtx_;
             double current_error_last_simtime_calced_;
             double current_error_;
-
-            // Determines if the task is doing stretching avoidance, or a controller
-            const bool use_stretching_correction_from_task_;
 
             // Rescale the desired motion so that it is less absurd
             const double desired_motion_scaling_factor_;

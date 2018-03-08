@@ -35,7 +35,8 @@ namespace smmap
 
             OutputData solvedByNomad(const InputData& input_data);
 
-            OutputData solvedByGradientDescent(const InputData& input_data);
+            OutputData solvedByGradientDescentProjectionViaGurobiMethod(const InputData& input_data);
+            OutputData solvedByGradientDescentBarrierMethod(const InputData& input_data);
             OutputData solvedByGradientDescentOld(const InputData& input_data);
 
             /////////////////////////////////////////////////////////////////////////////////////////
@@ -51,6 +52,13 @@ namespace smmap
                     const CollisionData& collision_data,
                     const double max_delta,
                     const std::pair<Eigen::Vector3d, Eigen::Vector3d>& stretching_correction_data);
+
+            kinematics::Vector6d getFeasibleGripperDeltaGurobi(
+                    const Eigen::Isometry3d& gripper_pose,
+                    const CollisionData& collision_data,
+                    const double max_delta,
+                    const std::pair<Eigen::Vector3d, Eigen::Vector3d>& stretching_correction_data) const;
+
 
             /*
             template <typename T1, typename T2>

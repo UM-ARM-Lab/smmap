@@ -34,8 +34,8 @@ using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 #pragma message "Magic number - reward scaling factor starting value"
 #define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
 
-//#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 1
-#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 0
+#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 1
+//#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 0
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal helpers
@@ -458,7 +458,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
 //    vis_->visualizeCloth("input_cloth", world_state.object_configuration_, Visualizer::Blue(), 1);
 
     // Temporaries needed here bercause model_input_data takes things by reference
-    const ObjectDeltaAndWeight desired_object_manipulation_direction = task_specification_->calculateDesiredDirection(world_state);
+    const DesiredDirection desired_object_manipulation_direction = task_specification_->calculateDesiredDirection(world_state);
     const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian(world_state.robot_configuration_);
     const DeformableController::InputData model_input_data(
                 world_state,
@@ -469,7 +469,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
     if (visualize_desired_motion_)
     {
-        visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_);
+        visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_.combined_correction_);
 //        std::this_thread::sleep_for(std::chrono::duration<double>(2.0));
     }
 
@@ -589,7 +589,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
 
     ROS_INFO_NAMED("planner", "Updating models");
-    updateModels(world_state, model_input_data.desired_object_motion_, suggested_robot_commands, model_to_use, world_feedback);
+    updateModels(world_state, model_input_data.desired_object_motion_.combined_correction_, suggested_robot_commands, model_to_use, world_feedback);
 
     const double controller_time = function_wide_stopwatch(READ) - robot_execution_time;
     ROS_INFO_STREAM_NAMED("planner", "Total local controller time                     " << controller_time << " seconds");
@@ -2048,15 +2048,15 @@ void Planner::controllerLogData(
         assert(collect_results_for_all_models_);
 
         // Split out data used for computation for each model
-        const ObjectDeltaAndWeight& task_desired_motion = controller_input_data.desired_object_motion_;
-        const Eigen::VectorXd& desired_p_dot = task_desired_motion.delta;
-        const Eigen::VectorXd& desired_p_dot_weight = task_desired_motion.weight;
+        const ObjectDeltaAndWeight& task_desired_error_correction = controller_input_data.desired_object_motion_.error_correction_;
+        const Eigen::VectorXd& desired_p_dot = task_desired_error_correction.delta;
+        const Eigen::VectorXd& desired_p_dot_weight = task_desired_error_correction.weight;
         const ssize_t num_grippers = initial_world_state.all_grippers_single_pose_.size();
         const ssize_t num_nodes = initial_world_state.object_configuration_.cols();
 
         // Data used by the function, per model
-        std::vector<double> avg_control_error(num_models_, std::numeric_limits<double>::quiet_NaN());
-        std::vector<double> current_stretching_factor(num_models_, std::numeric_limits<double>::quiet_NaN());
+        std::vector<double> avg_control_error(num_models_, 0.0);
+        std::vector<double> current_stretching_factor(num_models_, 0.0);
 
         for (size_t model_ind = 0; (ssize_t)model_ind < num_models_; ++model_ind)
         {

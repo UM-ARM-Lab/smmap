@@ -91,15 +91,11 @@ TaskSpecification::TaskSpecification(
         const bool is_dijkstras_type_task)
     : first_step_calculated_(false)
     , first_step_last_simtime_calced_(NAN)
-    , first_step_desired_motion_(0)
-    , first_step_error_correction_(0)
-    , first_step_stretching_correction_(0)
 
     , current_error_calculated_(false)
     , current_error_last_simtime_calced_(NAN)
     , current_error_(NAN)
 
-    , use_stretching_correction_from_task_(GetStretchingCorrectionFromTask(ph))
     , desired_motion_scaling_factor_(GetDesiredMotionScalingFactor(ph))
 
     , deformable_type_(deformable_type)
@@ -358,16 +354,7 @@ ObjectDeltaAndWeight TaskSpecification::calculateStretchingCorrectionDelta(
         const WorldState& world_state,
         bool visualize) const
 {
-    if (use_stretching_correction_from_task_)
-    {
-//        return calculateStretchingCorrectionDeltaFullyConnected(world_state.object_configuration_, visualize);
-        return calculateStretchingCorrectionDeltaPairwise(world_state.object_configuration_, visualize);
-    }
-    else
-    {
-        // If we're not getting it from the task, then set it to zero
-        return ObjectDeltaAndWeight(num_nodes_ * 3);;
-    }
+    return calculateStretchingCorrectionDeltaPairwise(world_state.object_configuration_, visualize);
 }
 
 
@@ -404,7 +391,7 @@ ObjectDeltaAndWeight TaskSpecification::combineErrorCorrectionAndStretchingCorre
 }
 
 
-ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldState& world_state)
+DesiredDirection TaskSpecification::calculateDesiredDirection(const WorldState& world_state)
 {
     if (first_step_last_simtime_calced_ != world_state.sim_time_)
     {
@@ -425,24 +412,26 @@ ObjectDeltaAndWeight TaskSpecification::calculateDesiredDirection(const WorldSta
         else
         {
             GlobalStopwatch(RESET);
-            first_step_error_correction_ = calculateObjectErrorCorrectionDelta(world_state);
+            first_step_desired_motion_.error_correction_ = calculateObjectErrorCorrectionDelta(world_state);
             ROS_INFO_STREAM_NAMED("task_specification", "Found best error correction delta in " << GlobalStopwatch(READ) << " seconds");
 
             GlobalStopwatch(RESET);
             const bool visualize_stretching_lines = false;
-            first_step_stretching_correction_ = calculateStretchingCorrectionDelta(world_state, visualize_stretching_lines);
+            first_step_desired_motion_.stretching_correction_ = calculateStretchingCorrectionDelta(world_state, visualize_stretching_lines);
             ROS_INFO_STREAM_NAMED("task_specification", "Found stretching correction delta in " << GlobalStopwatch(READ) << " seconds");
 
             GlobalStopwatch(RESET);
-            first_step_desired_motion_ = combineErrorCorrectionAndStretchingCorrection(
-                        first_step_error_correction_, first_step_stretching_correction_);
+            first_step_desired_motion_.combined_correction_ = combineErrorCorrectionAndStretchingCorrection(
+                        first_step_desired_motion_.error_correction_, first_step_desired_motion_.stretching_correction_);
             ROS_INFO_STREAM_NAMED("task_specification", "Combined deltas in                   " << GlobalStopwatch(READ) << " seconds");
 
             first_step_last_simtime_calced_ = world_state.sim_time_;
             first_step_calculated_.store(true);
 
             // Scale down the motion so that we are not asking for movements well beyond anything reasonable
-            first_step_desired_motion_.delta = first_step_desired_motion_.delta / desired_motion_scaling_factor_;
+            first_step_desired_motion_.error_correction_.delta /= desired_motion_scaling_factor_;
+            first_step_desired_motion_.stretching_correction_.delta /= desired_motion_scaling_factor_;
+            first_step_desired_motion_.combined_correction_.delta /= desired_motion_scaling_factor_;
 
             return first_step_desired_motion_;
         }

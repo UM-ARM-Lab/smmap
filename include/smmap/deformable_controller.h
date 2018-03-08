@@ -18,7 +18,7 @@ namespace smmap
                 public:
                     InputData(
                             const WorldState& world_current_state,
-                            const ObjectDeltaAndWeight& desired_object_motion,
+                            const DesiredDirection& desired_object_motion,
                             const RobotInterface::Ptr& robot,
                             const Eigen::MatrixXd& robot_jacobian,
                             const bool robot_jacobian_valid)
@@ -30,7 +30,7 @@ namespace smmap
                     {}
 
                     const WorldState& world_current_state_;
-                    const ObjectDeltaAndWeight& desired_object_motion_;
+                    const DesiredDirection& desired_object_motion_;
                     const RobotInterface::Ptr robot_;
                     const Eigen::MatrixXd& robot_jacobian_;
                     const bool robot_jacobian_valid_;
