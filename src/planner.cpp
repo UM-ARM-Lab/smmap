@@ -34,8 +34,8 @@ using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 #pragma message "Magic number - reward scaling factor starting value"
 #define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
 
-#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 1
-//#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 0
+//#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 1
+#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 0
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal helpers

@@ -67,9 +67,6 @@ WorldState RobotInterface::start()
     ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper test grippers poses to be available");
     test_grippers_poses_client_.waitForServer();
 
-    // Wait for a moment to allow everything to start up correctly before sending a command
-    arc_helpers::Sleep(1.0);
-
     ROS_INFO_NAMED("robot_interface", "Kickstarting the planner with a no-op");
     return commandRobotMotion_impl(noOpGripperMovement());
 }

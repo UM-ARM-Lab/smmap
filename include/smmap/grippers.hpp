@@ -597,12 +597,13 @@ namespace smmap
     };
 
     /**
-     * @brief ComputeCollisionToGripperJacobian
+     * @brief ComputeGripperMotionToPointMotionJacobian
      * @param point_on_gripper
      * @param gripper_pose
-     * @return
+     * @return Jacobian between gripper motion defined in the body frame of the gripper, and the world coordinates of the point in question
+     *         world_frame_p_dot = J * body_frame_twist
      */
-    inline Eigen::Matrix<double, 3, 6> ComputeCollisionToGripperJacobian(
+    inline Eigen::Matrix<double, 3, 6> ComputeGripperMotionToPointMotionJacobian(
             const Eigen::Vector3d& point_on_gripper,
             const Eigen::Isometry3d& gripper_pose)
     {
@@ -645,7 +646,7 @@ namespace smmap
         {
             // Create the collision Jacobian
             const Eigen::Matrix<double, 3, 6> J_collision =
-                    ComputeCollisionToGripperJacobian(
+                    ComputeGripperMotionToPointMotionJacobian(
                         collision_data.nearest_point_to_obstacle_, gripper_pose);
             const Eigen::Matrix<double, 6, 3> J_collision_inv =
                     EigenHelpers::Pinv(J_collision, EigenHelpers::SuggestedRcond());
