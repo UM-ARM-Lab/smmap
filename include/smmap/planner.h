@@ -211,7 +211,7 @@ namespace smmap
 
         public:
             // Topic names used for publishing visualization data
-            static constexpr auto DESIRED_DELTA_NS                         = "desired delta";
+            static constexpr auto DESIRED_DELTA_NS                         = "desired_delta";
             static constexpr auto PREDICTED_DELTA_NS                       = "predicted_delta";
 
             static constexpr auto PROJECTED_GRIPPER_NS                     = "projected_grippers";

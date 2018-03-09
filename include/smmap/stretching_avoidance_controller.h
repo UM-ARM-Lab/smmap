@@ -164,6 +164,18 @@ namespace smmap
             std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> ropeTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const;
             std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> clothTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const;
 
+
+
+
+
+
+
+            void visualizeCone(const Eigen::Vector3d& cone_direction, const double min_normalized_dot_product, const Eigen::Isometry3d& pose, const int marker_id);
+
+
+
+
+
         private:	    
             GripperCollisionChecker gripper_collision_checker_;
 

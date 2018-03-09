@@ -1,5 +1,4 @@
-%close all
-close all
+% close all
 clear all
 
 space_hold_1 = '%n';
@@ -33,7 +32,7 @@ t_mm_08 = textread(file_t_mm_08, space_hold_1, 'headerlines',1);
 t_dd_wo = textread(file_t_dd_wo, space_hold_1, 'headerlines',1);
 
 %%%%%%%%%%%%%%%%%%%% show all in two plots: %%%%%%%%%%%%%%%%%%
-fig_1 = figure;
+fig_1 = figure(6);
 plot(t_mm_04, stretching_factor_mm_04,...
     t_mm_06, stretching_factor_mm_06,...
     t_mm_08, stretching_factor_mm_08,...

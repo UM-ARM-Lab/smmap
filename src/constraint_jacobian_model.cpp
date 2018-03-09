@@ -183,8 +183,8 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
         // P dot of the node on object, grasped gripper
         // Due to the assumption of free-flying grippers, I simply take it as the xyz motion of grippers
         // In the future, it should be the translational motion of end effector.
-        const Vector3d& node_v = grippers_next_poses.at(gripper_ind).translation()
-                - grippers_current_poses.at(gripper_ind).translation();
+        const Vector3d& node_v = grippers_next_poses[gripper_ind].translation()
+                - grippers_current_poses[gripper_ind].translation();
 
         for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
         {
@@ -290,36 +290,29 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
 // Candidate function to model rigidity weighting for translation Jacobian
 ////////////////////////////////////////////////////////////////////////////////
 
+// TODO: consider replacing this "dot" with (1 - cos(theta)) and rescaling translation_dir_deformablility_
 // Candidate function to count vector effect, return 3x3 matrix = diag{exp[beta(.,.)]}
-Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node_to_gripper, const Vector3d node_v) const
+Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node_to_gripper, const Vector3d gripper_translation) const
 {
-    Matrix3d beta_rigidity = Matrix3d::Zero();
-    double dot1, dot2, dot3;
-    if (node_to_gripper.norm() > 0.0001 && node_v.norm() > 0)
+    double dot;
+    if (node_to_gripper.norm() > 1e-6 && gripper_translation.norm() > 1e-6)
     {
-        double dot_Value = node_to_gripper.normalized().dot(node_v);
-        dot_Value = dot_Value - std::fabs(dot_Value);
-        dot1 = dot_Value;
-        dot2 = dot_Value;
-        dot3 = dot_Value;
-    }
-    else if (node_v.norm() < 0.0001)
-    {
-        double dot_Value = 0;
-        dot1 = dot_Value;
-        dot2 = dot_Value;
-        dot3 = dot_Value;
+        dot = node_to_gripper.normalized().dot(gripper_translation);
+        if (dot > 0.0)
+        {
+            dot = 0.0;
+        }
+        else
+        {
+            dot *= 2.0;
+        }
     }
     else
     {
-        dot1 = 0;
-        dot2 = 0;
-        dot3 = 0;
+        dot = 0.0;
     }
 
-    beta_rigidity(0, 0) = std::exp(translation_dir_deformability_ * dot1);
-    beta_rigidity(1, 1) = std::exp(translation_dir_deformability_ * dot2);
-    beta_rigidity(2, 2) = std::exp(translation_dir_deformability_ * dot3);
+    Matrix3d beta_rigidity = Matrix3d::Identity() * std::exp(translation_dir_deformability_ * dot);
 
     return beta_rigidity;
 }

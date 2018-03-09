@@ -455,7 +455,11 @@ WorldState Planner::sendNextCommandUsingLocalController(
     Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
 
-//    vis_->visualizeCloth("input_cloth", world_state.object_configuration_, Visualizer::Blue(), 1);
+    vis_->visualizeCloth("input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
+    vis_->visualizeCloth("input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
+    vis_->visualizeCloth("input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
+    vis_->visualizeCloth("input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
+    vis_->visualizeCloth("input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
 
     // Temporaries needed here bercause model_input_data takes things by reference
     const DesiredDirection desired_object_manipulation_direction = task_specification_->calculateDesiredDirection(world_state);
@@ -469,12 +473,25 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
     if (visualize_desired_motion_)
     {
-        visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_.combined_correction_);
+        visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_.error_correction_);
 //        std::this_thread::sleep_for(std::chrono::duration<double>(2.0));
     }
 
     // Pick an arm to use
-    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
+
+
+
+
+
+    #warning "!!!!!!!!!!!!!!!!!!!!!!!BANDITS DISABLED!!!!!!!!!!!!!!!!!!!!"
+//    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
+    const ssize_t model_to_use = 0;
+
+
+
+
+
+
     const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
 
@@ -541,12 +558,43 @@ WorldState Planner::sendNextCommandUsingLocalController(
     if (visualize_predicted_motion_)
     {
         const ObjectPointSet& object_delta = suggested_robot_commands[(size_t)model_to_use].object_motion_;
-        vis_->visualizeObjectDelta(
-                    PREDICTED_DELTA_NS,
-                    world_state.object_configuration_,
-                    world_state.object_configuration_ + object_delta,
-                    Visualizer::Blue());
+//        vis_->visualizeObjectDelta(
+//                    PREDICTED_DELTA_NS,
+//                    world_state.object_configuration_,
+//                    world_state.object_configuration_ + object_delta,
+//                    Visualizer::Blue());
+
+        task_specification_->visualizeDeformableObject(
+                PREDICTED_DELTA_NS,
+                world_state.object_configuration_ + object_delta,
+                Visualizer::Blue());
     }
+
+
+
+    if (visualize_gripper_motion_)
+    {
+//        for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
+//        {
+            ssize_t model_ind = 0;
+            visualizeGripperMotion(world_state.all_grippers_single_pose_,
+                                   suggested_robot_commands[(size_t)model_ind].grippers_motion_,
+                                   model_ind);
+//        }
+//        for (size_t gripper_idx = 0; gripper_idx < all_grippers_single_pose.size(); ++gripper_idx)
+//        {
+//            vis_->visualizeGripper("target_gripper_positions", all_grippers_single_pose[gripper_idx], Visualizer::Yellow(), (int)gripper_idx + 1);
+//        }
+
+//        const size_t num_grippers = world_feedback.all_grippers_single_pose_.size();
+//        for (size_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
+//        {
+//            std::cerr << "Desired delta: " << selected_command.grippers_motion_[gripper_idx].head<3>().transpose() << std::endl;
+//            std::cerr << "Actual delta:  " << kinematics::calculateError(world_state.all_grippers_single_pose_[gripper_idx], world_feedback.all_grippers_single_pose_[gripper_idx]).head<3>().transpose() << std::endl;
+//        }
+    }
+
+
 
     // Execute the command
     ROS_INFO_STREAM_NAMED("planner", "Sending command to robot");
@@ -561,31 +609,6 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 world_state.robot_configuration_valid_);
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
-
-
-
-//    if (visualize_gripper_motion_)
-//    {
-//        for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
-//        {
-//            visualizeGripperMotion(world_state.all_grippers_single_pose_,
-//                                   suggested_robot_commands[(size_t)model_ind].grippers_motion_,
-//                                   model_ind);
-//        }
-//        for (size_t gripper_idx = 0; gripper_idx < all_grippers_single_pose.size(); ++gripper_idx)
-//        {
-//            vis_->visualizeGripper("target_gripper_positions", all_grippers_single_pose[gripper_idx], Visualizer::Yellow(), (int)gripper_idx + 1);
-//        }
-
-//        const size_t num_grippers = world_feedback.all_grippers_single_pose_.size();
-//        for (size_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
-//        {
-//            std::cerr << "Desired delta: " << selected_command.grippers_motion_[gripper_idx].head<3>().transpose() << std::endl;
-//            std::cerr << "Actual delta:  " << kinematics::calculateError(world_state.all_grippers_single_pose_[gripper_idx], world_feedback.all_grippers_single_pose_[gripper_idx]).head<3>().transpose() << std::endl;
-//        }
-
-//    }
-
 
 
     ROS_INFO_NAMED("planner", "Updating models");
@@ -1843,13 +1866,14 @@ void Planner::visualizeDesiredMotion(
                 AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
                 colors);
 
-        if (task_specification_->deformable_type_ == DeformableType::CLOTH)
+//        if (task_specification_->deformable_type_ == DeformableType::CLOTH)
         {
             vis_->visualizeObjectDelta(
                         DESIRED_DELTA_NS,
                         current_world_state.object_configuration_,
                         AddObjectDelta(current_world_state.object_configuration_, desired_motion.delta),
-                        Visualizer::Green());
+                        Visualizer::Green(),
+                        10);
         }
     }
 }
@@ -1866,42 +1890,25 @@ void Planner::visualizeGripperMotion(
     for (size_t gripper_ind = 0; gripper_ind < current_gripper_pose.size(); gripper_ind++)
     {
         line_starts.push_back(current_gripper_pose[gripper_ind].translation());
-        line_ends.push_back(current_gripper_pose[gripper_ind].translation() + 100 * (grippers_test_poses[gripper_ind].translation() - current_gripper_pose[gripper_ind].translation()));
+        line_ends.push_back(current_gripper_pose[gripper_ind].translation() + 100.0 * (grippers_test_poses[gripper_ind].translation() - current_gripper_pose[gripper_ind].translation()));
     }
 
     switch (model_ind)
     {
         case 0:
         {
-            vis_->visualizeLines("MM grippers motion",
-                                line_starts,
-                                line_ends,
-                                Visualizer::Black());
-            std::cerr << "0 first gripper motion norm: "
-                      << gripper_motion.at(0).norm()
-                      << std::endl;
+            vis_->visualizeLines("MM_grippers_motion", line_starts, line_ends, Visualizer::Silver());
+            vis_->visualizeLines("MM_grippers_motion", line_starts, line_ends, Visualizer::Silver());
+            vis_->visualizeLines("MM_grippers_motion", line_starts, line_ends, Visualizer::Silver());
+            vis_->visualizeLines("MM_grippers_motion", line_starts, line_ends, Visualizer::Silver());
             break;
         }
         case 1:
         {
-            vis_->visualizeLines("DM grippers motion",
-                                line_starts,
-                                line_ends,
-                                Visualizer::Silver());
-            std::cerr << "1 first gripper motion norm: "
-                      << gripper_motion.at(0).norm()
-                      << std::endl;
-            break;
-        }
-        case 2:
-        {
-            vis_->visualizeLines("DD grippers motion",
-                                line_starts,
-                                line_ends,
-                                Visualizer::Yellow());
-            std::cerr << "2 first gripper motion norm: "
-                      << gripper_motion.at(0).norm()
-                      << std::endl;
+            vis_->visualizeLines("DD_grippers_motion", line_starts, line_ends, Visualizer::Yellow());
+            vis_->visualizeLines("DD_grippers_motion", line_starts, line_ends, Visualizer::Yellow());
+            vis_->visualizeLines("DD_grippers_motion", line_starts, line_ends, Visualizer::Yellow());
+            vis_->visualizeLines("DD_grippers_motion", line_starts, line_ends, Visualizer::Yellow());
             break;
         }
         default:

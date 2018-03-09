@@ -1,5 +1,4 @@
-%close all
-close all
+% close all
 clear all
 
 space_hold_1 = '%n';
@@ -23,7 +22,7 @@ stretching_factor_dd_wo  = textread(file_error_dd_wo, space_hold_1, 'headerlines
 t_dd_wo = textread(file_t_dd_wo, space_hold_1, 'headerlines',1);
 
 %%%%%%%%%%%%%%%%%%%% show all in two plots: %%%%%%%%%%%%%%%%%%
-fig_1 = figure;
+fig_1 = figure(5);
 plot(t_mm, stretching_factor_mm, t_dd_wo, stretching_factor_dd_wo, 'LineWidth',2)
 legend(parameter_set_mm, parameter_set_dd_wo, 'Location', 'northwest')
 title('stretching factor each step')

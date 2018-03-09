@@ -1,4 +1,4 @@
-close all
+% close all
 clear all
 
 space_hold_1 = '%n';
@@ -29,7 +29,7 @@ relative_sum_dd_wo = cumsum(relative_error_dd_wo);
 
 show_ind = 1:length(t_mm);
 
-fig_1 = figure;
+fig_1 = figure(2);
 plot(t_mm(show_ind), relative_sum_mm(show_ind),...
         t_dd_wo(show_ind), relative_sum_dd_wo(show_ind),'LineWidth',2)
 legend(parameter_set_mm, parameter_set_dd_wo, 'Location', 'northwest')
