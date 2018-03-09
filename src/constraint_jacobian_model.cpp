@@ -13,6 +13,8 @@ using namespace Eigen;
 
 std::atomic_bool ConstraintJacobianModel::static_data_initialized_(false);
 Eigen::MatrixXd ConstraintJacobianModel::object_initial_node_distance_;
+Eigen::MatrixXd ConstraintJacobianModel::object_node_to_grippers_control_authority_;
+//Eigen::VectorXd ConstraintJacobianModel::sum_of_object_node_to_grippers_distances_;
 ssize_t ConstraintJacobianModel::num_nodes_;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -27,8 +29,55 @@ ssize_t ConstraintJacobianModel::num_nodes_;
 void ConstraintJacobianModel::SetInitialObjectConfiguration(
         const ObjectPointSet& object_initial_configuration)
 {
+    if (!grippers_data_initialized_.load())
+    {
+        throw_arc_exception(std::runtime_error, "You must call DeformableModel::SetGrippersData before setting the static data for ConstraintJacobianModel");
+    }
+    const ssize_t num_grippers = (ssize_t)(grippers_data_.size());
+
     num_nodes_ = object_initial_configuration.cols();
     object_initial_node_distance_ = EigenHelpers::CalculateDistanceMatrix(object_initial_configuration);
+
+    // First, collect the distances for each gripper <-> node pair
+    MatrixXd gripper_to_node_min_distances(num_grippers, num_nodes_);
+    for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+    {
+        for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
+        {
+            const std::pair<double, long> nearest_node_on_gripper =
+                    GetMinimumDistanceIndexToGripper(
+                        grippers_data_[(size_t)gripper_ind].node_indices_,
+                        node_ind, object_initial_node_distance_);
+
+            gripper_to_node_min_distances(gripper_ind, node_ind) = nearest_node_on_gripper.first;
+        }
+    }
+
+    // object_node_to_grippers_distances_ is indexed first by gripper, second by node i.e. (gripper_ind, node_ind)
+    object_node_to_grippers_control_authority_.resize(num_grippers, num_nodes_);
+    // Then, calculate relative control authority
+    // Last, normalize
+    for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
+    {
+        const double min_dist = gripper_to_node_min_distances.col(node_ind).minCoeff();
+
+        for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
+        {
+            const double gripper_dist = gripper_to_node_min_distances(gripper_ind, node_ind);
+            if (gripper_dist == 0.0)
+            {
+                assert(min_dist == 0.0);
+                object_node_to_grippers_control_authority_(gripper_ind, node_ind) = 1.0;
+            }
+            else
+            {
+                object_node_to_grippers_control_authority_(gripper_ind, node_ind) = min_dist / gripper_dist;
+            }
+        }
+        const double normalizer = object_node_to_grippers_control_authority_.col(node_ind).sum();
+        object_node_to_grippers_control_authority_.col(node_ind) /= normalizer;
+    }
+
     static_data_initialized_.store(true);
 }
 
@@ -210,6 +259,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
             // Beta inputs are distance vector, node velocity
             */
             const Matrix3d rigidity_translation =
+                    object_node_to_grippers_control_authority_(gripper_ind, node_ind) *
                     disLinearModel(dist_real, nearest_node_on_gripper.first) *
                     dirPropotionalModel(dist_real_vec, node_v);
 

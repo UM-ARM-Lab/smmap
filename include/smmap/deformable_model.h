@@ -50,7 +50,7 @@ namespace smmap
             // Static data
             ////////////////////////////////////////////////////////////////////
 
-            static std::atomic_bool grippers_data_initialized_;
+            static std::atomic<bool> grippers_data_initialized_;
             static std::vector<GripperData> grippers_data_;
 
             static std::atomic_bool function_pointers_initialized_;

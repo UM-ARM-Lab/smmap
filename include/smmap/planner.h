@@ -192,7 +192,8 @@ namespace smmap
                     const WorldState& resulting_world_state,
                     const std::vector<WorldState>& individual_model_results,
                     const DeformableController::InputData& controller_input_data,
-                    const std::vector<double>& individual_computation_times);
+                    const std::vector<double>& individual_computation_times,
+                    const std::vector<double>& model_prediction_errors);
 
             void storeWorldState(const WorldState& world_state);
             void loadStoredWorldState(WorldState& world_state);

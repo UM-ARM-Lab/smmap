@@ -50,8 +50,8 @@ include_directories(include
     ${catkin_INCLUDE_DIRS}
 )
 
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O2 -flto -g -Wall -Wextra -Wpedantic -Wconversion")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -Og -g -Wall -Wextra -Wpedantic -Wconversion")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O2 -flto -g -Wall -Wextra -Wpedantic -Wconversion")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -Og -g -Wall -Wextra -Wpedantic -Wconversion")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_PARALLEL_K_NEAREST_NEIGHBORS  -DENABLE_PARALLEL_ROADMAP -DENABLE_PARALLEL_DISTANCE_MATRIX")
 
 unset(USE_OPEN_MP CACHE)

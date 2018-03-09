@@ -34,8 +34,8 @@ using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 #pragma message "Magic number - reward scaling factor starting value"
 #define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
 
-#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 1
-//#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 0
+//#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 1
+#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 0
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal helpers
@@ -611,15 +611,34 @@ WorldState Planner::sendNextCommandUsingLocalController(
     const double robot_execution_time = stopwatch(READ);
 
 
+    #warning "!!!!!!!!!!!!!!! This data collection is only valid if the robot took the actual action requested!!!!!!!!!!!!!!!!!"
+    std::vector<double> model_prediction_errors(model_list_.size(), 0.0);
+    if (collect_results_for_all_models_)
+    {
+        ROS_INFO_NAMED("planner", "Calculating model predictions based on real motion taken");
+
+        const ObjectPointSet true_object_delta = world_feedback.object_configuration_ - world_state.object_configuration_;
+
+        for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
+        {
+            const ObjectPointSet predicted_delta = model_list_[model_ind]->getObjectDelta(world_state, selected_command.grippers_motion_);
+            const ObjectPointSet prediction_error_sq = (predicted_delta - true_object_delta).cwiseAbs2();
+
+            const Map<const VectorXd> error_sq_as_vector(prediction_error_sq.data(), prediction_error_sq.size());
+            model_prediction_errors[model_ind] = error_sq_as_vector.dot(desired_object_manipulation_direction.error_correction_.weight);
+        }
+    }
+
+
     ROS_INFO_NAMED("planner", "Updating models");
-    updateModels(world_state, model_input_data.desired_object_motion_.combined_correction_, suggested_robot_commands, model_to_use, world_feedback);
+    updateModels(world_state, model_input_data.desired_object_motion_.error_correction_, suggested_robot_commands, model_to_use, world_feedback);
 
     const double controller_time = function_wide_stopwatch(READ) - robot_execution_time;
     ROS_INFO_STREAM_NAMED("planner", "Total local controller time                     " << controller_time << " seconds");
 
     ROS_INFO_NAMED("planner", "Logging data");
     logPlannerData(world_state, world_feedback, individual_model_results, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use);
-    controllerLogData(world_state, world_feedback, individual_model_results, model_input_data, controller_computation_time);
+    controllerLogData(world_state, world_feedback, individual_model_results, model_input_data, controller_computation_time, model_prediction_errors);
 
     return world_feedback;
 }
@@ -1988,6 +2007,10 @@ void Planner::initializeControllerLogging()
         controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
                                        "individual_computation_times",
                                        Log::Log(log_folder + "individual_computation_times.txt", false)));
+
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "model_prediction_error",
+                                       Log::Log(log_folder + "model_prediction_error.txt", false)));
     }
 }
 
@@ -2046,7 +2069,8 @@ void Planner::controllerLogData(
         const WorldState& resulting_world_state,
         const std::vector<WorldState>& individual_model_results,
         const DeformableController::InputData& controller_input_data,
-        const std::vector<double>& individual_computation_times)
+        const std::vector<double>& individual_computation_times,
+        const std::vector<double>& model_prediction_errors)
 {
     if (controller_logging_enabled_)
     {
@@ -2146,6 +2170,9 @@ void Planner::controllerLogData(
 
         LOG(controller_loggers_.at("individual_computation_times"),
             PrettyPrint::PrettyPrint(individual_computation_times, false, " "));
+
+        LOG(controller_loggers_.at("model_prediction_error"),
+            PrettyPrint::PrettyPrint(model_prediction_errors, false, " "));
     }
 }
 
