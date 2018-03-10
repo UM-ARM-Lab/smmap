@@ -65,7 +65,7 @@ namespace smmap
             static Eigen::MatrixXd object_initial_node_distance_;
 
             /// Indexed first by gripper, second by node i.e. (gripper_ind, node_ind)
-            static Eigen::MatrixXd object_node_to_grippers_control_authority_;
+            static Eigen::MatrixXd object_node_to_grippers_gripper_influence_;
 //            static Eigen::VectorXd sum_of_object_node_to_grippers_distances_;
             static ssize_t num_nodes_;
 

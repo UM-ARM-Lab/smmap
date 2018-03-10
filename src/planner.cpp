@@ -613,7 +613,8 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
 
     #warning "!!!!!!!!!!!!!!! This data collection is only valid if the robot took the actual action requested!!!!!!!!!!!!!!!!!"
-    std::vector<double> model_prediction_errors(model_list_.size(), 0.0);
+    std::vector<double> model_prediction_errors_weighted(model_list_.size(), 0.0);
+    std::vector<double> model_prediction_errors_unweighted(model_list_.size(), 0.0);
     if (collect_results_for_all_models_)
     {
         ROS_INFO_NAMED("planner", "Calculating model predictions based on real motion taken");
@@ -626,7 +627,9 @@ WorldState Planner::sendNextCommandUsingLocalController(
             const ObjectPointSet prediction_error_sq = (predicted_delta - true_object_delta).cwiseAbs2();
 
             const Map<const VectorXd> error_sq_as_vector(prediction_error_sq.data(), prediction_error_sq.size());
-            model_prediction_errors[model_ind] = error_sq_as_vector.dot(desired_object_manipulation_direction.error_correction_.weight);
+            model_prediction_errors_weighted[model_ind] = error_sq_as_vector.dot(desired_object_manipulation_direction.error_correction_.weight);
+
+            model_prediction_errors_unweighted[model_ind] = prediction_error_sq.sum();
         }
     }
 
@@ -639,7 +642,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
     ROS_INFO_NAMED("planner", "Logging data");
     logPlannerData(world_state, world_feedback, individual_model_results, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use);
-    controllerLogData(world_state, world_feedback, individual_model_results, model_input_data, controller_computation_time, model_prediction_errors);
+    controllerLogData(world_state, world_feedback, individual_model_results, model_input_data, controller_computation_time, model_prediction_errors_weighted, model_prediction_errors_unweighted);
 
     return world_feedback;
 }
@@ -2060,8 +2063,12 @@ void Planner::initializeControllerLogging()
                                        Log::Log(log_folder + "individual_computation_times.txt", false)));
 
         controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
-                                       "model_prediction_error",
-                                       Log::Log(log_folder + "model_prediction_error.txt", false)));
+                                       "model_prediction_error_weighted",
+                                       Log::Log(log_folder + "model_prediction_error_weighted.txt", false)));
+
+        controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
+                                       "model_prediction_error_unweighted",
+                                       Log::Log(log_folder + "model_prediction_error_unweighted.txt", false)));
     }
 }
 
@@ -2121,7 +2128,8 @@ void Planner::controllerLogData(
         const std::vector<WorldState>& individual_model_results,
         const DeformableController::InputData& controller_input_data,
         const std::vector<double>& individual_computation_times,
-        const std::vector<double>& model_prediction_errors)
+        const std::vector<double>& model_prediction_errors_weighted,
+        const std::vector<double>& model_prediction_errors_unweighted)
 {
     if (controller_logging_enabled_)
     {
@@ -2222,8 +2230,11 @@ void Planner::controllerLogData(
         LOG(controller_loggers_.at("individual_computation_times"),
             PrettyPrint::PrettyPrint(individual_computation_times, false, " "));
 
-        LOG(controller_loggers_.at("model_prediction_error"),
-            PrettyPrint::PrettyPrint(model_prediction_errors, false, " "));
+        LOG(controller_loggers_.at("model_prediction_error_weighted"),
+            PrettyPrint::PrettyPrint(model_prediction_errors_weighted, false, " "));
+
+        LOG(controller_loggers_.at("model_prediction_error_unweighted"),
+            PrettyPrint::PrettyPrint(model_prediction_errors_unweighted, false, " "));
     }
 }
 
