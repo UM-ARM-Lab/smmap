@@ -69,6 +69,15 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::ROPE_ZIG_MATCH:
             return std::make_shared<RopeMaze>(nh, ph, vis);
 
+        case TaskType::ROPE_TABLE_LINEAR_MOTION:
+            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::ROPE, TaskType::ROPE_TABLE_LINEAR_MOTION);
+
+        case TaskType::ROPE_TABLE_PENTRATION:
+            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::ROPE, TaskType::ROPE_TABLE_PENTRATION);
+
+        case TaskType::CLOTH_TABLE_PENETRATION:
+            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_TABLE_PENETRATION);
+
         case TaskType::CLOTH_PLACEMAT_LIVE_ROBOT:
             return std::make_shared<ClothPlacemat>(nh, ph, vis);
 
@@ -449,6 +458,87 @@ const std::vector<long>& TaskSpecification::getGripperAttachedNodesIndices(const
     assert(gripper_idx < grippers_data_.size());
     return grippers_data_[gripper_idx].node_indices_;
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////// Model Accuracy Test Task ////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+ModelAccuracyTestTask::ModelAccuracyTestTask(
+        ros::NodeHandle& nh,
+        ros::NodeHandle& ph,
+        smmap_utilities::Visualizer::Ptr vis,
+        const DeformableType deformable_type,
+        const TaskType task_type)
+    : TaskSpecification(nh, ph, vis, deformable_type, task_type, false)
+{}
+
+void ModelAccuracyTestTask::visualizeDeformableObject_impl(
+        const std::string& marker_name,
+        const ObjectPointSet& object_configuration,
+        const std_msgs::ColorRGBA& color) const
+{
+    switch (deformable_type_)
+    {
+        case ROPE:
+            vis_->visualizeRope(marker_name, object_configuration, color);
+            break;
+
+        case CLOTH:
+            vis_->visualizeCloth(marker_name, object_configuration, color);
+
+        default:
+            assert(false && "Imposibru!");
+    }
+}
+
+void ModelAccuracyTestTask::visualizeDeformableObject_impl(
+        const std::string& marker_name,
+        const ObjectPointSet& object_configuration,
+        const std::vector<std_msgs::ColorRGBA>& colors) const
+{
+    switch (deformable_type_)
+    {
+        case ROPE:
+            vis_->visualizeRope(marker_name, object_configuration, colors);
+            break;
+
+        case CLOTH:
+            vis_->visualizeCloth(marker_name, object_configuration, colors);
+
+        default:
+            assert(false && "Imposibru!");
+    }
+}
+
+double ModelAccuracyTestTask::calculateError_impl(
+        const WorldState& world_state)
+{
+    (void)world_state;
+    return 0.0;
+}
+
+ObjectDeltaAndWeight ModelAccuracyTestTask::calculateObjectErrorCorrectionDelta_impl(
+        const WorldState& world_state)
+{
+    (void)world_state;
+    return ObjectDeltaAndWeight(num_nodes_ * 3);
+}
+
+std::vector<ssize_t> ModelAccuracyTestTask::getNodeNeighbours_impl(const ssize_t node) const
+{
+    (void)node;
+    return std::vector<ssize_t>(0);
+}
+
+bool ModelAccuracyTestTask::taskDone_impl(
+        const WorldState& world_state)
+{
+    (void)world_state;
+    return false;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

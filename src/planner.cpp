@@ -22,6 +22,7 @@
 
 #include "smmap/least_squares_controller_with_object_avoidance.h"
 #include "smmap/stretching_avoidance_controller.h"
+#include "smmap/straight_line_controller.h"
 
 using namespace smmap;
 using namespace smmap_utilities;
@@ -1717,6 +1718,56 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                                robot_,
                                                task_specification_->collisionScalingFactor(),
                                                optimization_enabled));
+            }
+            break;
+        }
+        case MULTI_MODEL_ACCURACY_TEST:
+        {
+            // Constraint Model
+            {
+                const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+
+                const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
+                const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
+                const double rotation_deformability = GetConstraintRotational(ph_);
+
+                model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
+                                      translation_dir_deformability,
+                                      translation_dis_deformability,
+                                      rotation_deformability,
+                                      environment_sdf));
+
+                controller_list_.push_back(std::make_shared<StraightLineController>(
+                                               ph_,
+                                               model_list_.back(),
+                                               robot_));
+            }
+            // Dminishing Rigidity Model
+            {
+                double translational_deformability, rotational_deformability;
+                if (ph_.getParam("translational_deformability", translational_deformability) &&
+                         ph_.getParam("rotational_deformability", rotational_deformability))
+                {
+                    ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                                           << translational_deformability << " "
+                                           << rotational_deformability);
+                }
+                else
+                {
+                    translational_deformability = task_specification_->defaultDeformability();
+                    rotational_deformability = task_specification_->defaultDeformability();
+                    ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                                           << task_specification_->defaultDeformability());
+                }
+
+                model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                          translational_deformability,
+                                          rotational_deformability));
+
+                controller_list_.push_back(std::make_shared<StraightLineController>(
+                                               ph_,
+                                               model_list_.back(),
+                                               robot_));
             }
             break;
         }

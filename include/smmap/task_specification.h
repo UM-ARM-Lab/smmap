@@ -81,7 +81,7 @@ namespace smmap
 
             double defaultDeformability() const;        // k
             double collisionScalingFactor() const;      // beta (or k2)
-            double maxStretchFactor() const;        // lambda
+            double maxStretchFactor() const;            // lambda
             double maxTime() const;                     // max simulation time when scripting things
 
             bool stretchingConstraintViolated(
@@ -176,10 +176,11 @@ namespace smmap
             const Eigen::MatrixXd object_initial_node_distance_;
             const ssize_t num_nodes_;
 
-
+            // TODO: Move these to the controller, not really part of the task anymore
             const double default_deformability_;        // k
             const double collision_scaling_factor_;     // beta (or k2)
             const double max_stretch_factor_;           // used to be lambda
+
             const double max_time_;                     // max simulation time when scripting things
 
         private:
@@ -207,6 +208,42 @@ namespace smmap
 
             virtual bool taskDone_impl(
                     const WorldState& world_state) = 0;
+    };
+
+    /**
+     * @brief The ModelAccuracyTestTask class. Essentially this is just a dummy placeholder for the task, and all output is meaningless
+     */
+    class ModelAccuracyTestTask : public TaskSpecification
+    {
+        public:
+            ModelAccuracyTestTask(
+                    ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
+                    smmap_utilities::Visualizer::Ptr vis,
+                    const DeformableType deformable_type,
+                    const TaskType task_type);
+
+        private:
+            virtual void visualizeDeformableObject_impl(
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std_msgs::ColorRGBA& color) const final;
+
+            virtual void visualizeDeformableObject_impl(
+                    const std::string& marker_name,
+                    const ObjectPointSet& object_configuration,
+                    const std::vector<std_msgs::ColorRGBA>& colors) const final;
+
+            virtual double calculateError_impl(
+                    const WorldState& world_state) final;
+
+            virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
+                    const WorldState& world_state) final;
+
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
+
+            virtual bool taskDone_impl(
+                    const WorldState& world_state) final;
     };
 
     class CoverageTask : public TaskSpecification

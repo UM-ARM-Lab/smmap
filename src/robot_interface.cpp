@@ -90,7 +90,7 @@ const std::vector<GripperData>& RobotInterface::getGrippersData() const
     return grippers_data_;
 }
 
-const AllGrippersSinglePose RobotInterface::getGrippersPose()
+const AllGrippersSinglePose RobotInterface::getGrippersPoses()
 {
     AllGrippersSinglePose grippers_pose(grippers_data_.size());
 
@@ -117,11 +117,17 @@ const AllGrippersSinglePose RobotInterface::getGrippersPose()
 
 double RobotInterface::getGrippersInitialDistance()
 {
-    const AllGrippersSinglePose poses = getGrippersPose();
-    assert(poses.size() == 2);
-    const auto gripper0_translation = poses[0].translation();
-    const auto gripper1_translation = poses[1].translation();
-    return (gripper0_translation - gripper1_translation).norm();
+    const AllGrippersSinglePose poses = getGrippersPoses();
+    if (poses.size() == 2)
+    {
+        const auto gripper0_translation = poses[0].translation();
+        const auto gripper1_translation = poses[1].translation();
+        return (gripper0_translation - gripper1_translation).norm();
+    }
+    else
+    {
+        return 0.0;
+    }
 }
 
 WorldState RobotInterface::commandRobotMotion(

@@ -29,7 +29,7 @@ namespace smmap
 
             const std::vector<GripperData>& getGrippersData() const;
 
-            const AllGrippersSinglePose getGrippersPose();
+            const AllGrippersSinglePose getGrippersPoses();
 
             // This function assumes only 2 grippers, and it is called before the grippers are moved by sendGrippersPoses
             double getGrippersInitialDistance();
