@@ -35,7 +35,6 @@ namespace smmap
 
             OutputData solvedByNomad(const InputData& input_data);
 
-            OutputData solvedByGradientDescentProjectionViaGurobiAndManualMethod(const InputData& input_data);
             OutputData solvedByGradientDescentProjectionViaGurobiMethod(const InputData& input_data);
             OutputData solvedByGradientDescentBarrierMethod(const InputData& input_data);
             OutputData solvedByGradientDescentOld(const InputData& input_data);

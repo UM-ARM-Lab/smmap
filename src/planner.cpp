@@ -195,10 +195,10 @@ Planner::Planner(ros::NodeHandle& nh,
     , planner_logging_enabled_(GetPlannerLoggingEnabled(ph_))
     , controller_logging_enabled_(GetControllerLoggingEnabled(ph_))
     , vis_(vis)
-    , visualize_desired_motion_(GetVisualizeObjectDesiredMotion(ph_))
-    , visualize_gripper_motion_(GetVisualizerGripperMotion(ph_))
-    , visualize_predicted_motion_(GetVisualizeObjectPredictedMotion(ph_))
-    , visualize_free_space_graph_(GetVisualizeFreeSpaceGraph(ph_))
+    , visualize_desired_motion_(!GetDisableAllVisualizations(ph) && GetVisualizeObjectDesiredMotion(ph_))
+    , visualize_gripper_motion_(!GetDisableAllVisualizations(ph) && GetVisualizerGripperMotion(ph_))
+    , visualize_predicted_motion_(!GetDisableAllVisualizations(ph) && GetVisualizeObjectPredictedMotion(ph_))
+    , visualize_free_space_graph_(!GetDisableAllVisualizations(ph) && GetVisualizeFreeSpaceGraph(ph_))
 {
     ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
     initializePlannerLogging();
@@ -556,20 +556,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
         ROS_INFO_STREAM_NAMED("planner", "Collected data to calculate regret in " << stopwatch(READ) << " seconds");
     }
 
-    if (visualize_predicted_motion_)
-    {
-        const ObjectPointSet& object_delta = suggested_robot_commands[(size_t)model_to_use].object_motion_;
-//        vis_->visualizeObjectDelta(
-//                    PREDICTED_DELTA_NS,
-//                    world_state.object_configuration_,
-//                    world_state.object_configuration_ + object_delta,
-//                    Visualizer::Blue());
 
-        task_specification_->visualizeDeformableObject(
-                PREDICTED_DELTA_NS,
-                world_state.object_configuration_ + object_delta,
-                Visualizer::Blue());
-    }
 
 
 
@@ -610,6 +597,40 @@ WorldState Planner::sendNextCommandUsingLocalController(
                 world_state.robot_configuration_valid_);
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
+
+
+
+    if (visualize_predicted_motion_)
+    {
+        const ObjectPointSet& object_delta_constrained = suggested_robot_commands[0].object_motion_;
+        const ObjectPointSet& object_delta_diminishing = suggested_robot_commands[1].object_motion_;
+
+
+        vis_->visualizeObjectDelta(
+                    "constraint_model_prediction",
+                    world_state.object_configuration_,
+                    world_state.object_configuration_ + 50.0 * object_delta_constrained,
+                    Visualizer::Cyan());
+
+        vis_->visualizeObjectDelta(
+                    "diminishing_model_prediction",
+                    world_state.object_configuration_,
+                    world_state.object_configuration_ + 50.0 * object_delta_diminishing,
+                    Visualizer::Red(0.3f));
+
+        const ObjectPointSet true_object_delta = world_feedback.object_configuration_ - world_state.object_configuration_;
+
+        vis_->visualizeObjectDelta(
+                    "true_object_delta",
+                    world_state.object_configuration_,
+                    world_state.object_configuration_ + 50.0 * true_object_delta,
+                    Visualizer::Green());
+
+//        task_specification_->visualizeDeformableObject(
+//                PREDICTED_DELTA_NS,
+//                world_state.object_configuration_ + object_delta,
+//                Visualizer::Blue());
+    }
 
 
     #warning "!!!!!!!!!!!!!!! This data collection is only valid if the robot took the actual action requested!!!!!!!!!!!!!!!!!"
@@ -1513,6 +1534,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
             const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
             const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
             const double rotation_deformability = GetConstraintRotational(ph_);
+//            const double translational_deformability = GetConstraintTranslationalOldVersion(ph_);
 
             const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
 
@@ -1520,6 +1542,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                                   translation_dir_deformability,
                                   translation_dis_deformability,
                                   rotation_deformability,
+//                                  translational_deformability,
                                   environment_sdf));
 
             controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
@@ -1637,11 +1660,13 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                 const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
                 const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
                 const double rotation_deformability = GetConstraintRotational(ph_);
+//                const double translational_deformability = GetConstraintTranslationalOldVersion(ph_);
 
                 model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
                                       translation_dir_deformability,
                                       translation_dis_deformability,
                                       rotation_deformability,
+//                                      translational_deformability,
                                       environment_sdf));
 
                 controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
@@ -1733,11 +1758,13 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
                 const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
                 const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
                 const double rotation_deformability = GetConstraintRotational(ph_);
+//                const double translational_deformability = GetConstraintTranslationalOldVersion(ph_);
 
                 model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
                                       translation_dir_deformability,
                                       translation_dis_deformability,
                                       rotation_deformability,
+//                                      translational_deformability,
                                       environment_sdf));
 
                 controller_list_.push_back(std::make_shared<StraightLineController>(

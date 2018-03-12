@@ -13,7 +13,7 @@ using namespace Eigen;
 
 std::atomic_bool ConstraintJacobianModel::static_data_initialized_(false);
 Eigen::MatrixXd ConstraintJacobianModel::object_initial_node_distance_;
-Eigen::MatrixXd ConstraintJacobianModel::object_node_to_grippers_gripper_influence_;
+Eigen::MatrixXd ConstraintJacobianModel::gripper_influence_per_node_;
 //Eigen::VectorXd ConstraintJacobianModel::sum_of_object_node_to_grippers_distances_;
 ssize_t ConstraintJacobianModel::num_nodes_;
 
@@ -54,7 +54,7 @@ void ConstraintJacobianModel::SetInitialObjectConfiguration(
     }
 
     // object_node_to_grippers_distances_ is indexed first by gripper, second by node i.e. (gripper_ind, node_ind)
-    object_node_to_grippers_gripper_influence_.resize(num_grippers, num_nodes_);
+    gripper_influence_per_node_.resize(num_grippers, num_nodes_);
     // Then, calculate relative control authority
     // Last, normalize
     for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
@@ -67,15 +67,15 @@ void ConstraintJacobianModel::SetInitialObjectConfiguration(
             if (gripper_dist == 0.0)
             {
                 assert(min_dist == 0.0);
-                object_node_to_grippers_gripper_influence_(gripper_ind, node_ind) = 1.0;
+                gripper_influence_per_node_(gripper_ind, node_ind) = 1.0;
             }
             else
             {
-                object_node_to_grippers_gripper_influence_(gripper_ind, node_ind) = min_dist / gripper_dist;
+                gripper_influence_per_node_(gripper_ind, node_ind) = min_dist / gripper_dist;
             }
         }
-        const double normalizer = object_node_to_grippers_gripper_influence_.col(node_ind).sum();
-        object_node_to_grippers_gripper_influence_.col(node_ind) /= normalizer;
+        const double normalizer = gripper_influence_per_node_.col(node_ind).sum();
+        gripper_influence_per_node_.col(node_ind) /= normalizer;
     }
 
     static_data_initialized_.store(true);
@@ -89,28 +89,12 @@ ConstraintJacobianModel::ConstraintJacobianModel(
         const double translation_dir_deformability,
         const double translation_dis_deformability,
         const double rotation_deformability,
+//        const double translational_deformablity,
         const sdf_tools::SignedDistanceField& environment_sdf)
-    : ConstraintJacobianModel(
-         translation_dir_deformability,
-         translation_dis_deformability,
-         rotation_deformability,
-         environment_sdf,
-         simpleFn,
-         simpleFn)
-{}
-
-ConstraintJacobianModel::ConstraintJacobianModel(
-        const double translation_dir_deformability,
-        const double translation_dis_deformability,
-        const double rotation_deformability,
-        const sdf_tools::SignedDistanceField& environment_sdf,
-        const RigidityFnType trans_dir_fn,
-        const RigidityFnType trans_dis_fn)
     : translation_dir_deformability_(translation_dir_deformability)
     , translation_dis_deformability_(translation_dis_deformability)
     , rotation_deformability_(rotation_deformability)
-    , trans_dir_type_(trans_dir_fn)
-    , trans_dis_type_(trans_dis_fn)
+//    , translational_deformability_(translational_deformablity)
     , environment_sdf_(environment_sdf)
     , obstacle_threshold_(0.0)
 {
@@ -223,6 +207,10 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
 
     MatrixXd J(num_Jrows, num_Jcols);
 
+//    Eigen::RowVectorXd disLinear_terms(num_nodes_);
+//    Eigen::RowVectorXd dirPropotional_terms(num_nodes_);
+//    Eigen::RowVectorXd transDimOld_terms(num_nodes_);
+
     // for each gripper
     for (ssize_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
     {
@@ -232,7 +220,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
         // P dot of the node on object, grasped gripper
         // Due to the assumption of free-flying grippers, I simply take it as the xyz motion of grippers
         // In the future, it should be the translational motion of end effector.
-        const Vector3d& node_v = grippers_next_poses[gripper_ind].translation()
+        const Vector3d& gripper_translation = grippers_next_poses[gripper_ind].translation()
                 - grippers_current_poses[gripper_ind].translation();
 
         for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
@@ -241,49 +229,74 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
                     GetMinimumDistanceIndexToGripper(
                         grippers_data_[(size_t)gripper_ind].node_indices_,
                         node_ind, object_initial_node_distance_);
+            const double geodesic_distance_to_gripper = nearest_node_on_gripper.first;
+            const long nearest_node_on_gripper_ind = nearest_node_on_gripper.second;
 
-            // Get dist_rest, get node velocity
-            // Dist_real_vec is vector form, it is for translation rigidity utilization
-            // Dist_real is the distance between two nodes on objects
-            // Gripper_to_node is the radius of rotation, one node may not on object
-            const Vector3d dist_real_vec =
-                    current_configuration.col(nearest_node_on_gripper.second)-
-                    current_configuration.col(node_ind) ; // in .hpp file ;
-            const double dist_real = dist_real_vec.norm();
+            const Vector3d node_to_gripper =
+                    current_configuration.col(nearest_node_on_gripper_ind) -
+                    current_configuration.col(node_ind);
+            const double euclidean_dist_to_gripper = node_to_gripper.norm();
 
             const Matrix3d& J_trans = gripper_rot;
 
-            /*
-            // Translation rigidity depends on both gamma(scalar) function and beta(vector) function
-            // Gamma inputs are real distance between two nodes and distance at rest
-            // Beta inputs are distance vector, node velocity
-            */
-            const Matrix3d rigidity_translation =
-                    object_node_to_grippers_gripper_influence_(gripper_ind, node_ind) *
-                    disLinearModel(dist_real, nearest_node_on_gripper.first) *
-                    dirPropotionalModel(dist_real_vec, node_v);
+
+            double cos_angle = 0.0;
+            if (node_to_gripper.norm() > 1e-6 && gripper_translation.norm() > 1e-6)
+            {
+                cos_angle = node_to_gripper.normalized().dot(gripper_translation.normalized());
+            }
+            else
+            {
+                cos_angle = 1.0;
+            }
+            const double direction_based_rigidity = std::exp(translation_dir_deformability_ * (cos_angle - 1.0) * geodesic_distance_to_gripper);//std::min(cos_angle, 0.0));
+//            const double distance_based_rigidity = std::exp(-translational_deformability_ * geodesic_distance_to_gripper);
+//            const double lambda = (1.0 - cos_angle) / 2.0;
+//            const double combined_translational = lambda * distance_based_rigidity + (1.0 - lambda) * direction_based_rigidity;
+
+            const double distance_ratio_rigidity = disLinearModel(euclidean_dist_to_gripper, geodesic_distance_to_gripper);
+
+            const double rigidity_translation =
+                    gripper_influence_per_node_(gripper_ind, node_ind) *
+                    distance_ratio_rigidity *
+//                    combined_translational;
+                    direction_based_rigidity;
 
             J.block<3, 3>(node_ind * 3, gripper_ind * 6) = rigidity_translation * J_trans;
+
+
+
+
+//            disLinear_terms(node_ind) = distance_ratio_rigidity;
+//            dirPropotional_terms(node_ind) = direction_based_rigidity;
+//            transDimOld_terms(node_ind) = distance_based_rigidity;
+
+
 
 
             // Calculate the cross product between the grippers x, y, and z axes
             // and the vector from the gripper to the node, for rotation utilization
 
-            const Vector3d gripper_to_node =
-                    current_configuration.col(node_ind) -
-                    current_configuration.col(nearest_node_on_gripper.second);
+            const Vector3d gripper_to_node = -node_to_gripper;
 
             Matrix3d J_rot;
             J_rot.col(0) = gripper_rot.col(0).cross(gripper_to_node);
             J_rot.col(1) = gripper_rot.col(1).cross(gripper_to_node);
             J_rot.col(2) = gripper_rot.col(2).cross(gripper_to_node);
 
-            // *M3
-            J.block<3, 3>(node_ind * 3, gripper_ind * 6 + 3) =
-                    object_node_to_grippers_gripper_influence_(gripper_ind, node_ind) *
-                    std::exp(-rotation_deformability_ * nearest_node_on_gripper.first) * J_rot;
+            const double rigidity_rotation =
+                    gripper_influence_per_node_(gripper_ind, node_ind) *
+                    std::exp(-rotation_deformability_ * geodesic_distance_to_gripper);
+
+            J.block<3, 3>(node_ind * 3, gripper_ind * 6 + 3) = rigidity_rotation * J_rot;
         }
     }
+
+//    std::cout << "dis linear:   " << disLinear_terms.head<8>() << std::endl;
+//    std::cout << "dir proporp:  " << dirPropotional_terms.head<8>() << std::endl;
+//    std::cout << "old dis term: " << transDimOld_terms.head<8>() << std::endl;
+//    std::cout << std::endl;
+
     return J;
 }
 
@@ -293,7 +306,6 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
  * @param desired_object_velocity
  * @return
  */
-
 Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
         const ObjectPointSet &current_configuration,
         const MatrixXd &object_p_dot) const
@@ -343,29 +355,20 @@ Eigen::MatrixXd ConstraintJacobianModel::computeObjectVelocityMask(
 
 // TODO: consider replacing this "dot" with (1 - cos(theta)) and rescaling translation_dir_deformablility_
 // Candidate function to count vector effect, return 3x3 matrix = diag{exp[beta(.,.)]}
-Eigen::Matrix3d ConstraintJacobianModel::dirPropotionalModel(const Vector3d node_to_gripper, const Vector3d gripper_translation) const
+double ConstraintJacobianModel::dirPropotionalModel(const Vector3d node_to_gripper, const Vector3d gripper_translation) const
 {
-    double dot;
+    double dot = 0.0;
     if (node_to_gripper.norm() > 1e-6 && gripper_translation.norm() > 1e-6)
     {
-        dot = node_to_gripper.normalized().dot(gripper_translation);
-        if (dot > 0.0)
-        {
-            dot = 0.0;
-        }
-        else
-        {
-            dot *= 2.0;
-        }
+        dot = node_to_gripper.normalized().dot(gripper_translation.normalized());
+        dot = std::min(dot, 0.0);
     }
     else
     {
         dot = 0.0;
     }
 
-    Matrix3d beta_rigidity = Matrix3d::Identity() * std::exp(translation_dir_deformability_ * dot);
-
-    return beta_rigidity;
+    return std::exp(translation_dir_deformability_ * dot);
 }
 
 
@@ -382,5 +385,4 @@ double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, con
     }
 
     return std::pow(ratio, translation_dis_deformability_);
-
 }

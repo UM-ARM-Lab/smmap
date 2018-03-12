@@ -24,6 +24,20 @@ StraightLineController::StraightLineController(
 DeformableController::OutputData StraightLineController::getGripperMotion_impl(
         const InputData& input_data)
 {
-    const auto prediction = model_->getObjectDelta(input_data.world_current_state_, grippers_motion_);
-    return OutputData(grippers_motion_, prediction, Eigen::VectorXd(0));
+    AllGrippersSinglePoseDelta cmd(1, kinematics::Vector6d::Zero());
+
+    cmd[0](0) = grippers_motion_[0](0);
+
+    if (input_data.world_current_state_.sim_time_ > 4.3)
+    {
+        cmd[0](5) = grippers_motion_[0](5);
+    }
+
+    if (input_data.world_current_state_.sim_time_ > 4.9)
+    {
+        cmd[0](5) = 0.0;
+    }
+
+    const auto prediction = model_->getObjectDelta(input_data.world_current_state_, cmd);
+    return OutputData(cmd, prediction, Eigen::VectorXd(0));
 }
