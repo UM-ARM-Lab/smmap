@@ -17,7 +17,8 @@ namespace smmap
             virtual OutputData getGripperMotion_impl(const InputData& input_data) override final;
 
             const DeformableModel::Ptr model_;
-            AllGrippersSinglePoseDelta grippers_motion_;
+            std::vector<std::pair<std::vector<double>, std::vector<kinematics::Vector6d>>> static_grippers_motions_;
+            std::vector<size_t> current_motion_idx_;
     };
 }
 

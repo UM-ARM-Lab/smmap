@@ -9,33 +9,45 @@ StraightLineController::StraightLineController(
     : DeformableController(robot)
     , model_(model)
 {
-    kinematics::Vector6d gripper_delta = kinematics::Vector6d::Zero();
-    gripper_delta(0) = GetGripperStraightLineMotionTransX(ph);
-    gripper_delta(1) = GetGripperStraightLineMotionTransY(ph);
-    gripper_delta(2) = GetGripperStraightLineMotionTransZ(ph);
-    gripper_delta(3) = GetGripperStraightLineMotionAngularX(ph);
-    gripper_delta(4) = GetGripperStraightLineMotionAngularY(ph);
-    gripper_delta(5) = GetGripperStraightLineMotionAngularZ(ph);
+    const auto grippers = robot_->getGrippersData();
+    const size_t num_grippers = grippers.size();
 
-    const auto num_grippers = robot_->getGrippersData().size();
-    grippers_motion_ = AllGrippersSinglePoseDelta(num_grippers, gripper_delta);
+    std::cout << std::endl;
+
+    static_grippers_motions_.reserve(num_grippers);
+    for (size_t idx = 0; idx < num_grippers; ++idx)
+    {
+        const std::string& gripper_name = grippers[idx].name_;
+        static_grippers_motions_.push_back(GetGripperDeltaTrajectory(ph, gripper_name));
+    }
+
+    current_motion_idx_.clear();
+    current_motion_idx_.resize(num_grippers, 0);
 }
 
 DeformableController::OutputData StraightLineController::getGripperMotion_impl(
         const InputData& input_data)
 {
-    AllGrippersSinglePoseDelta cmd(1, kinematics::Vector6d::Zero());
+    const size_t num_grippers = static_grippers_motions_.size();
 
-    cmd[0](0) = grippers_motion_[0](0);
-
-    if (input_data.world_current_state_.sim_time_ > 4.3)
+        AllGrippersSinglePoseDelta cmd(num_grippers, kinematics::Vector6d::Zero());
+    for (size_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
     {
-        cmd[0](5) = grippers_motion_[0](5);
-    }
+        const auto& current_gripper_motions = static_grippers_motions_[gripper_idx];
+        const std::vector<double>& timing_points = current_gripper_motions.first;
+        const std::vector<kinematics::Vector6d>& gripper_deltas = current_gripper_motions.second;
 
-    if (input_data.world_current_state_.sim_time_ > 4.9)
-    {
-        cmd[0](5) = 0.0;
+        // Check if we should move on to the next motion
+        size_t& motion_idx = current_motion_idx_[gripper_idx];
+        if (motion_idx + 1 < timing_points.size())
+        {
+            if (input_data.world_current_state_.sim_time_ >= timing_points[motion_idx + 1])
+            {
+                motion_idx++;
+            }
+        }
+
+        cmd[gripper_idx] = gripper_deltas[motion_idx];
     }
 
     const auto prediction = model_->getObjectDelta(input_data.world_current_state_, cmd);

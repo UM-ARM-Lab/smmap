@@ -72,11 +72,12 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::ROPE_TABLE_LINEAR_MOTION:
             return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::ROPE, TaskType::ROPE_TABLE_LINEAR_MOTION);
 
+        case TaskType::CLOTH_TABLE_LINEAR_MOTION:
+            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_TABLE_LINEAR_MOTION);
+
         case TaskType::ROPE_TABLE_PENTRATION:
             return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::ROPE, TaskType::ROPE_TABLE_PENTRATION);
 
-        case TaskType::CLOTH_TABLE_PENETRATION:
-            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_TABLE_PENETRATION);
 
         case TaskType::CLOTH_PLACEMAT_LIVE_ROBOT:
             return std::make_shared<ClothPlacemat>(nh, ph, vis);
