@@ -11,7 +11,6 @@
 
 // Needed due to rounding problems
 #define GRIPPER_COLLISION_REPULSION_MARGIN 0.000001
-//#define STRETCHING_COSINE_THRESHOLD_MARGIN 0.001
 
 #define ERROR_CONVERGENCE_LIMIT 1e-6
 #define BARRIER_INNER_LOOP_CONVERGENCE_LIMIT 1e-6
@@ -34,8 +33,6 @@ inline std::string print(const AllGrippersSinglePoseDelta& delta)
 
     return strm.str();
 }
-
-
 
 // We want to constrain all vectors "r" to lie within a specified angle of the cone direction.
 // I.e. cone_direction.transpose() * r / norm(r) >= cos(angle)
@@ -117,11 +114,6 @@ void StretchingAvoidanceController::visualizeCone(const Eigen::Vector3d& cone_di
     vis_->visualizeLines("stretching_cone", starts, ends, Visualizer::Magenta(), marker_id);
     vis_->visualizeLines("stretching_cone", starts, ends, Visualizer::Magenta(), marker_id);
 }
-
-
-
-
-
 
 
 
@@ -566,11 +558,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
 
 
 
-
-
-
-
-
 inline Eigen::VectorXd projectToMaxDeltaConstraints(
         const Eigen::VectorXd& delta,
         const double max_step_size,
@@ -868,12 +855,6 @@ inline AllGrippersSinglePoseDelta projectToCollisionAndMaxDeltaConstraints(
 
 
 
-
-
-
-
-
-
 DeformableController::OutputData StretchingAvoidanceController::solvedByGradientDescentProjectionViaGurobiMethod(const InputData& input_data)
 {
     // Unpack the input data into its constituent parts
@@ -897,50 +878,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 
     if (input_data.robot_jacobian_valid_)
     {
-        // Basic robot data
-        const ssize_t num_dof = input_data.world_current_state_.robot_configuration_.size();
-        const auto joint_motion_to_gripper_motion_fn = [&](const Eigen::VectorXd& robot_motion)
-        {
-            const Eigen::VectorXd grippers_motion_as_single_vector = input_data.robot_jacobian_ * robot_motion;
-
-            if (grippers_motion_as_single_vector.size() != num_grippers * 6)
-            {
-                assert(false && "num of grippers not match");
-            }
-
-            AllGrippersSinglePoseDelta gripper_motion(num_grippers);
-            for (ssize_t ind = 0; ind < num_grippers; ++ind)
-            {
-                gripper_motion[ind] = grippers_motion_as_single_vector.segment<6>(ind * 6);
-            }
-
-            return gripper_motion;
-        };
-
-        // Determine the search space for Gradient Descent, at least in terms of the decision variables only
-        const double max_step_size = robot_->max_dof_velocity_norm_ * robot_->dt_;
-
-        // Lower limit
-        const Eigen::VectorXd distance_to_lower_joint_limits = input_data.robot_->joint_lower_limits_ - input_data.world_current_state_.robot_configuration_;
-        const Eigen::VectorXd min_joint_delta = distance_to_lower_joint_limits.unaryExpr([&max_step_size] (const double x) {return std::max(x, -max_step_size);});
-
-        // Upper limit
-        const Eigen::VectorXd distance_to_upper_joint_limits = input_data.robot_->joint_upper_limits_ - input_data.world_current_state_.robot_configuration_;
-        const Eigen::VectorXd max_joint_delta = distance_to_upper_joint_limits.unaryExpr([&max_step_size] (const double x) {return std::min(x, max_step_size);});
-
-        // Collect the collision data needed
-        const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> poi_collision_data =
-                robot_->getPointsOfInterestCollisionData(input_data.world_current_state_.robot_configuration_);
-        const double required_obstacle_clearance = input_data.robot_->min_controller_distance_to_obstacles_;
-        // Calculate the matrics needed once for the projection
-        std::vector<Eigen::RowVectorXd> M_matrices(poi_collision_data.size());
-        std::vector<double> b_offsets(poi_collision_data.size());
-        for (size_t ind = 0; ind < poi_collision_data.size(); ++ind)
-        {
-            M_matrices[ind] = -1.0 * poi_collision_data[ind].first.obstacle_surface_normal_.transpose() * poi_collision_data[ind].second;
-            b_offsets[ind] = required_obstacle_clearance - poi_collision_data[ind].first.distance_to_obstacle_;
-        }
-
         assert(false && "Not implemented");
     }
     else
@@ -977,6 +914,8 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
                 linear_constraint_affine_terms_g0.push_back(0.0);
             }
 
+            // Visualization
+            if (false)
             {
                 Eigen::Vector3d stretching_start = grippers_poses[0] * stretching_constraint_data[0].second;
                 Eigen::Vector3d stretching_end = grippers_poses[0] * (stretching_constraint_data[0].second + 0.05 * stretching_constraint_data[0].first);
@@ -991,9 +930,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
                 visualizeCone(stretching_constraint_data[0].first, stretching_cosine_threshold_, grippers_poses[0], 1);
             }
 
-
-
-
             Eigen::Matrix<double, 3, 6> J_stretching_g1;
             J_stretching_g1.leftCols<3>() = Eigen::Matrix3d::Identity();
             J_stretching_g1.rightCols<3>() = kinematics::skew(stretching_constraint_data[1].second);
@@ -1004,6 +940,8 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
                 linear_constraint_affine_terms_g1.push_back(0.0);
             }
 
+            // Visualization
+            if (false)
             {
                 Eigen::Vector3d stretching_start = grippers_poses[1] * stretching_constraint_data[1].second;
                 Eigen::Vector3d stretching_end = grippers_poses[1] * (stretching_constraint_data[1].second + 0.05 * stretching_constraint_data[1].first);
@@ -1018,7 +956,8 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
                 visualizeCone(stretching_constraint_data[1].first, stretching_cosine_threshold_, grippers_poses[1], 2);
             }
         }
-        else
+        // Visualization
+        else if (false)
         {
             vis_->deleteObjects("stretching_correction_vector", 1, 10);
             vis_->deleteObjects("stretching_correction_vector", 1, 10);
@@ -1038,8 +977,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
             vis_->deleteObjects("stretching_cone", 1, 10);
             vis_->deleteObjects("stretching_cone", 1, 10);
         }
-
-
 
 
         const double max_individual_gripper_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
@@ -1120,11 +1057,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 //                const auto potential_next_object_delta = model_->getObjectDelta(world_state, potential_next_motion);
 //                const auto potential_next_error = errorOfControlByPrediction(potential_next_object_delta, desired_object_p_dot, desired_p_dot_weight);
 
-
-
-
-
-
                 auto projected_g0_motion = findClosestValidPoint(potential_next_motion[0], linear_constraint_linear_terms_g0, linear_constraint_affine_terms_g0, max_individual_gripper_step_size);
                 auto projected_g1_motion = findClosestValidPoint(potential_next_motion[1], linear_constraint_linear_terms_g1, linear_constraint_affine_terms_g1, max_individual_gripper_step_size);
 
@@ -1159,11 +1091,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 //                }
 //                auto manual_proj_object_delta = model_->getObjectDelta(world_state, {manually_projected_g0_motion, manually_projected_g1_motion});
 //                auto manual_proj_next_error = errorOfControlByPrediction(manual_proj_object_delta, desired_object_p_dot, desired_p_dot_weight);
-
-
-
-
-
 
 
 

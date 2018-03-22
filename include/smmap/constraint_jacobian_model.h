@@ -18,7 +18,6 @@ namespace smmap
                     const double translation_dir_deformability,
                     const double translation_dis_deformability,
                     const double rotation_deformability,
-//                    const double translational_deformablity,
                     const sdf_tools::SignedDistanceField& environment_sdf);
 
             ////////////////////////////////////////////////////////////////////
@@ -57,7 +56,6 @@ namespace smmap
 
             /// Indexed first by gripper, second by node i.e. (gripper_ind, node_ind)
             static Eigen::MatrixXd gripper_influence_per_node_;
-//            static Eigen::VectorXd sum_of_object_node_to_grippers_distances_;
             static ssize_t num_nodes_;
 
             ////////////////////////////////////////////////////////////////////
@@ -67,9 +65,8 @@ namespace smmap
             const double translation_dir_deformability_;
             const double translation_dis_deformability_;
 
-            // Analogs of the original version
+            // Analog of the original version
             const double rotation_deformability_;
-//            const double translational_deformability_;
 
             ////////////////////////////////////////////////////////////////////
             // Obstacle information from sdf tool
@@ -83,7 +80,8 @@ namespace smmap
 
             double dirPropotionalModel(
                     const Eigen::Vector3d node_to_gripper,
-                    const Eigen::Vector3d node_v) const;
+                    const Eigen::Vector3d gripper_translation,
+                    const double dist_rest) const;
 
             double disLinearModel(
                     const double dist_to_gripper,
@@ -96,11 +94,6 @@ namespace smmap
             Eigen::MatrixXd computeGrippersToDeformableObjectJacobian(
                     const WorldState& world_state,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta) const;
-
-            // Null Projection
-            Eigen::MatrixXd computeObjectVelocityMask(
-                    const ObjectPointSet& current_configuration,
-                    const Eigen::MatrixXd& object_p_dot) const;
     };
 }
 

@@ -59,52 +59,6 @@ namespace smmap
                     const double max_delta,
                     const std::pair<Eigen::Vector3d, Eigen::Vector3d>& stretching_correction_data) const;
 
-
-            /*
-            template <typename T1, typename T2>
-            inline kinematics::Vector6d getConstraintAwareGripperDeltaSample(
-                    const T1& collision_constraint_fn,
-                    const T2& stretching_constraint_fn,
-                    const double max_step_size)
-            {
-                kinematics::Vector6d sample = kinematics::Vector6d::Zero();
-                bool collision_satisfied = (collision_constraint_fn(sample) < 0.0);
-                bool stretching_satisified = (stretching_constraint_fn(sample) < 0.0);
-                bool valid_sample =  collision_satisfied && stretching_satisified;
-//                bool valid_sample = (collision_constraint_fn(sample) < 0.0) && (stretching_constraint_fn(sample) < 0.0);
-
-//                std::cout << "collision_satisfied:  " << collision_constraint_fn(sample) << std::endl;
-//                std::cout << "stretching_satisfied: " << stretching_constraint_fn(sample) << std::endl;
-
-                while (!valid_sample)
-                {
-                    sample = singleGripperPoseDeltaSampler(max_step_size);
-                    collision_satisfied = (collision_constraint_fn(sample) < 0.0);
-                    stretching_satisified = (stretching_constraint_fn(sample) < 0.0);
-                    valid_sample = collision_satisfied && stretching_satisified;
-//                    valid_sample = (collision_constraint_fn(sample) < 0.0) && (stretching_constraint_fn(sample) < 0.0);
-
-//                    std::cout << "collision_satisfied:  " << collision_constraint_fn(sample) << std::endl;
-//                    std::cout << "stretching_satisfied: " << stretching_constraint_fn(sample) << std::endl;
-                }
-
-//                if (collision_constraint_fn(sample) >= 0.0)
-//                {
-//                    std::cout << "Collision constraint violated on sampling: " << collision_constraint_fn(sample) << std::endl;
-//                }
-
-//                if (stretching_constraint_fn(sample) >= 0.0)
-//                {
-//                    std::cout << "Stretching constraint violated on sampling: " << stretching_constraint_fn(sample) << std::endl;
-//                }
-
-//                assert(collision_constraint_fn(sample) < 0.0);
-//                assert(stretching_constraint_fn(sample) < 0.0);
-
-                return sample;
-            }
-            */
-
             double errorOfControlByPrediction(const ObjectPointSet predicted_object_p_dot,
                                               const Eigen::VectorXd &desired_object_p_dot,
                                               const Eigen::VectorXd &desired_p_dot_weight) const;
@@ -159,22 +113,23 @@ namespace smmap
                     const InputData& input_data,
                     const AllGrippersSinglePoseDelta& test_gripper_motion);
 
-            double evaluateStretchingConstraint(const std::pair<Eigen::Vector3d, Eigen::Vector3d>& stretching_constraint_data, const kinematics::Vector6d& gripper_delta) const;
-            std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> stretchingCorrectionVectorsAndPoints(const InputData& input_data) const;
-            std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> ropeTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const;
-            std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> clothTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const;
+            double evaluateStretchingConstraint(
+                    const std::pair<Eigen::Vector3d, Eigen::Vector3d>& stretching_constraint_data,
+                    const kinematics::Vector6d& gripper_delta) const;
+
+            std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>
+                    stretchingCorrectionVectorsAndPoints(const InputData& input_data) const;
+            std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>
+                    ropeTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const;
+            std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>
+                    clothTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const;
 
 
-
-
-
-
-
-            void visualizeCone(const Eigen::Vector3d& cone_direction, const double min_normalized_dot_product, const Eigen::Isometry3d& pose, const int marker_id);
-
-
-
-
+            void visualizeCone(
+                    const Eigen::Vector3d& cone_direction,
+                    const double min_normalized_dot_product,
+                    const Eigen::Isometry3d& pose,
+                    const int marker_id);
 
         private:	    
             GripperCollisionChecker gripper_collision_checker_;
