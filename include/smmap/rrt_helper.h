@@ -8,6 +8,7 @@
 
 #include "smmap/rubber_band.hpp"
 #include "smmap/prm_helper.h"
+#include "smmap/robot_interface.hpp"
 
 namespace smmap
 {
@@ -28,6 +29,7 @@ namespace std
 namespace smmap
 {
     typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> RRTGrippersRepresentation;
+    typedef std::pair<Eigen::VectorXd, Eigen::VectorXd> RRTRobotRepresentation;
 
     class RRTConfig
     {
@@ -36,10 +38,12 @@ namespace smmap
 
             RRTConfig(
                     const RRTGrippersRepresentation& grippers_position,
+                    const RRTRobotRepresentation& robot_configuration,
                     const RubberBand& band,
                     const bool is_visible_to_blacklist);
 
             const RRTGrippersRepresentation& getGrippers() const;
+            const RRTRobotRepresentation& getRobotConfiguration() const;
             const RubberBand& getBand() const;
             bool isVisibleToBlacklist() const;
 
@@ -54,6 +58,7 @@ namespace smmap
         private:
 
             RRTGrippersRepresentation grippers_position_;
+            RRTRobotRepresentation robot_configuration_;
             RubberBand band_;
             bool is_visible_to_blacklist_;
     };
@@ -82,8 +87,9 @@ namespace smmap
             static constexpr auto RRT_SHORTCUT_SECOND_GRIPPER_NS = "rrt_shortcut_second_gripper";
 
             RRTHelper(
+                    const RobotInterface::Ptr robot,
                     const sdf_tools::SignedDistanceField& environment_sdf,
-                    smmap_utilities::Visualizer::Ptr vis,
+                    const smmap_utilities::Visualizer::Ptr vis,
                     std::mt19937_64& generator,
                     const std::shared_ptr<PRMHelper>& prm_helper,
                     const Eigen::Vector3d planning_world_lower_limits,
@@ -173,33 +179,40 @@ namespace smmap
 
 
         private:
+            const RobotInterface::Ptr robot_;
+            const sdf_tools::SignedDistanceField& environment_sdf_;
+
+            const smmap_utilities::Visualizer::Ptr vis_;
+            const bool visualization_enabled_globally_;
+            const std_msgs::ColorRGBA band_safe_color_;
+            const std_msgs::ColorRGBA band_overstretched_color_;
+
             const Eigen::Vector3d planning_world_lower_limits_;
             const Eigen::Vector3d planning_world_upper_limits_;
             const double max_step_size_;
             const double goal_bias_;
             const double goal_reach_radius_;
             const double homotopy_distance_penalty_;
+            const double gripper_min_distance_to_obstacles_;
 
             const int64_t max_shortcut_index_distance_;
             const uint32_t max_smoothing_iterations_;
             const uint32_t max_failed_smoothing_iterations_;
+
+            std::mt19937_64& generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
             std::uniform_int_distribution<int> uniform_shortcut_smoothing_int_distribution_;
             std::shared_ptr<PRMHelper> prm_helper_;
 
-            std::mt19937_64& generator_;
-            const sdf_tools::SignedDistanceField& environment_sdf_;
-            smmap_utilities::Visualizer::Ptr vis_;
-            const bool visualization_enabled_globally_;
-            const std_msgs::ColorRGBA band_safe_color_;
-            const std_msgs::ColorRGBA band_overstretched_color_;
 
+            // Set/updated on each call of "rrtPlan"
+            bool planning_for_whole_robot_;
             std::unique_ptr<RubberBand> starting_band_;
+            RRTRobotRepresentation starting_robot_configuration_;
+
             RRTGrippersRepresentation grippers_goal_position_;
             double max_grippers_distance_;
             std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
-
-            const double gripper_min_distance_to_obstacles_;
 
             // Planning and Smoothing statistics
             std::map<std::string, double> statistics_;

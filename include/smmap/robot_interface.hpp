@@ -29,7 +29,7 @@ namespace smmap
 
             const std::vector<GripperData>& getGrippersData() const;
 
-            const AllGrippersSinglePose getGrippersPoses();
+            AllGrippersSinglePose getGrippersPoses();
 
             // This function assumes only 2 grippers, and it is called before the grippers are moved by sendGrippersPoses
             double getGrippersInitialDistance();
@@ -48,6 +48,9 @@ namespace smmap
             std::vector<CollisionData> checkGripperCollision(const AllGrippersSinglePose& grippers_pose);
 
 
+
+            AllGrippersSinglePose getGrippersPoses(const Eigen::VectorXd& robot_configuration);
+
             // This a Jacobian between the movement of the grippers (in the gripper body frame)
             // and the movement of the robot's DOF
             Eigen::MatrixXd getGrippersJacobian(const Eigen::VectorXd& robot_configuration);
@@ -60,7 +63,17 @@ namespace smmap
             std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> getPointsOfInterestCollisionData(
                     const Eigen::VectorXd& configuration);
 
+            const Eigen::VectorXd mapGripperMotionToRobotMotion(
+                    const Eigen::VectorXd& robot_configuration,
+                    const AllGrippersSinglePoseDelta& grippers_delta);
+
+            // Only intended for use by 2 manipulators
+            const std::pair<Eigen::VectorXd, Eigen::VectorXd> mapGripperMotionToRobotMotion(
+                    const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration,
+                    const AllGrippersSinglePoseDelta& grippers_delta);
+
             void setCallbackFunctions(
+                    std::function<AllGrippersSinglePose(const Eigen::VectorXd&)> get_ee_poses_fn_,
                     std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)> get_grippers_jacobian_fn,
                     std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn,
                     std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn);
@@ -91,6 +104,7 @@ namespace smmap
             std::thread spin_thread_;
 
             // Function pointers that allow for generic(ish) external robots, without explicit inheritance
+            std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)> get_ee_poses_fn_;
             std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)> get_grippers_jacobian_fn_;
             std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn_;
             std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn_;

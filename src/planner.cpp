@@ -265,6 +265,7 @@ void Planner::execute()
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         rrt_helper_ = std::unique_ptr<RRTHelper>(
                     new RRTHelper(
+                        robot_,
                         dijkstras_task_->environment_sdf_,
                         vis_,
                         generator_,
@@ -1354,10 +1355,20 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
     {
         vis_->clearVisualizationsBullet();
 
+        RRTGrippersRepresentation gripper_config(
+                    world_state.all_grippers_single_pose_[0].translation(),
+                    world_state.all_grippers_single_pose_[1].translation());
+
+        RRTRobotRepresentation robot_config;
+        if (world_state.robot_configuration_valid_)
+        {
+            robot_config.first = world_state.robot_configuration_.head<7>();
+            robot_config.second = world_state.robot_configuration_.tail<7>();
+        }
+
         RRTConfig start_config(
-                    std::pair<Vector3d, Vector3d>(
-                                world_state.all_grippers_single_pose_[0].translation(),
-                                world_state.all_grippers_single_pose_[1].translation()),
+                    gripper_config,
+                    robot_config,
                     *rubber_band_between_grippers_,
                     true);
 

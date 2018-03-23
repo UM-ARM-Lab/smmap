@@ -90,7 +90,7 @@ const std::vector<GripperData>& RobotInterface::getGrippersData() const
     return grippers_data_;
 }
 
-const AllGrippersSinglePose RobotInterface::getGrippersPoses()
+AllGrippersSinglePose RobotInterface::getGrippersPoses()
 {
     AllGrippersSinglePose grippers_pose(grippers_data_.size());
 
@@ -158,6 +158,16 @@ std::vector<CollisionData> RobotInterface::checkGripperCollision(
 }
 
 
+AllGrippersSinglePose RobotInterface::getGrippersPoses(const Eigen::VectorXd& robot_configuration)
+{
+    if (get_ee_poses_fn_ == nullptr)
+    {
+        ROS_ERROR_NAMED("robot_interface", "Asked for gripper poses (with robot_configuration input), but function pointer is null");
+        return AllGrippersSinglePose();
+    }
+    return get_ee_poses_fn_(robot_configuration);
+}
+
 // This a Jacobian between the movement of the grippers (in the gripper body frame)
 // and the movement of the robot's DOF
 Eigen::MatrixXd RobotInterface::getGrippersJacobian(const Eigen::VectorXd& robot_configuration)
@@ -208,11 +218,37 @@ std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> RobotInterface::getPoint
     return results;
 }
 
+const Eigen::VectorXd RobotInterface::mapGripperMotionToRobotMotion(
+        const Eigen::VectorXd& robot_configuration,
+        const AllGrippersSinglePoseDelta& grippers_delta)
+{
+    const auto stacked_gripper_delta = EigenHelpers::VectorEigenVectorToEigenVectorX(grippers_delta);
+    const auto jacobian = get_grippers_jacobian_fn_(robot_configuration);
+    const auto result = jacobian.colPivHouseholderQr().solve(stacked_gripper_delta);
+    return result;
+}
+
+// Only intended for use by 2 manipulators
+const std::pair<Eigen::VectorXd, Eigen::VectorXd> RobotInterface::mapGripperMotionToRobotMotion(
+        const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration,
+        const AllGrippersSinglePoseDelta& grippers_delta)
+{
+    const auto num_dof = robot_configuration.first.size() + robot_configuration.second.size();
+    Eigen::VectorXd stacked_config(num_dof);
+    stacked_config << robot_configuration.first, robot_configuration.second;
+    const auto stacked_result = mapGripperMotionToRobotMotion(stacked_config, grippers_delta);
+    const auto first_config = stacked_result.segment(0, robot_configuration.first.size());
+    const auto second_config = stacked_result.segment(robot_configuration.first.size(), robot_configuration.second.size());
+    return std::pair<Eigen::VectorXd, Eigen::VectorXd>(first_config, second_config);
+}
+
 void RobotInterface::setCallbackFunctions(
+        std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)> get_ee_poses_fn,
         std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)> get_grippers_jacobian_fn,
         std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn,
         std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn)
 {
+    get_ee_poses_fn_ = get_ee_poses_fn;
     get_grippers_jacobian_fn_ = get_grippers_jacobian_fn;
     get_collision_points_of_interest_fn_ = get_collision_points_of_interest_fn;
     get_collision_points_of_interest_jacobians_fn_ = get_collision_points_of_interest_jacobians_fn;
