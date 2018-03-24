@@ -273,6 +273,7 @@ void Planner::execute()
                         Vector3d(GetRRTPlanningXMin(ph_), GetRRTPlanningYMin(ph_), GetRRTPlanningZMin(ph_)),
                         Vector3d(GetRRTPlanningXMax(ph_), GetRRTPlanningYMax(ph_), GetRRTPlanningZMax(ph_)),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
+                        GetRRTMaxGripperRotation(ph_),
                         GetRRTGoalBias(ph_),
                         dijkstras_task_->work_space_grid_.minStepDimension(),
                         GetRRTMinGripperDistanceToObstacles(ph_),
@@ -1369,6 +1370,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
         RRTConfig start_config(
                     gripper_config,
                     robot_config,
+                    0,
                     *rubber_band_between_grippers_,
                     true);
 

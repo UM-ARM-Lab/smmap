@@ -39,11 +39,13 @@ namespace smmap
             RRTConfig(
                     const RRTGrippersRepresentation& grippers_position,
                     const RRTRobotRepresentation& robot_configuration,
+                    const size_t unique_forward_propogation_idx,
                     const RubberBand& band,
                     const bool is_visible_to_blacklist);
 
             const RRTGrippersRepresentation& getGrippers() const;
             const RRTRobotRepresentation& getRobotConfiguration() const;
+            size_t getUniqueForwardPropogationIndex() const;
             const RubberBand& getBand() const;
             bool isVisibleToBlacklist() const;
 
@@ -51,7 +53,10 @@ namespace smmap
             double distance(const RRTConfig& other) const;
             static double distance(const RRTConfig& c1, const RRTConfig& c2);
             static double distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
-            static double pathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index);
+            static double distance(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2);
+
+            static double grippersPathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index);
+            static double robotPathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index);
 
             bool operator==(const RRTConfig& other) const;
 
@@ -59,6 +64,7 @@ namespace smmap
 
             RRTGrippersRepresentation grippers_position_;
             RRTRobotRepresentation robot_configuration_;
+            size_t unique_forward_propogation_idx_;
             RubberBand band_;
             bool is_visible_to_blacklist_;
     };
@@ -94,7 +100,8 @@ namespace smmap
                     const std::shared_ptr<PRMHelper>& prm_helper,
                     const Eigen::Vector3d planning_world_lower_limits,
                     const Eigen::Vector3d planning_world_upper_limits,
-                    const double max_step_size,
+                    const double max_gripper_step_size,
+                    const double max_gripper_rotation,
                     const double goal_bias,
                     const double goal_reach_radius,
                     const double gripper_min_distance_to_obstacles,
@@ -189,7 +196,8 @@ namespace smmap
 
             const Eigen::Vector3d planning_world_lower_limits_;
             const Eigen::Vector3d planning_world_upper_limits_;
-            const double max_step_size_;
+            const double max_gripper_step_size_;
+            const double max_gripper_rotation_;
             const double goal_bias_;
             const double goal_reach_radius_;
             const double homotopy_distance_penalty_;
@@ -209,6 +217,7 @@ namespace smmap
             bool planning_for_whole_robot_;
             std::unique_ptr<RubberBand> starting_band_;
             RRTRobotRepresentation starting_robot_configuration_;
+            AllGrippersSinglePose starting_grippers_poses_;
 
             RRTGrippersRepresentation grippers_goal_position_;
             double max_grippers_distance_;
@@ -221,6 +230,9 @@ namespace smmap
             double total_everything_included_forward_propogation_time_;
             double total_band_forward_propogation_time_;
             double total_first_order_vis_propogation_time_;
+
+            // Used to augment the state, duplicates work done by external code, but oh well
+            size_t next_unique_forward_propogation_idx_;
     };
 }
 
