@@ -6,8 +6,8 @@
 
 #include "smmap/task_specification.h"
 
-//#define ENABLE_DEBUGGING 1
-#define ENABLE_DEBUGGING 0
+//#define ENABLE_BAND_DEBUGGING 1
+#define ENABLE_BAND_DEBUGGING 0
 //#define ENABLE_BAND_LOAD_SAVE 1
 #define ENABLE_BAND_LOAD_SAVE 0
 
@@ -56,7 +56,23 @@ namespace smmap
                 const int32_t id,
                 const bool visualization_enabled) const;
 
+        void visualize(
+                const EigenHelpers::VectorVector3d& test_band,
+                const std::string& marker_name,
+                const std_msgs::ColorRGBA& safe_color,
+                const std_msgs::ColorRGBA& overstretched_color,
+                const int32_t id,
+                const bool visualization_enabled) const;
+
         void visualizeWithBubbles(
+                const std::string& marker_name,
+                const std_msgs::ColorRGBA& safe_color,
+                const std_msgs::ColorRGBA& overstretched_color,
+                const int32_t id,
+                const bool visualization_enabled) const;
+
+        void visualizeWithBubbles(
+                const EigenHelpers::VectorVector3d& test_band,
                 const std::string& marker_name,
                 const std_msgs::ColorRGBA& safe_color,
                 const std_msgs::ColorRGBA& overstretched_color,
@@ -85,21 +101,18 @@ namespace smmap
                 const double bubble_size_b,
                 const double distance) const;
         bool bandIsValid() const;
+        bool bandIsValid(const EigenHelpers::VectorVector3d& test_band) const;
         bool bandIsValidWithVisualization() const;
-#if ENABLE_DEBUGGING
-        void interpolateBetweenPoints(
-                EigenHelpers::VectorVector3d& point_buffer,
-                const Eigen::Vector3d& target);
-#else
+        bool bandIsValidWithVisualization(const EigenHelpers::VectorVector3d& test_band) const;
+
         void interpolateBetweenPoints(
                 EigenHelpers::VectorVector3d& point_buffer,
                 const Eigen::Vector3d& target) const;
-#endif
         void interpolateBandPoints();
         void removeExtraBandPoints(const bool verbose);
         void smoothBandPoints(const bool verbose);
 
-        void printBandData() const;
+        void printBandData(const EigenHelpers::VectorVector3d& test_band) const;
 
         void storeBand() const;
         void loadStoredBand();

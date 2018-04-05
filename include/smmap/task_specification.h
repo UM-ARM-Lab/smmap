@@ -385,7 +385,7 @@ namespace smmap
             bool loadDijkstrasResults();
 
             EigenHelpers::VectorVector3d followCoverPointAssignments(
-                    Eigen::Vector3d current_pos,
+                    const Eigen::Vector3d& starting_pos,
                     const std::vector<ssize_t>& cover_point_assignments,
                     const size_t maximum_itterations) const;
 

@@ -58,6 +58,8 @@ namespace smmap
             static double grippersPathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index);
             static double robotPathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index);
 
+            std::string print() const;
+
             bool operator==(const RRTConfig& other) const;
 
         private:
@@ -98,9 +100,12 @@ namespace smmap
                     const smmap_utilities::Visualizer::Ptr vis,
                     std::mt19937_64& generator,
                     const std::shared_ptr<PRMHelper>& prm_helper,
-                    const Eigen::Vector3d planning_world_lower_limits,
-                    const Eigen::Vector3d planning_world_upper_limits,
+                    const Eigen::Isometry3d& task_aligned_frame,
+                    const Eigen::Vector3d& task_aligned_lower_limits,
+                    const Eigen::Vector3d& task_aligned_upper_limits,
                     const double max_gripper_step_size,
+                    const double max_robot_dof_step_size,
+                    const double min_robot_dof_step_size,
                     const double max_gripper_rotation,
                     const double goal_bias,
                     const double goal_reach_radius,
@@ -193,10 +198,15 @@ namespace smmap
             const bool visualization_enabled_globally_;
             const std_msgs::ColorRGBA band_safe_color_;
             const std_msgs::ColorRGBA band_overstretched_color_;
+            const std_msgs::ColorRGBA gripper_a_tree_color_;
+            const std_msgs::ColorRGBA gripper_b_tree_color_;
 
-            const Eigen::Vector3d planning_world_lower_limits_;
-            const Eigen::Vector3d planning_world_upper_limits_;
+            const Eigen::Isometry3d task_aligned_frame_;
+            const Eigen::Vector3d task_aligned_lower_limits_;
+            const Eigen::Vector3d task_aligned_upper_limits_;
             const double max_gripper_step_size_;
+            const double max_robot_dof_step_size_;
+            const double min_robot_dof_step_size_;
             const double max_gripper_rotation_;
             const double goal_bias_;
             const double goal_reach_radius_;

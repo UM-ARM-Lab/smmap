@@ -12,14 +12,16 @@ PRMHelper::PRMHelper(
         const sdf_tools::SignedDistanceField& environment_sdf,
         Visualizer::Ptr vis,
         std::mt19937_64& generator,
-        const Eigen::Vector3d planning_world_lower_limits,
-        const Eigen::Vector3d planning_world_upper_limits,
+        const Eigen::Isometry3d& task_aligned_frame,
+        const Eigen::Vector3d task_frame_lower_limits,
+        const Eigen::Vector3d task_frame_upper_limits,
         const bool visualization_enabled,
         const size_t num_neighbours_to_connect,
         const size_t num_samples_to_try,
         const double edge_validity_stepsize)
-    : planning_world_lower_limits_(planning_world_lower_limits)
-    , planning_world_upper_limits_(planning_world_upper_limits)
+    : task_aligned_frame_(task_aligned_frame)
+    , task_frame_lower_limits_(task_frame_lower_limits)
+    , task_frame_upper_limits_(task_frame_upper_limits)
     , generator_(generator)
     , uniform_unit_distribution_(0.0, 1.0)
     , environment_sdf_(environment_sdf)
@@ -56,9 +58,13 @@ void PRMHelper::initializeRoadmap()
                 num_neighbours_to_connect_,
                 distance_is_symmetric);
 
+    std::cout << "Num nodes: " << roadmap_.GetNodesImmutable().size() << std::endl;
+    visualize(true);
+
     auto connected_components = roadmap_.GetConnectedComponentsUndirected();
     while (connected_components.second != 1)
     {
+        num_samples_done_ = 0;
         ROS_WARN_STREAM_NAMED("prm_helper", "PRM is not connected, num components: " << connected_components.second);
         ROS_WARN_STREAM_NAMED("prm_helper", "Extending PRM by " << num_samples_to_try_ << " samples");
         simple_prm_planner::SimpleGeometricPrmPlanner::ExtendRoadMap<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
@@ -71,6 +77,9 @@ void PRMHelper::initializeRoadmap()
                     num_neighbours_to_connect_,
                     distance_is_symmetric);
         connected_components = roadmap_.GetConnectedComponentsUndirected();
+
+        std::cout << "Num nodes: " << roadmap_.GetNodesImmutable().size() << std::endl;
+        visualize(true);
     }
 
     ROS_INFO_NAMED("prm_helper", "PRM Initialized");
@@ -125,15 +134,15 @@ EigenHelpers::VectorVector3d PRMHelper::getRandomPath(const Eigen::Vector3d& sta
 
 Eigen::Vector3d PRMHelper::sampleState()
 {
-    const double x = EigenHelpers::Interpolate(planning_world_lower_limits_.x(), planning_world_upper_limits_.x(), uniform_unit_distribution_(generator_));
-    const double y = EigenHelpers::Interpolate(planning_world_lower_limits_.y(), planning_world_upper_limits_.y(), uniform_unit_distribution_(generator_));
-    const double z = EigenHelpers::Interpolate(planning_world_lower_limits_.z(), planning_world_upper_limits_.z(), uniform_unit_distribution_(generator_));
+    const double x = EigenHelpers::Interpolate(task_frame_lower_limits_.x(), task_frame_upper_limits_.x(), uniform_unit_distribution_(generator_));
+    const double y = EigenHelpers::Interpolate(task_frame_lower_limits_.y(), task_frame_upper_limits_.y(), uniform_unit_distribution_(generator_));
+    const double z = EigenHelpers::Interpolate(task_frame_lower_limits_.z(), task_frame_upper_limits_.z(), uniform_unit_distribution_(generator_));
     num_samples_done_++;
     if (num_samples_done_ % 100 == 0)
     {
         ROS_INFO_STREAM_NAMED("prm_helper", "  " << num_samples_done_ << "'th state sampled");
     }
-    return Eigen::Vector3d(x, y, z);
+    return task_aligned_frame_ * Eigen::Vector3d(x, y, z);
 }
 
 double PRMHelper::distance(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2)

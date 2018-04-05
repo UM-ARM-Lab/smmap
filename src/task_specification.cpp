@@ -1097,11 +1097,13 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
     }
 }
 
+// Note that this is only used for predicting if the local controller will get stuck
 EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
-        Eigen::Vector3d current_pos,
+        const Eigen::Vector3d& starting_pos,
         const std::vector<ssize_t>& cover_point_assignments,
         const size_t maximum_itterations) const
 {
+    Eigen::Vector3d current_pos = starting_pos;
     EigenHelpers::VectorVector3d trajectory(1, current_pos);
 
     bool progress = cover_point_assignments.size() > 0;
@@ -1121,14 +1123,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             const Eigen::Vector3d& graph_aligned_current_pos = free_space_graph_.GetNodeImmutable(graph_aligned_current_ind).GetValueImmutable();
             const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(target_ind_in_work_space_graph).GetValueImmutable();
 
-            if (deformable_type_ == DeformableType::CLOTH)
-            {
-                summed_dijkstras_deltas += (target_point - graph_aligned_current_pos) / (double)VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS;
-            }
-            else
-            {
-                summed_dijkstras_deltas += (target_point - graph_aligned_current_pos);
-            }
+            summed_dijkstras_deltas += (target_point - graph_aligned_current_pos);
         }
 
         // If the combined vector moves us at least some minimum distance, then accept the delta.

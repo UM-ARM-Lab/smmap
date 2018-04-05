@@ -20,14 +20,15 @@ namespace smmap
 
 
             PRMHelper(const sdf_tools::SignedDistanceField& environment_sdf,
-                    smmap_utilities::Visualizer::Ptr vis,
-                    std::mt19937_64& generator,
-                    const Eigen::Vector3d planning_world_lower_limits,
-                    const Eigen::Vector3d planning_world_upper_limits,
-                    const bool visualization_enabled,
-                    const size_t num_neighbours_to_connect,
-                    const size_t num_samples_to_try,
-                    const double edge_validity_stepsize);
+                      smmap_utilities::Visualizer::Ptr vis,
+                      std::mt19937_64& generator,
+                      const Eigen::Isometry3d& task_aligned_frame,
+                      const Eigen::Vector3d task_frame_lower_limits,
+                      const Eigen::Vector3d task_frame_upper_limits,
+                      const bool visualization_enabled,
+                      const size_t num_neighbours_to_connect,
+                      const size_t num_samples_to_try,
+                      const double edge_validity_stepsize);
 
             void initializeRoadmap();
 
@@ -36,8 +37,9 @@ namespace smmap
             EigenHelpers::VectorVector3d getRandomPath(const Eigen::Vector3d& start, const Eigen::Vector3d& goal);
 
         private:
-            const Eigen::Vector3d planning_world_lower_limits_;
-            const Eigen::Vector3d planning_world_upper_limits_;
+            const Eigen::Isometry3d task_aligned_frame_;
+            const Eigen::Vector3d task_frame_lower_limits_;
+            const Eigen::Vector3d task_frame_upper_limits_;
 
             std::mt19937_64& generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;

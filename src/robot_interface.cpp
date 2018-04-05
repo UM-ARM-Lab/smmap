@@ -3,6 +3,7 @@
 #include <std_srvs/Empty.h>
 #include <ros/callback_queue.h>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
+#include <tf2_eigen/tf2_eigen.h>
 #include "smmap/ros_communication_helpers.hpp"
 
 
@@ -31,7 +32,12 @@ inline Eigen::VectorXd GetJointUpperLimits() // radians
 RobotInterface::RobotInterface(ros::NodeHandle& nh, ros::NodeHandle& ph)
     : nh_(nh)
     , ph_(ph)
-    , world_frame_name_(GetWorldFrameName())
+
+    , bullet_frame_name_(smmap::GetBulletFrameName())
+    , world_frame_name_(smmap::GetWorldFrameName())
+    , tf_buffer_()
+    , tf_listener_(tf_buffer_)
+
     , grippers_data_(GetGrippersData(nh_))
     , gripper_collision_checker_(nh_)
     , execute_gripper_movement_client_(nh_.serviceClient<deformable_manipulation_msgs::ExecuteRobotMotion>(GetExecuteRobotMotionTopic(nh_), true))
@@ -60,6 +66,20 @@ WorldState RobotInterface::start()
 //    assert(get_grippers_jacobian_fn_ != nullptr && "Function pointers must be initialized");
 //    assert(get_collision_points_of_interest_fn_ != nullptr && "Function pointers must be initialized");
 //    assert(get_collision_points_of_interest_jacobians_fn_ != nullptr && "Function pointers must be initialized");
+
+    const double timeout = 5.0;
+    ROS_INFO_STREAM("Waiting for tf from world to bullet frame for at most " << timeout << " seconds");
+    try
+    {
+        world_to_bullet_tf_ = EigenHelpersConversions::GeometryTransformToEigenIsometry3d(
+                tf_buffer_.lookupTransform(world_frame_name_, bullet_frame_name_, ros::Time::now(), ros::Duration(timeout)).transform);
+    }
+    catch (tf2::TransformException& ex)
+    {
+        ROS_WARN("%s", ex.what());
+        ROS_WARN("Assuming this means that no transform has been broadcast from world to bullet, so assuming identity, but NOT broadcasting");
+        world_to_bullet_tf_.setIdentity();
+    }
 
     ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper movement service to be available");
     execute_gripper_movement_client_.waitForExistence();
@@ -232,7 +252,17 @@ Eigen::VectorXd RobotInterface::mapGripperMotionToRobotMotion(
 {
     const auto stacked_gripper_delta = EigenHelpers::VectorEigenVectorToEigenVectorX(grippers_delta);
     const auto jacobian = get_grippers_jacobian_fn_(robot_configuration);
-    const auto result = jacobian.colPivHouseholderQr().solve(stacked_gripper_delta);
+
+//    std::cout << "Stacked delta size: " << stacked_gripper_delta.rows() << " x " << stacked_gripper_delta.cols() << std::endl;
+//    std::cout << "Jacobian size     : " << jacobian.rows() << " x " << jacobian.cols() << std::endl;
+
+//    std::cout << "Invoking QR solver" << std::endl;
+//    const Eigen::VectorXd result = jacobian.colPivHouseholderQr().solve(stacked_gripper_delta);
+//    std::cout << "result: " << result.transpose() << std::endl;
+
+//    const auto result = EigenHelpers::Pinv(jacobian, EigenHelpers::SuggestedRcond()) * stacked_gripper_delta;
+    const auto result = EigenHelpers::UnderdeterminedSolver(jacobian, stacked_gripper_delta, EigenHelpers::SuggestedRcond(), EigenHelpers::SuggestedRcond());
+
     return result;
 }
 
@@ -283,6 +313,23 @@ void RobotInterface::setCallbackFunctions(
     full_robot_collision_check_fn_ = full_robot_collision_check_fn;
 }
 
+
+Eigen::Vector3d RobotInterface::transformToFrame(
+        const Eigen::Vector3d& point,
+        const std::string& source_frame,
+        const std::string& target_frame,
+        const ros::Time& time) const
+{
+    tf2::Stamped<Eigen::Vector3d> point_stamped(point, time, source_frame);
+    const tf2::Stamped<Eigen::Vector3d> transformed = tf_buffer_.transform(point_stamped, target_frame);
+    const Eigen::Vector3d tmp(transformed.x(), transformed.y(), transformed.z());
+    return tmp;
+}
+
+const Eigen::Isometry3d& RobotInterface::getWorldToTaskFrameTf() const
+{
+    return world_to_bullet_tf_;
+}
 
 ////////////////////////////////////////////////////////////////////
 // ROS objects and helpers

@@ -7,6 +7,8 @@
 #include <ros/ros.h>
 #include <actionlib/client/simple_action_client.h>
 #include <deformable_manipulation_msgs/messages.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/static_transform_broadcaster.h>
 
 #include "smmap/grippers.hpp"
 #include "smmap/task_function_pointer_types.h"
@@ -89,6 +91,15 @@ namespace smmap
                     std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn,
                     std::function<bool(const Eigen::VectorXd& configuration)> full_robot_collision_check_fn);
 
+            // Defaults the timespace to "latest available", indicted by ros::Time(0)
+            Eigen::Vector3d transformToFrame(
+                    const Eigen::Vector3d& point,
+                    const std::string& source_frame,
+                    const std::string& target_frame,
+                    const ros::Time& time = ros::Time(0)) const;
+
+            const Eigen::Isometry3d& getWorldToTaskFrameTf() const;
+
         private:
             ////////////////////////////////////////////////////////////////////
             // ROS objects and helpers
@@ -96,7 +107,15 @@ namespace smmap
 
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
+
+        public:
+            const std::string bullet_frame_name_;
             const std::string world_frame_name_; // Frame that all incomming data must be in
+        private:
+            tf2_ros::Buffer tf_buffer_;
+            const tf2_ros::TransformListener tf_listener_;
+            Eigen::Isometry3d world_to_bullet_tf_;
+
             const std::vector<GripperData> grippers_data_;
             GripperCollisionChecker gripper_collision_checker_;
             ros::ServiceClient execute_gripper_movement_client_;
