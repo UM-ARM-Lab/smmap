@@ -17,6 +17,17 @@
 
 namespace smmap
 {
+#warning "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! I did stupid things with a define here !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+#ifdef UCB_BANDIT
+    #define Planner PlannerUCB
+#endif
+#ifdef KFMANB_BANDIT
+    #define Planner PlannerKFMANB
+#endif
+#ifdef KFMANDB_BANDIT
+    #define Planner PlannerKFMANDB
+#endif
+
     class Planner
     {
         public:

@@ -234,13 +234,23 @@ std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> RobotInterface::getPoint
     // TODO: address the fact that we're using checkGripperCollision for everything, even non-grippers
     const std::vector<CollisionData> poi_collision_data = checkGripperCollision(poses_to_test);
 
+//    for (size_t idx = 0; idx < poi_collision_data.size(); ++idx)
+//    {
+//        const CollisionData& data = poi_collision_data[idx];
+//        std::cout << "Poi: " << poi[idx].transpose() << std::endl;
+//        std::cout << "Dist: " << data.distance_to_obstacle_
+//                  << " Nearest: " << data.nearest_point_to_obstacle_.transpose()
+//                  << " Normal: " << data.obstacle_surface_normal_.transpose() << std::endl;
+//        std::cout << "Jacobian:\n" << poi_jacobians[idx] << std::endl;
+//    }
+
 
     std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> results;
     results.reserve(poi.size());
 
-    for (size_t ind = 0; ind < poi.size(); ++ind)
+    for (size_t idx = 0; idx < poi.size(); ++idx)
     {
-        results.push_back({poi_collision_data[ind], poi_jacobians[ind]});
+        results.push_back({poi_collision_data[idx], poi_jacobians[idx]});
     }
 
     return results;

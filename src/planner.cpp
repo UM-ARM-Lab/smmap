@@ -481,12 +481,16 @@ WorldState Planner::sendNextCommandUsingLocalController(
     // Temporaries needed here bercause model_input_data takes things by reference
     const DesiredDirection desired_object_manipulation_direction = task_specification_->calculateDesiredDirection(world_state);
     const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian(world_state.robot_configuration_);
+    // Build the constraints for the gippers and other points of interest on the robot - includes the grippers
+    const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data_ =
+            robot_->getPointsOfInterestCollisionData(world_state.robot_configuration_);
     const DeformableController::InputData model_input_data(
                 world_state,
                 desired_object_manipulation_direction,
                 robot_,
                 robot_dof_to_grippers_poses_jacobian,
-                world_state.robot_configuration_valid_);
+                world_state.robot_configuration_valid_,
+                poi_collision_data_);
 
     if (visualize_desired_motion_)
     {
@@ -500,9 +504,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
 
 
-    #warning "!!!!!!!!!!!!!!!!!!!!!!!BANDITS DISABLED!!!!!!!!!!!!!!!!!!!!"
-//    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
-    const ssize_t model_to_use = 0;
+    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
 
 
 
@@ -513,7 +515,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
 
     // Querry each model for it's best gripper delta
-    ROS_INFO_STREAM_NAMED("planner", "Generatining model suggestions");
+    ROS_INFO_STREAM_NAMED("planner", "Generating model suggestions");
     stopwatch(RESET);
     std::vector<DeformableController::OutputData> suggested_robot_commands(num_models_);
     std::vector<double> controller_computation_time(num_models_, 0.0);
@@ -886,12 +888,15 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectF
         desired_object_manipulation_direction.combined_correction_ = desired_object_manipulation_direction.error_correction_;
 
         const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian(world_state_copy.robot_configuration_);
+        const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data_ =
+                robot_->getPointsOfInterestCollisionData(world_state_copy.robot_configuration_);
         const DeformableController::InputData model_input_data(
                     world_state_copy,
                     desired_object_manipulation_direction,
                     robot_,
                     robot_dof_to_grippers_poses_jacobian,
-                    world_state_copy.robot_configuration_valid_);
+                    world_state_copy.robot_configuration_valid_,
+                    poi_collision_data_);
 
         const DeformableController::OutputData robot_command = controller_list_[0]->getGripperMotion(model_input_data);
 

@@ -13,6 +13,7 @@ namespace smmap
 
             // TODO: Solve problem that constructor can be passed a temporary, which then gets
             // destructed as soon as the ctor exits
+            // TODO: Move more data into "world current state" perhaps
             struct InputData
             {
                 public:
@@ -21,19 +22,22 @@ namespace smmap
                             const DesiredDirection& desired_object_motion,
                             const RobotInterface::Ptr& robot,
                             const Eigen::MatrixXd& robot_jacobian,
-                            const bool robot_jacobian_valid)
+                            const bool robot_jacobian_valid,
+                            const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>>& poi_collision_data)
                         : world_current_state_(world_current_state)
                         , desired_object_motion_(desired_object_motion)
                         , robot_(robot)
                         , robot_jacobian_(robot_jacobian)
                         , robot_jacobian_valid_(robot_jacobian_valid)
+                        , poi_collision_data_(poi_collision_data)
                     {}
 
-                    const WorldState& world_current_state_;
-                    const DesiredDirection& desired_object_motion_;
+                    const WorldState world_current_state_;
+                    const DesiredDirection desired_object_motion_;
                     const RobotInterface::Ptr robot_;
-                    const Eigen::MatrixXd& robot_jacobian_;
+                    const Eigen::MatrixXd robot_jacobian_;
                     const bool robot_jacobian_valid_;
+                    const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> poi_collision_data_;
             };
 
             struct OutputData

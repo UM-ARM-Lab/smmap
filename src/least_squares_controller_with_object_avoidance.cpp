@@ -62,17 +62,13 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
         const MatrixXd robot_dof_to_deformable_object_jacobian =
                 grippers_poses_to_object_jacobian * robot_dof_to_grippers_poses_jacobian;
 
-        // Build the constraints for the gippers and other points of interest on the robot - includes the grippers
-        const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data =
-                robot_->getPointsOfInterestCollisionData(input_data.world_current_state_.robot_configuration_);
-
-        const size_t num_poi = poi_collision_data.size();
+        const size_t num_poi = input_data.poi_collision_data_.size();
         std::vector<RowVectorXd> linear_constraints_linear_terms(num_poi);
         std::vector<double> linear_constraints_affine_terms(num_poi);
         for (size_t poi_ind = 0; poi_ind < num_poi; ++poi_ind)
         {
-            const CollisionData& collision_data = poi_collision_data[poi_ind].first;
-            const MatrixXd& poi_jacobian = poi_collision_data[poi_ind].second;
+            const CollisionData& collision_data = input_data.poi_collision_data_[poi_ind].first;
+            const MatrixXd& poi_jacobian = input_data.poi_collision_data_[poi_ind].second;
             linear_constraints_linear_terms[poi_ind] =
                     -collision_data.obstacle_surface_normal_.transpose() * poi_jacobian;
 
@@ -80,8 +76,8 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
                     collision_data.distance_to_obstacle_ - robot_->min_controller_distance_to_obstacles_;
         }
 
-        const Eigen::VectorXd min_joint_delta = input_data.robot_->joint_lower_limits_ - input_data.world_current_state_.robot_configuration_;
-        const Eigen::VectorXd max_joint_delta = input_data.robot_->joint_upper_limits_ - input_data.world_current_state_.robot_configuration_;
+        const VectorXd min_joint_delta = input_data.robot_->joint_lower_limits_ - input_data.world_current_state_.robot_configuration_;
+        const VectorXd max_joint_delta = input_data.robot_->joint_upper_limits_ - input_data.world_current_state_.robot_configuration_;
 
         // TODO: weights on robot DOF in velocity norm
         suggested_robot_motion.robot_dof_motion_ = minSquaredNormLinearConstraints(
@@ -97,11 +93,29 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
         // Assemble the output
         object_delta_as_vector = robot_dof_to_deformable_object_jacobian * suggested_robot_motion.robot_dof_motion_;
 
-        const Eigen::VectorXd grippers_motion = robot_dof_to_grippers_poses_jacobian * suggested_robot_motion.robot_dof_motion_;
+        const VectorXd grippers_motion = robot_dof_to_grippers_poses_jacobian * suggested_robot_motion.robot_dof_motion_;
         for (size_t gripper_ind = 0; gripper_ind < num_grippers; ++gripper_ind)
         {
             suggested_robot_motion.grippers_motion_[gripper_ind] = grippers_motion.segment<6>(gripper_ind * 3);
         }
+
+
+
+        const double max_grippers_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
+        const VectorXd grippers_delta_achieve_goal =
+                minSquaredNormSE3VelocityConstraints(
+                    grippers_poses_to_object_jacobian,
+                    desired_object_motion.delta,
+                    max_grippers_step_size,
+                    desired_object_motion.weight);
+
+
+        std::cout << "Pure gripper optimization: " << grippers_delta_achieve_goal.head<6>().normalized().transpose() << "    " << grippers_delta_achieve_goal.tail<6>().normalized().transpose() << std::endl;
+        std::cout << "Full robot   optimization: " << grippers_motion.head<6>().normalized().transpose() << "    " << grippers_motion.tail<6>().normalized().transpose() << std::endl;
+        std::cout << "Difference:                "
+                  << (grippers_delta_achieve_goal.head<6>().normalized() - grippers_motion.head<6>().normalized()).transpose() << "    "
+                  << (grippers_delta_achieve_goal.tail<6>().normalized() - grippers_motion.tail<6>().normalized()).transpose() << std::endl;
+
     }
     else
     {
