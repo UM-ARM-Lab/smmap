@@ -519,7 +519,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
     stopwatch(RESET);
     std::vector<DeformableController::OutputData> suggested_robot_commands(num_models_);
     std::vector<double> controller_computation_time(num_models_, 0.0);
-//    #pragma omp parallel for
+    #pragma omp parallel for
     for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
     {
         if (collect_results_for_all_models_ || get_action_for_all_models || (ssize_t)model_ind == model_to_use)
@@ -580,12 +580,14 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
     if (visualize_gripper_motion_)
     {
+        ROS_WARN_THROTTLE_NAMED(1.0, "planner", "Asked to visualize grippper motion but this is disabled");
+
 //        for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
 //        {
-            ssize_t model_ind = 0;
-            visualizeGripperMotion(world_state.all_grippers_single_pose_,
-                                   suggested_robot_commands[(size_t)model_ind].grippers_motion_,
-                                   model_ind);
+//            ssize_t model_ind = 0;
+//            visualizeGripperMotion(world_state.all_grippers_single_pose_,
+//                                   suggested_robot_commands[(size_t)model_ind].grippers_motion_,
+//                                   model_ind);
 //        }
 //        for (size_t gripper_idx = 0; gripper_idx < all_grippers_single_pose.size(); ++gripper_idx)
 //        {

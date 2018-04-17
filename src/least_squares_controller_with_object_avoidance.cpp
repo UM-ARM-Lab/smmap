@@ -56,6 +56,7 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
     if (input_data.robot_jacobian_valid_)
     {
         const double max_robot_dof_step_size = robot_->max_dof_velocity_norm_ * robot_->dt_;
+        const double max_grippers_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
 
         // Build the robot DOF to deformable object jacobian
         const MatrixXd& robot_dof_to_grippers_poses_jacobian = input_data.robot_jacobian_;
@@ -74,17 +75,22 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
 
             linear_constraints_affine_terms[poi_ind] =
                     collision_data.distance_to_obstacle_ - robot_->min_controller_distance_to_obstacles_;
+
+//            std::cout << "Poi ind: " << poi_ind << " Dist to obstacle: " << collision_data.distance_to_obstacle_ << " Min dist: " << robot_->min_controller_distance_to_obstacles_ << std::endl
+//                      << "Jacobian:\n" << poi_jacobian << std::endl;
         }
 
         const VectorXd min_joint_delta = input_data.robot_->joint_lower_limits_ - input_data.world_current_state_.robot_configuration_;
         const VectorXd max_joint_delta = input_data.robot_->joint_upper_limits_ - input_data.world_current_state_.robot_configuration_;
 
         // TODO: weights on robot DOF in velocity norm
-        suggested_robot_motion.robot_dof_motion_ = minSquaredNormLinearConstraints(
+        suggested_robot_motion.robot_dof_motion_ = minSquaredNormLinearConstraints_SE3VelocityConstraints(
                     robot_dof_to_deformable_object_jacobian,
                     desired_object_motion.delta,
-                    max_robot_dof_step_size,
                     desired_object_motion.weight,
+                    max_robot_dof_step_size,
+                    robot_dof_to_grippers_poses_jacobian,
+                    max_grippers_step_size,
                     linear_constraints_linear_terms,
                     linear_constraints_affine_terms,
                     min_joint_delta,
@@ -101,20 +107,32 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
 
 
 
-        const double max_grippers_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
-        const VectorXd grippers_delta_achieve_goal =
-                minSquaredNormSE3VelocityConstraints(
-                    grippers_poses_to_object_jacobian,
-                    desired_object_motion.delta,
-                    max_grippers_step_size,
-                    desired_object_motion.weight);
 
 
-        std::cout << "Pure gripper optimization: " << grippers_delta_achieve_goal.head<6>().normalized().transpose() << "    " << grippers_delta_achieve_goal.tail<6>().normalized().transpose() << std::endl;
-        std::cout << "Full robot   optimization: " << grippers_motion.head<6>().normalized().transpose() << "    " << grippers_motion.tail<6>().normalized().transpose() << std::endl;
-        std::cout << "Difference:                "
-                  << (grippers_delta_achieve_goal.head<6>().normalized() - grippers_motion.head<6>().normalized()).transpose() << "    "
-                  << (grippers_delta_achieve_goal.tail<6>().normalized() - grippers_motion.tail<6>().normalized()).transpose() << std::endl;
+
+
+
+
+//        const VectorXd grippers_delta_achieve_goal =
+//                minSquaredNormSE3VelocityConstraints(
+//                    grippers_poses_to_object_jacobian,
+//                    desired_object_motion.delta,
+//                    max_grippers_step_size,
+//                    desired_object_motion.weight);
+
+
+//        std::cout << "Desired_cloth_motion = [" << desired_object_motion.delta.transpose() << "]';\n";
+//        std::cout << "Weights = [" << desired_object_motion.weight.transpose() << "]';\n";
+//        std::cout << "Cloth_jacobian = [\n" << grippers_poses_to_object_jacobian << "];\n";
+//        std::cout << "Robot_jacobian = [\n" << robot_dof_to_grippers_poses_jacobian << "];\n";
+
+
+
+//        std::cout << "Pure gripper optimization: " << grippers_delta_achieve_goal.head<6>().normalized().transpose() << "    " << grippers_delta_achieve_goal.tail<6>().normalized().transpose() << std::endl;
+//        std::cout << "Full robot   optimization: " << grippers_motion.head<6>().normalized().transpose() << "    " << grippers_motion.tail<6>().normalized().transpose() << std::endl;
+//        std::cout << "Difference:                "
+//                  << (grippers_delta_achieve_goal.head<6>().normalized() - grippers_motion.head<6>().normalized()).transpose() << "    "
+//                  << (grippers_delta_achieve_goal.tail<6>().normalized() - grippers_motion.tail<6>().normalized()).transpose() << std::endl;
 
     }
     else

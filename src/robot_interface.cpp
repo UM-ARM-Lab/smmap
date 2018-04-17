@@ -13,8 +13,8 @@ inline Eigen::VectorXd GetJointLowerLimits() // radians
 {
     #warning "Magic number for robot joint limits in code"
     Eigen::VectorXd lower_limits(14);
-    lower_limits << -168.0, -118.0, -168.0, -118.0, -168.0, -118.0, -173.0,
-                    -168.0, -118.0, -168.0, -118.0, -168.0, -118.0, -173.0;
+    lower_limits << -169.9, -119.9, -169.9, -119.9, -169.9, -119.9, -174.9,
+                    -169.9, -119.9, -169.9, -119.9, -169.9, -119.9, -174.9;
     lower_limits *= M_PI / 180.0;
     return lower_limits;
 }
@@ -23,8 +23,8 @@ inline Eigen::VectorXd GetJointUpperLimits() // radians
 {
     #warning message "Magic number for robot joint limits in code"
     Eigen::VectorXd lower_limits(14);
-    lower_limits << 168.0, 118.0, 168.0, 118.0, 168.0, 118.0, 173.0,
-                    168.0, 118.0, 168.0, 118.0, 168.0, 118.0, 173.0;
+    lower_limits << 169.9, 119.9, 169.9, 119.9, 169.9, 119.9, 174.9,
+                    169.9, 119.9, 169.9, 119.9, 169.9, 119.9, 174.9;
     lower_limits *= M_PI / 180.0;
     return lower_limits;
 }

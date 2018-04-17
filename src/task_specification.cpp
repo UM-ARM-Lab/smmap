@@ -582,6 +582,13 @@ bool CoverageTask::pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d
 
     const std::pair<double, double> distances = EigenHelpers::DistanceToLine(cover_point, cover_point_normal, test_point);
 
+    std::cout << "Idx: " << cover_idx
+              << " Dist to normal: " << distances.first
+              << " Dist along normal: " << distances.second
+              << " Covered? " << ((distances.first < error_threshold_distance_to_normal_) && (std::abs(distances.second) < error_threshold_along_normal_))
+              << std::endl;
+
+
     return (distances.first < error_threshold_distance_to_normal_) && (std::abs(distances.second) < error_threshold_along_normal_);
 }
 
