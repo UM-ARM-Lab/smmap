@@ -34,7 +34,7 @@ set(Eigen3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 
 catkin_package(
     INCLUDE_DIRS    include
-    LIBRARIES       ${PROJECT_NAME}_KFMANDB ${PROJECT_NAME}_KFMANB ${PROJECT_NAME}_UCB
+    LIBRARIES       ${PROJECT_NAME}_KFMANDB #${PROJECT_NAME}_KFMANB ${PROJECT_NAME}_UCB
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
     DEPENDS         Eigen3
 )
@@ -77,15 +77,15 @@ add_dependencies(${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_KFMANDB ${catkin_LIBRARIES})
 set_target_properties(${PROJECT_NAME}_KFMANDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANDB_BANDIT")
 
-add_library(${PROJECT_NAME}_KFMANB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
-add_dependencies(${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES})
-set_target_properties(${PROJECT_NAME}_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
+#add_library(${PROJECT_NAME}_KFMANB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
+#add_dependencies(${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
+#target_link_libraries(${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES})
+#set_target_properties(${PROJECT_NAME}_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
 
-add_library(${PROJECT_NAME}_UCB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
-add_dependencies(${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_UCB ${catkin_LIBRARIES})
-set_target_properties(${PROJECT_NAME}_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
+#add_library(${PROJECT_NAME}_UCB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
+#add_dependencies(${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
+#target_link_libraries(${PROJECT_NAME}_UCB ${catkin_LIBRARIES})
+#set_target_properties(${PROJECT_NAME}_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
 
 ## Simulator tests
 add_executable(planner_test_node_KFMANDB nodes/planner_test_node.cpp)
@@ -93,15 +93,15 @@ add_dependencies(planner_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_EXPO
 target_link_libraries(planner_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_LIBRARIES})
 set_target_properties(planner_test_node_KFMANDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANDB_BANDIT")
 
-add_executable(planner_test_node_KFMANB nodes/planner_test_node.cpp)
-add_dependencies(planner_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(planner_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES})
-set_target_properties(planner_test_node_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
+#add_executable(planner_test_node_KFMANB nodes/planner_test_node.cpp)
+#add_dependencies(planner_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
+#target_link_libraries(planner_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES})
+#set_target_properties(planner_test_node_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
 
-add_executable(planner_test_node_UCB nodes/planner_test_node.cpp)
-add_dependencies(planner_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(planner_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_LIBRARIES})
-set_target_properties(planner_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
+#add_executable(planner_test_node_UCB nodes/planner_test_node.cpp)
+#add_dependencies(planner_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
+#target_link_libraries(planner_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_LIBRARIES})
+#set_target_properties(planner_test_node_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DUCB_BANDIT")
 
 ## Synthethic trials
 #add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp src/cvxopt_solvers.cpp src/gurobi_solvers.cpp)

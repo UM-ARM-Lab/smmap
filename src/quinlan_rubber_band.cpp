@@ -259,11 +259,21 @@ Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& l
         return location;
     }
 
+#if ENABLE_BAND_DEBUGGING
+    std::cout << "Projecting out of collision" << std::endl;
+    vis_->visualizePoints("___point_to_project", {location}, Visualizer::Yellow(0.3f), 1, 0.05);
+    vis_->visualizePoints("___point_to_project", {location}, Visualizer::Yellow(0.3f), 1, 0.05);
+    vis_->visualizePoints("___point_to_project", {location}, Visualizer::Yellow(0.3f), 1, 0.05);
+    arc_helpers::Sleep(0.01);
+#endif
     const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
+#if ENABLE_BAND_DEBUGGING
+    std::cout << "Projecting to valid volume" << std::endl;
+#endif
     const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);
 
 #if ENABLE_BAND_DEBUGGING
-    std::cout << std::setprecision(12)
+    std::cout << std::setprecision(20)
               << "location:       " << location.transpose() << std::endl
               << "post collision: " << post_collision_project.transpose() << std::endl
               << "post boundary:  " << post_boundary_project.transpose() << std::endl
@@ -280,21 +290,18 @@ Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& l
             distance_to_obstacles.first < min_distance_to_obstacle_)
         {
             constexpr int p = 20;
-            std::cerr << std::setprecision(p) << "location:                                                                 " << location.transpose() << std::endl;
 
-            const auto starting_distance_to_boundary = sdf_.DistanceToBoundary3d(location);
             const auto starting_distance_to_obstacles = sdf_.EstimateDistance3d(location);
+            const auto starting_distance_to_boundary = sdf_.DistanceToBoundary3d(location);
 
-            std::cerr << std::setprecision(p) << "Starting dist to obstacle: " << starting_distance_to_obstacles.first << std::endl;
-            std::cerr << std::setprecision(p) << "Starting dist to boundary: " << starting_distance_to_boundary.first << std::endl;
+            std::cerr << std::setprecision(p) << "Starting dist to obstacle: " << PrettyPrint::PrettyPrint(starting_distance_to_obstacles, true, " ") << std::endl;
+            std::cerr << std::setprecision(p) << "Starting dist to boundary: " << PrettyPrint::PrettyPrint(starting_distance_to_boundary, true, " ") << std::endl;
 
-            std::cerr << std::setprecision(p) << "Final dist to obstacle:    " << distance_to_obstacles.first << std::endl;
-            std::cerr << std::setprecision(p) << "Final dist to boundary:    " << distance_to_boundary.first << std::endl;
+            std::cerr << std::setprecision(p) << "Final dist to obstacle:    " << PrettyPrint::PrettyPrint(distance_to_obstacles, true, " ") << std::endl;
+            std::cerr << std::setprecision(p) << "Final dist to boundary:    " << PrettyPrint::PrettyPrint(distance_to_boundary, true, " ") << std::endl;
 
             std::cerr << std::setprecision(p) << "collision - location:      " << (post_collision_project - location).norm() << std::endl;
             std::cerr << std::setprecision(p) << "boundary - collision:      " << (post_boundary_project - post_collision_project).norm() << std::endl;
-
-            std::cerr << std::setprecision(p) << "Post boundary value:                                                      " << post_boundary_project.transpose() << std::endl;
 
             const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
             const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);
@@ -407,10 +414,18 @@ void QuinlanRubberBand::interpolateBetweenPoints(
         assert(bandIsValidWithVisualization(point_buffer));
     }
     visualizeWithBubbles(point_buffer, "start_of_interpolateBetweenPoints", Visualizer::Blue(), Visualizer::Cyan(), 1, true);
+    vis_->visualizePoints("start_of_interpolateBetweenPoints_target_point", {target}, Visualizer::Orange(), 1, 0.01);
+    vis_->visualizePoints("start_of_interpolateBetweenPoints_target_point", {target}, Visualizer::Orange(), 1, 0.01);
+    vis_->visualizePoints("start_of_interpolateBetweenPoints_target_point", {target}, Visualizer::Orange(), 1, 0.01);
 
-    std::cout << PrettyPrint::PrettyPrint(point_buffer, true, "\n") << std::endl << "Start of interpolateBetweenPoints: ";
+    std::cout << PrettyPrint::PrettyPrint(point_buffer, true, "\n") << std::endl << "Start of interpolateBetweenPoints: " << std::flush;
     int tmp;
     std::cin >> tmp;
+    visualizeWithBubbles(point_buffer, "start_of_interpolateBetweenPoints", Visualizer::Blue(), Visualizer::Cyan(), 1, true);
+    vis_->visualizePoints("start_of_interpolateBetweenPoints_target_point", {target}, Visualizer::Orange(), 1, 0.01);
+    vis_->visualizePoints("start_of_interpolateBetweenPoints_target_point", {target}, Visualizer::Orange(), 1, 0.01);
+    vis_->visualizePoints("start_of_interpolateBetweenPoints_target_point", {target}, Visualizer::Orange(), 1, 0.01);
+    arc_helpers::Sleep(0.1);
 #endif
 
 
@@ -425,12 +440,17 @@ void QuinlanRubberBand::interpolateBetweenPoints(
     double distance_to_end = (target - point_buffer.back()).norm();
     while (!sufficientOverlap(curr_bubble_size, target_bubble_size, distance_to_end))
     {
+#if ENABLE_BAND_DEBUGGING
+        std::cout << "Start of interpolateBetweenPoints outer loop" << std::endl;
+#endif
+
         const Eigen::Vector3d curr = point_buffer.back();
 
         // Find a position between point_buffer.back() and next_node with sufficient bubble overlap
         // TODO: verify that this cannot get stuck in an infinite loop
         int inner_iteration_counter = 0;
         double interpolation_ratio = 0.5;
+
         Eigen::Vector3d interpolated_point = EigenHelpers::Interpolate(curr, target, interpolation_ratio);
         Eigen::Vector3d test_point = projectToValidBubble(interpolated_point);
         double test_point_bubble_size = getBubbleSize(test_point);
@@ -486,6 +506,7 @@ void QuinlanRubberBand::interpolateBetweenPoints(
         {
             ROS_WARN_STREAM_COND_NAMED(inner_iteration_counter == 5, "rubber_band", "Rubber band interpolation inner loop counter at " << inner_iteration_counter << ", probably stuck in an infinite loop");
 #if ENABLE_BAND_DEBUGGING
+            std::cout << "Start of interpolateBetweenPoints inner loop" << std::endl;
             if (inner_iteration_counter >= 5)
             {
                 std::cout << "\n\n\n\n\n\n\nCurr:\n";
@@ -520,7 +541,9 @@ void QuinlanRubberBand::interpolateBetweenPoints(
                           << "dist + min:         " << distance_between_curr_and_test_point + min_overlap_distance_ << std::endl
                           << std::endl;
 
+                // delay some, doesn't actually do anything as nothing is on the "null" namespace
                 vis_->deleteObjects("null", 1, 10);
+                std::cin >> tmp;
             }
 #endif
 
@@ -531,6 +554,10 @@ void QuinlanRubberBand::interpolateBetweenPoints(
             distance_between_curr_and_test_point = (curr - test_point).norm();
 
             ++inner_iteration_counter;
+
+#if ENABLE_BAND_DEBUGGING
+            std::cout << "End of interpolateBetweenPoints outer loop" << std::endl;
+#endif
         }
         // The bubbles now overlap sufficiently, so accept this point and record the new values
         point_buffer.push_back(test_point);
@@ -539,6 +566,7 @@ void QuinlanRubberBand::interpolateBetweenPoints(
 
 #if ENABLE_BAND_DEBUGGING
         assert(bandIsValidWithVisualization(point_buffer));
+        std::cout << "End of interpolateBetweenPoints outer loop" << std::endl;
 #endif
 
         ++outer_iteration_counter;
@@ -549,6 +577,7 @@ void QuinlanRubberBand::interpolateBetweenPoints(
     visualizeWithBubbles(point_buffer, "end_of_interpolate_between_points", Visualizer::Black(), Visualizer::Cyan(), 1, true);
     assert(bandIsValidWithVisualization(point_buffer));
     point_buffer.erase(point_buffer.end() - 1);
+    std::cout << "End of interpolateBetweenPoints" << std::endl;
 #endif
 }
 
@@ -572,20 +601,25 @@ void QuinlanRubberBand::interpolateBandPoints()
 
     visualizeWithBubbles("start_of_interpolate_band_points", Visualizer::Blue(), Visualizer::Cyan(), 1, true);
 
-    std::cout << PrettyPrint::PrettyPrint(band_, true, "\n") << std::endl << "Start of interpolateBandPoints: ";
-    int tmp;
-    std::cin >> tmp;
+    std::cout << PrettyPrint::PrettyPrint(band_, true, "\n") << std::endl << "Start of interpolateBandPoints: "  << std::flush;
+//    int tmp;
+//    std::cin >> tmp;
 
 #endif
 
     EigenHelpers::VectorVector3d new_band(1, band_.front());
     for (size_t idx = 0; idx + 1 < band_.size(); ++idx)
     {
+#if ENABLE_BAND_DEBUGGING
+        std::cout << "Start of interpolateBandPointsLoop idx " << idx << std::endl;
+#endif
+
         const auto& next_node = band_[idx + 1];
         interpolateBetweenPoints(new_band, next_node);
         new_band.push_back(next_node);
 #if ENABLE_BAND_DEBUGGING
         assert(bandIsValidWithVisualization(new_band));
+        std::cout << "End of interpolateBandPointsLoop idx " << idx << std::endl;
 #endif
     }
 
@@ -599,12 +633,9 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
     assert(bandIsValidWithVisualization());
 
 #if ENABLE_BAND_DEBUGGING
-    if (verbose)
-    {
-        std::cout << "Start of removeExtraBandPoints\n";
-        visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
-        printBandData(band_);
-    }
+    std::cout << "Start of removeExtraBandPoints\n";
+    visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
+    printBandData(band_);
 #endif
 
     // The start can't be removed, so push that point on immediately
@@ -618,6 +649,10 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
 
     for (size_t curr_idx = 1; curr_idx + 1 < band_.size(); ++curr_idx)
     {
+#if ENABLE_BAND_DEBUGGING
+        std::cout << "Start of removeExtraBandPoints loop, idx: " << curr_idx << std::endl;
+#endif
+
         const auto& prev = forward_pass.back();
         const auto& curr = band_[curr_idx];
         const auto& next = band_[curr_idx + 1];
@@ -639,18 +674,27 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
         // Discard this point if it is containted in either neighbouring bubble
         if (curr_bubble_is_wholey_contained_in_prev || curr_bubble_is_wholey_contained_in_next)
         {
+#if ENABLE_BAND_DEBUGGING
+            std::cout << "Removing point as it is wholey contained, idx: " << curr_idx << std::endl;
+#endif
             continue;
         }
 
         // Discard this point if prev overlaps next by enough
         if (sufficientOverlap(prev_bubble_size, next_bubble_size, prev_next_dist * node_removal_overlap_factor_))
         {
+#if ENABLE_BAND_DEBUGGING
+            std::cout << "Removing point as it has enough overlap, idx: " << curr_idx << std::endl;
+#endif
             continue;
         }
 
         // Discard this point if it is too close to the previous, or too close to the next
         if (prev.isApprox(curr) || next.isApprox(curr))
         {
+#if ENABLE_BAND_DEBUGGING
+            std::cout << "Removing point as it is really really really close to and adjacent one, idx: " << curr_idx << std::endl;
+#endif
             continue;
         }
 
@@ -661,46 +705,35 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
 
         if (band_backtracks)
         {
-//                std::cout << "Backtrack detected\n";
-
-//                vis_->visualizePoints("prev", {prev}, Visualizer::Blue(), 1, 0.01);
-//                vis_->visualizePoints("curr", {curr}, Visualizer::Magenta(), 1, 0.01);
-//                vis_->visualizePoints("next", {next}, Visualizer::Red(), 1, 0.01);
-
-//                std::cout << prev.transpose() << std::endl;
-//                std::cout << curr.transpose() << std::endl;
-//                std::cout << next.transpose() << std::endl;
-//                std::cout << angle_defined_by_points << std::endl;
-//                std::cout << std::endl;
+#if ENABLE_BAND_DEBUGGING
+            std::cout << "Removing point as it is a backtrack, idx: " << curr_idx << std::endl;
+#endif
             continue;
         }
 
 #if ENABLE_BAND_DEBUGGING
-        if (verbose)
-        {
-            vis_->visualizePoints( "remove_extra_test_prev", {prev}, Visualizer::Red(1.0f),   1, 0.002);
-            vis_->visualizeSpheres("remove_extra_test_prev", {prev}, Visualizer::Red(0.2f),   2, prev_bubble_size);
-            vis_->visualizePoints( "remove_extra_test_curr", {curr}, Visualizer::Green(1.0f), 1, 0.002);
-            vis_->visualizeSpheres("remove_extra_test_curr", {curr}, Visualizer::Green(0.2f), 2, curr_bubble_size);
-            vis_->visualizePoints( "remove_extra_test_next", {next}, Visualizer::Blue(1.0f),  1, 0.002);
-            vis_->visualizeSpheres("remove_extra_test_next", {next}, Visualizer::Blue(0.2f),  2, next_bubble_size);
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+        vis_->visualizePoints( "remove_extra_test_prev", {prev}, Visualizer::Red(1.0f),   1, 0.002);
+        vis_->visualizeSpheres("remove_extra_test_prev", {prev}, Visualizer::Red(0.2f),   2, prev_bubble_size);
+        vis_->visualizePoints( "remove_extra_test_curr", {curr}, Visualizer::Green(1.0f), 1, 0.002);
+        vis_->visualizeSpheres("remove_extra_test_curr", {curr}, Visualizer::Green(0.2f), 2, curr_bubble_size);
+        vis_->visualizePoints( "remove_extra_test_next", {next}, Visualizer::Blue(1.0f),  1, 0.002);
+        vis_->visualizeSpheres("remove_extra_test_next", {next}, Visualizer::Blue(0.2f),  2, next_bubble_size);
+        std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
 
-
-
-            std::cout << "prev bubble size: " << prev_bubble_size << std::endl;
-            std::cout << "curr bubble size: " << curr_bubble_size << std::endl;
-            std::cout << "next bubble size: " << next_bubble_size << std::endl;
-            std::cout << "prev-curr dist:   " << prev_curr_dist << std::endl;
-            std::cout << "curr-next dist:   " << curr_next_dist << std::endl;
-            std::cout << "prev-next dist:   " << prev_next_dist << std::endl;
-        }
+        std::cout << "prev bubble size: " << prev_bubble_size << std::endl;
+        std::cout << "curr bubble size: " << curr_bubble_size << std::endl;
+        std::cout << "next bubble size: " << next_bubble_size << std::endl;
+        std::cout << "prev-curr dist:   " << prev_curr_dist << std::endl;
+        std::cout << "curr-next dist:   " << curr_next_dist << std::endl;
+        std::cout << "prev-next dist:   " << prev_next_dist << std::endl;
 #endif
         // If no item said we should delete this item, then keep it
         forward_pass.push_back(curr);
 #if ENABLE_BAND_DEBUGGING
         vis_->visualizePoints( "remove_extra_test_points_kept_points",  {forward_pass.back()}, Visualizer::Cyan(1.0f), (int32_t)forward_pass.size(), 0.002);
         vis_->visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, Visualizer::Cyan(0.2f), (int32_t)forward_pass.size(), getBubbleSize(forward_pass.back()));
+
+        std::cout << "End of removeExtraBandPoints loop"  << std::endl;
 #endif
     }
     forward_pass.push_back(band_.back());
@@ -711,7 +744,13 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
 
     band_ = forward_pass;
     visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, verbose);
+
+#if ENABLE_BAND_DEBUGGING
+    std::cout << "End of removeExtraBandPoints\n";
+    visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
+    printBandData(band_);
     assert(bandIsValidWithVisualization());
+#endif
 }
 
 void QuinlanRubberBand::smoothBandPoints(const bool verbose)
@@ -721,12 +760,9 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
     for (size_t smoothing_iter = 0; smoothing_iter < smoothing_iterations_; ++smoothing_iter)
     {
 #if ENABLE_BAND_DEBUGGING
-        if (verbose)
-        {
-            visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
-            std::cerr << "Start of loop smoothBandPoints\n";
-            printBandData(band_);
-        }
+        visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
+        std::cerr << "Start of loop smoothBandPoints\n";
+        printBandData(band_);
 #endif
 
         // The start doesn't move, so push that point on immediately
@@ -736,6 +772,10 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 
         for (size_t curr_idx = 1; curr_idx + 1 < band_.size(); ++ curr_idx)
         {
+#if ENABLE_BAND_DEBUGGING
+            std::cout << "Start of smoothBandPointsInnerLoop: band idx: " << curr_idx << std::endl;
+#endif
+
             const auto& prev = next_band.back();
             const auto& curr = band_[curr_idx];
             const auto& next = band_[curr_idx + 1];
@@ -765,6 +805,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
             const bool curr_plus_delta_inside_bubble = delta.norm() <= max_delta_norm;
             const Eigen::Vector3d prime =  curr_plus_delta_inside_bubble ? Eigen::Vector3d(curr + delta) : Eigen::Vector3d(curr + max_delta_norm * delta.normalized());
             // Ensure that the resulting point is not in collision even with numerical rounding (and weirdness in the SDF)
+
             const Eigen::Vector3d projected = projectToValidBubble(prime);
             const double projected_bubble_size = getBubbleSize(projected);
 
@@ -779,38 +820,35 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
             }
             const double prime_bubble_size = getBubbleSize(prime);
 
-            if (verbose)
-            {
-                vis_->visualizePoints( "smoothing_test_prev",      {prev},      Visualizer::Red(1.0f),     1, 0.002);
-                vis_->visualizeSpheres("smoothing_test_prev",      {prev},      Visualizer::Red(0.2f),     2, prev_bubble_size);
-                vis_->visualizePoints( "smoothing_test_curr",      {curr},      Visualizer::Green(1.0f),   1, 0.002);
-                vis_->visualizeSpheres("smoothing_test_curr",      {curr},      Visualizer::Green(0.2f),   2, curr_bubble_size);
-                vis_->visualizePoints( "smoothing_test_prime",     {prime},     Visualizer::Cyan(1.0f),    1, 0.002);
-                vis_->visualizeSpheres("smoothing_test_prime",     {prime},     Visualizer::Cyan(0.2f),    2, prime_bubble_size);
-                vis_->visualizePoints( "smoothing_test_projected", {projected}, Visualizer::Magenta(1.0f), 1, 0.002);
-                vis_->visualizeSpheres("smoothing_test_projected", {projected}, Visualizer::Magenta(0.2f), 2, projected_bubble_size);
-                vis_->visualizePoints( "smoothing_test_next",      {next},      Visualizer::Blue(1.0f),    1, 0.002);
-                vis_->visualizeSpheres("smoothing_test_next",      {next},      Visualizer::Blue(0.2f),    2, next_bubble_size);
-                std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+            vis_->visualizePoints( "smoothing_test_prev",      {prev},      Visualizer::Red(1.0f),     1, 0.002);
+            vis_->visualizeSpheres("smoothing_test_prev",      {prev},      Visualizer::Red(0.2f),     2, prev_bubble_size);
+            vis_->visualizePoints( "smoothing_test_curr",      {curr},      Visualizer::Green(1.0f),   1, 0.002);
+            vis_->visualizeSpheres("smoothing_test_curr",      {curr},      Visualizer::Green(0.2f),   2, curr_bubble_size);
+            vis_->visualizePoints( "smoothing_test_prime",     {prime},     Visualizer::Cyan(1.0f),    1, 0.002);
+            vis_->visualizeSpheres("smoothing_test_prime",     {prime},     Visualizer::Cyan(0.2f),    2, prime_bubble_size);
+            vis_->visualizePoints( "smoothing_test_projected", {projected}, Visualizer::Magenta(1.0f), 1, 0.002);
+            vis_->visualizeSpheres("smoothing_test_projected", {projected}, Visualizer::Magenta(0.2f), 2, projected_bubble_size);
+            vis_->visualizePoints( "smoothing_test_next",      {next},      Visualizer::Blue(1.0f),    1, 0.002);
+            vis_->visualizeSpheres("smoothing_test_next",      {next},      Visualizer::Blue(0.2f),    2, next_bubble_size);
+            arc_helpers::Sleep(0.01);
 
-                std::cout << std::setprecision(12)
-                          << "Prev:                         " << prev.transpose() << std::endl
-                          << "Curr:                         " << curr.transpose() << std::endl
-                          << "Next:                         " << next.transpose() << std::endl
-                          << "Prev - Curr:                  " << (prev - curr).normalized().transpose() << std::endl
-                          << "Next - Curr:                  " << (next - curr).normalized().transpose() << std::endl
-                          << "Allowed movement dir:         " << allowed_movement_direction.transpose() << std::endl
-                          << "Delta raw:                    " << delta_raw.transpose() << std::endl
-                          << "Delta:                        " << delta.transpose() << std::endl
-                          << "Allowed cross delta norm:     " << delta.cross(allowed_movement_direction).norm() << std::endl
-                          << std::endl
-                          << "prev bubble size:  " << prev_bubble_size << std::endl
-                          << "curr bubble size:  " << curr_bubble_size << std::endl
-                          << "prime bubble size: " << prime_bubble_size << std::endl
-                          << "proj bubble size:  " << projected_bubble_size << std::endl
-                          << "next bubble size:  " << next_bubble_size << std::endl
-                          << std::endl;
-            }
+            std::cout << std::setprecision(12)
+                      << "Prev:                         " << prev.transpose() << std::endl
+                      << "Curr:                         " << curr.transpose() << std::endl
+                      << "Next:                         " << next.transpose() << std::endl
+                      << "Prev - Curr:                  " << (prev - curr).normalized().transpose() << std::endl
+                      << "Next - Curr:                  " << (next - curr).normalized().transpose() << std::endl
+                      << "Allowed movement dir:         " << allowed_movement_direction.transpose() << std::endl
+                      << "Delta raw:                    " << delta_raw.transpose() << std::endl
+                      << "Delta:                        " << delta.transpose() << std::endl
+                      << "Allowed cross delta norm:     " << delta.cross(allowed_movement_direction).norm() << std::endl
+                      << std::endl
+                      << "prev bubble size:  " << prev_bubble_size << std::endl
+                      << "curr bubble size:  " << curr_bubble_size << std::endl
+                      << "prime bubble size: " << prime_bubble_size << std::endl
+                      << "proj bubble size:  " << projected_bubble_size << std::endl
+                      << "next bubble size:  " << next_bubble_size << std::endl
+                      << std::endl;
 #endif
 
             // Check if the bubbles still overlap on each side
@@ -827,6 +865,10 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
             {
                 interpolateBetweenPoints(next_band, next);
             }
+
+#if ENABLE_BAND_DEBUGGING
+            std::cout << "End of smoothBandPointsInnerLoop: band idx: " << curr_idx << std::endl;
+#endif
         }
 
         // The end doesn't move, so push that point on at the end, then swap buffers
@@ -841,12 +883,9 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 
         band_ = next_band;
 #if ENABLE_BAND_DEBUGGING
-        if (verbose)
-        {
-            std::cout << "\n\n\nEnd of smoothing loop, iteration: " << smoothing_iter << std::endl;
-            visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
-            printBandData(band_);
-        }
+        std::cout << "\n\n\nEnd of smoothing loop, iteration: " << smoothing_iter << std::endl;
+        visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
+        printBandData(band_);
         assert(bandIsValidWithVisualization());
 #endif
 
@@ -854,10 +893,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
     }
 
 #if ENABLE_BAND_DEBUGGING
-    if (verbose)
-    {
-        printBandData(band_);
-    }
+    printBandData(band_);
     assert(bandIsValidWithVisualization());
 #endif
 }

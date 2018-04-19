@@ -10,6 +10,11 @@ using namespace smmap;
 using namespace smmap_utilities;
 using namespace arc_utilities;
 
+void print(const RRTRobotRepresentation& config)
+{
+    std::cout << config.first.transpose() << "        " << config.second.transpose() << std::endl;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper function for assertion testing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -478,35 +483,19 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
         const bool calculate_first_order_vis,
         const bool visualization_enabled_locally)
 {
-    Stopwatch function_wide_stopwatch;
-    Stopwatch stopwatch;
-
-    static EigenHelpers::VectorVector3d band_visualization_line_start_points;
-    static EigenHelpers::VectorVector3d band_visualization_line_end_points;
-    static EigenHelpers::VectorVector3d gripper_a_tree_start_points;
-    static EigenHelpers::VectorVector3d gripper_a_tree_end_points;
-    static EigenHelpers::VectorVector3d gripper_b_tree_start_points;
-    static EigenHelpers::VectorVector3d gripper_b_tree_end_points;
-    static int32_t marker_id = 1;
-    static size_t num_bands_in_visualize_list = 0;
-
-    const RRTGrippersRepresentation& starting_grippers_position = nearest_neighbor.getGrippers();
-    const RRTGrippersRepresentation& target_grippers_position = random_target.getGrippers();
-
     // Note: This is used only for visualization purposes
     const bool target_is_goal_config = (RRTConfig::distance(random_target.getGrippers(), grippers_goal_position_) < goal_reach_radius_);
-
     if (visualization_enabled_globally_ && visualization_enabled_locally)// && target_is_goal_config && false)
     {
         vis_->visualizeCubes(
                     RRT_FORWARD_PROP_START_NS,
-                    {starting_grippers_position.first},
+                    {nearest_neighbor.getGrippers().first},
                     Eigen::Vector3d(0.01, 0.01, 0.01),
                     gripper_a_tree_color_,
                     1);
         vis_->visualizeCubes(
                     RRT_FORWARD_PROP_START_NS,
-                    {starting_grippers_position.second},
+                    {nearest_neighbor.getGrippers().second},
                     Eigen::Vector3d(0.01, 0.01, 0.01),
                     gripper_b_tree_color_,
                     5);
@@ -520,13 +509,13 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
 
         vis_->visualizeCubes(
                     RRT_SAMPLE_NS,
-                    {target_grippers_position.first},
+                    {random_target.getGrippers().first},
                     Eigen::Vector3d(0.01, 0.01, 0.01),
                     gripper_a_tree_color_,
                     1);
         vis_->visualizeCubes(
                     RRT_SAMPLE_NS,
-                    {target_grippers_position.second},
+                    {random_target.getGrippers().second},
                     Eigen::Vector3d(0.01, 0.01, 0.01),
                     gripper_b_tree_color_,
                     5);
@@ -534,6 +523,67 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
         vis_->deleteObjects(RRT_FORWARD_PROP_STEPS_NS, 1, 2);
     }
 
+//    std::cout << "Nearest Neighbour Config:\n" << nearest_neighbor.print() << std::endl;
+//    std::cout << "Random Target Config:\n" << random_target.print() << std::endl;
+
+    Stopwatch function_wide_stopwatch;
+    Stopwatch stopwatch;
+
+    static EigenHelpers::VectorVector3d band_visualization_line_start_points;
+    static EigenHelpers::VectorVector3d band_visualization_line_end_points;
+    static EigenHelpers::VectorVector3d gripper_a_tree_start_points;
+    static EigenHelpers::VectorVector3d gripper_a_tree_end_points;
+    static EigenHelpers::VectorVector3d gripper_b_tree_start_points;
+    static EigenHelpers::VectorVector3d gripper_b_tree_end_points;
+    static int32_t marker_id = 1;
+    static size_t num_bands_in_visualize_list = 0;
+
+    const RRTGrippersRepresentation& starting_grippers_position = nearest_neighbor.getGrippers();
+    const RRTRobotRepresentation& starting_robot_configuration = nearest_neighbor.getRobotConfiguration();
+
+    // Extract the target gripper pose and corresponding robot configuration
+    const RRTGrippersRepresentation& target_grippers_position = random_target.getGrippers();
+    RRTRobotRepresentation target_robot_configuration = starting_robot_configuration;
+    if (planning_for_whole_robot_)
+    {
+        AllGrippersSinglePose target_grippers_poses = starting_grippers_poses_;
+        target_grippers_poses[0].translation() = target_grippers_position.first;
+        target_grippers_poses[1].translation() = target_grippers_position.second;
+
+        const auto ik_solutions = robot_->getIkSolutions(target_grippers_poses);
+        assert(ik_solutions.size() == 2);
+
+        const size_t num_solutions_gripper_a = ik_solutions[0].size();
+        const size_t num_solutions_gripper_b = ik_solutions[1].size();
+
+        if (num_solutions_gripper_a == 0 || num_solutions_gripper_b == 0)
+        {
+            std::cout << "Fwd prop never started as there are no IK solutions: Gripper A: " << num_solutions_gripper_a << " Gripper B: " << num_solutions_gripper_b << std::endl;
+            return std::vector<std::pair<RRTConfig, int64_t>>();
+        }
+
+        const std::function<double(const Eigen::VectorXd&, const Eigen::VectorXd&)> individual_arm_config_distance_fn =
+                [] (const Eigen::VectorXd& c1, const Eigen::VectorXd& c2)
+        {
+            return (c1 - c2).norm();
+        };
+
+//        std::cout << "Getting nearest IK solution" << std::endl;
+
+        const size_t K = 1;
+        const auto gripper_a_nn_results = arc_helpers::GetKNearestNeighbors(ik_solutions[0], nearest_neighbor.getRobotConfiguration().first, individual_arm_config_distance_fn, K);
+        assert(gripper_a_nn_results.size() == K);
+        const int64_t gripper_a_nn_idx = gripper_a_nn_results[0].first;
+        const auto gripper_b_nn_results = arc_helpers::GetKNearestNeighbors(ik_solutions[1], nearest_neighbor.getRobotConfiguration().second, individual_arm_config_distance_fn, K);
+        assert(gripper_b_nn_results.size() == K);
+        const int64_t gripper_b_nn_idx = gripper_b_nn_results[0].first;
+
+        target_robot_configuration.first = ik_solutions[0][gripper_a_nn_idx];
+        target_robot_configuration.second = ik_solutions[1][gripper_b_nn_idx];
+
+//        std::cout << "Starting robot config: "; print(starting_robot_configuration);
+//        std::cout << "Nearest solution:      "; print(target_robot_configuration);
+    }
 
     // Continue advancing the grippers until the grippers collide or the band overstretches
     const bool rubber_band_verbose = visualization_enabled_globally_ && visualization_enabled_locally;
@@ -544,14 +594,12 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
     if (planning_for_whole_robot_)
     {
         // Allocate space for potential children
-//        const double total_distance = RRTConfig::distance(nearest_neighbor.getGrippers(), random_target.getGrippers());
-//        const uint32_t max_total_steps = (uint32_t)ceil(total_distance / max_gripper_step_size_);
-//        propagated_states.reserve(max_total_steps);
+        const double total_distance = RRTConfig::distance(nearest_neighbor.getRobotConfiguration(), target_robot_configuration);
+        const uint32_t max_total_steps = (uint32_t)ceil(total_distance / max_robot_dof_step_size_);
+        propagated_states.reserve(max_total_steps);
 
-        while (true)
+        while (step_index < max_total_steps)
         {
-//            std::cout << std::endl;
-
             stopwatch(RESET);
             // Using ternary operator here so that we can avoid making copies, and still take advantage of const correctness
             const bool use_nearest_neighbour_as_prev = (parent_offset == -1);
@@ -560,65 +608,71 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
             const auto& prev_robot_config = prev_node.getRobotConfiguration();
 
 
-//            auto task_frame_prev_grippers_position = prev_node.getGrippers();
-//            task_frame_prev_grippers_position.first = task_aligned_frame_.inverse() * task_frame_prev_grippers_position.first;
-//            task_frame_prev_grippers_position.second = task_aligned_frame_.inverse() * task_frame_prev_grippers_position.second;
+            // Interpolate in joint space to find the translation of the grippers
+//            std::cout << "Interpolating robot config" << std::endl;
+            const double ratio = std::min(1.0, (double)(step_index + 1) * max_gripper_step_size_ / total_distance);
+            const Eigen::VectorXd arm_a_interpolated = EigenHelpers::Interpolate(starting_robot_configuration.first, target_robot_configuration.first, ratio);
+            const Eigen::VectorXd arm_b_interpolated = EigenHelpers::Interpolate(starting_robot_configuration.second, target_robot_configuration.second, ratio);
+            const RRTRobotRepresentation next_robot_configuration(arm_a_interpolated, arm_b_interpolated);
 
-//            assert((task_frame_prev_grippers_position.first.array() <= task_aligned_upper_limits_.array()).all());
-//            assert((task_frame_prev_grippers_position.first.array() >= task_aligned_lower_limits_.array()).all());
-//            assert((task_frame_prev_grippers_position.second.array() <= task_aligned_upper_limits_.array()).all());
-//            assert((task_frame_prev_grippers_position.second.array() >= task_aligned_lower_limits_.array()).all());
+//            std::cout << "Converting to gripper poses" << std::endl;
+            const AllGrippersSinglePose next_grippers_poses = robot_->getGrippersPoses(next_robot_configuration);
+            const RRTGrippersRepresentation next_grippers_position(next_grippers_poses[0].translation(), next_grippers_poses[1].translation());
 
-
-
-
-            RRTRobotRepresentation next_robot_configuration = prev_robot_config;
-            RRTGrippersRepresentation next_grippers_position = starting_grippers_position;
-
-            const auto& prev_grippers_position = prev_node.getGrippers();
-            const auto gripper_a_desired_motion = target_grippers_position.first - prev_grippers_position.first;
-            const auto gripper_b_desired_motion = target_grippers_position.second - prev_grippers_position.second;
-
-            AllGrippersSinglePoseDelta grippers_desired_motion(2, kinematics::Vector6d::Zero());
-            grippers_desired_motion[0].head<3>() = gripper_a_desired_motion;
-            grippers_desired_motion[1].head<3>() = gripper_b_desired_motion;
-
-            // Get the matching robot motion, limiting the size of the step based on
-            auto robot_motion = robot_->mapGripperMotionToRobotMotion(prev_robot_config, grippers_desired_motion);
-            if (robot_motion.first.norm() > max_robot_dof_step_size_)
+            // Old Jacobian based movement
+            if (false)
             {
-                robot_motion.first = robot_motion.first.normalized() * max_robot_dof_step_size_;
-            }
-            if (robot_motion.second.norm() > max_robot_dof_step_size_)
-            {
-                robot_motion.second = robot_motion.second.normalized() * max_robot_dof_step_size_;
+////            RRTRobotRepresentation next_robot_configuration = prev_robot_config;
+////            RRTGrippersRepresentation next_grippers_position = starting_grippers_position;
+
+////            const auto& prev_grippers_position = prev_node.getGrippers();
+////            const auto gripper_a_desired_motion = target_grippers_position.first - prev_grippers_position.first;
+////            const auto gripper_b_desired_motion = target_grippers_position.second - prev_grippers_position.second;
+
+////            AllGrippersSinglePoseDelta grippers_desired_motion(2, kinematics::Vector6d::Zero());
+////            grippers_desired_motion[0].head<3>() = gripper_a_desired_motion;
+////            grippers_desired_motion[1].head<3>() = gripper_b_desired_motion;
+
+//            // Get the matching robot motion, limiting the size of the step based on
+//            auto robot_motion = robot_->mapGripperMotionToRobotMotion(prev_robot_config, grippers_desired_motion);
+//            if (robot_motion.first.norm() > max_robot_dof_step_size_)
+//            {
+//                robot_motion.first = robot_motion.first.normalized() * max_robot_dof_step_size_;
+//            }
+//            if (robot_motion.second.norm() > max_robot_dof_step_size_)
+//            {
+//                robot_motion.second = robot_motion.second.normalized() * max_robot_dof_step_size_;
+//            }
+
+//            // Check if the robot motion is small enough to stop propogation
+//            if (robot_motion.first.norm() < min_robot_dof_step_size_ && robot_motion.second.norm() < min_robot_dof_step_size_)
+//            {
+//                std::cerr << "Fwd prop stopped due to No meaningful motion towards target\n"
+//                          << robot_motion.first.transpose() << "    " << robot_motion.second.transpose() << std::endl;
+//                break;
+//            }
+
+//            next_robot_configuration.first += robot_motion.first;
+//            next_robot_configuration.second += robot_motion.second;
+
+//            // Check if we violated joint limits
+//            const Eigen::VectorXd lower_limits_first  = robot_->joint_lower_limits_.head(robot_motion.first.size());
+//            const Eigen::VectorXd lower_limits_second = robot_->joint_lower_limits_.tail(robot_motion.second.size());
+//            const Eigen::VectorXd upper_limits_first  = robot_->joint_upper_limits_.head(robot_motion.first.size());
+//            const Eigen::VectorXd upper_limits_second = robot_->joint_upper_limits_.tail(robot_motion.second.size());
+//            if (((next_robot_configuration.first  - lower_limits_first).array()  <= 0.0).any() ||
+//                ((next_robot_configuration.second - lower_limits_second).array() <= 0.0).any() ||
+//                ((upper_limits_first  - next_robot_configuration.first).array()  <= 0.0).any() ||
+//                ((upper_limits_second - next_robot_configuration.second).array() <= 0.0).any())
+//            {
+//                std::cerr << "Fwd prop stopped due to joint limits:\n"
+//                          << "Robot config:  " << next_robot_configuration.first.transpose() << "    " << next_robot_configuration.second.transpose() << std::endl;
+//                break;
+//            }
             }
 
-            // Check if the robot motion is small enough to stop propogation
-            if (robot_motion.first.norm() < min_robot_dof_step_size_ && robot_motion.second.norm() < min_robot_dof_step_size_)
-            {
-                std::cerr << "Fwd prop stopped due to No meaningful motion towards target\n"
-                          << robot_motion.first.transpose() << "    " << robot_motion.second.transpose() << std::endl;
-                break;
-            }
 
-            next_robot_configuration.first += robot_motion.first;
-            next_robot_configuration.second += robot_motion.second;
-
-            // Check if we violated joint limits
-            const Eigen::VectorXd lower_limits_first  = robot_->joint_lower_limits_.head(robot_motion.first.size());
-            const Eigen::VectorXd lower_limits_second = robot_->joint_lower_limits_.tail(robot_motion.second.size());
-            const Eigen::VectorXd upper_limits_first  = robot_->joint_upper_limits_.head(robot_motion.first.size());
-            const Eigen::VectorXd upper_limits_second = robot_->joint_upper_limits_.tail(robot_motion.second.size());
-            if (((next_robot_configuration.first  - lower_limits_first).array()  <= 0.0).any() ||
-                ((next_robot_configuration.second - lower_limits_second).array() <= 0.0).any() ||
-                ((upper_limits_first  - next_robot_configuration.first).array()  <= 0.0).any() ||
-                ((upper_limits_second - next_robot_configuration.second).array() <= 0.0).any())
-            {
-                std::cerr << "Fwd prop stopped due to joint limits:\n"
-                          << "Robot config:  " << next_robot_configuration.first.transpose() << "    " << next_robot_configuration.second.transpose() << std::endl;
-                break;
-            }
+//            std::cout << "Checking robot collision" << std::endl;
 
             // Check if we entered collision
             if (robot_->checkRobotCollision(next_robot_configuration))
@@ -631,46 +685,46 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
                 break;
             }
 
+//            std::cout << "Checking gripper overrotation" << std::endl;
+
             // Check if we rotated the grippers too much
-            const auto next_grippers_poses = robot_->getGrippersPoses(next_robot_configuration);
-            const double gripper_a_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_[0], next_grippers_poses[0]);
-            const double gripper_b_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_[1], next_grippers_poses[1]);
-            if (gripper_a_rotation_dist > max_gripper_rotation_ || gripper_b_rotation_dist > max_gripper_rotation_)
             {
-                std::cerr << "Fwd prop stopped due to gripper overrotation:\n"
-                          << "Gripper rotation dists: " << gripper_a_rotation_dist << " " << gripper_b_rotation_dist << std::endl;
-                break;
+                const double gripper_a_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_[0].rotation(), next_grippers_poses[0].rotation());
+                const double gripper_b_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_[1].rotation(), next_grippers_poses[1].rotation());
+                if (gripper_a_rotation_dist > max_gripper_rotation_ || gripper_b_rotation_dist > max_gripper_rotation_)
+                {
+                    std::cerr << "Fwd prop stopped due to gripper overrotation:\n"
+                              << "Gripper rotation dists: " << gripper_a_rotation_dist << " " << gripper_b_rotation_dist << std::endl;
+                    break;
+                }
             }
 
-            next_grippers_position.first = next_grippers_poses[0].translation();
-            next_grippers_position.second = next_grippers_poses[1].translation();
-
-
-            auto task_frame_next_grippers_position = next_grippers_position;
-            task_frame_next_grippers_position.first = task_aligned_frame_.inverse() * task_frame_next_grippers_position.first;
-            task_frame_next_grippers_position.second = task_aligned_frame_.inverse() * task_frame_next_grippers_position.second;
+//            std::cout << "Checking grippers moving outside of planning arena" << std::endl;
 
             // If the grippers move outside of the planning arena (possible due to non-linearities), then stop
-            if ((task_frame_next_grippers_position.first.array() > task_aligned_upper_limits_.array()).any() ||
-                (task_frame_next_grippers_position.first.array() < task_aligned_lower_limits_.array()).any() ||
-                (task_frame_next_grippers_position.second.array() > task_aligned_upper_limits_.array()).any() ||
-                (task_frame_next_grippers_position.second.array() < task_aligned_lower_limits_.array()).any())
             {
-                std::cerr << "Fwd prop stopped due to grippers moving outside the planning arena:\n";
-                std::cout << "Task aligned Next grippers positions: " << PrettyPrint::PrettyPrint(task_frame_next_grippers_position, true, " ") << std::endl;
-                std::cout << "Next grippers positions:              " << PrettyPrint::PrettyPrint(next_grippers_position, true, " ") << std::endl;
-                break;
+                auto task_frame_next_grippers_position = next_grippers_position;
+                task_frame_next_grippers_position.first = task_aligned_frame_.inverse() * task_frame_next_grippers_position.first;
+                task_frame_next_grippers_position.second = task_aligned_frame_.inverse() * task_frame_next_grippers_position.second;
+
+                if ((task_frame_next_grippers_position.first.array() > task_aligned_upper_limits_.array()).any() ||
+                    (task_frame_next_grippers_position.first.array() < task_aligned_lower_limits_.array()).any() ||
+                    (task_frame_next_grippers_position.second.array() > task_aligned_upper_limits_.array()).any() ||
+                    (task_frame_next_grippers_position.second.array() < task_aligned_lower_limits_.array()).any())
+                {
+                    std::cerr << "Fwd prop stopped due to grippers moving outside the planning arena:\n";
+                    std::cout << "Task aligned Next grippers positions: " << PrettyPrint::PrettyPrint(task_frame_next_grippers_position, true, " ") << std::endl;
+                    std::cout << "Next grippers positions:              " << PrettyPrint::PrettyPrint(next_grippers_position, true, " ") << std::endl;
+                    break;
+                }
+
+                assert((task_frame_next_grippers_position.first.array() <= task_aligned_upper_limits_.array()).all());
+                assert((task_frame_next_grippers_position.first.array() >= task_aligned_lower_limits_.array()).all());
+                assert((task_frame_next_grippers_position.second.array() <= task_aligned_upper_limits_.array()).all());
+                assert((task_frame_next_grippers_position.second.array() >= task_aligned_lower_limits_.array()).all());
             }
 
-            assert((task_frame_next_grippers_position.first.array() <= task_aligned_upper_limits_.array()).all());
-            assert((task_frame_next_grippers_position.first.array() >= task_aligned_lower_limits_.array()).all());
-            assert((task_frame_next_grippers_position.second.array() <= task_aligned_upper_limits_.array()).all());
-            assert((task_frame_next_grippers_position.second.array() >= task_aligned_lower_limits_.array()).all());
-
-
-
-
-//            prev_band.visualize("rrt_forward_prop_band_start", Visualizer::Green(), Visualizer::Red(), 1, true);
+//            std::cout << "Checking band propogation" << std::endl;
 
 
             // Duplicated from below
@@ -733,6 +787,8 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
             {
                 is_first_order_visible = isBandFirstOrderVisibileToBlacklist(next_band);
             }
+
+            // The new configuation is valid, add it to the tree
             const RRTConfig next_node(
                         next_grippers_position,
                         next_robot_configuration,
@@ -763,6 +819,7 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
             }
 
             ++parent_offset;
+            ++step_index;
         }
     }
     else
@@ -781,13 +838,12 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
             const RubberBand& prev_band = prev_node.getBand();
             const auto& prev_robot_config = prev_node.getRobotConfiguration();
 
-            RRTRobotRepresentation next_robot_configuration = prev_robot_config;
-            RRTGrippersRepresentation next_grippers_position = starting_grippers_position;
 
             const double ratio = std::min(1.0, (double)(step_index + 1) * max_gripper_step_size_ / total_distance);
             const Eigen::Vector3d gripper_a_interpolated = EigenHelpers::Interpolate(starting_grippers_position.first, target_grippers_position.first, ratio);
             const Eigen::Vector3d gripper_b_interpolated = EigenHelpers::Interpolate(starting_grippers_position.second, target_grippers_position.second, ratio);
-            next_grippers_position = RRTGrippersRepresentation(gripper_a_interpolated, gripper_b_interpolated);
+            const RRTGrippersRepresentation next_grippers_position = RRTGrippersRepresentation(gripper_a_interpolated, gripper_b_interpolated);
+            const RRTRobotRepresentation next_robot_configuration = prev_robot_config;
 
             // If the grippers collide with each other, then return however far we are able to get
             if ((gripper_a_interpolated - gripper_b_interpolated).norm() < gripper_min_distance_to_obstacles_)

@@ -51,13 +51,13 @@ namespace smmap
 
 
 
-            AllGrippersSinglePose getGrippersPoses(const Eigen::VectorXd& robot_configuration);
+            AllGrippersSinglePose getGrippersPoses(const Eigen::VectorXd& robot_configuration) const;
 
-            AllGrippersSinglePose getGrippersPoses(const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration);
+            AllGrippersSinglePose getGrippersPoses(const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration) const;
 
             // This a Jacobian between the movement of the grippers (in the gripper body frame)
             // and the movement of the robot's DOF
-            Eigen::MatrixXd getGrippersJacobian(const Eigen::VectorXd& robot_configuration);
+            Eigen::MatrixXd getGrippersJacobian(const Eigen::VectorXd& robot_configuration) const;
 
             // This looks up the points of interest as reporeted by the external robot (i.e. OpenRAVE)
             // then querrys Bullet for the data needed to do collision avoidance, and querrys OpenRAVE for the Jacobian
@@ -70,26 +70,30 @@ namespace smmap
 
             Eigen::VectorXd mapGripperMotionToRobotMotion(
                     const Eigen::VectorXd& robot_configuration,
-                    const AllGrippersSinglePoseDelta& grippers_delta);
+                    const AllGrippersSinglePoseDelta& grippers_delta) const;
 
             // Only intended for use by 2 manipulators
             std::pair<Eigen::VectorXd, Eigen::VectorXd> mapGripperMotionToRobotMotion(
                     const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration,
-                    const AllGrippersSinglePoseDelta& grippers_delta);
+                    const AllGrippersSinglePoseDelta& grippers_delta) const;
 
 
-            bool checkRobotCollision(const Eigen::VectorXd& robot_configuration);
+            bool checkRobotCollision(const Eigen::VectorXd& robot_configuration) const;
 
             // Only intended for use by 2 manipulators
-            bool checkRobotCollision(const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration);
+            bool checkRobotCollision(const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration) const;
 
+            std::vector<Eigen::VectorXd> getIkSolutions(const std::string& gripper, const Eigen::Isometry3d& target_pose) const;
+
+            std::vector<std::vector<Eigen::VectorXd>> getIkSolutions(const AllGrippersSinglePose& target_poses) const;
 
             void setCallbackFunctions(
-                    std::function<AllGrippersSinglePose(const Eigen::VectorXd&)> get_ee_poses_fn_,
-                    std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)> get_grippers_jacobian_fn,
-                    std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn,
-                    std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn,
-                    std::function<bool(const Eigen::VectorXd& configuration)> full_robot_collision_check_fn);
+                    const std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)>& get_ee_poses_fn,
+                    const std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)>& get_grippers_jacobian_fn,
+                    const std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_fn,
+                    const std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_jacobians_fn,
+                    const std::function<bool(const Eigen::VectorXd& configuration)>& full_robot_collision_check_fn,
+                    const std::function<std::vector<Eigen::VectorXd>(const std::string& gripper, const Eigen::Isometry3d& target_pose)>& ik_solutions_fn);
 
             // Defaults the timespace to "latest available", indicted by ros::Time(0)
             Eigen::Vector3d transformToFrame(
@@ -139,6 +143,7 @@ namespace smmap
             std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn_;
             std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn_;
             std::function<bool(const Eigen::VectorXd& configuration)> full_robot_collision_check_fn_;
+            std::function<std::vector<Eigen::VectorXd>(const std::string& gripper, const Eigen::Isometry3d& target_pose)> ik_solutions_fn_;
 
             WorldState commandRobotMotion_impl(
                     const deformable_manipulation_msgs::ExecuteRobotMotionRequest& movement);

@@ -78,10 +78,6 @@ namespace smmap
                     const std::vector<EigenHelpers::VectorVector3d>& projected_paths,
                     const bool visualization_enabled = true);
 
-            bool checkForClothStretchingViolations(
-                    const std::vector<EigenHelpers::VectorVector3d>& projected_paths,
-                    const bool visualization_enabled = true);
-
             std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<RubberBand>> detectFutureConstraintViolations(
                     const WorldState& current_world_state,
                     const bool visualization_enabled = true);

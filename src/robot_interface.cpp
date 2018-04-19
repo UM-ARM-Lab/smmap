@@ -50,9 +50,13 @@ RobotInterface::RobotInterface(ros::NodeHandle& nh, ros::NodeHandle& ph)
     , joint_upper_limits_(GetJointUpperLimits())
     // TODO: remove this hardcoded spin period
     , spin_thread_(ROSHelpers::Spin, 0.01)
+
+    , get_ee_poses_fn_(nullptr)
     , get_grippers_jacobian_fn_(nullptr)
     , get_collision_points_of_interest_fn_(nullptr)
     , get_collision_points_of_interest_jacobians_fn_(nullptr)
+    , full_robot_collision_check_fn_(nullptr)
+    , ik_solutions_fn_(nullptr)
 {}
 
 RobotInterface::~RobotInterface()
@@ -178,7 +182,7 @@ std::vector<CollisionData> RobotInterface::checkGripperCollision(
 }
 
 
-AllGrippersSinglePose RobotInterface::getGrippersPoses(const Eigen::VectorXd& robot_configuration)
+AllGrippersSinglePose RobotInterface::getGrippersPoses(const Eigen::VectorXd& robot_configuration) const
 {
     if (get_ee_poses_fn_ == nullptr)
     {
@@ -188,7 +192,7 @@ AllGrippersSinglePose RobotInterface::getGrippersPoses(const Eigen::VectorXd& ro
     return get_ee_poses_fn_(robot_configuration);
 }
 
-AllGrippersSinglePose RobotInterface::getGrippersPoses(const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration)
+AllGrippersSinglePose RobotInterface::getGrippersPoses(const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration) const
 {
     const auto num_dof = robot_configuration.first.size() + robot_configuration.second.size();
     Eigen::VectorXd stacked_config(num_dof);
@@ -198,7 +202,7 @@ AllGrippersSinglePose RobotInterface::getGrippersPoses(const std::pair<Eigen::Ve
 
 // This a Jacobian between the movement of the grippers (in the gripper body frame)
 // and the movement of the robot's DOF
-Eigen::MatrixXd RobotInterface::getGrippersJacobian(const Eigen::VectorXd& robot_configuration)
+Eigen::MatrixXd RobotInterface::getGrippersJacobian(const Eigen::VectorXd& robot_configuration) const
 {
     if (get_grippers_jacobian_fn_ == nullptr)
     {
@@ -258,7 +262,7 @@ std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> RobotInterface::getPoint
 
 Eigen::VectorXd RobotInterface::mapGripperMotionToRobotMotion(
         const Eigen::VectorXd& robot_configuration,
-        const AllGrippersSinglePoseDelta& grippers_delta)
+        const AllGrippersSinglePoseDelta& grippers_delta) const
 {
     const auto stacked_gripper_delta = EigenHelpers::VectorEigenVectorToEigenVectorX(grippers_delta);
     const auto jacobian = get_grippers_jacobian_fn_(robot_configuration);
@@ -279,7 +283,7 @@ Eigen::VectorXd RobotInterface::mapGripperMotionToRobotMotion(
 // Only intended for use by 2 manipulators
 std::pair<Eigen::VectorXd, Eigen::VectorXd> RobotInterface::mapGripperMotionToRobotMotion(
         const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration,
-        const AllGrippersSinglePoseDelta& grippers_delta)
+        const AllGrippersSinglePoseDelta& grippers_delta) const
 {
     const auto num_dof = robot_configuration.first.size() + robot_configuration.second.size();
     Eigen::VectorXd stacked_config(num_dof);
@@ -290,7 +294,7 @@ std::pair<Eigen::VectorXd, Eigen::VectorXd> RobotInterface::mapGripperMotionToRo
     return std::pair<Eigen::VectorXd, Eigen::VectorXd>(first_config, second_config);
 }
 
-bool RobotInterface::checkRobotCollision(const Eigen::VectorXd& robot_configuration)
+bool RobotInterface::checkRobotCollision(const Eigen::VectorXd& robot_configuration) const
 {
     if (get_grippers_jacobian_fn_ == nullptr)
     {
@@ -301,7 +305,7 @@ bool RobotInterface::checkRobotCollision(const Eigen::VectorXd& robot_configurat
 }
 
 // Only intended for use by 2 manipulators
-bool RobotInterface::checkRobotCollision(const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration)
+bool RobotInterface::checkRobotCollision(const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration) const
 {
     const auto num_dof = robot_configuration.first.size() + robot_configuration.second.size();
     Eigen::VectorXd stacked_config(num_dof);
@@ -309,18 +313,41 @@ bool RobotInterface::checkRobotCollision(const std::pair<Eigen::VectorXd, Eigen:
     return checkRobotCollision(stacked_config);
 }
 
+std::vector<Eigen::VectorXd> RobotInterface::getIkSolutions(const std::string& gripper, const Eigen::Isometry3d& target_pose) const
+{
+    if (ik_solutions_fn_ == nullptr)
+    {
+        ROS_ERROR_NAMED("robot_interface", "Asked for ik solutions, but function pointer is null");
+        return std::vector<Eigen::VectorXd>(0);
+    }
+    return ik_solutions_fn_(gripper, target_pose);
+}
+
+std::vector<std::vector<Eigen::VectorXd>> RobotInterface::getIkSolutions(const AllGrippersSinglePose& target_poses) const
+{
+    assert(target_poses.size() == grippers_data_.size() && "Must request one pose per gripper");
+    std::vector<std::vector<Eigen::VectorXd>> solutions(grippers_data_.size());
+    for (size_t gripper_idx = 0; gripper_idx < grippers_data_.size(); ++gripper_idx)
+    {
+        solutions[gripper_idx] = getIkSolutions(grippers_data_[gripper_idx].name_, target_poses[gripper_idx]);
+    }
+    return solutions;
+}
+
 void RobotInterface::setCallbackFunctions(
-        std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)> get_ee_poses_fn,
-        std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)> get_grippers_jacobian_fn,
-        std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn,
-        std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn,
-        std::function<bool(const Eigen::VectorXd& configuration)> full_robot_collision_check_fn)
+        const std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)>& get_ee_poses_fn,
+        const std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)>& get_grippers_jacobian_fn,
+        const std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_fn,
+        const std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_jacobians_fn,
+        const std::function<bool(const Eigen::VectorXd& configuration)>& full_robot_collision_check_fn,
+        const std::function<std::vector<Eigen::VectorXd>(const std::string& gripper, const Eigen::Isometry3d& target_pose)>& ik_solutions_fn)
 {
     get_ee_poses_fn_ = get_ee_poses_fn;
     get_grippers_jacobian_fn_ = get_grippers_jacobian_fn;
     get_collision_points_of_interest_fn_ = get_collision_points_of_interest_fn;
     get_collision_points_of_interest_jacobians_fn_ = get_collision_points_of_interest_jacobians_fn;
     full_robot_collision_check_fn_ = full_robot_collision_check_fn;
+    ik_solutions_fn_ = ik_solutions_fn;
 }
 
 
