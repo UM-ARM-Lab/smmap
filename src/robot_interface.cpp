@@ -29,6 +29,21 @@ inline Eigen::VectorXd GetJointUpperLimits() // radians
     return lower_limits;
 }
 
+inline Eigen::VectorXd GetDOFWeights()
+{
+    #warning message "Magic number for robot DOF weights in code"
+    /* calculated using
+        lmodel = databases.linkstatistics.LinkStatisticsModel(robot)
+        if not lmodel.load():
+            lmodel.autogenerate()
+        lmodel.setRobotWeights()
+    */
+    Eigen::VectorXd dof_weights(14);
+    dof_weights << 3.6885707 ,  3.17881391,  2.53183486,  2.0392053 ,  1.48086104,  1.14257071,  0.74185964,
+                   3.6885707 ,  3.17881391,  2.53183486,  2.0392053 ,  1.48086104,  1.14257071,  0.74185964;
+    return dof_weights;
+}
+
 RobotInterface::RobotInterface(ros::NodeHandle& nh, ros::NodeHandle& ph)
     : nh_(nh)
     , ph_(ph)
@@ -48,6 +63,7 @@ RobotInterface::RobotInterface(ros::NodeHandle& nh, ros::NodeHandle& ph)
     , min_controller_distance_to_obstacles_(GetControllerMinDistanceToObstacles(ph_))
     , joint_lower_limits_(GetJointLowerLimits())
     , joint_upper_limits_(GetJointUpperLimits())
+    , dof_weights_(GetDOFWeights())
     // TODO: remove this hardcoded spin period
     , spin_thread_(ROSHelpers::Spin, 0.01)
 

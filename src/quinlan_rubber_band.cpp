@@ -47,7 +47,7 @@ QuinlanRubberBand& QuinlanRubberBand::operator=(const QuinlanRubberBand& other)
 {
     assert(task_ == other.task_);
     assert(&sdf_ == &(other.sdf_));
-    assert(&vis_ == &(other.vis_));
+    assert(vis_.get() == (other.vis_.get()));
 
     assert(max_total_band_distance_ == other.max_total_band_distance_);
 
@@ -937,6 +937,19 @@ void QuinlanRubberBand::printBandData(const EigenHelpers::VectorVector3d& test_b
 }
 
 
+uint64_t QuinlanRubberBand::serialize(std::vector<uint8_t>& buffer) const
+{
+    return arc_utilities::SerializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+                                                    band_, buffer, &arc_utilities::SerializeEigenType<Eigen::Vector3d>);
+}
+
+uint64_t QuinlanRubberBand::deserializeIntoSelf(const std::vector<uint8_t>& buffer, const uint64_t current)
+{
+    const auto deserialized_results = arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+                buffer, current, &arc_utilities::DeserializeEigenType<Eigen::Vector3d>);
+    band_ = deserialized_results.first;
+    return deserialized_results.second;
+}
 
 void QuinlanRubberBand::storeBand() const
 {
@@ -960,8 +973,7 @@ void QuinlanRubberBand::storeBand() const
         ROS_DEBUG_STREAM("Saving band to " << full_path);
 
         std::vector<uint8_t> buffer;
-        arc_utilities::SerializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
-                    band_, buffer, &arc_utilities::SerializeEigenType<Eigen::Vector3d>);
+        serialize(buffer);
         ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
     }
     catch (const std::exception& e)
@@ -995,10 +1007,7 @@ void QuinlanRubberBand::loadStoredBand()
         ROS_INFO_STREAM("Loading band from " << full_path);
 
         const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(full_path);
-        const auto deserialized_results = arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
-                    buffer, 0, &arc_utilities::DeserializeEigenType<Eigen::Vector3d>);
-        band_ = deserialized_results.first;
-
+        deserializeIntoSelf(buffer, 0);
     }
     catch (const std::exception& e)
     {

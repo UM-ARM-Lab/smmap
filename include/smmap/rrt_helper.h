@@ -62,6 +62,16 @@ namespace smmap
 
             bool operator==(const RRTConfig& other) const;
 
+            uint64_t serialize(std::vector<uint8_t>& buffer) const;
+//            std::pair<RRTConfig, uint64_t> deserialize(const std::vector<uint8_t>& buffer, const uint64_t current);
+
+            static uint64_t Serialize(const RRTConfig& config, std::vector<uint8_t>& buffer);
+            static std::pair<RRTConfig, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current, const RubberBand& starting_band);
+
+            static void SavePathToFile(const std::vector<RRTConfig, RRTAllocator>& path);
+
+            static std::vector<RRTConfig, RRTAllocator> LoadPathFomFile(const RubberBand& starting_band);
+
         private:
 
             RRTGrippersRepresentation grippers_position_;
@@ -157,6 +167,7 @@ namespace smmap
             // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
             RRTConfig prmBasedSampling_internal();
             RRTGrippersRepresentation posPairSampling_internal();
+            RRTRobotRepresentation robotConfigPairSampling_internal();
 
             bool goalReached(const RRTConfig& node);
 
@@ -220,18 +231,26 @@ namespace smmap
             std::mt19937_64& generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
             std::uniform_int_distribution<int> uniform_shortcut_smoothing_int_distribution_;
+            std::uniform_int_distribution<size_t> arm_a_goal_config_int_distribution_;
+            std::uniform_int_distribution<size_t> arm_b_goal_config_int_distribution_;
             std::shared_ptr<PRMHelper> prm_helper_;
 
 
             // Set/updated on each call of "rrtPlan"
             bool planning_for_whole_robot_;
             std::unique_ptr<RubberBand> starting_band_;
-            RRTRobotRepresentation starting_robot_configuration_;
             AllGrippersSinglePose starting_grippers_poses_;
+            RRTRobotRepresentation starting_robot_configuration_;
 
             RRTGrippersRepresentation grippers_goal_position_;
             double max_grippers_distance_;
             std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
+
+            std::pair<ssize_t, ssize_t> arm_dof_;
+            std::vector<Eigen::VectorXd> arm_a_goal_configurations_;
+            std::vector<Eigen::VectorXd> arm_b_goal_configurations_;
+            RRTRobotRepresentation robot_joint_limits_upper_;
+            RRTRobotRepresentation robot_joint_limits_lower_;
 
             // Planning and Smoothing statistics
             std::map<std::string, double> statistics_;

@@ -133,6 +133,7 @@ namespace smmap
             const double min_controller_distance_to_obstacles_;
             const Eigen::VectorXd joint_lower_limits_;
             const Eigen::VectorXd joint_upper_limits_;
+            const Eigen::VectorXd dof_weights_;
 
         private:
             std::thread spin_thread_;

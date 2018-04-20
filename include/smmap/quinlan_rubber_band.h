@@ -79,6 +79,9 @@ namespace smmap
                 const int32_t id,
                 const bool visualization_enabled) const;
 
+        uint64_t serialize(std::vector<uint8_t>& buffer) const;
+        uint64_t deserializeIntoSelf(const std::vector<uint8_t>& buffer, const uint64_t current);
+
     private:
         ros::NodeHandle ph_;
         const std::shared_ptr<DijkstrasCoverageTask> task_;
