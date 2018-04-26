@@ -68,10 +68,6 @@ namespace smmap
             static uint64_t Serialize(const RRTConfig& config, std::vector<uint8_t>& buffer);
             static std::pair<RRTConfig, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current, const RubberBand& starting_band);
 
-            static void SavePathToFile(const std::vector<RRTConfig, RRTAllocator>& path);
-
-            static std::vector<RRTConfig, RRTAllocator> LoadPathFomFile(const RubberBand& starting_band);
-
         private:
 
             RRTGrippersRepresentation grippers_position_;
@@ -105,6 +101,8 @@ namespace smmap
             static constexpr auto RRT_SHORTCUT_SECOND_GRIPPER_NS = "rrt_shortcut_second_gripper";
 
             RRTHelper(
+                    ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
                     const RobotInterface::Ptr robot,
                     const sdf_tools::SignedDistanceField& environment_sdf,
                     const smmap_utilities::Visualizer::Ptr vis,
@@ -144,6 +142,12 @@ namespace smmap
             void visualizePath(const std::vector<RRTConfig, RRTAllocator>& path) const;
 
             void visualizeBlacklist() const;
+
+            void storePath(const std::vector<RRTConfig, RRTAllocator>& path) const;
+
+            std::vector<RRTConfig, RRTAllocator> loadStoredPath() const;
+
+            bool useStoredPath() const;
 
         private:
             ///////////////////////////////////////////////////////////////////////////////////////
@@ -202,6 +206,8 @@ namespace smmap
 
 
         private:
+            ros::NodeHandle nh_;
+            ros::NodeHandle ph_;
             const RobotInterface::Ptr robot_;
             const sdf_tools::SignedDistanceField& environment_sdf_;
 

@@ -259,6 +259,7 @@ void Planner::execute()
                     GetRRTPlanningYMaxBulletFrame(ph_),
                     GetRRTPlanningZMaxBulletFrame(ph_));
 
+        #ifdef PRM_SAMPLING
         prm_helper_ = std::make_shared<PRMHelper>(
                     dijkstras_task_->environment_sdf_,
                     vis_,
@@ -272,10 +273,15 @@ void Planner::execute()
                     dijkstras_task_->work_space_grid_.minStepDimension());
         prm_helper_->initializeRoadmap();
         prm_helper_->visualize(GetVisualizePRM(ph_));
+        #else
+        prm_helper_ = nullptr;
+        #endif
 
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         rrt_helper_ = std::unique_ptr<RRTHelper>(
                     new RRTHelper(
+                        nh_,
+                        ph_,
                         robot_,
                         dijkstras_task_->environment_sdf_,
                         vis_,

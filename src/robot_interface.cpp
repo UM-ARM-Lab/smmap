@@ -72,7 +72,8 @@ RobotInterface::RobotInterface(ros::NodeHandle& nh, ros::NodeHandle& ph)
     , get_collision_points_of_interest_fn_(nullptr)
     , get_collision_points_of_interest_jacobians_fn_(nullptr)
     , full_robot_collision_check_fn_(nullptr)
-    , ik_solutions_fn_(nullptr)
+    , close_ik_solutions_fn_(nullptr)
+    , general_ik_solution_fn_(nullptr)
 {}
 
 RobotInterface::~RobotInterface()
@@ -329,25 +330,38 @@ bool RobotInterface::checkRobotCollision(const std::pair<Eigen::VectorXd, Eigen:
     return checkRobotCollision(stacked_config);
 }
 
-std::vector<Eigen::VectorXd> RobotInterface::getIkSolutions(const std::string& gripper, const Eigen::Isometry3d& target_pose) const
+std::vector<Eigen::VectorXd> RobotInterface::getCloseIkSolutions(const std::string& gripper, const Eigen::Isometry3d& target_pose) const
 {
-    if (ik_solutions_fn_ == nullptr)
+    if (close_ik_solutions_fn_ == nullptr)
     {
         ROS_ERROR_NAMED("robot_interface", "Asked for ik solutions, but function pointer is null");
         return std::vector<Eigen::VectorXd>(0);
     }
-    return ik_solutions_fn_(gripper, target_pose);
+    return close_ik_solutions_fn_(gripper, target_pose);
 }
 
-std::vector<std::vector<Eigen::VectorXd>> RobotInterface::getIkSolutions(const AllGrippersSinglePose& target_poses) const
+std::vector<std::vector<Eigen::VectorXd>> RobotInterface::getCloseIkSolutions(const AllGrippersSinglePose& target_poses) const
 {
     assert(target_poses.size() == grippers_data_.size() && "Must request one pose per gripper");
     std::vector<std::vector<Eigen::VectorXd>> solutions(grippers_data_.size());
     for (size_t gripper_idx = 0; gripper_idx < grippers_data_.size(); ++gripper_idx)
     {
-        solutions[gripper_idx] = getIkSolutions(grippers_data_[gripper_idx].name_, target_poses[gripper_idx]);
+        solutions[gripper_idx] = getCloseIkSolutions(grippers_data_[gripper_idx].name_, target_poses[gripper_idx]);
     }
     return solutions;
+}
+
+std::pair<bool, Eigen::VectorXd> RobotInterface::getGeneralIkSolution(
+        const Eigen::VectorXd& starting_config,
+        const std::vector<std::string>& gripper_names,
+        const AllGrippersSinglePose& target_poses) const
+{
+    if (general_ik_solution_fn_ == nullptr)
+    {
+        ROS_ERROR_NAMED("robot_interface", "Asked for generalik solution, but function pointer is null");
+        return {false, Eigen::VectorXd(0)};
+    }
+    return general_ik_solution_fn_(starting_config, gripper_names, target_poses);
 }
 
 void RobotInterface::setCallbackFunctions(
@@ -356,14 +370,16 @@ void RobotInterface::setCallbackFunctions(
         const std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_fn,
         const std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_jacobians_fn,
         const std::function<bool(const Eigen::VectorXd& configuration)>& full_robot_collision_check_fn,
-        const std::function<std::vector<Eigen::VectorXd>(const std::string& gripper, const Eigen::Isometry3d& target_pose)>& ik_solutions_fn)
+        const std::function<std::vector<Eigen::VectorXd>(const std::string& gripper, const Eigen::Isometry3d& target_pose)>& close_ik_solutions_fn,
+        const std::function<std::pair<bool, Eigen::VectorXd>(const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn)
 {
     get_ee_poses_fn_ = get_ee_poses_fn;
     get_grippers_jacobian_fn_ = get_grippers_jacobian_fn;
     get_collision_points_of_interest_fn_ = get_collision_points_of_interest_fn;
     get_collision_points_of_interest_jacobians_fn_ = get_collision_points_of_interest_jacobians_fn;
     full_robot_collision_check_fn_ = full_robot_collision_check_fn;
-    ik_solutions_fn_ = ik_solutions_fn;
+    close_ik_solutions_fn_ = close_ik_solutions_fn;
+    general_ik_solution_fn_ = general_ik_solution_fn;
 }
 
 

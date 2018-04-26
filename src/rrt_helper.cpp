@@ -5,6 +5,7 @@
 #include <arc_utilities/first_order_deformation.h>
 #include <arc_utilities/simple_dtw.hpp>
 #include <arc_utilities/timing.hpp>
+#include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
 
 using namespace smmap;
@@ -125,7 +126,7 @@ double RRTConfig::distance(const RRTGrippersRepresentation& c1, const RRTGripper
 
 double RRTConfig::distance(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2)
 {
-#warning "!!!!!!!!!!!!!!! magic numbers in code duplicated from robot_interface.cpp !!!!!!!!!!!!"
+    #warning "!!!!!!!!!!!!!!! magic numbers in code duplicated from robot_interface.cpp !!!!!!!!!!!!"
     VectorXd weights(7);
 //    weights << 3.6885707 ,  3.17881391,  2.53183486,  2.0392053 ,  1.48086104,  1.14257071,  0.74185964;
     weights << 1.9206,    1.7829,    1.5912,    1.4280,    1.2169,    1.0689,    0.8613;
@@ -212,15 +213,97 @@ bool RRTConfig::operator==(const RRTConfig& other) const
 
 uint64_t RRTConfig::serialize(std::vector<uint8_t>& buffer) const
 {
-    uint64_t starting_bytes = buffer.size();
+    const uint64_t starting_bytes = buffer.size();
 
-    arc_utilities::SerializePair<Vector3d, Vector3d>(grippers_position_, buffer, &arc_utilities::SerializeEigenType<Vector3d>, &arc_utilities::SerializeEigenType<Vector3d>);
+//    uint64_t current_bytes = buffer.size();
+    arc_utilities::SerializePair<Vector3d, Vector3d>(grippers_position_, buffer, &arc_utilities::SerializeEigenType<Vector3d>, &arc_utilities::SerializeEigenType<Vector3d>);    
+//    const auto deserialized_position = arc_utilities::DeserializePair<Vector3d, Vector3d>(buffer, current_bytes, &arc_utilities::DeserializeEigenType<Vector3d>, &arc_utilities::DeserializeEigenType<Vector3d>);
+//    std::cout << "Testing position serialization" << std::endl;
+//    std::cout << "Size before serialization: " << current_bytes << std::endl;
+//    std::cout << "Bytes written:             " << buffer.size() - current_bytes << std::endl;
+//    std::cout << "Size after serialization:  " << buffer.size() << std::endl;
+//    if (deserialized_position.first != grippers_position_)
+//    {
+//        std::cout << "Initial:      " << PrettyPrint::PrettyPrint(grippers_position_, false, " ") << std::endl;
+//        std::cout << "Deserialized: " << PrettyPrint::PrettyPrint(deserialized_position.first, false, " ") << std::endl;
+//    }
+
+
+//    current_bytes = buffer.size();
     arc_utilities::SerializePair<VectorXd, VectorXd>(robot_configuration_, buffer, &arc_utilities::SerializeEigenType<VectorXd>, &arc_utilities::SerializeEigenType<VectorXd>);
-    arc_utilities::SerializeFixedSizePOD(unique_forward_propogation_idx_, buffer);
-    band_.serialize(buffer);
-    arc_utilities::SerializeFixedSizePOD(is_visible_to_blacklist_, buffer);
+//    const auto deserialized_robot_config = arc_utilities::DeserializePair<VectorXd, VectorXd>(buffer, current_bytes, &arc_utilities::DeserializeEigenType<VectorXd>, &arc_utilities::DeserializeEigenType<VectorXd>);
+//    std::cout << "Testing robot config serialization" << std::endl;
+//    std::cout << "Size before serialization: " << current_bytes << std::endl;
+//    std::cout << "Bytes written:             " << buffer.size() - current_bytes << std::endl;
+//    std::cout << "Size after serialization:  " << buffer.size() << std::endl;
+//    if (deserialized_robot_config.first != robot_configuration_)
+//    {
+//        std::cout << "Initial:      " << PrettyPrint::PrettyPrint(robot_configuration_, false, " ") << std::endl;
+//        std::cout << "Deserialized: " << PrettyPrint::PrettyPrint(deserialized_robot_config.first, false, " ") << std::endl;
+//    }
 
-    uint64_t ending_bytes = buffer.size();
+
+//    current_bytes = buffer.size();
+    arc_utilities::SerializeFixedSizePOD(unique_forward_propogation_idx_, buffer);
+//    const auto deserialized_unique_idx = arc_utilities::DeserializeFixedSizePOD<size_t>(buffer, current_bytes);
+//    std::cout << "Testing unique idx serialization" << std::endl;
+//    std::cout << "Size before serialization: " << current_bytes << std::endl;
+//    std::cout << "Bytes written:             " << buffer.size() - current_bytes << std::endl;
+//    std::cout << "Size after serialization:  " << buffer.size() << std::endl;
+//    if (deserialized_unique_idx.first != unique_forward_propogation_idx_)
+//    {
+//        std::cout << "Initial:      " << unique_forward_propogation_idx_ << std::endl;
+//        std::cout << "Deserialized: " << deserialized_unique_idx.first << std::endl;
+//    }
+
+
+//    current_bytes = buffer.size();
+    band_.serialize(buffer);
+//    RubberBand deserialized_band = band_;
+//    deserialized_band.deserializeIntoSelf(buffer, current_bytes);
+//    std::cout << "Testing band serialization" << std::endl;
+//    std::cout << "Size before serialization: " << current_bytes << std::endl;
+//    std::cout << "Bytes written:             " << buffer.size() - current_bytes << std::endl;
+//    std::cout << "Size after serialization:  " << buffer.size() << std::endl;
+//    if (deserialized_band.getVectorRepresentation() != band_.getVectorRepresentation())
+//    {
+//        std::cout << "Initial:      " << PrettyPrint::PrettyPrint(band_.getVectorRepresentation(), false, "\n") << std::endl;
+//        std::cout << "Deserialized: " << PrettyPrint::PrettyPrint(deserialized_band.getVectorRepresentation(), false, "\n") << std::endl;
+//    }
+
+
+//    current_bytes = buffer.size();
+    arc_utilities::SerializeFixedSizePOD(is_visible_to_blacklist_, buffer);
+//    const auto deserialized_is_visible = arc_utilities::DeserializeFixedSizePOD<bool>(buffer, current_bytes);
+//    std::cout << "Testing unique idx serialization" << std::endl;
+//    std::cout << "Size before serialization: " << current_bytes << std::endl;
+//    std::cout << "Bytes written:             " << buffer.size() - current_bytes << std::endl;
+//    std::cout << "Size after serialization:  " << buffer.size() << std::endl;
+//    if (deserialized_is_visible.first != is_visible_to_blacklist_)
+//    {
+//        std::cout << "Initial:      " << is_visible_to_blacklist_ << std::endl;
+//        std::cout << "Deserialized: " << deserialized_is_visible.first << std::endl;
+//    }
+
+    const uint64_t ending_bytes = buffer.size();
+
+//    std::cout << "Serialization starting bytes: " << starting_bytes << std::endl;
+//    std::cout << "Serialization bytes written:  " << ending_bytes - starting_bytes << std::endl;
+//    std::cout << "Serialization ending bytes:   " << ending_bytes << std::endl;
+
+//    std::cout << std::endl;
+
+    const auto deserialized = Deserialize(buffer, starting_bytes, band_);
+
+//    std::cout << "Bytes written: " << ending_bytes - starting_bytes << std::endl;
+//    std::cout << "Bytes read:    " << deserialized.second << std::endl;
+
+    assert(ending_bytes - starting_bytes == deserialized.second);
+
+//    std::cout << std::endl;
+//    std::cout << std::endl;
+
+
     return ending_bytes - starting_bytes;
 }
 
@@ -234,28 +317,39 @@ std::pair<RRTConfig, uint64_t> RRTConfig::Deserialize(const std::vector<uint8_t>
     assert(current < buffer.size());
     uint64_t current_position = current;
 
-    std::cout << "Deserializing gripper positions" << std::endl;
+//    std::cout << "Deserializing gripper positions" << std::endl;
+//    std::cout << "Starting at buffer idx: " << current_position << std::endl;
     const auto grippers_position_deserialized = arc_utilities::DeserializePair<Vector3d, Vector3d>(
                 buffer, current_position, &arc_utilities::DeserializeEigenType<Vector3d>, &arc_utilities::DeserializeEigenType<Vector3d>);
     current_position += grippers_position_deserialized.second;
+//    std::cout << "Read a total of :       " << grippers_position_deserialized.second << " bytes" << std::endl;
 
-    std::cout << "Deserializing robot configuration" << std::endl;
+//    std::cout << "Deserializing robot configuration" << std::endl;
+//    std::cout << "Starting at buffer idx: " << current_position << std::endl;
     const auto robot_configuration_deserialized = arc_utilities::DeserializePair<VectorXd, VectorXd>(
                 buffer, current_position, &arc_utilities::DeserializeEigenType<VectorXd>, &arc_utilities::DeserializeEigenType<VectorXd>);
     current_position += robot_configuration_deserialized.second;
+//    std::cout << "Read a total of :       " << robot_configuration_deserialized.second << " bytes" << std::endl;
 
-    std::cout << "Deserializing unique id" << std::endl;
+//    std::cout << "Deserializing unique id" << std::endl;
+//    std::cout << "Starting at buffer idx: " << current_position << std::endl;
     const auto unique_forward_propogation_idx_deserialized = arc_utilities::DeserializeFixedSizePOD<size_t>(buffer, current_position);
     current_position += unique_forward_propogation_idx_deserialized.second;
+//    std::cout << "Read a total of :       " << robot_configuration_deserialized.second << " bytes" << std::endl;
 
-    std::cout << "Deserializing band" << std::endl;
+//    std::cout << "Deserializing band" << std::endl;
+//    std::cout << "Starting at buffer idx: " << current_position << std::endl;
     RubberBand band = starting_band;
     current_position += band.deserializeIntoSelf(buffer, current_position);
+//    std::cout << "Read a total of :       " << " I dunno, do the math " << " bytes" << std::endl;
 
-    std::cout << "Deserializing is visible" << std::endl;
+//    std::cout << "Deserializing is visible" << std::endl;
+//    std::cout << "Starting at buffer idx: " << current_position << std::endl;
     const auto is_visible_to_blacklist_deserialized = arc_utilities::DeserializeFixedSizePOD<bool>(buffer, current_position);
+    current_position += is_visible_to_blacklist_deserialized.second;
+//    std::cout << "Read a total of :       " << is_visible_to_blacklist_deserialized.second << " bytes" << std::endl;
 
-    std::cout << "Compiling results and returning" << std::endl;
+//    std::cout << "Compiling results and returning" << std::endl;
     RRTConfig deserialized(
                 grippers_position_deserialized.first,
                 robot_configuration_deserialized.first,
@@ -264,30 +358,10 @@ std::pair<RRTConfig, uint64_t> RRTConfig::Deserialize(const std::vector<uint8_t>
                 is_visible_to_blacklist_deserialized.first);
 
     const uint64_t bytes_read = current_position - current;
+
+//    std::cout << "Deserialization bytes read: " << bytes_read << std::endl << std::endl;
+
     return std::make_pair(deserialized, bytes_read);
-}
-
-void RRTConfig::SavePathToFile(const std::vector<RRTConfig, RRTAllocator>& path)
-{
-    std::vector<uint8_t> buffer;
-    arc_utilities::SerializeVector<RRTConfig, RRTAllocator>(path, buffer, &RRTConfig::Serialize);
-    ros::NodeHandle nh("/");
-    const std::string file_path = GetLogFolder(nh) + "rrt_solution_no_smoothing.path";
-    ZlibHelpers::CompressAndWriteToFile(buffer, file_path);
-}
-
-std::vector<RRTConfig, RRTAllocator> RRTConfig::LoadPathFomFile(const RubberBand& starting_band)
-{
-    const auto deserializer = [&] (const std::vector<uint8_t>& buffer, const uint64_t current)
-    {
-        return RRTConfig::Deserialize(buffer, current, starting_band);
-    };
-
-    ros::NodeHandle nh("/");
-    const std::string file_path = GetLogFolder(nh) + "rrt_solution_no_smoothing.path";
-    const std::vector<uint8_t> buffer = ZlibHelpers::LoadFromFileAndDecompress(file_path);
-    const auto path_deserialized = arc_utilities::DeserializeVector<RRTConfig, RRTAllocator>(buffer, 0, deserializer);
-    return path_deserialized.first;
 }
 
 std::size_t std::hash<smmap::RRTConfig>::operator()(const smmap::RRTConfig& rrt_config) const
@@ -314,6 +388,8 @@ std::size_t std::hash<smmap::RRTConfig>::operator()(const smmap::RRTConfig& rrt_
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 RRTHelper::RRTHelper(
+        ros::NodeHandle& nh,
+        ros::NodeHandle& ph,
         const RobotInterface::Ptr robot,
         const sdf_tools::SignedDistanceField& environment_sdf,
         const Visualizer::Ptr vis,
@@ -334,7 +410,9 @@ RRTHelper::RRTHelper(
         const uint32_t max_smoothing_iterations,
         const uint32_t max_failed_smoothing_iterations,
         const bool visualization_enabled)
-    : robot_(robot)
+    : nh_(nh)
+    , ph_(ph.getNamespace() + "/rrt")
+    , robot_(robot)
     , environment_sdf_(environment_sdf)
 
     , vis_(vis)
@@ -480,9 +558,11 @@ RRTConfig RRTHelper::configSampling()
     {
         arc_helpers::DoNotOptimize(arm_a_goal_configurations_);
         const RRTRobotRepresentation arm_config_sample = robotConfigPairSampling_internal();
-        const AllGrippersSinglePose grippers_pose_sample_as_vector = robot_->getGrippersPoses(arm_config_sample);
-        const RRTGrippersRepresentation grippers_pose_sample_as_pair(grippers_pose_sample_as_vector[0].translation(), grippers_pose_sample_as_vector[1].translation());
-        const RRTConfig sample(grippers_pose_sample_as_pair, arm_config_sample, next_unique_forward_propogation_idx_, *starting_band_, false);
+//        const AllGrippersSinglePose grippers_pose_sample_as_vector = robot_->getGrippersPoses(arm_config_sample);
+//        const RRTGrippersRepresentation grippers_pose_sample_as_pair(grippers_pose_sample_as_vector[0].translation(), grippers_pose_sample_as_vector[1].translation());
+//        const RRTConfig gripper_config_sample(grippers_pose_sample_as_pair, arm_config_sample, next_unique_forward_propogation_idx_, *starting_band_, false);
+        RRTGrippersRepresentation gripper_config_sample(Eigen::Vector3d(NAN, NAN, NAN), Eigen::Vector3d(NAN, NAN, NAN));
+        const RRTConfig sample(gripper_config_sample, arm_config_sample, next_unique_forward_propogation_idx_, *starting_band_, false);
         arc_helpers::DoNotOptimize(sample.getGrippers());
 
         const double sampling_time = stopwatch(READ);
@@ -577,15 +657,65 @@ RRTRobotRepresentation RRTHelper::robotConfigPairSampling_internal()
     else
     {
         rand_sample.first.resize(arm_dof_.first);
+        rand_sample.second.resize(arm_dof_.second);
         for (ssize_t idx = 0; idx < arm_dof_.first; ++idx)
         {
             rand_sample.first(idx) = EigenHelpers::Interpolate(robot_joint_limits_lower_.first(idx), robot_joint_limits_upper_.first(idx), uniform_unit_distribution_(generator_));
         }
 
-        rand_sample.second.resize(arm_dof_.second);
         for (ssize_t idx = 0; idx < arm_dof_.second; ++idx)
         {
             rand_sample.second(idx) = EigenHelpers::Interpolate(robot_joint_limits_lower_.second(idx), robot_joint_limits_upper_.second(idx), uniform_unit_distribution_(generator_));
+        }
+
+        return rand_sample;
+
+
+
+
+
+        // Keep sampling until something works
+        while (true)
+        {
+            for (ssize_t idx = 0; idx < arm_dof_.first; ++idx)
+            {
+                rand_sample.first(idx) = EigenHelpers::Interpolate(robot_joint_limits_lower_.first(idx), robot_joint_limits_upper_.first(idx), uniform_unit_distribution_(generator_));
+            }
+
+            for (ssize_t idx = 0; idx < arm_dof_.second; ++idx)
+            {
+                rand_sample.second(idx) = EigenHelpers::Interpolate(robot_joint_limits_lower_.second(idx), robot_joint_limits_upper_.second(idx), uniform_unit_distribution_(generator_));
+            }
+
+            const AllGrippersSinglePose sampled_gripper_poses = robot_->getGrippersPoses(rand_sample);
+            const RRTGrippersRepresentation sampled_gripper_positions(sampled_gripper_poses[0].translation(), sampled_gripper_poses[1].translation());
+
+            // Check if we rotated the grippers too much
+            {
+                const double gripper_a_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_[0].rotation(), sampled_gripper_poses[0].rotation());
+                const double gripper_b_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_[1].rotation(), sampled_gripper_poses[1].rotation());
+                if (gripper_a_rotation_dist > max_gripper_rotation_ || gripper_b_rotation_dist > max_gripper_rotation_)
+                {
+                    continue;
+                }
+            }
+
+            // If the grippers move outside of the planning arena, then this is not a valid sample
+            {
+                auto task_frame_next_grippers_position = sampled_gripper_positions;
+                task_frame_next_grippers_position.first = task_aligned_frame_.inverse() * task_frame_next_grippers_position.first;
+                task_frame_next_grippers_position.second = task_aligned_frame_.inverse() * task_frame_next_grippers_position.second;
+
+                if ((task_frame_next_grippers_position.first.array() > task_aligned_upper_limits_.array()).any() ||
+                    (task_frame_next_grippers_position.first.array() < task_aligned_lower_limits_.array()).any() ||
+                    (task_frame_next_grippers_position.second.array() > task_aligned_upper_limits_.array()).any() ||
+                    (task_frame_next_grippers_position.second.array() < task_aligned_lower_limits_.array()).any())
+                {
+                    continue;
+                }
+
+                break;
+            }
         }
     }
 
@@ -697,7 +827,7 @@ std::vector<std::pair<RRTConfig, int64_t>> RRTHelper::forwardPropogationFunction
 
         Stopwatch ik_stopwatch;
         arc_helpers::DoNotOptimize(target_grippers_poses);
-        const auto ik_solutions = robot_->getIkSolutions(target_grippers_poses);
+        const auto ik_solutions = robot_->getCloseIkSolutions(target_grippers_poses);
         arc_helpers::DoNotOptimize(ik_solutions);
         assert(ik_solutions.size() == 2);
         const double ik_time = ik_stopwatch(READ);
@@ -1164,7 +1294,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
         while (arm_a_goal_configurations_.size() == 0)
         {
             ROS_INFO_THROTTLE_NAMED(1.0, "rrt", "Getting arm 'a' IK solutions at gripper goal");
-            arm_a_goal_configurations_ = robot_->getIkSolutions(robot_->getGrippersData()[0].name_, target_grippers_poses[0]);
+            arm_a_goal_configurations_ = robot_->getCloseIkSolutions(robot_->getGrippersData()[0].name_, target_grippers_poses[0]);
         }
         arm_a_goal_config_int_distribution_ = std::uniform_int_distribution<size_t>(0, arm_a_goal_configurations_.size() - 1);
 
@@ -1172,7 +1302,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
         while (arm_b_goal_configurations_.size() == 0)
         {
             ROS_INFO_THROTTLE_NAMED(1.0, "rrt", "Getting arm 'b' IK solutions at gripper goal");
-            arm_b_goal_configurations_ = robot_->getIkSolutions(robot_->getGrippersData()[1].name_, target_grippers_poses[1]);
+            arm_b_goal_configurations_ = robot_->getCloseIkSolutions(robot_->getGrippersData()[1].name_, target_grippers_poses[1]);
         }
         arm_b_goal_config_int_distribution_ = std::uniform_int_distribution<size_t>(0, arm_b_goal_configurations_.size() - 1);
 
@@ -1226,31 +1356,42 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
     next_unique_forward_propogation_idx_ = 1;
 
     ROS_INFO_NAMED("rrt", "Starting SimpleHybridRRTPlanner");
-
-    // Call the actual planner
-    const auto rrt_results = simple_rrt_planner::SimpleHybridRRTPlanner::Plan<RRTConfig, RRTAllocator>(
-                start, nearest_neighbor_fn, goal_reached_fn, sampling_fn, forward_propagation_fn, time_limit);
-
-    if (visualization_enabled_globally_)
+    std::vector<RRTConfig, RRTAllocator> path;
+    if (useStoredPath())
     {
-        vis_->clearVisualizationsBullet();
+        path = loadStoredPath();
     }
 
-    statistics_["planning0_sampling_time                                 "] = total_sampling_time_;
-    statistics_["planning1_nearest_neighbour_time                        "] = total_nearest_neighbour_time_;
-    statistics_["planning2_forward_propogation_band_sim_time             "] = total_band_forward_propogation_time_;
-    statistics_["planning3_forward_propogation_first_order_vis_time      "] = total_first_order_vis_propogation_time_;
-    statistics_["planning4_forward_propogation_everything_included_time  "] = total_everything_included_forward_propogation_time_;
-    statistics_["planning5_total_time                                    "] = rrt_results.second.at("planning_time");
+    // If we failed to retreive a path (or we didn't try) then plan a path
+    if (path.size() == 0)
+    {
+        // Call the actual planner
+        const auto rrt_results = simple_rrt_planner::SimpleHybridRRTPlanner::Plan<RRTConfig, RRTAllocator>(
+                    start, nearest_neighbor_fn, goal_reached_fn, sampling_fn, forward_propagation_fn, time_limit);
 
-    std::cout << "\nSimpleRRT Statistics:\n" << PrettyPrint::PrettyPrint(rrt_results.second, false, "\n") << std::endl << std::endl;
+        if (visualization_enabled_globally_)
+        {
+            vis_->clearVisualizationsBullet();
+        }
 
+        statistics_["planning0_sampling_time                                 "] = total_sampling_time_;
+        statistics_["planning1_nearest_neighbour_time                        "] = total_nearest_neighbour_time_;
+        statistics_["planning2_forward_propogation_band_sim_time             "] = total_band_forward_propogation_time_;
+        statistics_["planning3_forward_propogation_first_order_vis_time      "] = total_first_order_vis_propogation_time_;
+        statistics_["planning4_forward_propogation_everything_included_time  "] = total_everything_included_forward_propogation_time_;
+        statistics_["planning5_total_time                                    "] = rrt_results.second.at("planning_time");
 
-    const std::vector<RRTConfig, RRTAllocator>& path = rrt_results.first;
-    RRTConfig::SavePathToFile(path);
+        std::cout << "\nSimpleRRT Statistics:\n" << PrettyPrint::PrettyPrint(rrt_results.second, false, "\n") << std::endl << std::endl;
 
+        std::vector<RRTConfig, RRTAllocator> path = rrt_results.first;
 
-//    std::vector<RRTConfig, RRTAllocator> path = RRTConfig::LoadPathFomFile(*starting_band_);
+//        std::vector<RRTConfig, RRTAllocator> path;
+//        path.push_back(start);
+//        path.push_back(start);
+//        path.push_back(start);
+//        path.push_back(start);
+        storePath(path);
+    }
 
     ROS_INFO_NAMED("rrt", "Starting Shortcut Smoothing");
     const bool visualize_rrt_smoothing = true;
@@ -2030,4 +2171,94 @@ void RRTHelper::visualizeBlacklist() const
     }
 
     vis_->visualizeLines(RRT_BLACKLISTED_GOAL_BANDS_NS, line_start_points, line_end_points, Visualizer::Red(), 1, 0.01);
+}
+
+void RRTHelper::storePath(const std::vector<RRTConfig, RRTAllocator>& path) const
+{
+    try
+    {
+        const auto log_folder = ROSHelpers::GetParamRequiredDebugLog<std::string>(nh_, "log_folder", __func__);
+        if (!log_folder.Valid())
+        {
+            throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
+        }
+        arc_utilities::CreateDirectory(log_folder.GetImmutable());
+        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "path_file_name_prefix", __func__);
+        if (!file_name_prefix.Valid())
+        {
+            throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_prefix from parameter server");
+        }
+
+        const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsString();
+        const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
+        const std::string full_path = log_folder.GetImmutable() + file_name;
+        ROS_DEBUG_STREAM("Saving path to " << full_path);
+
+        std::vector<uint8_t> buffer;
+        arc_utilities::SerializeVector<RRTConfig, RRTAllocator>(path, buffer, &RRTConfig::Serialize);
+        ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
+
+        // Verify no mistakes were made
+        {
+            const auto deserializer = [&] (const std::vector<uint8_t>& buffer, const uint64_t current)
+            {
+                return RRTConfig::Deserialize(buffer, current, *starting_band_);
+            };
+
+            const std::vector<RRTConfig, RRTAllocator> retrieved_path =
+                    arc_utilities::DeserializeVector<RRTConfig, RRTAllocator>(buffer, 0, deserializer).first;
+
+            assert(retrieved_path == path);
+        }
+    }
+    catch (const std::exception& e)
+    {
+        ROS_ERROR_STREAM("Failed to store path: "  <<  e.what());
+    }
+}
+
+std::vector<RRTConfig, RRTAllocator> RRTHelper::loadStoredPath() const
+{
+    try
+    {
+        const auto log_folder = ROSHelpers::GetParamRequired<std::string>(nh_, "log_folder", __func__);
+        if (!log_folder.Valid())
+        {
+            throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
+        }
+        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "path_file_name_prefix", __func__);
+        if (!file_name_prefix.Valid())
+        {
+            throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_prefix from parameter server");
+        }
+        const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "path_file_name_suffix_to_load", __func__);
+        if (!file_name_suffix.Valid())
+        {
+            throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_suffix_to_load from parameter server");
+        }
+
+        const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix.GetImmutable() + ".compressed";
+        const std::string full_path = log_folder.GetImmutable() + file_name;
+        ROS_INFO_STREAM("Loading path from " << full_path);
+
+        const auto deserializer = [&] (const std::vector<uint8_t>& buffer, const uint64_t current)
+        {
+            return RRTConfig::Deserialize(buffer, current, *starting_band_);
+        };
+
+        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(full_path);
+        const auto path_deserialized = arc_utilities::DeserializeVector<RRTConfig, RRTAllocator>(buffer, 0, deserializer);
+        return path_deserialized.first;
+    }
+    catch (const std::exception& e)
+    {
+        ROS_ERROR_STREAM("Failed to load stored band: "  <<  e.what());
+    }
+
+    return std::vector<RRTConfig, RRTAllocator>();
+}
+
+bool RRTHelper::useStoredPath() const
+{
+    return ROSHelpers::GetParamRequired<bool>(ph_, "use_stored_path", __func__).GetImmutable();
 }
