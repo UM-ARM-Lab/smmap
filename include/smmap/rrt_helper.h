@@ -218,7 +218,8 @@ namespace smmap
             const std_msgs::ColorRGBA gripper_a_tree_color_;
             const std_msgs::ColorRGBA gripper_b_tree_color_;
 
-            const Eigen::Isometry3d task_aligned_frame_;
+            const Eigen::Isometry3d task_aligned_frame_transform_;
+            const Eigen::Isometry3d task_aligned_frame_inverse_transform_;
             const Eigen::Vector3d task_aligned_lower_limits_;
             const Eigen::Vector3d task_aligned_upper_limits_;
             const double max_gripper_step_size_;

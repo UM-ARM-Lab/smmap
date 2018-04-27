@@ -364,6 +364,23 @@ std::pair<bool, Eigen::VectorXd> RobotInterface::getGeneralIkSolution(
     return general_ik_solution_fn_(starting_config, gripper_names, target_poses);
 }
 
+std::pair<bool, std::pair<Eigen::VectorXd, Eigen::VectorXd>> RobotInterface::getGeneralIkSolution(
+        const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration,
+        const AllGrippersSinglePose& target_poses) const
+{
+    const auto num_dof = robot_configuration.first.size() + robot_configuration.second.size();
+    Eigen::VectorXd stacked_config(num_dof);
+    stacked_config << robot_configuration.first, robot_configuration.second;
+
+    const std::vector<std::string> gripper_names = {grippers_data_[0].name_, grippers_data_[1].name_};
+
+    const std::pair<bool, Eigen::VectorXd> stacked_result = getGeneralIkSolution(stacked_config, gripper_names, target_poses);
+    assert(stacked_result.second.size() == num_dof);
+    const Eigen::VectorXd result_a = stacked_result.second.head(robot_configuration.first.size());
+    const Eigen::VectorXd result_b = stacked_result.second.tail(robot_configuration.second.size());
+    return {stacked_result.first, {result_a, result_b}};
+}
+
 void RobotInterface::setCallbackFunctions(
         const std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)>& get_ee_poses_fn,
         const std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)>& get_grippers_jacobian_fn,

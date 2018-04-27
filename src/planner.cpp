@@ -918,7 +918,23 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectF
 bool Planner::globalPlannerNeededDueToOverstretch(
         const WorldState& current_world_state)
 {
-    return true;
+    static bool returned_true_by_default_once = false;
+
+    if (!returned_true_by_default_once)
+    {
+        returned_true_by_default_once = true;
+        return true;
+    }
+
+
+
+
+
+
+
+
+
+
 
     static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(ph_);
 
@@ -1003,6 +1019,12 @@ bool Planner::globalPlannerNeededDueToLackOfProgress()
 
 bool Planner::predictStuckForGlobalPlannerResults(const bool visualization_enabled)
 {
+    return false;
+
+
+
+
+
     assert(global_plan_current_timestep_ < global_plan_gripper_trajectory_.size());
 
     // TODO: Move to class wide location, currently in 2 positions in this file

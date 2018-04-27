@@ -92,6 +92,10 @@ namespace smmap
                     const std::vector<std::string>& gripper_names,
                     const AllGrippersSinglePose& target_poses) const;
 
+            std::pair<bool, std::pair<Eigen::VectorXd, Eigen::VectorXd>> getGeneralIkSolution(
+                    const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration,
+                    const AllGrippersSinglePose& target_poses) const;
+
             void setCallbackFunctions(
                     const std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)>& get_ee_poses_fn,
                     const std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)>& get_grippers_jacobian_fn,
