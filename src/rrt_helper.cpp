@@ -1517,6 +1517,7 @@ std::vector<RRTConfig, RRTAllocator> RRTHelper::rrtPlan(
         statistics_["planning5_total_time                                    "] = rrt_results.second.at("planning_time");
 
         std::cout << "\nSimpleRRT Statistics:\n" << PrettyPrint::PrettyPrint(rrt_results.second, false, "\n") << std::endl << std::endl;
+        std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
 
         std::vector<RRTConfig, RRTAllocator> path = rrt_results.first;
 

@@ -74,6 +74,7 @@ RobotInterface::RobotInterface(ros::NodeHandle& nh, ros::NodeHandle& ph)
     , full_robot_collision_check_fn_(nullptr)
     , close_ik_solutions_fn_(nullptr)
     , general_ik_solution_fn_(nullptr)
+    , test_path_for_collision_fn_(nullptr)
 {}
 
 RobotInterface::~RobotInterface()
@@ -381,6 +382,16 @@ std::pair<bool, std::pair<Eigen::VectorXd, Eigen::VectorXd>> RobotInterface::get
     return {stacked_result.first, {result_a, result_b}};
 }
 
+bool RobotInterface::testPathForCollision(const std::vector<Eigen::VectorXd>& path) const
+{
+    if (test_path_for_collision_fn_ == nullptr)
+    {
+        ROS_ERROR_NAMED("robot_interface", "Asked for test_path_for_collision_fn_, but function pointer is null");
+        return true;
+    }
+    return test_path_for_collision_fn_(path);
+}
+
 void RobotInterface::setCallbackFunctions(
         const std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)>& get_ee_poses_fn,
         const std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)>& get_grippers_jacobian_fn,
@@ -388,7 +399,8 @@ void RobotInterface::setCallbackFunctions(
         const std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_jacobians_fn,
         const std::function<bool(const Eigen::VectorXd& configuration)>& full_robot_collision_check_fn,
         const std::function<std::vector<Eigen::VectorXd>(const std::string& gripper, const Eigen::Isometry3d& target_pose)>& close_ik_solutions_fn,
-        const std::function<std::pair<bool, Eigen::VectorXd>(const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn)
+        const std::function<std::pair<bool, Eigen::VectorXd>(const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn,
+        const std::function<bool(const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn)
 {
     get_ee_poses_fn_ = get_ee_poses_fn;
     get_grippers_jacobian_fn_ = get_grippers_jacobian_fn;
@@ -397,6 +409,7 @@ void RobotInterface::setCallbackFunctions(
     full_robot_collision_check_fn_ = full_robot_collision_check_fn;
     close_ik_solutions_fn_ = close_ik_solutions_fn;
     general_ik_solution_fn_ = general_ik_solution_fn;
+    test_path_for_collision_fn_ = test_path_for_collision_fn;
 }
 
 

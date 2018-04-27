@@ -1417,6 +1417,10 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
             global_plan_full_robot_trajectory_ = deserialized_full_robot_traj.first;
 
             ROS_INFO_STREAM_NAMED("rrt_planner_results", "Read RRT solutions in " << stopwatch(READ) << " seconds");
+            if (world_state.robot_configuration_valid_ && robot_->testPathForCollision(global_plan_full_robot_trajectory_))
+            {
+                throw_arc_exception(std::runtime_error, "Loaded plan did not pass collision validation");
+            }
             return;
         }
         catch (...)
@@ -1550,6 +1554,8 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
             }
         }
     }
+
+    assert(!(robot_->testPathForCollision(global_plan_full_robot_trajectory_)));
 }
 
 void Planner::convertRRTResultIntoGripperTrajectory(

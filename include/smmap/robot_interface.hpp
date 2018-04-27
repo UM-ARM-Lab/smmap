@@ -96,6 +96,8 @@ namespace smmap
                     const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration,
                     const AllGrippersSinglePose& target_poses) const;
 
+            bool testPathForCollision(const std::vector<Eigen::VectorXd>& path) const;
+
             void setCallbackFunctions(
                     const std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)>& get_ee_poses_fn,
                     const std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)>& get_grippers_jacobian_fn,
@@ -103,7 +105,8 @@ namespace smmap
                     const std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_jacobians_fn,
                     const std::function<bool(const Eigen::VectorXd& configuration)>& full_robot_collision_check_fn,
                     const std::function<std::vector<Eigen::VectorXd>(const std::string& gripper, const Eigen::Isometry3d& target_pose)>& close_ik_solutions_fn,
-                    const std::function<std::pair<bool, Eigen::VectorXd>(const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn);
+                    const std::function<std::pair<bool, Eigen::VectorXd>(const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn,
+                    const std::function<bool(const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn);
 
             // Defaults the timespace to "latest available", indicted by ros::Time(0)
             Eigen::Vector3d transformToFrame(
@@ -156,6 +159,7 @@ namespace smmap
             std::function<bool(const Eigen::VectorXd& configuration)> full_robot_collision_check_fn_;
             std::function<std::vector<Eigen::VectorXd>(const std::string& gripper, const Eigen::Isometry3d& target_pose)> close_ik_solutions_fn_;
             std::function<std::pair<bool, Eigen::VectorXd>(const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn_;
+            std::function<bool(const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn_;
 
             WorldState commandRobotMotion_impl(
                     const deformable_manipulation_msgs::ExecuteRobotMotionRequest& movement);
