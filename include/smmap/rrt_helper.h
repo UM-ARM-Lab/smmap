@@ -175,6 +175,10 @@ namespace smmap
 
             bool goalReached(const RRTConfig& node);
 
+            const std::pair<bool, RRTRobotRepresentation> projectToValidConfig(
+                    const RRTRobotRepresentation& configuration,
+                    const AllGrippersSinglePose& poses) const;
+
             /* const std::function<std::vector<std::pair<T, int64_t>>(const T&, const T&)>& forward_propagation_fn,
              * forward_propagation_fn - given the nearest neighbor and a new target state, returns the states that would grow the tree towards the target
              * SHOULD : collosion checking, constraint violation checking
@@ -263,9 +267,10 @@ namespace smmap
             std::map<std::string, double> statistics_;
             double total_sampling_time_;
             double total_nearest_neighbour_time_;
-            double total_everything_included_forward_propogation_time_;
             double total_band_forward_propogation_time_;
+            double total_crrt_projection_time_;
             double total_first_order_vis_propogation_time_;
+            double total_everything_included_forward_propogation_time_;
 
             // Used to augment the state, duplicates work done by external code, but oh well
             size_t next_unique_forward_propogation_idx_;
