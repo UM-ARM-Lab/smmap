@@ -12,17 +12,18 @@
 
 namespace smmap
 {
-    class RRTConfig;
-    typedef std::allocator<RRTConfig> RRTAllocator;
-    typedef simple_rrt_planner::SimpleRRTPlannerState<RRTConfig, RRTAllocator> ExternalRRTState;
+    class RRTNode;
+    typedef std::allocator<RRTNode> RRTAllocator;
+    typedef simple_rrt_planner::SimpleRRTPlannerState<RRTNode, RRTAllocator> ExternalRRTState;
 }
 
+// Needed for the goal extension blacklist
 namespace std
 {
     template<>
-    struct hash<smmap::RRTConfig>
+    struct hash<smmap::RRTNode>
     {
-        std::size_t operator()(const smmap::RRTConfig& rrt_config) const;
+        std::size_t operator()(const smmap::RRTNode& rrt_config) const;
     };
 }
 
@@ -31,50 +32,80 @@ namespace smmap
     typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> RRTGrippersRepresentation;
     typedef std::pair<Eigen::VectorXd, Eigen::VectorXd> RRTRobotRepresentation;
 
-    class RRTConfig
+    class RRTNode
     {
         public:
             EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-            RRTConfig(
+            RRTNode();
+
+            RRTNode(
                     const RRTGrippersRepresentation& grippers_position,
                     const RRTRobotRepresentation& robot_configuration,
+                    const RubberBand::Ptr& band,
+                    const size_t unique_forward_propogation_idx);
+
+            RRTNode(
+                    const RRTGrippersRepresentation& grippers_position,
+                    const RRTRobotRepresentation& robot_configuration,
+                    const RubberBand::Ptr& band,
                     const size_t unique_forward_propogation_idx,
-                    const RubberBand& band,
-                    const bool is_visible_to_blacklist);
+                    const int64_t parent_index);
+
+            RRTNode(
+                    const RRTGrippersRepresentation& grippers_position,
+                    const RRTRobotRepresentation& robot_configuration,
+                    const RubberBand::Ptr& band,
+                    const size_t unique_forward_propogation_idx,
+                    const int64_t parent_index,
+                    const std::vector<int64_t>& child_indices);
+
+            bool isInitialized() const;
 
             const RRTGrippersRepresentation& getGrippers() const;
             const RRTRobotRepresentation& getRobotConfiguration() const;
+            const RubberBand::Ptr& getBand() const;
             size_t getUniqueForwardPropogationIndex() const;
-            const RubberBand& getBand() const;
-            bool isVisibleToBlacklist() const;
 
-            // returned distance is the Euclidian distance of two grippers pos
-            double distance(const RRTConfig& other) const;
-            static double distance(const RRTConfig& c1, const RRTConfig& c2);
+            int64_t getParentIndex() const;
+            void setParentIndex(const int64_t parent_index);
+
+            const std::vector<int64_t>& getChildIndices() const;
+            void clearChildIndicies();
+            void addChildIndex(const int64_t child_index);
+            void removeChildIndex(const int64_t child_index);
+
+            double distance(const RRTNode& other) const;
+            static double distance(const RRTNode& c1, const RRTNode& c2);
             static double distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
             static double distance(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2);
 
-            static double grippersPathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index);
-            static double robotPathDistance(const std::vector<RRTConfig, RRTAllocator>& path, const size_t start_index, const size_t end_index);
+            static double grippersPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index);
+            static double robotPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index);
+
+
 
             std::string print() const;
 
-            bool operator==(const RRTConfig& other) const;
+            bool operator==(const RRTNode& other) const;
 
             uint64_t serialize(std::vector<uint8_t>& buffer) const;
 //            std::pair<RRTConfig, uint64_t> deserialize(const std::vector<uint8_t>& buffer, const uint64_t current);
 
-            static uint64_t Serialize(const RRTConfig& config, std::vector<uint8_t>& buffer);
-            static std::pair<RRTConfig, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current, const RubberBand& starting_band);
+            static uint64_t Serialize(const RRTNode& config, std::vector<uint8_t>& buffer);
+            static std::pair<RRTNode, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current, const RubberBand& starting_band);
 
         private:
 
             RRTGrippersRepresentation grippers_position_;
             RRTRobotRepresentation robot_configuration_;
+            RubberBand::Ptr band_;
+
+            // Book keeping
             size_t unique_forward_propogation_idx_;
-            RubberBand band_;
-            bool is_visible_to_blacklist_;
+            int64_t parent_index_;
+            std::vector<int64_t> child_indices_;
+            bool initialized_;
     };
 
     class RRTHelper
@@ -106,8 +137,8 @@ namespace smmap
                     const RobotInterface::Ptr robot,
                     const sdf_tools::SignedDistanceField& environment_sdf,
                     const smmap_utilities::Visualizer::Ptr vis,
-                    std::mt19937_64& generator,
-                    const std::shared_ptr<PRMHelper>& prm_helper,
+                    const std::shared_ptr<std::mt19937_64>& generator,
+                    const PRMHelper::Ptr& prm_helper,
                     const Eigen::Isometry3d& task_aligned_frame,
                     const Eigen::Vector3d& task_aligned_lower_limits,
                     const Eigen::Vector3d& task_aligned_upper_limits,
@@ -124,8 +155,8 @@ namespace smmap
                     const uint32_t max_failed_smoothing_iterations,
                     const bool visualization_enabled);
 
-            std::vector<RRTConfig, RRTAllocator> rrtPlan(
-                    const RRTConfig& start,
+            std::vector<RRTNode, RRTAllocator> rrtPlan(
+                    const RRTNode& start,
                     const RRTGrippersRepresentation& grippers_goal,
                     const std::chrono::duration<double>& time_limit);
 
@@ -139,13 +170,13 @@ namespace smmap
             // Visualization and other debugging tools
             ///////////////////////////////////////////////////////////////////////////////////////
 
-            void visualizePath(const std::vector<RRTConfig, RRTAllocator>& path) const;
+            void visualizePath(const std::vector<RRTNode, RRTAllocator>& path) const;
 
             void visualizeBlacklist() const;
 
-            void storePath(const std::vector<RRTConfig, RRTAllocator>& path) const;
+            void storePath(const std::vector<RRTNode, RRTAllocator>& path) const;
 
-            std::vector<RRTConfig, RRTAllocator> loadStoredPath() const;
+            std::vector<RRTNode, RRTAllocator> loadStoredPath() const;
 
             bool useStoredPath() const;
 
@@ -154,26 +185,26 @@ namespace smmap
             // Helper functions and data for internal rrt planning algorithm
             ///////////////////////////////////////////////////////////////////////////////////////
 
-            std::unordered_set<RRTConfig> goal_expansion_nn_blacklist_;
+            std::unordered_set<RRTNode> goal_expansion_nn_blacklist_;
 
             int64_t nearestNeighbour(
                     const std::vector<ExternalRRTState>& nodes,
-                    const RRTConfig& config);
+                    const RRTNode& config);
 
             // Used for timing purposes
             // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
             int64_t nearestNeighbour_internal(
                     const std::vector<ExternalRRTState>& nodes,
-                    const RRTConfig& config);
+                    const RRTNode& config);
 
-            RRTConfig configSampling();
+            RRTNode configSampling();
             // Used for timing purposes
             // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
-            RRTConfig prmBasedSampling_internal();
+            RRTNode prmBasedSampling_internal();
             RRTGrippersRepresentation posPairSampling_internal();
             RRTRobotRepresentation robotConfigPairSampling_internal();
 
-            bool goalReached(const RRTConfig& node);
+            bool goalReached(const RRTNode& node);
 
             const std::pair<bool, RRTRobotRepresentation> projectToValidConfig(
                     const RRTRobotRepresentation& configuration,
@@ -181,7 +212,7 @@ namespace smmap
 
             /* const std::function<std::vector<std::pair<T, int64_t>>(const T&, const T&)>& forward_propagation_fn,
              * forward_propagation_fn - given the nearest neighbor and a new target state, returns the states that would grow the tree towards the target
-             * SHOULD : collosion checking, constraint violation checking
+             * SHOULD : collision checking, constraint violation checking
              Determine the parent index of the new state
              This process deserves some explanation
              The "current relative parent index" is the index of the parent, relative to the list of propagated nodes.
@@ -189,23 +220,22 @@ namespace smmap
              NOTE - the relative parent index *must* be lower than the index in the list of prograted nodes
              * i.e. the first node must have a negative value, and so on.
              */
-            std::vector<std::pair<RRTConfig, int64_t>> forwardPropogationFunction(
-                    const RRTConfig& nearest_neighbor,
-                    const RRTConfig& random_target,
-                    const bool calculate_first_order_vis,
+            std::vector<std::pair<RRTNode, int64_t>> forwardPropogationFunction(
+                    const RRTNode& nearest_neighbor,
+                    const RRTNode& random_target,
                     const bool visualization_enabled_locally);
 
             ///////////////////////////////////////////////////////////////////////////////////////
             // Helper function for shortcut smoothing
             ///////////////////////////////////////////////////////////////////////////////////////
 
-            std::pair<bool, std::vector<RRTConfig, RRTAllocator>> forwardSimulateGrippersPath(
-                    const std::vector<RRTConfig, RRTAllocator>& path,
+            std::pair<bool, std::vector<RRTNode, RRTAllocator>> forwardSimulateGrippersPath(
+                    const std::vector<RRTNode, RRTAllocator>& path,
                     const size_t start_index,
                     RubberBand rubber_band);
 
-            std::vector<RRTConfig, RRTAllocator> rrtShortcutSmooth(
-                    std::vector<RRTConfig, RRTAllocator> path,
+            std::vector<RRTNode, RRTAllocator> rrtShortcutSmooth(
+                    std::vector<RRTNode, RRTAllocator> path,
                     const bool visualization_enabled_locally);
 
 
@@ -213,7 +243,8 @@ namespace smmap
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
             const RobotInterface::Ptr robot_;
-            const sdf_tools::SignedDistanceField& environment_sdf_;
+            // TODO: replace this with a shared pointer
+            const sdf_tools::SignedDistanceField environment_sdf_;
 
             const smmap_utilities::Visualizer::Ptr vis_;
             const bool visualization_enabled_globally_;
@@ -239,12 +270,12 @@ namespace smmap
             const uint32_t max_smoothing_iterations_;
             const uint32_t max_failed_smoothing_iterations_;
 
-            std::mt19937_64& generator_;
+            const std::shared_ptr<std::mt19937_64> generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
             std::uniform_int_distribution<int> uniform_shortcut_smoothing_int_distribution_;
             std::uniform_int_distribution<size_t> arm_a_goal_config_int_distribution_;
             std::uniform_int_distribution<size_t> arm_b_goal_config_int_distribution_;
-            std::shared_ptr<PRMHelper> prm_helper_;
+            PRMHelper::Ptr prm_helper_;
 
 
             // Set/updated on each call of "rrtPlan"
@@ -267,8 +298,8 @@ namespace smmap
             std::map<std::string, double> statistics_;
             double total_sampling_time_;
             double total_nearest_neighbour_time_;
-            double total_band_forward_propogation_time_;
             double total_crrt_projection_time_;
+            double total_band_forward_propogation_time_;
             double total_first_order_vis_propogation_time_;
             double total_everything_included_forward_propogation_time_;
 

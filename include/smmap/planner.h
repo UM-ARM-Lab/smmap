@@ -51,7 +51,7 @@ namespace smmap
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
             const unsigned long seed_;
-            std::mt19937_64 generator_;
+            std::shared_ptr<std::mt19937_64> generator_;
 
             RobotInterface::Ptr robot_;
             std::shared_ptr<TaskSpecification> task_specification_;
@@ -94,11 +94,11 @@ namespace smmap
 
             void convertRRTResultIntoGripperTrajectory(
                     const AllGrippersSinglePose& starting_poses,
-                    const std::vector<RRTConfig, RRTAllocator>& rrt_result);
+                    const std::vector<RRTNode, RRTAllocator>& rrt_result);
 
             void convertRRTResultIntoFullRobotTrajectory(
                     const AllGrippersSinglePose& starting_poses,
-                    const std::vector<RRTConfig, RRTAllocator>& rrt_result);
+                    const std::vector<RRTNode, RRTAllocator>& rrt_result);
 
             AllGrippersSinglePose getGripperTargets(
                     const WorldState& world_state);

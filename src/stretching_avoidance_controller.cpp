@@ -123,7 +123,7 @@ StretchingAvoidanceController::StretchingAvoidanceController(
         const DeformableModel::Ptr& deformable_model,
         const RobotInterface::Ptr& robot,
         const sdf_tools::SignedDistanceField& sdf,
-        std::mt19937_64& generator,
+        const std::shared_ptr<std::mt19937_64>& generator,
         const smmap_utilities::Visualizer::Ptr& vis,
         const StretchingAvoidanceControllerSolverType gripper_controller_type,
         const int max_count)
@@ -436,7 +436,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
                     num_dof,
                     min_joint_delta,
                     max_joint_delta,
-                    generator_,
+                    *generator_,
                     uniform_unit_distribution_,
                     eval_error_cost_fn,
                     collision_constraint_fn,
@@ -531,7 +531,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
                     max_count_,
                     num_grippers,
                     max_step_size,
-                    generator_,
+                    *generator_,
                     uniform_unit_distribution_,
                     eval_error_cost_fn,
                     collision_constraint_fn,
@@ -1937,13 +1937,13 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 kinematics::Vector6d StretchingAvoidanceController::singleGripperPoseDeltaSampler(
         const double max_delta)
 {
-    const double x_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
-    const double y_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
-    const double z_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
+    const double x_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(*generator_));
+    const double y_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(*generator_));
+    const double z_trans = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(*generator_));
 
-//    const double x_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
-//    const double y_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
-//    const double z_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(generator_));
+//    const double x_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(*generator_));
+//    const double y_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(*generator_));
+//    const double z_rot = EigenHelpers::Interpolate(-max_delta, max_delta, uniform_unit_distribution_(*generator_));
 
     kinematics::Vector6d random_sample = kinematics::Vector6d::Zero();
 

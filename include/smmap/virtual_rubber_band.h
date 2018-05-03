@@ -14,6 +14,8 @@ namespace smmap
             static constexpr auto BAND_POST_SHORTCUT_SMOOTHING_NS   = "band_post_shortcut_smoothing";
             static constexpr auto BAND_BADNESS_NS                   = "band_badness";
 
+            typedef std::shared_ptr<VirtualRubberBand> Ptr;
+
             VirtualRubberBand(
                     const Eigen::Vector3d& start_point,
                     const Eigen::Vector3d& end_point,

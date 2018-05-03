@@ -18,6 +18,7 @@ namespace smmap
             static constexpr auto RRM_SAMPLE_NS      = "prm_sample";
             static constexpr auto PRM_RANDOM_PATH_NS = "prm_random_path";
 
+            typedef std::shared_ptr<PRMHelper> Ptr;
 
             PRMHelper(const sdf_tools::SignedDistanceField& environment_sdf,
                       smmap_utilities::Visualizer::Ptr vis,

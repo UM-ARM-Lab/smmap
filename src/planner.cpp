@@ -169,7 +169,7 @@ Planner::Planner(ros::NodeHandle& nh,
     : nh_(nh)
     , ph_(ph)
     , seed_(GetPlannerSeed(ph_))
-    , generator_(seed_)
+    , generator_(std::make_shared<std::mt19937_64>(seed_))
     , robot_(robot)
     , task_specification_(task_specification)
     , dijkstras_task_(std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_)) // If possible, this will be done, if not, it will be NULL (nullptr?)
@@ -509,7 +509,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
 
 
 
-    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(generator_);
+    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(*generator_);
 
 
 
@@ -1444,12 +1444,11 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
             robot_config.second = world_state.robot_configuration_.tail<7>();
         }
 
-        RRTConfig start_config(
+        RRTNode start_config(
                     gripper_config,
                     robot_config,
-                    0,
-                    *rubber_band_between_grippers_,
-                    true);
+                    rubber_band_between_grippers_,
+                    0);
 
 //        std::cout << "RRT Start Config:\n" << start_config.print() << std::endl;
 
@@ -1560,7 +1559,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
 
 void Planner::convertRRTResultIntoGripperTrajectory(
         const AllGrippersSinglePose& starting_poses,
-        const std::vector<RRTConfig, RRTAllocator>& rrt_result)
+        const std::vector<RRTNode, RRTAllocator>& rrt_result)
 {
     assert(starting_poses.size() == 2);
 
@@ -1598,7 +1597,7 @@ void Planner::convertRRTResultIntoGripperTrajectory(
 
 void Planner::convertRRTResultIntoFullRobotTrajectory(
         const AllGrippersSinglePose& starting_poses,
-        const std::vector<RRTConfig, RRTAllocator>& rrt_result)
+        const std::vector<RRTNode, RRTAllocator>& rrt_result)
 {
     global_plan_gripper_trajectory_.clear();
     global_plan_gripper_trajectory_.reserve(rrt_result.size());

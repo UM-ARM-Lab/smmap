@@ -13,7 +13,7 @@ QuinlanRubberBand::QuinlanRubberBand(
         const Eigen::Vector3d& end_point,
         const std::shared_ptr<DijkstrasCoverageTask>& task,
         const Visualizer::Ptr vis,
-        std::mt19937_64& generator)
+        const std::shared_ptr<std::mt19937_64>& generator)
     : QuinlanRubberBand({start_point, end_point},
                         (end_point - start_point).norm() * task_->maxStretchFactor(),
                         task,
@@ -26,7 +26,7 @@ QuinlanRubberBand::QuinlanRubberBand(
         const double max_total_band_distance,
         const std::shared_ptr<DijkstrasCoverageTask>& task,
         const Visualizer::Ptr vis,
-        std::mt19937_64& generator)
+        const std::shared_ptr<std::mt19937_64>& generator)
     : ph_("/smmap_planner_node/band")
     , task_(task)
     , sdf_(task_->environment_sdf_)

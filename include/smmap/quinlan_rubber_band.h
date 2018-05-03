@@ -16,19 +16,21 @@ namespace smmap
     class QuinlanRubberBand
     {
     public:
+        typedef std::shared_ptr<QuinlanRubberBand> Ptr;
+
         QuinlanRubberBand(
                 const Eigen::Vector3d& start_point,
                 const Eigen::Vector3d& end_point,
                 const std::shared_ptr<DijkstrasCoverageTask>& task,
                 const smmap_utilities::Visualizer::Ptr vis,
-                std::mt19937_64& generator);
+                const std::shared_ptr<std::mt19937_64>& generator);
 
         QuinlanRubberBand(
                 EigenHelpers::VectorVector3d starting_points,
                 const double max_total_band_distance,
                 const std::shared_ptr<DijkstrasCoverageTask>& task,
                 const smmap_utilities::Visualizer::Ptr vis,
-                std::mt19937_64& generator);
+                const std::shared_ptr<std::mt19937_64>& generator);
 
         QuinlanRubberBand& operator=(const QuinlanRubberBand& other);
 
