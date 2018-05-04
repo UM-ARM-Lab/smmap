@@ -200,6 +200,26 @@ std::vector<CollisionData> RobotInterface::checkGripperCollision(
 }
 
 
+void RobotInterface::lockEnvironment()
+{
+    if (lock_env_fn_ == nullptr)
+    {
+        ROS_ERROR_NAMED("robot_interface", "Asked to lock environment, but function pointer is null");
+        return;
+    }
+    return lock_env_fn_();
+}
+
+void RobotInterface::unlockEnvironment()
+{
+    if (unlock_env_fn_ == nullptr)
+    {
+        ROS_ERROR_NAMED("robot_interface", "Asked to unlock environment, but function pointer is null");
+        return;
+    }
+    return unlock_env_fn_();
+}
+
 AllGrippersSinglePose RobotInterface::getGrippersPoses(const Eigen::VectorXd& robot_configuration) const
 {
     if (get_ee_poses_fn_ == nullptr)
@@ -393,6 +413,8 @@ bool RobotInterface::testPathForCollision(const std::vector<Eigen::VectorXd>& pa
 }
 
 void RobotInterface::setCallbackFunctions(
+        const std::function<void()>& lock_env_fn,
+        const std::function<void()>& unlock_env_fn,
         const std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)>& get_ee_poses_fn,
         const std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)>& get_grippers_jacobian_fn,
         const std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_fn,
@@ -402,6 +424,8 @@ void RobotInterface::setCallbackFunctions(
         const std::function<std::pair<bool, Eigen::VectorXd>(const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn,
         const std::function<bool(const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn)
 {
+    lock_env_fn_ = lock_env_fn;
+    unlock_env_fn_ = unlock_env_fn;
     get_ee_poses_fn_ = get_ee_poses_fn;
     get_grippers_jacobian_fn_ = get_grippers_jacobian_fn;
     get_collision_points_of_interest_fn_ = get_collision_points_of_interest_fn;

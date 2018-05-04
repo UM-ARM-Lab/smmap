@@ -51,6 +51,9 @@ namespace smmap
 
 
 
+            void lockEnvironment();
+            void unlockEnvironment();
+
             AllGrippersSinglePose getGrippersPoses(const Eigen::VectorXd& robot_configuration) const;
 
             AllGrippersSinglePose getGrippersPoses(const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration) const;
@@ -99,6 +102,8 @@ namespace smmap
             bool testPathForCollision(const std::vector<Eigen::VectorXd>& path) const;
 
             void setCallbackFunctions(
+                    const std::function<void()>& lock_env_fn,
+                    const std::function<void()>& unlock_env_fn,
                     const std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)>& get_ee_poses_fn,
                     const std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)>& get_grippers_jacobian_fn,
                     const std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_fn,
@@ -152,6 +157,8 @@ namespace smmap
             std::thread spin_thread_;
 
             // Function pointers that allow for generic(ish) external robots, without explicit inheritance
+            std::function<void()> lock_env_fn_;
+            std::function<void()> unlock_env_fn_;
             std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)> get_ee_poses_fn_;
             std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)> get_grippers_jacobian_fn_;
             std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn_;
