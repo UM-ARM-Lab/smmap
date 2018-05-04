@@ -314,7 +314,7 @@ std::pair<Eigen::VectorXd, Eigen::VectorXd> RobotInterface::mapGripperMotionToRo
 
 bool RobotInterface::checkRobotCollision(const Eigen::VectorXd& robot_configuration) const
 {
-    if (get_grippers_jacobian_fn_ == nullptr)
+    if (full_robot_collision_check_fn_ == nullptr)
     {
         ROS_ERROR_NAMED("robot_interface", "Asked for robot collision check, but function pointer is null");
         return true;

@@ -3,7 +3,6 @@
 
 #include <random>
 #include <arc_utilities/eigen_helpers.hpp>
-#include <arc_utilities/simple_rrt_planner.hpp>
 #include <smmap_utilities/visualization_tools.h>
 
 #include "smmap/rubber_band.hpp"
@@ -13,18 +12,7 @@
 namespace smmap
 {
     class RRTNode;
-    typedef std::allocator<RRTNode> RRTAllocator;
-    typedef simple_rrt_planner::SimpleRRTPlannerState<RRTNode, RRTAllocator> ExternalRRTState;
-}
-
-// Needed for the goal extension blacklist
-namespace std
-{
-    template<>
-    struct hash<smmap::RRTNode>
-    {
-        std::size_t operator()(const smmap::RRTNode& rrt_config) const;
-    };
+    typedef Eigen::aligned_allocator<RRTNode> RRTAllocator;
 }
 
 namespace smmap
@@ -42,21 +30,18 @@ namespace smmap
             RRTNode(
                     const RRTGrippersRepresentation& grippers_position,
                     const RRTRobotRepresentation& robot_configuration,
-                    const RubberBand::Ptr& band,
-                    const size_t unique_forward_propogation_idx);
+                    const RubberBand::Ptr& band);
 
             RRTNode(
                     const RRTGrippersRepresentation& grippers_position,
                     const RRTRobotRepresentation& robot_configuration,
                     const RubberBand::Ptr& band,
-                    const size_t unique_forward_propogation_idx,
                     const int64_t parent_index);
 
             RRTNode(
                     const RRTGrippersRepresentation& grippers_position,
                     const RRTRobotRepresentation& robot_configuration,
                     const RubberBand::Ptr& band,
-                    const size_t unique_forward_propogation_idx,
                     const int64_t parent_index,
                     const std::vector<int64_t>& child_indices);
 
@@ -65,7 +50,6 @@ namespace smmap
             const RRTGrippersRepresentation& getGrippers() const;
             const RRTRobotRepresentation& getRobotConfiguration() const;
             const RubberBand::Ptr& getBand() const;
-            size_t getUniqueForwardPropogationIndex() const;
 
             int64_t getParentIndex() const;
             void setParentIndex(const int64_t parent_index);
@@ -74,6 +58,9 @@ namespace smmap
             void clearChildIndicies();
             void addChildIndex(const int64_t child_index);
             void removeChildIndex(const int64_t child_index);
+
+            bool isBlacklisted() const;
+            void blacklist();
 
             double distance(const RRTNode& other) const;
             static double distance(const RRTNode& c1, const RRTNode& c2);
@@ -102,10 +89,10 @@ namespace smmap
             RubberBand::Ptr band_;
 
             // Book keeping
-            size_t unique_forward_propogation_idx_;
             int64_t parent_index_;
             std::vector<int64_t> child_indices_;
             bool initialized_;
+            bool blacklisted_;
     };
 
     class RRTHelper
@@ -155,10 +142,16 @@ namespace smmap
                     const uint32_t max_failed_smoothing_iterations,
                     const bool visualization_enabled);
 
-            std::vector<RRTNode, RRTAllocator> rrtPlan(
+            std::vector<RRTNode, RRTAllocator> plan(
                     const RRTNode& start,
                     const RRTGrippersRepresentation& grippers_goal,
                     const std::chrono::duration<double>& time_limit);
+
+            static std::vector<Eigen::VectorXd> ConvertRRTPathToRobotPath(const std::vector<RRTNode, RRTAllocator>& path);
+            static bool CheckTreeLinkage(const std::vector<RRTNode, RRTAllocator>& nodes);
+            static std::vector<RRTNode, RRTAllocator> ExtractSolutionPath(
+                    const std::vector<RRTNode, RRTAllocator>& tree,
+                    const int64_t goal_node_idx);
 
             void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
             void clearBlacklist();
@@ -185,17 +178,15 @@ namespace smmap
             // Helper functions and data for internal rrt planning algorithm
             ///////////////////////////////////////////////////////////////////////////////////////
 
-            std::unordered_set<RRTNode> goal_expansion_nn_blacklist_;
-
             int64_t nearestNeighbour(
-                    const std::vector<ExternalRRTState>& nodes,
+                    const std::vector<RRTNode, RRTAllocator>& tree,
                     const RRTNode& config);
 
             // Used for timing purposes
             // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
             int64_t nearestNeighbour_internal(
-                    const std::vector<ExternalRRTState>& nodes,
-                    const RRTNode& config);
+                    const std::vector<RRTNode, RRTAllocator>& tree,
+                    const RRTNode& config) const;
 
             RRTNode configSampling();
             // Used for timing purposes
@@ -210,20 +201,14 @@ namespace smmap
                     const RRTRobotRepresentation& configuration,
                     const AllGrippersSinglePose& poses) const;
 
-            /* const std::function<std::vector<std::pair<T, int64_t>>(const T&, const T&)>& forward_propagation_fn,
-             * forward_propagation_fn - given the nearest neighbor and a new target state, returns the states that would grow the tree towards the target
-             * SHOULD : collision checking, constraint violation checking
-             Determine the parent index of the new state
-             This process deserves some explanation
-             The "current relative parent index" is the index of the parent, relative to the list of propagated nodes.
-             A negative value means the nearest neighbor in the tree, zero means the first propagated node, and so on.
-             NOTE - the relative parent index *must* be lower than the index in the list of prograted nodes
-             * i.e. the first node must have a negative value, and so on.
-             */
-            std::vector<std::pair<RRTNode, int64_t>> forwardPropogationFunction(
-                    const RRTNode& nearest_neighbor,
-                    const RRTNode& random_target,
+            size_t forwardPropogationFunction(
+                    std::vector<RRTNode, RRTAllocator>& tree_to_extend,
+                    const int64_t& nearest_neighbor_idx,
+                    const RRTNode& target,
+                    const bool extend_band,
                     const bool visualization_enabled_locally);
+
+            std::vector<RRTNode, RRTAllocator> planningMainLoop();
 
             ///////////////////////////////////////////////////////////////////////////////////////
             // Helper function for shortcut smoothing
@@ -280,19 +265,26 @@ namespace smmap
 
             // Set/updated on each call of "rrtPlan"
             bool planning_for_whole_robot_;
-            std::unique_ptr<RubberBand> starting_band_;
+            RubberBand::Ptr starting_band_;
             AllGrippersSinglePose starting_grippers_poses_;
             RRTRobotRepresentation starting_robot_configuration_;
 
+            std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
             RRTGrippersRepresentation grippers_goal_position_;
             double max_grippers_distance_;
-            std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
+            std::chrono::duration<double> time_limit_;
 
             std::pair<ssize_t, ssize_t> arm_dof_;
             std::vector<Eigen::VectorXd> arm_a_goal_configurations_;
             std::vector<Eigen::VectorXd> arm_b_goal_configurations_;
             RRTRobotRepresentation robot_joint_limits_upper_;
             RRTRobotRepresentation robot_joint_limits_lower_;
+
+            bool path_found_;
+            bool forward_iteration_;
+            std::vector<RRTNode, RRTAllocator> forward_tree_;
+            // Note that the band portion of the backward tree is invalid
+            std::vector<RRTNode, RRTAllocator> backward_tree_;
 
             // Planning and Smoothing statistics
             std::map<std::string, double> statistics_;
@@ -302,9 +294,6 @@ namespace smmap
             double total_band_forward_propogation_time_;
             double total_first_order_vis_propogation_time_;
             double total_everything_included_forward_propogation_time_;
-
-            // Used to augment the state, duplicates work done by external code, but oh well
-            size_t next_unique_forward_propogation_idx_;
     };
 }
 

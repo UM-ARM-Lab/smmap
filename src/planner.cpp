@@ -1447,8 +1447,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
         RRTNode start_config(
                     gripper_config,
                     robot_config,
-                    rubber_band_between_grippers_,
-                    0);
+                    rubber_band_between_grippers_);
 
 //        std::cout << "RRT Start Config:\n" << start_config.print() << std::endl;
 
@@ -1485,7 +1484,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
             target_grippers_pose[1].translation());
 
         const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
-        const auto rrt_results = rrt_helper_->rrtPlan(start_config, rrt_grippers_goal, time_limit);
+        const auto rrt_results = rrt_helper_->plan(start_config, rrt_grippers_goal, time_limit);
 
 //        vis_->deleteObjects(CLUSTERING_TARGETS_NS, 1, 2);
         vis_->clearVisualizationsBullet();
