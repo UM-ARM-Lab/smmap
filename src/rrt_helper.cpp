@@ -212,17 +212,22 @@ double RRTNode::distance(const RRTNode& c1, const RRTNode& c2)
     return RRTNode::distance(c1.getGrippers(), c2.getGrippers());
 }
 
-double RRTNode::distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2)
+double RRTNode::distanceSquared(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2)
 {
     const Vector3d& c1_first_gripper     = c1.first;
     const Vector3d& c1_second_gripper    = c1.second;
     const Vector3d& c2_first_gripper     = c2.first;
     const Vector3d& c2_second_gripper    = c2.second;
-    return std::sqrt((c1_first_gripper - c2_first_gripper).squaredNorm() +
-                     (c1_second_gripper - c2_second_gripper).squaredNorm());
+    return (c1_first_gripper - c2_first_gripper).squaredNorm() +
+            (c1_second_gripper - c2_second_gripper).squaredNorm();
 }
 
-double RRTNode::distance(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2)
+double RRTNode::distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2)
+{
+    return std::sqrt(distanceSquared(c1, c2));
+}
+
+double RRTNode::distanceSquared(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2)
 {
     #warning "!!!!!!!!!!!!!!! magic numbers in code duplicated from robot_interface.cpp !!!!!!!!!!!!"
     VectorXd weights(7);
@@ -237,8 +242,13 @@ double RRTNode::distance(const RRTRobotRepresentation& r1, const RRTRobotReprese
     const VectorXd first_arm_delta = r1_first_arm - r2_first_arm;
     const VectorXd second_arm_delta = r1_second_arm - r2_second_arm;
 
-    return std::sqrt((first_arm_delta.cwiseProduct(weights)).squaredNorm()  +
-                     (second_arm_delta.cwiseProduct(weights)).squaredNorm());
+    return (first_arm_delta.cwiseProduct(weights)).squaredNorm()  +
+            (second_arm_delta.cwiseProduct(weights)).squaredNorm();
+}
+
+double RRTNode::distance(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2)
+{
+    return std::sqrt(distanceSquared(r1, r2));
 }
 
 // Only calculates the distance travelled by the grippers, not the entire band
@@ -514,11 +524,11 @@ int64_t RRTHelper::nearestNeighbour_internal(
 
         if (!planning_for_whole_robot_)
         {
-            return blacklist_penalty + RRTNode::distance(c1.getGrippers(), c2.getGrippers());
+            return blacklist_penalty + RRTNode::distanceSquared(c1.getGrippers(), c2.getGrippers());
         }
         else
         {
-            return blacklist_penalty + RRTNode::distance(c1.getRobotConfiguration(), c2.getRobotConfiguration());
+            return blacklist_penalty + RRTNode::distanceSquared(c1.getRobotConfiguration(), c2.getRobotConfiguration());
         }
     };
 

@@ -27,19 +27,16 @@ namespace smmap
 
             RRTNode();
 
-            RRTNode(
-                    const RRTGrippersRepresentation& grippers_position,
+            RRTNode(const RRTGrippersRepresentation& grippers_position,
                     const RRTRobotRepresentation& robot_configuration,
                     const RubberBand::Ptr& band);
 
-            RRTNode(
-                    const RRTGrippersRepresentation& grippers_position,
+            RRTNode(const RRTGrippersRepresentation& grippers_position,
                     const RRTRobotRepresentation& robot_configuration,
                     const RubberBand::Ptr& band,
                     const int64_t parent_index);
 
-            RRTNode(
-                    const RRTGrippersRepresentation& grippers_position,
+            RRTNode(const RRTGrippersRepresentation& grippers_position,
                     const RRTRobotRepresentation& robot_configuration,
                     const RubberBand::Ptr& band,
                     const int64_t parent_index,
@@ -64,7 +61,9 @@ namespace smmap
 
             double distance(const RRTNode& other) const;
             static double distance(const RRTNode& c1, const RRTNode& c2);
+            static double distanceSquared(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
             static double distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
+            static double distanceSquared(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2);
             static double distance(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2);
 
             static double grippersPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index);
