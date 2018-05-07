@@ -444,10 +444,11 @@ RRTHelper::RRTHelper(
 
     , vis_(vis)
     , visualization_enabled_globally_(visualization_enabled)
-    , band_safe_color_(Visualizer::Black())
-    , band_overstretched_color_(Visualizer::Cyan())
+//    , band_safe_color_(Visualizer::Black())
+//    , band_overstretched_color_(Visualizer::Cyan())
     , gripper_a_tree_color_(Visualizer::Magenta())
     , gripper_b_tree_color_(Visualizer::Orange())
+    , band_tree_color_(Visualizer::Blue())
 
     , task_aligned_frame_transform_(task_aligned_frame)
     , task_aligned_frame_inverse_transform_(task_aligned_frame_transform_.inverse())
@@ -473,7 +474,8 @@ RRTHelper::RRTHelper(
 
     , total_sampling_time_(NAN)
     , total_nearest_neighbour_time_(NAN)
-    , total_crrt_projection_time_(NAN)
+    , total_projection_time_(NAN)
+    , total_collision_check_time_(NAN)
     , total_band_forward_propogation_time_(NAN)
     , total_first_order_vis_propogation_time_(NAN)
     , total_everything_included_forward_propogation_time_(NAN)
@@ -600,7 +602,7 @@ RRTNode RRTHelper::prmBasedSampling_internal()
 RRTGrippersRepresentation RRTHelper::posPairSampling_internal()
 {
     RRTGrippersRepresentation rand_sample;
-    const bool sample_goal = uniform_unit_distribution_(*generator_) < goal_bias_;
+    const bool sample_goal = false;//uniform_unit_distribution_(*generator_) < goal_bias_;
 
     if (sample_goal)
     {
@@ -648,7 +650,7 @@ RRTGrippersRepresentation RRTHelper::posPairSampling_internal()
 RRTRobotRepresentation RRTHelper::robotConfigPairSampling_internal()
 {
     RRTRobotRepresentation rand_sample;
-    const bool sample_goal = uniform_unit_distribution_(*generator_) < goal_bias_;
+    const bool sample_goal = false;//uniform_unit_distribution_(*generator_) < goal_bias_;
 
     if (sample_goal)
     {
@@ -752,12 +754,18 @@ size_t RRTHelper::forwardPropogationFunction(
         const int64_t& nearest_neighbor_idx,
         const RRTNode& target,
         const bool extend_band,
+        const size_t max_projected_new_states,
         const bool visualization_enabled_locally)
 {
+    arc_helpers::DoNotOptimize(target.getParentIndex());
+    Stopwatch function_wide_stopwatch;
+    Stopwatch stopwatch;
+
     const size_t nodes_at_start_of_propogation = tree_to_extend.size();
     const RRTNode& nearest_neighbour = tree_to_extend[nearest_neighbor_idx];
 
-    if (visualization_enabled_globally_ && visualization_enabled_locally)
+    const bool rubber_band_verbose = false && visualization_enabled_globally_ && visualization_enabled_locally;
+    if (false && visualization_enabled_globally_ && visualization_enabled_locally)
     {
         vis_->visualizeCubes(
                     RRT_FORWARD_PROP_START_NS,
@@ -791,24 +799,10 @@ size_t RRTHelper::forwardPropogationFunction(
                     Vector3d(0.01, 0.01, 0.01),
                     gripper_b_tree_color_,
                     5);
-
-        vis_->deleteObjects(RRT_FORWARD_PROP_STEPS_NS, 1, 2);
     }
 
-//    std::cout << "Nearest Neighbour Config:\n" << nearest_neighbor.print() << std::endl;
-//    std::cout << "Random Target Config:\n" << random_target.print() << std::endl;
-
-    Stopwatch function_wide_stopwatch;
-    Stopwatch stopwatch;
-
-    static EigenHelpers::VectorVector3d band_visualization_line_start_points;
-    static EigenHelpers::VectorVector3d band_visualization_line_end_points;
-    static EigenHelpers::VectorVector3d gripper_a_tree_start_points;
-    static EigenHelpers::VectorVector3d gripper_a_tree_end_points;
-    static EigenHelpers::VectorVector3d gripper_b_tree_start_points;
-    static EigenHelpers::VectorVector3d gripper_b_tree_end_points;
-    static int32_t marker_id = 1;
-    static size_t num_bands_in_visualize_list = 0;
+    static int32_t tree_marker_id = 1;
+    const size_t visualization_frequency = 100;
 
     const RRTGrippersRepresentation& starting_grippers_position = nearest_neighbour.getGrippers();
     const RRTRobotRepresentation& starting_robot_configuration = nearest_neighbour.getRobotConfiguration();
@@ -817,10 +811,7 @@ size_t RRTHelper::forwardPropogationFunction(
     const RRTGrippersRepresentation& target_grippers_position = target.getGrippers();
     RRTRobotRepresentation target_robot_configuration = target.getRobotConfiguration();
 
-    // Continue advancing the grippers until the grippers collide or the band overstretches
-    const bool rubber_band_verbose = visualization_enabled_globally_ && visualization_enabled_locally;
-
-    const bool using_cbirrt_style_projection = false;
+    const bool using_cbirrt_style_projection = true;
     if (planning_for_whole_robot_ && !using_cbirrt_style_projection)
     {
         // Allocate space for potential children
@@ -853,12 +844,9 @@ size_t RRTHelper::forwardPropogationFunction(
                     const double gripper_b_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_[1].rotation(), next_grippers_poses[1].rotation());
                     if (gripper_a_rotation_dist > max_gripper_rotation_ || gripper_b_rotation_dist > max_gripper_rotation_)
                     {
-    //                    std::cerr << "Fwd prop stopped due to gripper overrotation:\n"
-    //                              << "Gripper rotation dists: " << gripper_a_rotation_dist << " " << gripper_b_rotation_dist << std::endl;
                         break;
                     }
                 }
-
 
                 // If the grippers move outside of the planning arena (possible due to non-linearities), then stop
                 {
@@ -871,23 +859,23 @@ size_t RRTHelper::forwardPropogationFunction(
                         (task_frame_next_grippers_position.second.array() > task_aligned_upper_limits_.array()).any() ||
                         (task_frame_next_grippers_position.second.array() < task_aligned_lower_limits_.array()).any())
                     {
-    //                    std::cerr << "Fwd prop stopped due to grippers moving outside the planning arena:\n";
-    //                    std::cout << "Task aligned Next grippers positions: " << PrettyPrint::PrettyPrint(task_frame_next_grippers_position, true, " ") << std::endl;
-    //                    std::cout << "Next grippers positions:              " << PrettyPrint::PrettyPrint(next_grippers_position, true, " ") << std::endl;
                         break;
                     }
                 }
             }
 
-            // Check if we entered collision
-            if (robot_->checkRobotCollision(next_robot_configuration))
+            // Collision checking
             {
-                if (visualization_enabled_locally)
+                stopwatch(RESET);
+                arc_helpers::DoNotOptimize(next_robot_configuration);
+                const bool in_collision = robot_->checkRobotCollision(next_robot_configuration);
+                arc_helpers::DoNotOptimize(next_robot_configuration);
+                const double collision_check_time = stopwatch(READ);
+                total_collision_check_time_ += collision_check_time;
+                if (in_collision)
                 {
-//                    std::cerr << "Fwd prop stopped due to robot collision:\n"
-//                              << "Robot config:  " << next_robot_configuration.first.transpose() << "    " << next_robot_configuration.second.transpose() << std::endl;
+                    break;
                 }
-                break;
             }
 
             RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
@@ -918,25 +906,6 @@ size_t RRTHelper::forwardPropogationFunction(
                 {
                     break;
                 }
-
-                if (visualization_enabled_globally_ && visualization_enabled_locally)
-                {
-                    ++num_bands_in_visualize_list;
-                    const EigenHelpers::VectorVector3d band_vec = next_band->getVectorRepresentation();
-                    for (size_t band_idx = 0; band_idx + 1 < band_vec.size(); ++band_idx)
-                    {
-                        band_visualization_line_start_points.push_back(band_vec[band_idx]);
-                        band_visualization_line_end_points.push_back(band_vec[band_idx + 1]);
-                    }
-
-                    if (num_bands_in_visualize_list >= 100)
-                    {
-                        vis_->visualizeLines(RRT_FORWARD_PROP_STEPS_NS, band_visualization_line_start_points, band_visualization_line_end_points, Visualizer::Blue(), 1);
-                        band_visualization_line_start_points.clear();
-                        band_visualization_line_end_points.clear();
-                        num_bands_in_visualize_list = 0;
-                    }
-                }
             }
             else
             {
@@ -954,36 +923,15 @@ size_t RRTHelper::forwardPropogationFunction(
 
             parent_idx = new_node_idx;
             ++step_index;
-
-            if (visualization_enabled_globally_ && visualization_enabled_locally)
-            {
-                const RRTGrippersRepresentation& prev_grippers_position = prev_node.getGrippers();
-
-                gripper_a_tree_start_points.push_back(prev_grippers_position.first);
-                gripper_b_tree_start_points.push_back(prev_grippers_position.second);
-                gripper_a_tree_end_points.push_back(next_grippers_position.first);
-                gripper_b_tree_end_points.push_back(next_grippers_position.second);
-
-                if (gripper_a_tree_start_points.size() >= 100)
-                {
-                    vis_->visualizeLines(RRT_TREE_GRIPPER_A_NS, gripper_a_tree_start_points, gripper_a_tree_end_points, gripper_a_tree_color_, marker_id);
-                    vis_->visualizeLines(RRT_TREE_GRIPPER_B_NS, gripper_b_tree_start_points, gripper_b_tree_end_points, gripper_b_tree_color_, marker_id);
-                    gripper_a_tree_start_points.clear();
-                    gripper_b_tree_start_points.clear();
-                    gripper_a_tree_end_points.clear();
-                    gripper_b_tree_end_points.clear();
-                    ++marker_id;
-                }
-            }
         }
     }
     else if (planning_for_whole_robot_ && using_cbirrt_style_projection)
     {
         int64_t parent_idx = nearest_neighbor_idx;
-        // Only accept at most 256 new states, if there are more, then we're probably stuck in some sort of bad configuration for IK
+        // Only accept at most max_new_states new states, if there are more, then we're probably stuck in some sort of bad configuration for IK
         // TODO: distinguish between smoothing and exploration for this check
         uint32_t step_index = 0;
-        while (step_index < 256)
+        while (step_index < max_projected_new_states)
         {
             stopwatch(RESET);
             arc_helpers::DoNotOptimize(parent_idx);
@@ -1003,52 +951,51 @@ size_t RRTHelper::forwardPropogationFunction(
 
             // Project and check the projection result for failure
             const auto next_robot_configuration_projection_result = projectToValidConfig(next_robot_configuration_pre_projection, next_grippers_poses_pre_projection);
-            const RRTRobotRepresentation next_robot_configuration = next_robot_configuration_projection_result.second;
+            const RRTRobotRepresentation& next_robot_configuration = next_robot_configuration_projection_result.second;
+            arc_helpers::DoNotOptimize(next_robot_configuration);
+            const double projection_time = stopwatch(READ);
+            total_projection_time_ += projection_time;
+
+            // Check if the projection failed
+            if (!next_robot_configuration_projection_result.first)
             {
-                // Check if the projection failed
-                if (!next_robot_configuration_projection_result.first)
+                break;
+            }
+
+            // Check if we made any progress
+            const double current_distance = RRTNode::distance(target_robot_configuration, next_robot_configuration);
+            if (current_distance > prev_distance - min_robot_dof_step_size_ &&
+                current_distance < prev_distance + min_robot_dof_step_size_)
+            {
+                break;
+            }
+
+            // Check the distance to the previous previous value as well (if it exists)
+            if (step_index >= 1)
+            {
+                const RRTRobotRepresentation& ancient_robot_config = (tree_to_extend.end() - 2)->getRobotConfiguration();
+                if (RRTNode::distance(ancient_robot_config, next_robot_configuration) < min_robot_dof_step_size_)
                 {
                     break;
                 }
+            }
 
-                // Check if we made any progress
-                const double current_distance = RRTNode::distance(target_robot_configuration, next_robot_configuration);
-                if (current_distance > prev_distance - min_robot_dof_step_size_ &&
-                    current_distance < prev_distance + min_robot_dof_step_size_)
+            // Colision checking
+            {
+                stopwatch(RESET);
+                arc_helpers::DoNotOptimize(next_robot_configuration);
+                const bool in_collision = robot_->checkRobotCollision(next_robot_configuration);
+                arc_helpers::DoNotOptimize(next_robot_configuration);
+                const double collision_check_time = stopwatch(READ);
+                total_collision_check_time_ += collision_check_time;
+                if (in_collision)
                 {
-                    break;
-                }
-
-                // Check the distance to the previous previous value as well (if it exists)
-                if (step_index >= 1)
-                {
-                    const RRTRobotRepresentation& ancient_robot_config = (tree_to_extend.end() - 2)->getRobotConfiguration();
-                    if (RRTNode::distance(ancient_robot_config, next_robot_configuration) < min_robot_dof_step_size_)
-                    {
-                        break;
-                    }
-                }
-
-                // Check if we entered collision
-                if (robot_->checkRobotCollision(next_robot_configuration))
-                {
-                    if (visualization_enabled_locally)
-                    {
-    //                    std::cerr << "Fwd prop stopped due to robot collision:\n"
-    //                              << "Robot config:  " << next_robot_configuration.first.transpose() << "    " << next_robot_configuration.second.transpose() << std::endl;
-                    }
                     break;
                 }
             }
 
             const AllGrippersSinglePose next_grippers_poses = robot_->getGrippersPoses(next_robot_configuration);
             const RRTGrippersRepresentation next_grippers_position(next_grippers_poses[0].translation(), next_grippers_poses[1].translation());
-
-            arc_helpers::DoNotOptimize(next_grippers_position);
-            const double crrt_projection_time_ = stopwatch(READ);
-            total_crrt_projection_time_ += crrt_projection_time_;
-
-
 
             RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
             if (extend_band)
@@ -1078,25 +1025,6 @@ size_t RRTHelper::forwardPropogationFunction(
                 {
                     break;
                 }
-
-                if (visualization_enabled_globally_ && visualization_enabled_locally)
-                {
-                    ++num_bands_in_visualize_list;
-                    const EigenHelpers::VectorVector3d band_vec = next_band->getVectorRepresentation();
-                    for (size_t band_idx = 0; band_idx + 1 < band_vec.size(); ++band_idx)
-                    {
-                        band_visualization_line_start_points.push_back(band_vec[band_idx]);
-                        band_visualization_line_end_points.push_back(band_vec[band_idx + 1]);
-                    }
-
-                    if (num_bands_in_visualize_list >= 100)
-                    {
-                        vis_->visualizeLines(RRT_FORWARD_PROP_STEPS_NS, band_visualization_line_start_points, band_visualization_line_end_points, Visualizer::Blue(), 1);
-                        band_visualization_line_start_points.clear();
-                        band_visualization_line_end_points.clear();
-                        num_bands_in_visualize_list = 0;
-                    }
-                }
             }
             else
             {
@@ -1114,27 +1042,6 @@ size_t RRTHelper::forwardPropogationFunction(
 
             parent_idx = new_node_idx;
             ++step_index;
-
-            if (visualization_enabled_globally_ && visualization_enabled_locally)
-            {
-                const RRTGrippersRepresentation& prev_grippers_position = prev_node.getGrippers();
-
-                gripper_a_tree_start_points.push_back(prev_grippers_position.first);
-                gripper_b_tree_start_points.push_back(prev_grippers_position.second);
-                gripper_a_tree_end_points.push_back(next_grippers_position.first);
-                gripper_b_tree_end_points.push_back(next_grippers_position.second);
-
-                if (gripper_a_tree_start_points.size() >= 100)
-                {
-                    vis_->visualizeLines(RRT_TREE_GRIPPER_A_NS, gripper_a_tree_start_points, gripper_a_tree_end_points, gripper_a_tree_color_, marker_id);
-                    vis_->visualizeLines(RRT_TREE_GRIPPER_B_NS, gripper_b_tree_start_points, gripper_b_tree_end_points, gripper_b_tree_color_, marker_id);
-                    gripper_a_tree_start_points.clear();
-                    gripper_b_tree_start_points.clear();
-                    gripper_a_tree_end_points.clear();
-                    gripper_b_tree_end_points.clear();
-                    ++marker_id;
-                }
-            }
         }
     }
     else
@@ -1159,27 +1066,34 @@ size_t RRTHelper::forwardPropogationFunction(
             const RRTGrippersRepresentation next_grippers_position = RRTGrippersRepresentation(gripper_a_interpolated, gripper_b_interpolated);
             const RRTRobotRepresentation next_robot_configuration = prev_robot_config;
 
-
-            // If the grippers collide with each other, then return however far we are able to get
-            if ((gripper_a_interpolated - gripper_b_interpolated).norm() < gripper_min_distance_to_obstacles_)
+            // Collision checking
             {
-                if (visualization_enabled_locally)
+                stopwatch(RESET);
+                arc_helpers::DoNotOptimize(gripper_a_interpolated);
+                bool in_collision = (gripper_a_interpolated - gripper_b_interpolated).norm() < gripper_min_distance_to_obstacles_;
+                arc_helpers::DoNotOptimize(in_collision);
+                const double collision_check_time_pt1 = stopwatch(READ);
+                total_collision_check_time_ += collision_check_time_pt1;
+                // If the grippers collide with each other, then return however far we are able to get
+                if (in_collision)
                 {
-                    std::cerr << "Fwd prop stopped due to gripper collision with other gripper:\n"
-                              << "First Pos:  " << PrettyPrint::PrettyPrint(gripper_a_interpolated)
-                              << "    Second Pos: " << PrettyPrint::PrettyPrint(gripper_b_interpolated)
-                              << "    Dist: " << (gripper_a_interpolated - gripper_b_interpolated).norm() << std::endl;
+                    break;
                 }
-                break;
-            }
 
-            // If the grippers enter collision with the environment, then return however far we were able to get
-            if ((environment_sdf_.EstimateDistance3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
-                (environment_sdf_.EstimateDistance3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_) ||
-                (environment_sdf_.DistanceToBoundary3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
-                (environment_sdf_.DistanceToBoundary3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_))
-            {
-                break;
+                stopwatch(RESET);
+                arc_helpers::DoNotOptimize(gripper_a_interpolated);
+                // If the grippers enter collision with the environment, then return however far we were able to get
+                in_collision = (environment_sdf_.EstimateDistance3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
+                               (environment_sdf_.EstimateDistance3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_) ||
+                               (environment_sdf_.DistanceToBoundary3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
+                               (environment_sdf_.DistanceToBoundary3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_);
+                arc_helpers::DoNotOptimize(in_collision);
+                const double collision_check_time_pt2 = stopwatch(READ);
+                total_collision_check_time_ += collision_check_time_pt2;
+                if (in_collision)
+                {
+                    break;
+                }
             }
 
             RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
@@ -1208,25 +1122,6 @@ size_t RRTHelper::forwardPropogationFunction(
                 {
                     break;
                 }
-
-                if (visualization_enabled_globally_ && visualization_enabled_locally)
-                {
-                    ++num_bands_in_visualize_list;
-                    const EigenHelpers::VectorVector3d band_vec = next_band->getVectorRepresentation();
-                    for (size_t band_idx = 0; band_idx + 1 < band_vec.size(); ++band_idx)
-                    {
-                        band_visualization_line_start_points.push_back(band_vec[band_idx]);
-                        band_visualization_line_end_points.push_back(band_vec[band_idx + 1]);
-                    }
-
-                    if (num_bands_in_visualize_list >= 100)
-                    {
-                        vis_->visualizeLines(RRT_FORWARD_PROP_STEPS_NS, band_visualization_line_start_points, band_visualization_line_end_points, Visualizer::Blue(), 1);
-                        band_visualization_line_start_points.clear();
-                        band_visualization_line_end_points.clear();
-                        num_bands_in_visualize_list = 0;
-                    }
-                }
             }
             else
             {
@@ -1244,43 +1139,49 @@ size_t RRTHelper::forwardPropogationFunction(
 
             parent_idx = new_node_idx;
             ++step_index;
-
-            if (visualization_enabled_globally_ && visualization_enabled_locally)
-            {
-                const RRTGrippersRepresentation& prev_grippers_position = prev_node.getGrippers();
-
-                gripper_a_tree_start_points.push_back(prev_grippers_position.first);
-                gripper_b_tree_start_points.push_back(prev_grippers_position.second);
-                gripper_a_tree_end_points.push_back(next_grippers_position.first);
-                gripper_b_tree_end_points.push_back(next_grippers_position.second);
-
-                if (gripper_a_tree_start_points.size() >= 100)
-                {
-                    vis_->visualizeLines(RRT_TREE_GRIPPER_A_NS, gripper_a_tree_start_points, gripper_a_tree_end_points, gripper_a_tree_color_, marker_id);
-                    vis_->visualizeLines(RRT_TREE_GRIPPER_B_NS, gripper_b_tree_start_points, gripper_b_tree_end_points, gripper_b_tree_color_, marker_id);
-                    gripper_a_tree_start_points.clear();
-                    gripper_b_tree_start_points.clear();
-                    gripper_a_tree_end_points.clear();
-                    gripper_b_tree_end_points.clear();
-                    ++marker_id;
-                }
-            }
         }
     }
 
     const size_t nodes_at_end_of_propogation = tree_to_extend.size();
+    const size_t nodes_created = nodes_at_end_of_propogation - nodes_at_start_of_propogation;
 
+    if (visualization_enabled_globally_ &&
+        visualization_enabled_locally &&
+        nodes_created > 0 &&
+        tree_to_extend.size() % visualization_frequency == 0)
+    {
+        const bool draw_band = extend_band;
+        visualizeTree(
+                    tree_to_extend,
+                    tree_to_extend.size() - visualization_frequency,
+                    RRT_TREE_GRIPPER_A_NS,
+                    RRT_TREE_GRIPPER_B_NS,
+                    RRT_TREE_BAND_NS,
+                    tree_marker_id,
+                    tree_marker_id,
+                    1,
+                    gripper_a_tree_color_,
+                    gripper_b_tree_color_,
+                    band_tree_color_,
+                    draw_band);
+        ++tree_marker_id;
+    }
+
+    arc_helpers::DoNotOptimize(nodes_created);
     const double everything_included_forward_propogation_time = function_wide_stopwatch(READ);
     total_everything_included_forward_propogation_time_ += everything_included_forward_propogation_time;
 
-    return nodes_at_end_of_propogation - nodes_at_start_of_propogation;
+    assert(CheckTreeLinkage(tree_to_extend));
+
+    return nodes_created;
 }
 
 std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
 {
     total_sampling_time_ = 0.0;
     total_nearest_neighbour_time_ = 0.0;
-    total_crrt_projection_time_ = 0.0;
+    total_projection_time_ = 0.0;
+    total_collision_check_time_ = 0.0;
     total_band_forward_propogation_time_ = 0.0;
     total_first_order_vis_propogation_time_ = 0.0;
     total_everything_included_forward_propogation_time_ = 0.0;
@@ -1311,7 +1212,11 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     const std::chrono::time_point<std::chrono::steady_clock> start_time = std::chrono::steady_clock::now();
     forward_iteration_ = true;
 
+    const bool fwd_prop_local_visualization_enabled = true;
+    const size_t fwd_prop_max_steps = 32;
+
     // Plan
+    std::cout << "Starting planning..." << std::flush;
     while (!path_found_ && (std::chrono::steady_clock::now() - start_time) < time_limit_)
     {
         auto& first_tree_to_extend = forward_iteration_ ? forward_tree_ : backward_tree_;
@@ -1325,8 +1230,15 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
         const int64_t first_tree_nearest_neighbour_idx =  nearestNeighbour(first_tree_to_extend, random_target);
         assert((first_tree_nearest_neighbour_idx >= 0) && (first_tree_nearest_neighbour_idx < (int64_t)first_tree_to_extend.size()));
         // Forward propagate towards the sampled target
+        const bool first_tree_extend_band = forward_iteration_;
         const size_t first_tree_num_nodes_created =
-                forwardPropogationFunction(first_tree_to_extend, first_tree_nearest_neighbour_idx, random_target, forward_iteration_, true);
+                forwardPropogationFunction(
+                    first_tree_to_extend,
+                    first_tree_nearest_neighbour_idx,
+                    random_target,
+                    first_tree_extend_band,
+                    fwd_prop_max_steps,
+                    fwd_prop_local_visualization_enabled);
         // Record the index of the last node in the new branch. This is either the last item in the tree, or the nearest neighbour itself
         const int64_t first_tree_last_node_idx_in_branch = first_tree_num_nodes_created > 0 ?
                     (int64_t)first_tree_to_extend.size() - 1 : first_tree_nearest_neighbour_idx;
@@ -1351,7 +1263,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
             }
             else
             {
-                ++backward_connection_attempts_useless;
+                ++backward_random_samples_useless;
             }
         }
 
@@ -1363,8 +1275,15 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
         const int64_t second_tree_nearest_neighbour_idx =  nearestNeighbour(second_tree_to_extend, selected_target);
         assert((second_tree_nearest_neighbour_idx >= 0) && (second_tree_nearest_neighbour_idx < (int64_t)second_tree_to_extend.size()));
         // Forward propagate towards the selected target
+        const bool second_tree_extend_band = !forward_iteration_;
         const size_t second_tree_num_nodes_created =
-                forwardPropogationFunction(second_tree_to_extend, second_tree_nearest_neighbour_idx, selected_target, !forward_iteration_, true);
+                forwardPropogationFunction(
+                    second_tree_to_extend,
+                    second_tree_nearest_neighbour_idx,
+                    selected_target,
+                    second_tree_extend_band,
+                    fwd_prop_max_steps,
+                    fwd_prop_local_visualization_enabled);
         // Record the index of the last node in the new branch. This is either the last item in the tree, or the nearest neighbour itself
         const int64_t second_tree_last_node_idx_in_branch = second_tree_num_nodes_created > 0 ?
                     (int64_t)second_tree_to_extend.size() - 1 : second_tree_nearest_neighbour_idx;
@@ -1393,6 +1312,24 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
             }
         }
 
+
+
+
+//        std::cout << "Forward iteration? " << forward_iteration_ << std::endl
+//                  << "Forward Tree Nodes:  " << forward_tree_.size() << std::endl
+//                  << "Backward Tree Nodes: " << backward_tree_.size() << std::endl
+
+//                  << "First Tree NN Index: " << first_tree_nearest_neighbour_idx << std::endl
+//                  << "First Tree Num Nodes created: " << first_tree_num_nodes_created << std::endl
+//                  << "First Tree last Index: " << first_tree_last_node_idx_in_branch << std::endl
+
+//                  << "Second Tree NN Index: " << second_tree_nearest_neighbour_idx << std::endl
+//                  << "Second Tree Num Nodes created: " << second_tree_num_nodes_created << std::endl
+//                  << "Second Tree last Index: " << second_tree_last_node_idx_in_branch << std::endl
+//                  << std::endl;
+
+
+
         //////////////// Check for a connection between the trees, extending the forward tree if possible ////////////////
 
         if (second_tree_num_nodes_created > 0)
@@ -1405,8 +1342,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
 
             if (connection_made)
             {
-                assert(CheckTreeLinkage(forward_tree_));
-                assert(CheckTreeLinkage(backward_tree_));
+//                assert(CheckTreeLinkage(forward_tree_));
+//                assert(CheckTreeLinkage(backward_tree_));
 
                 // Record some statistics
                 if (forward_iteration_)
@@ -1423,7 +1360,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
 
                 statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
                 statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
-                statistics_["planning_time2_forward_propogation_crrt_projection      "] = total_crrt_projection_time_;
+                statistics_["planning_time2_forward_propogation_crrt_projection      "] = total_projection_time_;
                 statistics_["planning_time3_forward_propogation_band_sim             "] = total_band_forward_propogation_time_;
                 statistics_["planning_time4_forward_propogation_first_order_vis      "] = total_first_order_vis_propogation_time_;
                 statistics_["planning_time5_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
@@ -1487,6 +1424,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                         break;
                     }
 
+                    next_band->visualize("bispace_connect_bands", Visualizer::Blue(), Visualizer::Blue(), forward_parent_idx + 1, true);
+
                     // The new configuation is valid, add it to the forward tree
                     const RRTNode next_node(next_grippers_position, next_robot_configuration, next_band, forward_parent_idx);
                     forward_tree_.push_back(next_node);
@@ -1524,11 +1463,12 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
 
     statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
     statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
-    statistics_["planning_time2_forward_propogation_crrt_projection      "] = total_crrt_projection_time_;
-    statistics_["planning_time3_forward_propogation_band_sim             "] = total_band_forward_propogation_time_;
-    statistics_["planning_time4_forward_propogation_first_order_vis      "] = total_first_order_vis_propogation_time_;
-    statistics_["planning_time5_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
-    statistics_["planning_time6_total                                    "] = planning_time.count();
+    statistics_["planning_time2_forward_propogation_projection           "] = total_projection_time_;
+    statistics_["planning_time3_forward_propogation_collision_check      "] = total_collision_check_time_;
+    statistics_["planning_time4_forward_propogation_band_sim             "] = total_band_forward_propogation_time_;
+    statistics_["planning_time5_forward_propogation_first_order_vis      "] = total_first_order_vis_propogation_time_;
+    statistics_["planning_time6_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
+    statistics_["planning_time7_total                                    "] = planning_time.count();
 
     statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless;
     statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful;
@@ -2084,8 +2024,6 @@ std::pair<bool, std::vector<RRTNode, RRTAllocator>> RRTHelper::forwardSimulateGr
         const double forward_propogation_time = stopwatch(READ);
         total_band_forward_propogation_time_ += forward_propogation_time;
 
-//        rubber_band.visualize(RRT_SHORTCUT_REMAINDER_NS, Visualizer::Yellow(), Visualizer::Cyan(), (int32_t)path_idx, true);
-
         // Store the band in the results
 //        stopwatch(RESET);
 //        const bool is_first_order_visible = isBandFirstOrderVisibileToBlacklist(rubber_band);
@@ -2125,7 +2063,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
     uint32_t num_iterations = 0;
     uint32_t failed_iterations = 0;
-    total_crrt_projection_time_ = 0.0;
+    total_projection_time_ = 0.0;
     total_band_forward_propogation_time_ = 0.0;
     total_first_order_vis_propogation_time_ = 0.0;
     total_everything_included_forward_propogation_time_ = 0.0;
@@ -2144,9 +2082,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
         if (visualization_enabled_globally_ && visualization_enabled_locally)
         {
-            vis_->deleteObjects(RRT_SHORTCUT_FIRST_GRIPPER_NS, 1, 21);
-            vis_->deleteObjects(RRT_SHORTCUT_SECOND_GRIPPER_NS, 1, 21);
-            vis_->deleteObjects(RRT_FORWARD_PROP_STEPS_NS, 1, 2);
             vis_->clearVisualizationsBullet();
         }
 
@@ -2185,6 +2120,10 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         smoothed_segment.reserve(256);
         std::pair<bool, std::vector<RRTNode, RRTAllocator>> end_of_smoothing_to_goal_results;
 
+        const bool fwd_prop_local_visualization_enabled = false;
+        const bool fwd_prop_extend_band = true;
+        const size_t fwd_prop_max_steps = 256;
+
         if (planning_for_whole_robot_)
         {
             // Check if the edge possibly can be smoothed
@@ -2199,11 +2138,9 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
             }
 
             // Forward simulate the rubber band along the straight line between gripper/robot positions
-            const bool local_visualization_enabled = false;
-            const bool extend_band = true;
             const int64_t start_idx = 0;
             smoothed_segment.push_back(smoothing_start_config);
-            forwardPropogationFunction(smoothed_segment, start_idx, smoothing_end_config, extend_band, local_visualization_enabled);
+            forwardPropogationFunction(smoothed_segment, start_idx, smoothing_end_config, fwd_prop_extend_band, fwd_prop_max_steps, fwd_prop_local_visualization_enabled);
 
             // Check if the rubber band gets overstretched while propogating the grippers/robot on the new path
             const auto& target_robot_configuration = smoothing_end_config.getRobotConfiguration();
@@ -2242,11 +2179,9 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                 }
 
                 // Forward simulate the rubber band along the straight line between gripper positions
-                const bool local_visualization_enabled = false;
-                const bool extend_band = true;
                 const int64_t start_idx = 0;
                 smoothed_segment.push_back(smoothing_start_config);
-                forwardPropogationFunction(smoothed_segment, start_idx, smoothing_end_config, extend_band, local_visualization_enabled);
+                forwardPropogationFunction(smoothed_segment, start_idx, smoothing_end_config, fwd_prop_extend_band, fwd_prop_max_steps, fwd_prop_local_visualization_enabled);
             }
             else if (smoothing_type == 3 || smoothing_type == 4)
             {
@@ -2320,10 +2255,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                                 RRTRobotRepresentation(),
                                 path.front().getBand());
 
-                    const bool local_visualization_enabled = false;
-                    const bool extend_band = true;
                     const int64_t start_idx = (int64_t)smoothed_segment.size() - 1;
-                    forwardPropogationFunction(smoothed_segment, start_idx, forward_prop_target_config, extend_band, local_visualization_enabled);
+                    forwardPropogationFunction(smoothed_segment, start_idx, forward_prop_target_config, fwd_prop_extend_band, fwd_prop_max_steps, fwd_prop_local_visualization_enabled);
                 }
             }
             else
@@ -2396,7 +2329,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
     statistics_["smoothing0_failed_iterations                            "] = (double)failed_iterations;
     statistics_["smoothing1_iterations                                   "] = (double)num_iterations;
-    statistics_["smoothing2_forward_propogation_crrt_projection_time     "] = total_crrt_projection_time_;
+    statistics_["smoothing2_forward_propogation_crrt_projection_time     "] = total_projection_time_;
     statistics_["smoothing3_forward_propogation_band_sim_time            "] = total_band_forward_propogation_time_;
     statistics_["smoothing4_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
     statistics_["smoothing5_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
@@ -2408,6 +2341,74 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Visualization and other debugging tools
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Draws lines connecting all nodes in the tree, from start_idx through to the end of the vector
+void RRTHelper::visualizeTree(
+        const std::vector<RRTNode, RRTAllocator>& tree,
+        const size_t start_idx,
+        const std::string ns_a,
+        const std::string ns_b,
+        const std::string ns_band,
+        const int id_a,
+        const int id_b,
+        const int id_band,
+        const std_msgs::ColorRGBA& color_a,
+        const std_msgs::ColorRGBA& color_b,
+        const std_msgs::ColorRGBA& color_band,
+        const bool draw_band) const
+{
+    if (visualization_enabled_globally_)
+    {
+        assert(start_idx < tree.size());
+
+        EigenHelpers::VectorVector3d band_line_start_points;
+        EigenHelpers::VectorVector3d band_line_end_points;
+
+        EigenHelpers::VectorVector3d gripper_a_tree_start_points;
+        EigenHelpers::VectorVector3d gripper_a_tree_end_points;
+        EigenHelpers::VectorVector3d gripper_b_tree_start_points;
+        EigenHelpers::VectorVector3d gripper_b_tree_end_points;
+
+        gripper_a_tree_start_points.reserve(tree.size() - start_idx);
+        gripper_b_tree_start_points.reserve(tree.size() - start_idx);
+        gripper_a_tree_end_points.reserve(tree.size() - start_idx);
+        gripper_b_tree_end_points.reserve(tree.size() - start_idx);
+
+        for (size_t idx = start_idx; idx < tree.size(); ++idx)
+        {
+            const RRTNode& curr = tree[idx];
+
+            if (draw_band)
+            {
+                const EigenHelpers::VectorVector3d& band_vec = curr.getBand()->getVectorRepresentation();
+                for (size_t band_idx = 0; band_idx + 1 < band_vec.size(); ++band_idx)
+                {
+                    band_line_start_points.push_back(band_vec[band_idx]);
+                    band_line_end_points.push_back(band_vec[band_idx + 1]);
+                }
+            }
+
+            if (curr.getParentIndex() >= 0)
+            {
+                const RRTNode& parent = tree[curr.getParentIndex()];
+
+                // Add edges from the parent to the current node
+                gripper_a_tree_start_points.push_back(parent.getGrippers().first);
+                gripper_b_tree_start_points.push_back(parent.getGrippers().second);
+
+                gripper_a_tree_end_points.push_back(curr.getGrippers().first);
+                gripper_b_tree_end_points.push_back(curr.getGrippers().second);
+            }
+        }
+
+        vis_->visualizeLines(ns_a, gripper_a_tree_start_points, gripper_a_tree_end_points, color_a, id_a);
+        vis_->visualizeLines(ns_b, gripper_b_tree_start_points, gripper_b_tree_end_points, color_b, id_b);
+        if (draw_band)
+        {
+            vis_->visualizeLines(ns_band, band_line_start_points, band_line_end_points, color_band, id_band);
+        }
+    }
+}
 
 void RRTHelper::visualizePath(const std::vector<RRTNode, RRTAllocator>& path) const
 {
@@ -2553,7 +2554,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::loadStoredPath() const
     }
     catch (const std::exception& e)
     {
-        ROS_ERROR_STREAM("Failed to load stored band: "  <<  e.what());
+        ROS_ERROR_STREAM("Failed to load stored path: "  <<  e.what());
     }
 
     return std::vector<RRTNode, RRTAllocator>();

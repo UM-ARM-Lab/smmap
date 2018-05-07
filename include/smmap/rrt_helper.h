@@ -13,10 +13,6 @@ namespace smmap
 {
     class RRTNode;
     typedef Eigen::aligned_allocator<RRTNode> RRTAllocator;
-}
-
-namespace smmap
-{
     typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> RRTGrippersRepresentation;
     typedef std::pair<Eigen::VectorXd, Eigen::VectorXd> RRTRobotRepresentation;
 
@@ -97,7 +93,7 @@ namespace smmap
     class RRTHelper
     {
         public:
-            static constexpr double NN_BLACKLIST_DISTANCE = (std::numeric_limits<double>::max() - 1e10);
+            static constexpr double NN_BLACKLIST_DISTANCE = std::numeric_limits<double>::max() - 1e10;
 
             // Topic names used for publishing visualization data
             static constexpr auto RRT_BLACKLISTED_GOAL_BANDS_NS  = "rrt_blacklisted_goal_bands";
@@ -105,17 +101,14 @@ namespace smmap
 
             static constexpr auto RRT_TREE_GRIPPER_A_NS          = "rrt_tree_gripper_a";
             static constexpr auto RRT_TREE_GRIPPER_B_NS          = "rrt_tree_gripper_b";
+            static constexpr auto RRT_TREE_BAND_NS               = "rrt_tree_band";
 
             static constexpr auto RRT_SAMPLE_NS                  = "rrt_sample";
             static constexpr auto RRT_FORWARD_PROP_START_NS      = "rrt_forward_prop_start";
-            static constexpr auto RRT_FORWARD_PROP_STEPS_NS      = "rrt_forward_prop_steps";
 
             static constexpr auto RRT_SOLUTION_GRIPPER_A_NS      = "rrt_solution_gripper_a";
             static constexpr auto RRT_SOLUTION_GRIPPER_B_NS      = "rrt_solution_gripper_b";
             static constexpr auto RRT_SOLUTION_RUBBER_BAND_NS    = "rrt_solution_rubber_band";
-
-            static constexpr auto RRT_SHORTCUT_FIRST_GRIPPER_NS  = "rrt_shortcut_first_gripper";
-            static constexpr auto RRT_SHORTCUT_SECOND_GRIPPER_NS = "rrt_shortcut_second_gripper";
 
             RRTHelper(
                     ros::NodeHandle& nh,
@@ -162,6 +155,20 @@ namespace smmap
             // Visualization and other debugging tools
             ///////////////////////////////////////////////////////////////////////////////////////
 
+            void visualizeTree(
+                    const std::vector<RRTNode, RRTAllocator>& tree,
+                    const size_t start_idx,
+                    const std::string ns_a,
+                    const std::string ns_b,
+                    const std::string ns_band,
+                    const int id_a,
+                    const int id_b,
+                    const int id_band,
+                    const std_msgs::ColorRGBA& color_a,
+                    const std_msgs::ColorRGBA& color_b,
+                    const std_msgs::ColorRGBA& color_band,
+                    const bool draw_band) const;
+
             void visualizePath(const std::vector<RRTNode, RRTAllocator>& path) const;
 
             void visualizeBlacklist() const;
@@ -200,11 +207,11 @@ namespace smmap
                     const RRTRobotRepresentation& configuration,
                     const AllGrippersSinglePose& poses) const;
 
-            size_t forwardPropogationFunction(
-                    std::vector<RRTNode, RRTAllocator>& tree_to_extend,
+            size_t forwardPropogationFunction(std::vector<RRTNode, RRTAllocator>& tree_to_extend,
                     const int64_t& nearest_neighbor_idx,
                     const RRTNode& target,
                     const bool extend_band,
+                    const size_t max_projected_new_states,
                     const bool visualization_enabled_locally);
 
             std::vector<RRTNode, RRTAllocator> planningMainLoop();
@@ -232,10 +239,11 @@ namespace smmap
 
             const smmap_utilities::Visualizer::Ptr vis_;
             const bool visualization_enabled_globally_;
-            const std_msgs::ColorRGBA band_safe_color_;
-            const std_msgs::ColorRGBA band_overstretched_color_;
+//            const std_msgs::ColorRGBA band_safe_color_;
+//            const std_msgs::ColorRGBA band_overstretched_color_;
             const std_msgs::ColorRGBA gripper_a_tree_color_;
             const std_msgs::ColorRGBA gripper_b_tree_color_;
+            const std_msgs::ColorRGBA band_tree_color_;
 
             const Eigen::Isometry3d task_aligned_frame_transform_;
             const Eigen::Isometry3d task_aligned_frame_inverse_transform_;
@@ -289,7 +297,8 @@ namespace smmap
             std::map<std::string, double> statistics_;
             double total_sampling_time_;
             double total_nearest_neighbour_time_;
-            double total_crrt_projection_time_;
+            double total_projection_time_;
+            double total_collision_check_time_;
             double total_band_forward_propogation_time_;
             double total_first_order_vis_propogation_time_;
             double total_everything_included_forward_propogation_time_;

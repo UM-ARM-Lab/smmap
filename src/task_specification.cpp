@@ -579,16 +579,7 @@ bool CoverageTask::pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d
 {
     const auto cover_point          = cover_points_.col(cover_idx);
     const auto cover_point_normal   = cover_point_normals_.col(cover_idx);
-
     const std::pair<double, double> distances = EigenHelpers::DistanceToLine(cover_point, cover_point_normal, test_point);
-
-    std::cout << "Idx: " << cover_idx
-              << " Dist to normal: " << distances.first
-              << " Dist along normal: " << distances.second
-              << " Covered? " << ((distances.first < error_threshold_distance_to_normal_) && (std::abs(distances.second) < error_threshold_along_normal_))
-              << std::endl;
-
-
     return (distances.first < error_threshold_distance_to_normal_) && (std::abs(distances.second) < error_threshold_along_normal_);
 }
 
@@ -1022,14 +1013,9 @@ bool DijkstrasCoverageTask::saveDijkstrasResults()
         arc_utilities::SerializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(dijkstras_results_, buffer, pair_serializer);
 
         // Compress and save to file
-        ROS_INFO_NAMED("coverage_task", "Compressing for storage");
-        const std::vector<uint8_t> compressed_serialized_data = ZlibHelpers::CompressBytes(buffer);
-        ROS_INFO_NAMED("coverage_task", "Saving Dijkstras results to file");
+        ROS_INFO_NAMED("coverage_task", "Compressing and saving to file");
         const std::string dijkstras_file_path = GetDijkstrasStorageLocation(nh_);
-        std::ofstream output_file(dijkstras_file_path, std::ios::out | std::ios::binary);
-        uint64_t serialized_size = compressed_serialized_data.size();
-        output_file.write(reinterpret_cast<const char*>(compressed_serialized_data.data()), (std::streamsize)serialized_size);
-        output_file.close();
+        ZlibHelpers::CompressAndWriteToFile(buffer, dijkstras_file_path);
         return true;
     }
     catch (...)

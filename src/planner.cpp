@@ -1553,7 +1553,8 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
         }
     }
 
-    assert(!(robot_->testPathForCollision(global_plan_full_robot_trajectory_)));
+    assert(!world_state.robot_configuration_valid_ ||
+           !(robot_->testPathForCollision(global_plan_full_robot_trajectory_)));
 }
 
 void Planner::convertRRTResultIntoGripperTrajectory(
