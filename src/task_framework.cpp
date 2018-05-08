@@ -1,4 +1,4 @@
-#include "smmap/planner.h"
+#include "smmap/task_framework.h"
 
 #include <future>
 #include <assert.h>
@@ -160,7 +160,7 @@ std::vector<uint32_t> numberOfPointsInEachCluster(
  * @param vis
  * @param task_specification
  */
-Planner::Planner(ros::NodeHandle& nh,
+TaskFramework::TaskFramework(ros::NodeHandle& nh,
         ros::NodeHandle& ph,
         const RobotInterface::Ptr& robot,
         Visualizer::Ptr vis,
@@ -209,7 +209,7 @@ Planner::Planner(ros::NodeHandle& nh,
 // The one function that gets invoked externally
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void Planner::execute()
+void TaskFramework::execute()
 {
     WorldState world_feedback = robot_->start();
     const double start_time = world_feedback.sim_time_;
@@ -297,7 +297,7 @@ void Planner::execute()
  * @param current_world_state
  * @return
  */
-WorldState Planner::sendNextCommand(
+WorldState TaskFramework::sendNextCommand(
         const WorldState& world_state)
 {
     ROS_INFO_NAMED("planner", "---------------------------- Start of Loop -----------------------------------------");
@@ -406,7 +406,7 @@ WorldState Planner::sendNextCommand(
  * @param world_state
  * @return
  */
-WorldState Planner::sendNextCommandUsingLocalController(
+WorldState TaskFramework::sendNextCommandUsingLocalController(
         WorldState world_state)
 {
 #if ENABLE_LOCAL_CONTROLLER_LOAD_SAVE
@@ -644,7 +644,7 @@ WorldState Planner::sendNextCommandUsingLocalController(
  * @param current_world_state
  * @return
  */
-WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
+WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
         const WorldState& current_world_state)
 {
     assert(executing_global_trajectory_);
@@ -684,7 +684,7 @@ WorldState Planner::sendNextCommandUsingGlobalGripperPlannerResults(
 // Constraint violation detection
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void Planner::visualizeProjectedPaths(
+void TaskFramework::visualizeProjectedPaths(
         const std::vector<VectorVector3d>& projected_paths,
         const bool visualization_enabled)
 {
@@ -712,7 +712,7 @@ void Planner::visualizeProjectedPaths(
     }
 }
 
-std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectFutureConstraintViolations(
+std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::detectFutureConstraintViolations(
         const WorldState& starting_world_state,
         const bool visualization_enabled)
 {
@@ -861,7 +861,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectF
     return projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 }
 
-bool Planner::globalPlannerNeededDueToOverstretch(
+bool TaskFramework::globalPlannerNeededDueToOverstretch(
         const WorldState& current_world_state)
 {
     static bool returned_true_by_default_once = false;
@@ -913,7 +913,7 @@ bool Planner::globalPlannerNeededDueToOverstretch(
     return false;
 }
 
-bool Planner::globalPlannerNeededDueToLackOfProgress()
+bool TaskFramework::globalPlannerNeededDueToLackOfProgress()
 {
     static double error_delta_threshold_for_progress = GetErrorDeltaThresholdForProgress(ph_);
     static double grippers_distance_delta_threshold_for_progress = GetGrippersDistanceDeltaThresholdForProgress(ph_);
@@ -963,7 +963,7 @@ bool Planner::globalPlannerNeededDueToLackOfProgress()
     return false;
 }
 
-bool Planner::predictStuckForGlobalPlannerResults(const bool visualization_enabled)
+bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization_enabled)
 {
     return false;
 
@@ -1006,7 +1006,7 @@ bool Planner::predictStuckForGlobalPlannerResults(const bool visualization_enabl
 // Global gripper planner functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
+AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_state)
 {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////// Determine the cluster centers /////////////////////////////////////////////////////////
@@ -1320,7 +1320,7 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
     return target_gripper_poses;
 }
 
-void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
+void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 {
     static int num_times_invoked = 0;
     num_times_invoked++;
@@ -1376,7 +1376,13 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
     }
 
     // Planning if we did not load a plan from file
+    for (int i = 0; i < 10; ++i)
     {
+        num_times_invoked++;
+
+
+
+
         const Vector3d task_frame_lower_limits = Vector3d(
                     GetRRTPlanningXMinBulletFrame(ph_),
                     GetRRTPlanningYMinBulletFrame(ph_),
@@ -1488,35 +1494,10 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
                 SerializeAllGrippersPoseTrajectory(global_plan_gripper_trajectory_, buffer);
                 SerializeVector<VectorXd>(global_plan_full_robot_trajectory_, buffer, &SerializeEigenType<VectorXd>);
 
-                // Verify no mistakes made in serialization
-//                {
-//                    const auto deserialized_results = DeserializeAllGrippersPoseTrajectory(buffer, 0);
-//                    const auto& deserialized_traj = deserialized_results.first;
-//                    const auto deserialized_bytes_read = deserialized_results.second;
-//                    assert(deserialized_bytes_read == bytes_used);
-//                    assert(global_plan_gripper_trajectory_.size() == deserialized_traj.size());
-//                    for (size_t time_idx = 0; time_idx < deserialized_traj.size(); ++time_idx)
-//                    {
-//                        const auto& planned_poses = global_plan_gripper_trajectory_[time_idx];
-//                        const auto& deserialized_poses = deserialized_traj[time_idx];
-
-//                        assert(planned_poses.size() == deserialized_poses.size());
-//                        for (size_t gripper_idx = 0; gripper_idx < deserialized_poses.size(); ++gripper_idx)
-//                        {
-//                            assert(planned_poses[gripper_idx].matrix() == deserialized_poses[gripper_idx].matrix());
-//                        }
-//                    }
-//                }
-
                 // Compress and save to file
-                ROS_INFO_NAMED("rrt_planner_results", "Compressing for storage");
-                const std::vector<uint8_t> compressed_serialized_data = ZlibHelpers::CompressBytes(buffer);
-                ROS_INFO_NAMED("rrt_planner_results", "Saving RRT results to file");
+                ROS_INFO_NAMED("rrt_planner_results", "Compressing and saving RRT results to file for storage");
                 const std::string rrt_file_path = GetLogFolder(nh_) + "rrt_cache_step." + PrettyPrint::PrettyPrint(num_times_invoked);
-                std::ofstream output_file(rrt_file_path, std::ios::out | std::ios::binary);
-                uint64_t serialized_size = compressed_serialized_data.size();
-                output_file.write(reinterpret_cast<const char*>(compressed_serialized_data.data()), (std::streamsize)serialized_size);
-                output_file.close();
+                ZlibHelpers::CompressAndWriteToFile(buffer, rrt_file_path);
             }
             catch (...)
             {
@@ -1529,7 +1510,7 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
            !(robot_->testPathForCollision(global_plan_full_robot_trajectory_)));
 }
 
-void Planner::convertRRTResultIntoGripperTrajectory(
+void TaskFramework::convertRRTResultIntoGripperTrajectory(
         const AllGrippersSinglePose& starting_poses,
         const std::vector<RRTNode, RRTAllocator>& rrt_result)
 {
@@ -1567,7 +1548,7 @@ void Planner::convertRRTResultIntoGripperTrajectory(
     global_plan_full_robot_trajectory_ = std::vector<VectorXd>(global_plan_gripper_trajectory_.size(), VectorXd(0));
 }
 
-void Planner::convertRRTResultIntoFullRobotTrajectory(
+void TaskFramework::convertRRTResultIntoFullRobotTrajectory(
         const AllGrippersSinglePose& starting_poses,
         const std::vector<RRTNode, RRTAllocator>& rrt_result)
 {
@@ -1595,7 +1576,7 @@ void Planner::convertRRTResultIntoFullRobotTrajectory(
 // Model list management
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void Planner::initializeModelAndControllerSet(const WorldState& initial_world_state)
+void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_world_state)
 {
     // Initialze each model type with the shared data
     DeformableModel::SetGrippersData(robot_->getGrippersData());
@@ -1936,7 +1917,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
     createBandits();
 }
 
-void Planner::createBandits()
+void TaskFramework::createBandits()
 {
     num_models_ = (ssize_t)model_list_.size();
     ROS_INFO_STREAM_NAMED("planner", "Generating bandits for " << num_models_ << " bandits");
@@ -1966,7 +1947,7 @@ void Planner::createBandits()
  * @param model_used
  * @param world_feedback
  */
-void Planner::updateModels(
+void TaskFramework::updateModels(
         const WorldState& starting_world_state,
         const ObjectDeltaAndWeight& task_desired_motion,
         const std::vector<DeformableController::OutputData>& suggested_commands,
@@ -2023,7 +2004,7 @@ void Planner::updateModels(
  * @param suggested_commands
  * @return
  */
-MatrixXd Planner::calculateProcessNoise(
+MatrixXd TaskFramework::calculateProcessNoise(
         const std::vector<DeformableController::OutputData>& suggested_commands) const
 {
     std::vector<double> grippers_velocity_norms((size_t)num_models_);
@@ -2068,7 +2049,7 @@ MatrixXd Planner::calculateProcessNoise(
 // Logging and visualization functionality
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void Planner::visualizeDesiredMotion(
+void TaskFramework::visualizeDesiredMotion(
         const WorldState& current_world_state,
         const ObjectDeltaAndWeight& desired_motion,
         const bool visualization_enabled) const
@@ -2101,7 +2082,7 @@ void Planner::visualizeDesiredMotion(
     }
 }
 
-void Planner::visualizeGripperMotion(
+void TaskFramework::visualizeGripperMotion(
         const AllGrippersSinglePose& current_gripper_pose,
         const AllGrippersSinglePoseDelta& gripper_motion,
         const ssize_t model_ind) const
@@ -2142,7 +2123,7 @@ void Planner::visualizeGripperMotion(
     }
 }
 
-void Planner::initializePlannerLogging()
+void TaskFramework::initializePlannerLogging()
 {
     if (planner_logging_enabled_)
     {
@@ -2186,7 +2167,7 @@ void Planner::initializePlannerLogging()
     }
 }
 
-void Planner::initializeControllerLogging()
+void TaskFramework::initializeControllerLogging()
 {
     if(controller_logging_enabled_)
     {
@@ -2224,7 +2205,7 @@ void Planner::initializeControllerLogging()
 
 // Note that resulting_world_state may not be exactly indentical to individual_model_rewards[model_used]
 // because of the way forking words (and doesn't) in Bullet. They should be very close however.
-void Planner::logPlannerData(
+void TaskFramework::logPlannerData(
         const WorldState& initial_world_state,
         const WorldState& resulting_world_state,
         const std::vector<WorldState>& individual_model_results,
@@ -2272,7 +2253,7 @@ void Planner::logPlannerData(
 
 // Note that resulting_world_state may not be exactly indentical to individual_model_rewards[model_used]
 // because of the way forking words (and doesn't) in Bullet. They should be very close however.
-void Planner::controllerLogData(
+void TaskFramework::controllerLogData(
         const WorldState& initial_world_state,
         const WorldState& resulting_world_state,
         const std::vector<WorldState>& individual_model_results,
@@ -2391,7 +2372,7 @@ void Planner::controllerLogData(
 
 
 
-void Planner::storeWorldState(const WorldState& world_state)
+void TaskFramework::storeWorldState(const WorldState& world_state)
 {
     try
     {
@@ -2418,7 +2399,7 @@ void Planner::storeWorldState(const WorldState& world_state)
     }
 }
 
-void Planner::loadStoredWorldState(WorldState& world_state)
+void TaskFramework::loadStoredWorldState(WorldState& world_state)
 {
     try
     {
@@ -2449,7 +2430,7 @@ void Planner::loadStoredWorldState(WorldState& world_state)
     }
 }
 
-bool Planner::useStoredWorldState() const
+bool TaskFramework::useStoredWorldState() const
 {
     return ROSHelpers::GetParamDebugLog<bool>(ph_, "use_stored_world_state", false);
 }

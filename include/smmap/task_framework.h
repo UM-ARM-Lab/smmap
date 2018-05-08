@@ -19,23 +19,23 @@ namespace smmap
 {
 #warning "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! I did stupid things with a define here !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
 #ifdef UCB_BANDIT
-    #define Planner PlannerUCB
+    #define TaskFramework TaskFrameworkUCB
 #endif
 #ifdef KFMANB_BANDIT
-    #define Planner PlannerKFMANB
+    #define TaskFramework TaskFrameworkKFMANB
 #endif
 #ifdef KFMANDB_BANDIT
-    #define Planner PlannerKFMANDB
+    #define TaskFramework TaskFrameworkKFMANDB
 #endif
 
-    class Planner
+    class TaskFramework
     {
         public:
             ////////////////////////////////////////////////////////////////////
             // Constructor and the one function that gets called externally
             ////////////////////////////////////////////////////////////////////
 
-            Planner(ros::NodeHandle& nh,
+            TaskFramework(ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
                     const RobotInterface::Ptr& robot,
                     smmap_utilities::Visualizer::Ptr vis,

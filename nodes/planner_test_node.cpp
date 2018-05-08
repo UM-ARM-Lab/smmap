@@ -1,4 +1,4 @@
-#include "smmap/planner.h"
+#include "smmap/task_framework.h"
 
 int main(int argc, char* argv[])
 {
@@ -25,7 +25,7 @@ int main(int argc, char* argv[])
     smmap::TaskSpecification::Ptr task_specification(smmap::TaskSpecification::MakeTaskSpecification(nh, ph, vis));
 
     ROS_INFO("Creating and executing planner");
-    smmap::Planner planner(nh, ph, robot, vis, task_specification);
+    smmap::TaskFramework planner(nh, ph, robot, vis, task_specification);
     planner.execute();
 
     ROS_INFO("Disposing planner...");

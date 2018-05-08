@@ -1518,9 +1518,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful;
     statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made;
 
-    std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
-
-    storePath(path);
     return path;
 }
 
@@ -1642,6 +1639,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         robot_->lockEnvironment();
         path = planningMainLoop();
         robot_->unlockEnvironment();
+        std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
+        storePath(path);
     }
 
     if (visualization_enabled_globally_)
@@ -1663,8 +1662,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
 
     ROS_INFO_NAMED("rrt", "Playing back smoothed path in OpenRAVE");
     robot_->testPathForCollision(ConvertRRTPathToRobotPath(smoothed_path));
-
-    std::cout << PrettyPrint::PrettyPrint(smoothed_path.back().getBand()->getVectorRepresentation(), false, "\n") << std::endl << std::endl;
 
     if (visualization_enabled_globally_)
     {
