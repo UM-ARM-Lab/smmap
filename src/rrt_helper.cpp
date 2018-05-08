@@ -1240,7 +1240,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     assert(CheckTreeLinkage(backward_tree_));
 
     const std::chrono::time_point<std::chrono::steady_clock> start_time = std::chrono::steady_clock::now();
-    forward_iteration_ = true;
+    forward_iteration_ = false;
 
     const bool fwd_prop_local_visualization_enabled = true;
     const size_t fwd_prop_max_steps = 32;
@@ -1249,233 +1249,209 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     std::cout << "Starting planning..." << std::endl;
     while (!path_found_ && (std::chrono::steady_clock::now() - start_time) < time_limit_)
     {
-        auto& first_tree_to_extend = forward_iteration_ ? forward_tree_ : backward_tree_;
-        auto& second_tree_to_extend = forward_iteration_ ? backward_tree_ : forward_tree_;
-
-        //////////////// Extend (connect) the first tree towards a random target ////////////////
-
-        // Sample a random target
-        const RRTNode random_target = configSampling();
-        // Get the nearest neighbor
-        const int64_t first_tree_nearest_neighbour_idx =  nearestNeighbour(first_tree_to_extend, random_target);
-        assert((first_tree_nearest_neighbour_idx >= 0) && (first_tree_nearest_neighbour_idx < (int64_t)first_tree_to_extend.size()));
-        // Forward propagate towards the sampled target
-        const bool first_tree_extend_band = forward_iteration_;
-        const size_t first_tree_num_nodes_created =
-                forwardPropogationFunction(
-                    first_tree_to_extend,
-                    first_tree_nearest_neighbour_idx,
-                    random_target,
-                    first_tree_extend_band,
-                    fwd_prop_max_steps,
-                    fwd_prop_local_visualization_enabled);
-        // Record the index of the last node in the new branch. This is either the last item in the tree, or the nearest neighbour itself
-        const int64_t first_tree_last_node_idx_in_branch = first_tree_num_nodes_created > 0 ?
-                    (int64_t)first_tree_to_extend.size() - 1 : first_tree_nearest_neighbour_idx;
-
-        // Record statistics for the randomly sampled extension
         if (forward_iteration_)
         {
-            if (first_tree_num_nodes_created != 0)
+            for (size_t itr = 0; itr < forward_tree_extend_iterations_; ++itr)
             {
-                ++forward_random_samples_useful;
-            }
-            else
-            {
-                ++forward_random_samples_useless;
-            }
-        }
-        else
-        {
-            if (first_tree_num_nodes_created != 0)
-            {
-                ++backward_random_samples_useful;
-            }
-            else
-            {
-                ++backward_random_samples_useless;
-            }
-        }
+                //////////////// Extend (connect) the first tree towards a random target ////////////////
+                const bool extend_band = true;
 
-        //////////////// Extend (connect) the second tree towards the last node of the first tree ////////////////
+                // Sample a random target
+                const RRTNode random_target = configSampling();
+                // Get the nearest neighbor
+                const int64_t forward_tree_nearest_neighbour_idx =  nearestNeighbour(forward_tree_, random_target);
+                // Forward propagate towards the sampled target
+                const size_t num_random_nodes_created =
+                        forwardPropogationFunction(
+                            forward_tree_,
+                            forward_tree_nearest_neighbour_idx,
+                            random_target,
+                            extend_band,
+                            fwd_prop_max_steps,
+                            fwd_prop_local_visualization_enabled);
 
-        // Extend the 2nd tree towards the end point of the branch in the first tree
-        const RRTNode& selected_target = first_tree_to_extend[first_tree_last_node_idx_in_branch];
-        // Get the nearest neighbour
-        const int64_t second_tree_nearest_neighbour_idx =  nearestNeighbour(second_tree_to_extend, selected_target);
-        assert((second_tree_nearest_neighbour_idx >= 0) && (second_tree_nearest_neighbour_idx < (int64_t)second_tree_to_extend.size()));
-        // Forward propagate towards the selected target
-        const bool second_tree_extend_band = !forward_iteration_;
-        const size_t second_tree_num_nodes_created =
-                forwardPropogationFunction(
-                    second_tree_to_extend,
-                    second_tree_nearest_neighbour_idx,
-                    selected_target,
-                    second_tree_extend_band,
-                    fwd_prop_max_steps,
-                    fwd_prop_local_visualization_enabled);
-        // Record the index of the last node in the new branch. This is either the last item in the tree, or the nearest neighbour itself
-        const int64_t second_tree_last_node_idx_in_branch = second_tree_num_nodes_created > 0 ?
-                    (int64_t)second_tree_to_extend.size() - 1 : second_tree_nearest_neighbour_idx;
-
-        // Record statistics for the deterministic extension
-        if (forward_iteration_)
-        {
-            if (second_tree_num_nodes_created != 0)
-            {
-                ++backward_connection_attempts_useful;
-            }
-            else
-            {
-                ++backward_connection_attempts_useless;
-            }
-        }
-        else
-        {
-            if (second_tree_num_nodes_created != 0)
-            {
-                ++forward_connection_attempts_useful;
-            }
-            else
-            {
-                ++forward_connection_attempts_useless;
-            }
-        }
-
-
-
-
-//        std::cout << "Forward iteration? " << forward_iteration_ << std::endl
-//                  << "Forward Tree Nodes:  " << forward_tree_.size() << std::endl
-//                  << "Backward Tree Nodes: " << backward_tree_.size() << std::endl
-
-//                  << "First Tree NN Index: " << first_tree_nearest_neighbour_idx << std::endl
-//                  << "First Tree Num Nodes created: " << first_tree_num_nodes_created << std::endl
-//                  << "First Tree last Index: " << first_tree_last_node_idx_in_branch << std::endl
-
-//                  << "Second Tree NN Index: " << second_tree_nearest_neighbour_idx << std::endl
-//                  << "Second Tree Num Nodes created: " << second_tree_num_nodes_created << std::endl
-//                  << "Second Tree last Index: " << second_tree_last_node_idx_in_branch << std::endl
-//                  << std::endl;
-
-
-
-        //////////////// Check for a connection between the trees, extending the forward tree if possible ////////////////
-
-        if (second_tree_num_nodes_created > 0)
-        {
-            const RRTNode& first_tree_final_node = first_tree_to_extend[first_tree_last_node_idx_in_branch];
-            const RRTNode& second_tree_final_node = second_tree_to_extend[second_tree_last_node_idx_in_branch];
-            const bool connection_made = planning_for_whole_robot_ ?
-                        robotConfigurationsAreApproximatelyEqual(first_tree_final_node.getRobotConfiguration(), second_tree_final_node.getRobotConfiguration()) :
-                        gripperPositionsAreApproximatelyEqual(first_tree_final_node.getGrippers(), second_tree_final_node.getGrippers());
-
-            if (connection_made)
-            {
-//                assert(CheckTreeLinkage(forward_tree_));
-//                assert(CheckTreeLinkage(backward_tree_));
-
-                // Record some statistics
-                if (forward_iteration_)
+                // Record statistics for the randomly sampled extension
+                if (num_random_nodes_created != 0)
                 {
-                    ++forward_connections_made;
+                    ++forward_random_samples_useful;
                 }
                 else
                 {
-                    ++backward_connections_made;
+                    ++forward_random_samples_useless;
                 }
 
-                const std::chrono::time_point<std::chrono::steady_clock> cur_time = std::chrono::steady_clock::now();
-                const std::chrono::duration<double> planning_time(cur_time - start_time);
-
-                statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
-                statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
-                statistics_["planning_time2_forward_propogation_crrt_projection      "] = total_projection_time_;
-                statistics_["planning_time3_forward_propogation_band_sim             "] = total_band_forward_propogation_time_;
-                statistics_["planning_time4_forward_propogation_first_order_vis      "] = total_first_order_vis_propogation_time_;
-                statistics_["planning_time5_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
-                statistics_["planning_time6_total                                    "] = planning_time.count();
-
-                statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless;
-                statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful;
-                statistics_["planning_size02_forward_states                          "] = (double)forward_tree_.size();
-
-                statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless;
-                statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful;
-                statistics_["planning_size05_backward_states                         "] = (double)backward_tree_.size();
-
-                statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless;
-                statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful;
-                statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made;
-
-                statistics_["planning_size09_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless;
-                statistics_["planning_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful;
-                statistics_["planning_size11_backward_connections_made               "] = (double)backward_connections_made;
-
-                std::cout << "Connection made. Stats:\n";
-                std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
-
-                // March down the backward tree, propagating the band in the forward tree
-                int64_t forward_parent_idx = forward_iteration_ ? first_tree_last_node_idx_in_branch : second_tree_last_node_idx_in_branch;
-                int64_t backward_next_idx = forward_iteration_ ? second_tree_last_node_idx_in_branch : first_tree_last_node_idx_in_branch;
-                while (backward_next_idx >= 0)
+                const bool sample_goal = uniform_unit_distribution_(*generator_) < goal_bias_;
+                if (sample_goal)
                 {
-                    assert(backward_next_idx < (int64_t)backward_tree_.size());
-                    RRTNode& backward_next_node = backward_tree_[backward_next_idx];
-                    const RRTGrippersRepresentation& next_grippers_position = backward_next_node.getGrippers();
-                    const RRTRobotRepresentation& next_robot_configuration = backward_next_node.getRobotConfiguration();
-                    const RubberBand::Ptr prev_band = forward_tree_[forward_parent_idx].getBand();
-//                    backward_next_node.blacklist();
+                    // Record the index of the last node in the new branch. This is either the last item in the tree, or the nearest neighbour itself
+                    const int64_t last_node_idx_in_forward_tree_branch = num_random_nodes_created > 0 ?
+                                (int64_t)forward_tree_.size() - 1 : forward_tree_nearest_neighbour_idx;
 
+                    const int64_t backward_tree_nearest_neighbour_idx =  nearestNeighbour(
+                                backward_tree_, forward_tree_[last_node_idx_in_forward_tree_branch]);
+                    const RRTNode& target_in_backward_tree = backward_tree_[backward_tree_nearest_neighbour_idx];
 
-                    RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
-                    Stopwatch stopwatch;
-                    const bool rubber_band_verbose = true;
-                    arc_helpers::DoNotOptimize(rubber_band_verbose);
-                    // Forward simulate the rubber band to test this transition
-                    next_band->forwardPropagateRubberBandToEndpointTargets(
-                                next_grippers_position.first,
-                                next_grippers_position.second,
-                                rubber_band_verbose);
-                    arc_helpers::DoNotOptimize(next_band->getVectorRepresentation());
-                    const double band_forward_propogation_time = stopwatch(READ);
-                    total_band_forward_propogation_time_ += band_forward_propogation_time;
+                    const size_t num_goal_directed_nodes_created =
+                            forwardPropogationFunction(
+                                forward_tree_,
+                                last_node_idx_in_forward_tree_branch,
+                                target_in_backward_tree,
+                                extend_band,
+                                fwd_prop_max_steps,
+                                fwd_prop_local_visualization_enabled);
 
-                    // If we are still able to get to the next target position after retrying,
-                    // then return however far we were able to get
-                    if (!bandEndpointsMatchGripperPositions(next_band, next_grippers_position))
+                    // Record statistics for the goal biased extension
+                    if (num_goal_directed_nodes_created != 0)
                     {
-                        break;
+                        ++forward_connection_attempts_useful;
+                    }
+                    else
+                    {
+                        ++forward_connection_attempts_useless;
                     }
 
-                    // If the rubber band becomes overstretched, then return however far we were able to get
-                    if (next_band->isOverstretched())
+                    //////////////// Check for a connection between the trees, extending the forward tree if possible ////////////////
+
+                    if (num_goal_directed_nodes_created > 0)
                     {
-                        break;
+                        const bool connection_made = planning_for_whole_robot_ ?
+                                    robotConfigurationsAreApproximatelyEqual(forward_tree_.back().getRobotConfiguration(), target_in_backward_tree.getRobotConfiguration()) :
+                                    gripperPositionsAreApproximatelyEqual(forward_tree_.back().getGrippers(), target_in_backward_tree.getGrippers());
+
+                        if (connection_made)
+                        {
+                            assert(CheckTreeLinkage(forward_tree_));
+                            assert(CheckTreeLinkage(backward_tree_));
+
+                            // Record some statistics
+                            ++forward_connections_made;
+
+                            const std::chrono::time_point<std::chrono::steady_clock> cur_time = std::chrono::steady_clock::now();
+                            const std::chrono::duration<double> planning_time(cur_time - start_time);
+
+                            statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
+                            statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
+                            statistics_["planning_time2_forward_propogation_projection           "] = total_projection_time_;
+                            statistics_["planning_time3_forward_propogation_collision_check      "] = total_collision_check_time_;
+                            statistics_["planning_time4_forward_propogation_band_sim             "] = total_band_forward_propogation_time_;
+                            statistics_["planning_time5_forward_propogation_first_order_vis      "] = total_first_order_vis_propogation_time_;
+                            statistics_["planning_time6_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
+                            statistics_["planning_time7_total                                    "] = planning_time.count();
+
+                            statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless;
+                            statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful;
+                            statistics_["planning_size02_forward_states                          "] = (double)forward_tree_.size();
+
+                            statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless;
+                            statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful;
+                            statistics_["planning_size05_backward_states                         "] = (double)backward_tree_.size();
+
+                            statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless;
+                            statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful;
+                            statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made;
+
+                            statistics_["planning_size09_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless;
+                            statistics_["planning_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful;
+                            statistics_["planning_size11_backward_connections_made               "] = (double)backward_connections_made;
+
+                            std::cout << "Connection made. Stats:\n";
+                            std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
+
+                            // March down the backward tree, propagating the band in the forward tree
+                            int64_t forward_parent_idx = (int64_t)forward_tree_.size() - 1;
+                            int64_t backward_next_idx = backward_tree_nearest_neighbour_idx;
+                            while (backward_next_idx >= 0)
+                            {
+                                assert(backward_next_idx < (int64_t)backward_tree_.size());
+                                RRTNode& backward_next_node = backward_tree_[backward_next_idx];
+                                const RRTGrippersRepresentation& next_grippers_position = backward_next_node.getGrippers();
+                                const RRTRobotRepresentation& next_robot_configuration = backward_next_node.getRobotConfiguration();
+                                const RubberBand::Ptr prev_band = forward_tree_[forward_parent_idx].getBand();
+            //                    backward_next_node.blacklist();
+
+
+                                RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
+                                Stopwatch stopwatch;
+                                const bool rubber_band_verbose = true;
+                                arc_helpers::DoNotOptimize(rubber_band_verbose);
+                                // Forward simulate the rubber band to test this transition
+                                next_band->forwardPropagateRubberBandToEndpointTargets(
+                                            next_grippers_position.first,
+                                            next_grippers_position.second,
+                                            rubber_band_verbose);
+                                arc_helpers::DoNotOptimize(next_band->getVectorRepresentation());
+                                const double band_forward_propogation_time = stopwatch(READ);
+                                total_band_forward_propogation_time_ += band_forward_propogation_time;
+
+                                // If we are still able to get to the next target position after retrying,
+                                // then return however far we were able to get
+                                if (!bandEndpointsMatchGripperPositions(next_band, next_grippers_position))
+                                {
+                                    break;
+                                }
+
+                                // If the rubber band becomes overstretched, then return however far we were able to get
+                                if (next_band->isOverstretched())
+                                {
+                                    break;
+                                }
+
+                                next_band->visualize("bispace_connect_bands", Visualizer::Blue(), Visualizer::Blue(), (int)forward_parent_idx + 1, true);
+
+                                // The new configuation is valid, add it to the forward tree
+                                const RRTNode next_node(next_grippers_position, next_robot_configuration, next_band, forward_parent_idx);
+                                forward_tree_.push_back(next_node);
+                                const int64_t new_node_idx = (int64_t)forward_tree_.size() - 1;
+                                forward_tree_[forward_parent_idx].addChildIndex(new_node_idx);
+
+                                if (goalReached(next_node))
+                                {
+                                    path_found_ = true;
+                                    goal_idx_in_forward_tree = new_node_idx;
+                                    break;
+                                }
+
+                                forward_parent_idx = new_node_idx;
+                                backward_next_idx = backward_next_node.getParentIndex();
+                            }
+                        }
                     }
+                }
+            }
+        }
+        else
+        {
+            for (size_t itr = 0; itr < backward_tree_extend_iterations_; ++itr)
+            {
+                //////////////// Extend (connect) the backward tree towards a random target ////////////////
+                const bool extend_band = false;
 
-                    next_band->visualize("bispace_connect_bands", Visualizer::Blue(), Visualizer::Blue(), forward_parent_idx + 1, true);
+                // Sample a random target
+                const RRTNode random_target = configSampling();
+                // Get the nearest neighbor
+                const int64_t backward_tree_nearest_neighbour_idx =  nearestNeighbour(backward_tree_, random_target);
+                // Forward propagate towards the sampled target
+                const size_t num_nodes_created =
+                        forwardPropogationFunction(
+                            backward_tree_,
+                            backward_tree_nearest_neighbour_idx,
+                            random_target,
+                            extend_band,
+                            fwd_prop_max_steps,
+                            fwd_prop_local_visualization_enabled);
 
-                    // The new configuation is valid, add it to the forward tree
-                    const RRTNode next_node(next_grippers_position, next_robot_configuration, next_band, forward_parent_idx);
-                    forward_tree_.push_back(next_node);
-                    const int64_t new_node_idx = (int64_t)forward_tree_.size() - 1;
-                    forward_tree_[forward_parent_idx].addChildIndex(new_node_idx);
-
-                    if (goalReached(next_node))
-                    {
-                        path_found_ = true;
-                        goal_idx_in_forward_tree = new_node_idx;
-                        break;
-                    }
-
-                    forward_parent_idx = new_node_idx;
-                    backward_next_idx = backward_next_node.getParentIndex();
+                // Record statistics for the randomly sampled extension
+                if (num_nodes_created != 0)
+                {
+                    ++backward_random_samples_useful;
+                }
+                else
+                {
+                    ++backward_random_samples_useless;
                 }
             }
         }
 
-        // Swap trees
         forward_iteration_ = !forward_iteration_;
     }
 
