@@ -1,6 +1,8 @@
 #ifndef ROS_COMMUNICATION_HELPERS_HPP
 #define ROS_COMMUNICATION_HELPERS_HPP
 
+#include <mutex>
+
 #include <ros/ros.h>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/dijkstras.hpp>
@@ -212,21 +214,28 @@ namespace smmap
 
     inline sdf_tools::SignedDistanceField::ConstPtr GetEnvironmentSDF(ros::NodeHandle& nh)
     {
-        ROS_INFO_NAMED("ros_comms_helpers", "Getting environment sdf");
+        static sdf_tools::SignedDistanceField::Ptr sdf(nullptr);
+        static std::mutex mtx;
 
-        // First we collect the data in serialzed form
-        ros::ServiceClient sdf_client =
-            nh.serviceClient<deformable_manipulation_msgs::GetSignedDistanceField>(GetSignedDistanceFieldTopic(nh));
+        std::lock_guard<std::mutex> lock(mtx);
+        if (sdf == nullptr)
+        {
+            ROS_INFO_NAMED("ros_comms_helpers", "Getting environment sdf");
 
-        sdf_client.waitForExistence();
+            // First we collect the data in serialzed form
+            ros::ServiceClient sdf_client =
+                nh.serviceClient<deformable_manipulation_msgs::GetSignedDistanceField>(GetSignedDistanceFieldTopic(nh));
 
-        deformable_manipulation_msgs::GetSignedDistanceField srv_data;
-        sdf_client.call(srv_data);
+            sdf_client.waitForExistence();
 
-        // Then parse the message and return the result
-        sdf_tools::SignedDistanceField::Ptr sdf;
-        sdf->LoadFromMessageRepresentation(srv_data.response.sdf);
-        CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), sdf->GetFrame());
+            deformable_manipulation_msgs::GetSignedDistanceField srv_data;
+            sdf_client.call(srv_data);
+
+            // Then parse the message and return the result
+            sdf->LoadFromMessageRepresentation(srv_data.response.sdf);
+            CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), sdf->GetFrame());
+        }
+
         return sdf;
     }
 }
