@@ -118,6 +118,9 @@ namespace smmap
                     const smmap_utilities::Visualizer::Ptr vis,
                     const std::shared_ptr<std::mt19937_64>& generator,
                     const PRMHelper::Ptr& prm_helper,
+                    const bool using_cbirrt_style_projection,
+                    const size_t forward_tree_extend_iterations,
+                    const size_t backward_tree_extend_iterations,
                     const Eigen::Isometry3d& task_aligned_frame,
                     const Eigen::Vector3d& task_aligned_lower_limits,
                     const Eigen::Vector3d& task_aligned_upper_limits,
@@ -239,12 +242,17 @@ namespace smmap
 
             const smmap_utilities::Visualizer::Ptr vis_;
             const bool visualization_enabled_globally_;
+
+        public:
 //            const std_msgs::ColorRGBA band_safe_color_;
 //            const std_msgs::ColorRGBA band_overstretched_color_;
-            const std_msgs::ColorRGBA gripper_a_tree_color_;
-            const std_msgs::ColorRGBA gripper_b_tree_color_;
+            const std_msgs::ColorRGBA gripper_a_forward_tree_color_;
+            const std_msgs::ColorRGBA gripper_b_forward_tree_color_;
+            const std_msgs::ColorRGBA gripper_a_backward_tree_color_;
+            const std_msgs::ColorRGBA gripper_b_backward_tree_color_;
             const std_msgs::ColorRGBA band_tree_color_;
 
+        private:
             const Eigen::Isometry3d task_aligned_frame_transform_;
             const Eigen::Isometry3d task_aligned_frame_inverse_transform_;
             const Eigen::Vector3d task_aligned_lower_limits_;
@@ -268,6 +276,9 @@ namespace smmap
             std::uniform_int_distribution<size_t> arm_a_goal_config_int_distribution_;
             std::uniform_int_distribution<size_t> arm_b_goal_config_int_distribution_;
             PRMHelper::Ptr prm_helper_;
+            const bool using_cbirrt_style_projection_;
+            const size_t forward_tree_extend_iterations_;
+            const size_t backward_tree_extend_iterations_;
 
 
             // Set/updated on each call of "rrtPlan"

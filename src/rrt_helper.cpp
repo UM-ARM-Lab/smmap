@@ -422,6 +422,11 @@ RRTHelper::RRTHelper(
         const Visualizer::Ptr vis,
         const std::shared_ptr<std::mt19937_64>& generator,
         const PRMHelper::Ptr& prm_helper,
+
+        const bool using_cbirrt_style_projection,
+        const size_t forward_tree_extend_iterations,
+        const size_t backward_tree_extend_iterations,
+
         const Isometry3d& task_aligned_frame,
         const Vector3d& task_aligned_lower_limits,
         const Vector3d& task_aligned_upper_limits,
@@ -446,8 +451,10 @@ RRTHelper::RRTHelper(
     , visualization_enabled_globally_(visualization_enabled)
 //    , band_safe_color_(Visualizer::Black())
 //    , band_overstretched_color_(Visualizer::Cyan())
-    , gripper_a_tree_color_(Visualizer::Magenta())
-    , gripper_b_tree_color_(Visualizer::Orange())
+    , gripper_a_forward_tree_color_(Visualizer::Magenta())
+    , gripper_b_forward_tree_color_(Visualizer::Red())
+    , gripper_a_backward_tree_color_(Visualizer::Yellow())
+    , gripper_b_backward_tree_color_(Visualizer::Cyan())
     , band_tree_color_(Visualizer::Blue())
 
     , task_aligned_frame_transform_(task_aligned_frame)
@@ -471,6 +478,9 @@ RRTHelper::RRTHelper(
     , uniform_unit_distribution_(0.0, 1.0)
     , uniform_shortcut_smoothing_int_distribution_(1, 4)
     , prm_helper_(prm_helper)
+    , using_cbirrt_style_projection_(using_cbirrt_style_projection)
+    , forward_tree_extend_iterations_(forward_tree_extend_iterations)
+    , backward_tree_extend_iterations_(backward_tree_extend_iterations)
 
     , total_sampling_time_(NAN)
     , total_nearest_neighbour_time_(NAN)
@@ -687,8 +697,8 @@ bool RRTHelper::goalReached(const RRTNode& node)
         if (visualization_enabled_globally_)
         {
             vis_->visualizeLineStrip(RRT_GOAL_TESTING_NS, node.getBand()->getVectorRepresentation(), Visualizer::White(), 1, 0.01);
-            ros::spinOnce();
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+//            ros::spinOnce();
+//            std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         }
 
         // Only accept paths that are different from those on the blacklist
@@ -771,13 +781,13 @@ size_t RRTHelper::forwardPropogationFunction(
                     RRT_FORWARD_PROP_START_NS,
                     {nearest_neighbour.getGrippers().first},
                     Vector3d(0.01, 0.01, 0.01),
-                    gripper_a_tree_color_,
+                    gripper_a_forward_tree_color_,
                     1);
         vis_->visualizeCubes(
                     RRT_FORWARD_PROP_START_NS,
                     {nearest_neighbour.getGrippers().second},
                     Vector3d(0.01, 0.01, 0.01),
-                    gripper_b_tree_color_,
+                    gripper_b_forward_tree_color_,
                     5);
 
         nearest_neighbour.getBand()->visualize(
@@ -791,17 +801,19 @@ size_t RRTHelper::forwardPropogationFunction(
                     RRT_SAMPLE_NS,
                     {target.getGrippers().first},
                     Vector3d(0.01, 0.01, 0.01),
-                    gripper_a_tree_color_,
+                    gripper_a_forward_tree_color_,
                     1);
         vis_->visualizeCubes(
                     RRT_SAMPLE_NS,
                     {target.getGrippers().second},
                     Vector3d(0.01, 0.01, 0.01),
-                    gripper_b_tree_color_,
+                    gripper_b_forward_tree_color_,
                     5);
     }
 
     static int32_t tree_marker_id = 1;
+    static size_t forward_tree_next_visualized_node = 0;
+    static size_t backward_tree_next_visualized_node = 0;
     const size_t visualization_frequency = 100;
 
     const RRTGrippersRepresentation& starting_grippers_position = nearest_neighbour.getGrippers();
@@ -811,8 +823,7 @@ size_t RRTHelper::forwardPropogationFunction(
     const RRTGrippersRepresentation& target_grippers_position = target.getGrippers();
     RRTRobotRepresentation target_robot_configuration = target.getRobotConfiguration();
 
-    const bool using_cbirrt_style_projection = true;
-    if (planning_for_whole_robot_ && !using_cbirrt_style_projection)
+    if (planning_for_whole_robot_ && !using_cbirrt_style_projection_)
     {
         // Allocate space for potential children
         const double total_distance = RRTNode::distance(nearest_neighbour.getRobotConfiguration(), target_robot_configuration);
@@ -925,7 +936,7 @@ size_t RRTHelper::forwardPropogationFunction(
             ++step_index;
         }
     }
-    else if (planning_for_whole_robot_ && using_cbirrt_style_projection)
+    else if (planning_for_whole_robot_ && using_cbirrt_style_projection_)
     {
         int64_t parent_idx = nearest_neighbor_idx;
         // Only accept at most max_new_states new states, if there are more, then we're probably stuck in some sort of bad configuration for IK
@@ -937,7 +948,7 @@ size_t RRTHelper::forwardPropogationFunction(
             arc_helpers::DoNotOptimize(parent_idx);
 
             // We could be updating the child indices of this node later, so take the value by non-const reference
-            RRTNode& prev_node = tree_to_extend[parent_idx];
+            const RRTNode& prev_node = tree_to_extend[parent_idx];
             const RubberBand::Ptr& prev_band = prev_node.getBand();
             const RRTRobotRepresentation& prev_robot_config = prev_node.getRobotConfiguration();
 
@@ -1038,7 +1049,7 @@ size_t RRTHelper::forwardPropogationFunction(
             const RRTNode next_node(next_grippers_position, next_robot_configuration, next_band, parent_idx);
             tree_to_extend.push_back(next_node);
             const int64_t new_node_idx = (int64_t)tree_to_extend.size() - 1;
-            prev_node.addChildIndex(new_node_idx);
+            tree_to_extend[parent_idx].addChildIndex(new_node_idx);
 
             parent_idx = new_node_idx;
             ++step_index;
@@ -1150,28 +1161,47 @@ size_t RRTHelper::forwardPropogationFunction(
         nodes_created > 0 &&
         tree_to_extend.size() % visualization_frequency == 0)
     {
-        const bool draw_band = extend_band;
+        const auto starting_idx = (&tree_to_extend == &forward_tree_)
+                    ? forward_tree_next_visualized_node
+                    : backward_tree_next_visualized_node;
+
+        const auto& tree_a_color = (&tree_to_extend == &forward_tree_)
+                    ? gripper_a_forward_tree_color_
+                    : gripper_a_backward_tree_color_;
+
+        const auto& tree_b_color = (&tree_to_extend == &forward_tree_)
+                    ? gripper_b_forward_tree_color_
+                    : gripper_b_backward_tree_color_;
+
+        const bool draw_band = false;
         visualizeTree(
                     tree_to_extend,
-                    tree_to_extend.size() - visualization_frequency,
+                    starting_idx,
                     RRT_TREE_GRIPPER_A_NS,
                     RRT_TREE_GRIPPER_B_NS,
                     RRT_TREE_BAND_NS,
                     tree_marker_id,
                     tree_marker_id,
                     1,
-                    gripper_a_tree_color_,
-                    gripper_b_tree_color_,
+                    tree_a_color,
+                    tree_b_color,
                     band_tree_color_,
                     draw_band);
         ++tree_marker_id;
+
+        if (&tree_to_extend == &forward_tree_)
+        {
+            forward_tree_next_visualized_node = tree_to_extend.size();
+        }
+        else
+        {
+            backward_tree_next_visualized_node = tree_to_extend.size();
+        }
     }
 
     arc_helpers::DoNotOptimize(nodes_created);
     const double everything_included_forward_propogation_time = function_wide_stopwatch(READ);
     total_everything_included_forward_propogation_time_ += everything_included_forward_propogation_time;
-
-    assert(CheckTreeLinkage(tree_to_extend));
 
     return nodes_created;
 }
@@ -1216,7 +1246,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     const size_t fwd_prop_max_steps = 32;
 
     // Plan
-    std::cout << "Starting planning..." << std::flush;
+    std::cout << "Starting planning..." << std::endl;
     while (!path_found_ && (std::chrono::steady_clock::now() - start_time) < time_limit_)
     {
         auto& first_tree_to_extend = forward_iteration_ ? forward_tree_ : backward_tree_;
@@ -1449,6 +1479,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
         forward_iteration_ = !forward_iteration_;
     }
 
+    std::cout << "Finished planning, for better or worse" << std::endl;
+
     assert(CheckTreeLinkage(forward_tree_));
     assert(CheckTreeLinkage(backward_tree_));
 
@@ -1520,7 +1552,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         assert(starting_grippers_poses_.size() == 2);
     }
     forward_tree_.clear();
-    forward_tree_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 10000));
+    forward_tree_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 300000));
     forward_tree_.push_back(start);
 
     // Goal/termination information
@@ -1530,7 +1562,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
 
     // Setup the backward tree
     backward_tree_.clear();
-    backward_tree_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 10000));
+    backward_tree_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 300000));
     if (planning_for_whole_robot_)
     {
         AllGrippersSinglePose target_grippers_poses = starting_grippers_poses_;
@@ -2402,10 +2434,22 @@ void RRTHelper::visualizeTree(
         }
 
         vis_->visualizeLines(ns_a, gripper_a_tree_start_points, gripper_a_tree_end_points, color_a, id_a);
+//        vis_->visualizeLines(ns_a, gripper_a_tree_start_points, gripper_a_tree_end_points, color_a, id_a);
+//        vis_->visualizeLines(ns_a, gripper_a_tree_start_points, gripper_a_tree_end_points, color_a, id_a);
+//        ros::spinOnce();
+//        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
         vis_->visualizeLines(ns_b, gripper_b_tree_start_points, gripper_b_tree_end_points, color_b, id_b);
+//        vis_->visualizeLines(ns_b, gripper_b_tree_start_points, gripper_b_tree_end_points, color_b, id_b);
+//        vis_->visualizeLines(ns_b, gripper_b_tree_start_points, gripper_b_tree_end_points, color_b, id_b);
+//        ros::spinOnce();
+//        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
         if (draw_band)
         {
             vis_->visualizeLines(ns_band, band_line_start_points, band_line_end_points, color_band, id_band);
+//            vis_->visualizeLines(ns_band, band_line_start_points, band_line_end_points, color_band, id_band);
+//            vis_->visualizeLines(ns_band, band_line_start_points, band_line_end_points, color_band, id_band);
+//            ros::spinOnce();
+//            std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
         }
     }
 }
@@ -2439,21 +2483,21 @@ void RRTHelper::visualizePath(const std::vector<RRTNode, RRTAllocator>& path) co
             }
         }
 
-        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.005, 0.005, 0.005), gripper_a_tree_color_, 1);
-        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.005, 0.005, 0.005), gripper_a_tree_color_, 1);
-        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.005, 0.005, 0.005), gripper_a_tree_color_, 1);
-        ros::spinOnce();
-        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
-        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.005, 0.005, 0.005), gripper_b_tree_color_, 1);
-        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.005, 0.005, 0.005), gripper_b_tree_color_, 1);
-        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.005, 0.005, 0.005), gripper_b_tree_color_, 1);
-        ros::spinOnce();
-        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.005, 0.005, 0.005), gripper_a_forward_tree_color_, 1);
+//        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.005, 0.005, 0.005), gripper_a_tree_color_, 1);
+//        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.005, 0.005, 0.005), gripper_a_tree_color_, 1);
+//        ros::spinOnce();
+//        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.005, 0.005, 0.005), gripper_b_forward_tree_color_, 1);
+//        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.005, 0.005, 0.005), gripper_b_tree_color_, 1);
+//        vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.005, 0.005, 0.005), gripper_b_tree_color_, 1);
+//        ros::spinOnce();
+//        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
         vis_->visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
-        vis_->visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
-        vis_->visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
-        ros::spinOnce();
-        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+//        vis_->visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
+//        vis_->visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
+//        ros::spinOnce();
+//        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
     }
 }
 
