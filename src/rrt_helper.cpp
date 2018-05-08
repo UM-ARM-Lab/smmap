@@ -418,7 +418,7 @@ RRTHelper::RRTHelper(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
         const RobotInterface::Ptr robot,
-        const sdf_tools::SignedDistanceField& environment_sdf,
+        const sdf_tools::SignedDistanceField::ConstPtr environment_sdf,
         const Visualizer::Ptr vis,
         const std::shared_ptr<std::mt19937_64>& generator,
         const PRMHelper::Ptr& prm_helper,
@@ -627,7 +627,7 @@ RRTGrippersRepresentation RRTHelper::posPairSampling_internal()
             const double z1 = EigenHelpers::Interpolate(task_aligned_lower_limits_.z(), task_aligned_upper_limits_.z(), uniform_unit_distribution_(*generator_));
             rand_sample.first = Vector3d(x1, y1, z1);
         }
-        while (environment_sdf_.EstimateDistance3d(task_aligned_frame_transform_ * rand_sample.first).first < gripper_min_distance_to_obstacles_);
+        while (environment_sdf_->EstimateDistance3d(task_aligned_frame_transform_ * rand_sample.first).first < gripper_min_distance_to_obstacles_);
 
         // We want to only sample within a radius max_grippers_distance_, and within the world extents; to do so
         // uniformly, we sample from an axis aligned box limited by R and the world extents, rejecting samples that lie
@@ -648,7 +648,7 @@ RRTGrippersRepresentation RRTHelper::posPairSampling_internal()
             rand_sample.second = Vector3d(x2, y2, z2);
             valid = (rand_sample.first - rand_sample.second).norm() <= max_grippers_distance_;
         }
-        while (!valid || environment_sdf_.EstimateDistance3d(task_aligned_frame_transform_ * rand_sample.second).first < gripper_min_distance_to_obstacles_);
+        while (!valid || environment_sdf_->EstimateDistance3d(task_aligned_frame_transform_ * rand_sample.second).first < gripper_min_distance_to_obstacles_);
     }
 
     rand_sample.first = task_aligned_frame_transform_ * rand_sample.first;
@@ -1094,10 +1094,10 @@ size_t RRTHelper::forwardPropogationFunction(
                 stopwatch(RESET);
                 arc_helpers::DoNotOptimize(gripper_a_interpolated);
                 // If the grippers enter collision with the environment, then return however far we were able to get
-                in_collision = (environment_sdf_.EstimateDistance3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
-                               (environment_sdf_.EstimateDistance3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_) ||
-                               (environment_sdf_.DistanceToBoundary3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
-                               (environment_sdf_.DistanceToBoundary3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_);
+                in_collision = (environment_sdf_->EstimateDistance3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
+                               (environment_sdf_->EstimateDistance3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_) ||
+                               (environment_sdf_->DistanceToBoundary3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
+                               (environment_sdf_->DistanceToBoundary3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_);
                 arc_helpers::DoNotOptimize(in_collision);
                 const double collision_check_time_pt2 = stopwatch(READ);
                 total_collision_check_time_ += collision_check_time_pt2;
@@ -1223,9 +1223,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     size_t forward_connection_attempts_useful = 0;
     size_t forward_connection_attempts_useless = 0;
     size_t forward_connections_made = 0;
-    size_t backward_connection_attempts_useful = 0;
-    size_t backward_connection_attempts_useless = 0;
-    size_t backward_connections_made = 0;
 
 
     path_found_ = false;
@@ -1251,7 +1248,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     {
         if (forward_iteration_)
         {
-            for (size_t itr = 0; itr < forward_tree_extend_iterations_; ++itr)
+            for (size_t itr = 0; !path_found_ && itr < forward_tree_extend_iterations_; ++itr)
             {
                 //////////////// Extend (connect) the first tree towards a random target ////////////////
                 const bool extend_band = true;
@@ -1310,6 +1307,41 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                         ++forward_connection_attempts_useless;
                     }
 
+
+
+
+
+//                    const std::chrono::time_point<std::chrono::steady_clock> cur_time = std::chrono::steady_clock::now();
+//                    const std::chrono::duration<double> planning_time(cur_time - start_time);
+
+//                    statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
+//                    statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
+//                    statistics_["planning_time2_forward_propogation_projection           "] = total_projection_time_;
+//                    statistics_["planning_time3_forward_propogation_collision_check      "] = total_collision_check_time_;
+//                    statistics_["planning_time4_forward_propogation_band_sim             "] = total_band_forward_propogation_time_;
+//                    statistics_["planning_time5_forward_propogation_first_order_vis      "] = total_first_order_vis_propogation_time_;
+//                    statistics_["planning_time6_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
+//                    statistics_["planning_time7_total                                    "] = planning_time.count();
+
+//                    statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless;
+//                    statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful;
+//                    statistics_["planning_size02_forward_states                          "] = (double)forward_tree_.size();
+
+//                    statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless;
+//                    statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful;
+//                    statistics_["planning_size05_backward_states                         "] = (double)backward_tree_.size();
+
+//                    statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless;
+//                    statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful;
+//                    statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made;
+
+//                    std::cout << "Connection attempted. Stats:\n";
+//                    std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
+
+
+
+
+
                     //////////////// Check for a connection between the trees, extending the forward tree if possible ////////////////
 
                     if (num_goal_directed_nodes_created > 0)
@@ -1326,36 +1358,32 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                             // Record some statistics
                             ++forward_connections_made;
 
-                            const std::chrono::time_point<std::chrono::steady_clock> cur_time = std::chrono::steady_clock::now();
-                            const std::chrono::duration<double> planning_time(cur_time - start_time);
+//                            const std::chrono::time_point<std::chrono::steady_clock> cur_time = std::chrono::steady_clock::now();
+//                            const std::chrono::duration<double> planning_time(cur_time - start_time);
 
-                            statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
-                            statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
-                            statistics_["planning_time2_forward_propogation_projection           "] = total_projection_time_;
-                            statistics_["planning_time3_forward_propogation_collision_check      "] = total_collision_check_time_;
-                            statistics_["planning_time4_forward_propogation_band_sim             "] = total_band_forward_propogation_time_;
-                            statistics_["planning_time5_forward_propogation_first_order_vis      "] = total_first_order_vis_propogation_time_;
-                            statistics_["planning_time6_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
-                            statistics_["planning_time7_total                                    "] = planning_time.count();
+//                            statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
+//                            statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
+//                            statistics_["planning_time2_forward_propogation_projection           "] = total_projection_time_;
+//                            statistics_["planning_time3_forward_propogation_collision_check      "] = total_collision_check_time_;
+//                            statistics_["planning_time4_forward_propogation_band_sim             "] = total_band_forward_propogation_time_;
+//                            statistics_["planning_time5_forward_propogation_first_order_vis      "] = total_first_order_vis_propogation_time_;
+//                            statistics_["planning_time6_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
+//                            statistics_["planning_time7_total                                    "] = planning_time.count();
 
-                            statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless;
-                            statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful;
-                            statistics_["planning_size02_forward_states                          "] = (double)forward_tree_.size();
+//                            statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless;
+//                            statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful;
+//                            statistics_["planning_size02_forward_states                          "] = (double)forward_tree_.size();
 
-                            statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless;
-                            statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful;
-                            statistics_["planning_size05_backward_states                         "] = (double)backward_tree_.size();
+//                            statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless;
+//                            statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful;
+//                            statistics_["planning_size05_backward_states                         "] = (double)backward_tree_.size();
 
-                            statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless;
-                            statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful;
-                            statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made;
+//                            statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless;
+//                            statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful;
+//                            statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made;
 
-                            statistics_["planning_size09_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless;
-                            statistics_["planning_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful;
-                            statistics_["planning_size11_backward_connections_made               "] = (double)backward_connections_made;
-
-                            std::cout << "Connection made. Stats:\n";
-                            std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
+//                            std::cout << "Connection made. Stats:\n";
+//                            std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
 
                             // March down the backward tree, propagating the band in the forward tree
                             int64_t forward_parent_idx = (int64_t)forward_tree_.size() - 1;
@@ -1490,10 +1518,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful;
     statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made;
 
-    statistics_["planning_size09_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless;
-    statistics_["planning_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful;
-    statistics_["planning_size11_backward_connections_made               "] = (double)backward_connections_made;
-
     std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
 
     storePath(path);
@@ -1528,7 +1552,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         assert(starting_grippers_poses_.size() == 2);
     }
     forward_tree_.clear();
-    forward_tree_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 300000));
+    forward_tree_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 100000));
     forward_tree_.push_back(start);
 
     // Goal/termination information
@@ -1538,7 +1562,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
 
     // Setup the backward tree
     backward_tree_.clear();
-    backward_tree_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 300000));
+    backward_tree_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 100000));
     if (planning_for_whole_robot_)
     {
         AllGrippersSinglePose target_grippers_poses = starting_grippers_poses_;
@@ -1595,12 +1619,12 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     }
 
     // Double check that the input goal location isn't immediately impossible
-    if ((environment_sdf_.EstimateDistance3d(grippers_goal_position_.first).first < gripper_min_distance_to_obstacles_) ||
-        (environment_sdf_.EstimateDistance3d(grippers_goal_position_.second).first < gripper_min_distance_to_obstacles_) ||
+    if ((environment_sdf_->EstimateDistance3d(grippers_goal_position_.first).first < gripper_min_distance_to_obstacles_) ||
+        (environment_sdf_->EstimateDistance3d(grippers_goal_position_.second).first < gripper_min_distance_to_obstacles_) ||
         ((grippers_goal_position_.first - grippers_goal_position_.second).norm() > max_grippers_distance_))
     {
         std::cerr << "Unfeasible goal location: " << PrettyPrint::PrettyPrint(grippers_goal) << std::endl;
-        std::cerr << "Min gripper collision distance: " << gripper_min_distance_to_obstacles_ << " Current Distances: " << environment_sdf_.EstimateDistance3d(grippers_goal.first).first << " " << environment_sdf_.EstimateDistance3d(grippers_goal.second).first << std::endl;
+        std::cerr << "Min gripper collision distance: " << gripper_min_distance_to_obstacles_ << " Current Distances: " << environment_sdf_->EstimateDistance3d(grippers_goal.first).first << " " << environment_sdf_->EstimateDistance3d(grippers_goal.second).first << std::endl;
         std::cerr << "Max allowable distance: " << max_grippers_distance_ << " Distance beteween goal grippers: " << (grippers_goal_position_.first - grippers_goal_position_.second).norm() << std::endl;
         assert(false && "Unfeasible goal location");
     }
@@ -1803,14 +1827,14 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVe
 //                vis_->visualizeLineStrip("first_order_vis_check", {first_node, second_node}, Visualizer::White(), 2);
 //            }
 
-            const ssize_t num_steps = (ssize_t)std::ceil((second_node - first_node).norm() / environment_sdf_.GetResolution());
+            const ssize_t num_steps = (ssize_t)std::ceil((second_node - first_node).norm() / environment_sdf_->GetResolution());
 
             // We don't need to check the endpoints as they are already checked as part of the rubber band process
             for (ssize_t ind = 1; ind < num_steps; ++ind)
             {
                 const double ratio = (double)ind / (double)num_steps;
                 const Vector3d interpolated_point = EigenHelpers::Interpolate(first_node, second_node, ratio);
-                if (environment_sdf_.Get3d(interpolated_point) < 0.0)
+                if (environment_sdf_->Get3d(interpolated_point) < 0.0)
                 {
 //                    if (visualize)
 //                    {

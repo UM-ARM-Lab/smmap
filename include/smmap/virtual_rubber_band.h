@@ -61,7 +61,7 @@ namespace smmap
             void shortcutSmoothBand(const bool verbose);
 
             const std::shared_ptr<DijkstrasCoverageTask> task_;
-            const sdf_tools::SignedDistanceField& sdf_;
+            const sdf_tools::SignedDistanceField::ConstPtr sdf_;
             const smmap_utilities::Visualizer::Ptr vis_;
 
         public:

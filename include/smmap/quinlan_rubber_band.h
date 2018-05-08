@@ -87,7 +87,7 @@ namespace smmap
     private:
         ros::NodeHandle ph_;
         const std::shared_ptr<DijkstrasCoverageTask> task_;
-        const sdf_tools::SignedDistanceField& sdf_;
+        const sdf_tools::SignedDistanceField::ConstPtr sdf_;
         const smmap_utilities::Visualizer::Ptr vis_;
 
         EigenHelpers::VectorVector3d band_;

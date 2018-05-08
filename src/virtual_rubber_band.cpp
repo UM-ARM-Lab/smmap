@@ -32,7 +32,7 @@ VirtualRubberBand::VirtualRubberBand(
     : task_(task)
     , sdf_(task_->environment_sdf_)
     , vis_(vis)
-    , max_integration_step_size_(sdf_.GetResolution() / 10.0)
+    , max_integration_step_size_(sdf_->GetResolution() / 10.0)
     , max_distance_between_rubber_band_points_(task_->work_space_grid_.minStepDimension() / 2.0)
     , num_smoothing_iters_per_band_point_(5)
     , min_smoothing_iters_(200)
@@ -71,7 +71,7 @@ void VirtualRubberBand::setPointsAndSmooth(const EigenHelpers::VectorVector3d& p
     band_ = points;
     for (auto& point : band_)
     {
-        point = sdf_.ProjectOutOfCollision3d(point);
+        point = sdf_->ProjectOutOfCollision3d(point);
     }
     resampleBand(false);
     shortcutSmoothBand(false);
@@ -92,8 +92,8 @@ const EigenHelpers::VectorVector3d& VirtualRubberBand::forwardPropagateRubberBan
         bool verbose)
 {
     // Add the new endpoints, then let the resample and smooth process handle the propogation
-    assert(sdf_.EstimateDistance3d(first_endpoint_target).first > 0.0);
-    assert(sdf_.EstimateDistance3d(second_endpoint_target).first > 0.0);
+    assert(sdf_->EstimateDistance3d(first_endpoint_target).first > 0.0);
+    assert(sdf_->EstimateDistance3d(second_endpoint_target).first > 0.0);
     band_.insert(band_.begin(), first_endpoint_target);
     band_.push_back(second_endpoint_target);
     resampleBand(verbose);
@@ -157,14 +157,14 @@ void VirtualRubberBand::resampleBand(const bool verbose)
     const auto state_interpolation_fn = [&] (const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, const double ratio)
     {
         const auto interpolated = EigenHelpers::Interpolate(prev, curr, ratio);
-        const auto projected = sdf_.ProjectOutOfCollision3d(interpolated);
+        const auto projected = sdf_->ProjectOutOfCollision3d(interpolated);
         return projected;
     };    
 /*    const auto verbose_state_interpolation_fn = [&] (const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, const double ratio)
     {
         const auto interpolated = EigenHelpers::Interpolate(prev, curr, ratio);
         const auto interp4d = Eigen::Vector4d(interpolated.x(), interpolated.y(), interpolated.z(), 1.0);
-        const auto projected = sdf_.ProjectOutOfCollisionToMinimumDistance4dVerbose(interp4d, 0.0).head<3>();
+        const auto projected = sdf_->ProjectOutOfCollisionToMinimumDistance4dVerbose(interp4d, 0.0).head<3>();
 
         std::cerr << "ratio " << ratio << std::endl;
         std::cerr << "Prev:      " << prev.transpose() << std::endl;
@@ -224,7 +224,7 @@ void VirtualRubberBand::shortcutSmoothBand(const bool verbose)
     const int num_smooting_ittrs = std::max(min_smoothing_iters_, num_smoothing_iters_per_band_point_ * (int)band_.size());
     const auto sdf_collision_fn = [&] (const Eigen::Vector3d& location)
     {
-        return sdf_.EstimateDistance3d(location).first <= 0.0;
+        return sdf_->EstimateDistance3d(location).first <= 0.0;
     };
 
     // Setup strucutres to terminate early if no smoothing can be done.
@@ -239,7 +239,7 @@ void VirtualRubberBand::shortcutSmoothBand(const bool verbose)
 
         const ssize_t max_smooth_distance = std::max(
                     (ssize_t)MIN_BAND_SMOOTHING_INDEX_DISTANCE,
-                    (ssize_t)std::floor(sdf_.EstimateDistance3d(band_[first_ind]).first / max_distance_between_rubber_band_points_));
+                    (ssize_t)std::floor(sdf_->EstimateDistance3d(band_[first_ind]).first / max_distance_between_rubber_band_points_));
         std::uniform_int_distribution<ssize_t> second_distribution(-max_smooth_distance, max_smooth_distance);
         const ssize_t second_offset = second_distribution(generator_);
         const size_t second_ind = (size_t)arc_helpers::ClampValue<ssize_t>(first_ind + second_offset, 0, (ssize_t)band_.size() - 1);

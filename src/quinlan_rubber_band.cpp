@@ -32,8 +32,8 @@ QuinlanRubberBand::QuinlanRubberBand(
     , sdf_(task_->environment_sdf_)
     , vis_(vis)
     , max_total_band_distance_(max_total_band_distance)
-    , min_overlap_distance_(sdf_.GetResolution() * 0.05)
-    , min_distance_to_obstacle_(sdf_.GetResolution() * 0.1)
+    , min_overlap_distance_(sdf_->GetResolution() * 0.05)
+    , min_distance_to_obstacle_(sdf_->GetResolution() * 0.1)
     , node_removal_overlap_factor_(1.2)
     , backtrack_threshold_(0.1)
     , smoothing_iterations_(50)
@@ -266,11 +266,11 @@ Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& l
     vis_->visualizePoints("___point_to_project", {location}, Visualizer::Yellow(0.3f), 1, 0.05);
     arc_helpers::Sleep(0.01);
 #endif
-    const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
+    const auto post_collision_project = sdf_->ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
 #if ENABLE_BAND_DEBUGGING
     std::cout << "Projecting to valid volume" << std::endl;
 #endif
-    const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);
+    const auto post_boundary_project = sdf_->ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);
 
 #if ENABLE_BAND_DEBUGGING
     std::cout << std::setprecision(20)
@@ -283,16 +283,16 @@ Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& l
 
     if (getBubbleSize(post_boundary_project) < min_distance_to_obstacle_)
     {
-        const auto distance_to_boundary = sdf_.DistanceToBoundary3d(post_boundary_project);
-        const auto distance_to_obstacles = sdf_.EstimateDistance3d(post_boundary_project);
+        const auto distance_to_boundary = sdf_->DistanceToBoundary3d(post_boundary_project);
+        const auto distance_to_obstacles = sdf_->EstimateDistance3d(post_boundary_project);
 
         if (distance_to_boundary.first < min_distance_to_obstacle_ ||
             distance_to_obstacles.first < min_distance_to_obstacle_)
         {
             constexpr int p = 20;
 
-            const auto starting_distance_to_obstacles = sdf_.EstimateDistance3d(location);
-            const auto starting_distance_to_boundary = sdf_.DistanceToBoundary3d(location);
+            const auto starting_distance_to_obstacles = sdf_->EstimateDistance3d(location);
+            const auto starting_distance_to_boundary = sdf_->DistanceToBoundary3d(location);
 
             std::cerr << std::setprecision(p) << "Starting dist to obstacle: " << PrettyPrint::PrettyPrint(starting_distance_to_obstacles, true, " ") << std::endl;
             std::cerr << std::setprecision(p) << "Starting dist to boundary: " << PrettyPrint::PrettyPrint(starting_distance_to_boundary, true, " ") << std::endl;
@@ -303,8 +303,8 @@ Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& l
             std::cerr << std::setprecision(p) << "collision - location:      " << (post_collision_project - location).norm() << std::endl;
             std::cerr << std::setprecision(p) << "boundary - collision:      " << (post_boundary_project - post_collision_project).norm() << std::endl;
 
-            const auto post_collision_project = sdf_.ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
-            const auto post_boundary_project = sdf_.ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);
+            const auto post_collision_project = sdf_->ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
+            const auto post_boundary_project = sdf_->ProjectIntoValidVolumeToMinimumDistance3d(post_collision_project, min_distance_to_obstacle_);
         }
     }
     assert(getBubbleSize(post_boundary_project) >= min_distance_to_obstacle_);
@@ -319,12 +319,12 @@ double QuinlanRubberBand::getBubbleSize(const Eigen::Vector3d& location) const
 //    std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
 #endif
 
-    return sdf_.EstimateDistance3d(location).first;
+    return sdf_->EstimateDistance3d(location).first;
 
 
     const Eigen::Vector4d loc_4d(location.x(), location.y(), location.z(), 1.0);
-    const auto distance_to_boundary = sdf_.DistanceToBoundary4d(loc_4d);
-    const auto distance_to_obstacles = sdf_.EstimateDistance4d(loc_4d);
+    const auto distance_to_boundary = sdf_->DistanceToBoundary4d(loc_4d);
+    const auto distance_to_obstacles = sdf_->EstimateDistance4d(loc_4d);
     assert(distance_to_boundary.second == distance_to_obstacles.second);
     const auto distance = std::min(distance_to_boundary.first, distance_to_obstacles.first);
 //    std::cout << std::setprecision(12) << std::setw(15) << location.transpose() << " Estimate dist: " << distance_to_obstacles.first << " Boundary dist: " << distance_to_boundary.first << " Reported distance: " << distance << std::endl;
@@ -359,12 +359,12 @@ bool QuinlanRubberBand::bandIsValid(const EigenHelpers::VectorVector3d& test_ban
         const double curr_bubble_size = getBubbleSize(curr);
         const double next_bubble_size = getBubbleSize(next);
         const double dist = (curr - next).norm();
-        if (!sdf_.CheckInBounds3d(curr) ||
+        if (!sdf_->CheckInBounds3d(curr) ||
             curr_bubble_size < min_distance_to_obstacle_ ||
             !sufficientOverlap(curr_bubble_size, next_bubble_size, dist))
         {
             std::cerr << "Problem between node " << node_idx << " and " << node_idx + 1 << std::endl
-                      << "In bounds: " << sdf_.CheckInBounds3d(curr) << std::endl
+                      << "In bounds: " << sdf_->CheckInBounds3d(curr) << std::endl
                       << "Curr bubble size: " << curr_bubble_size << std::endl
                       << "Next bubble size: " << next_bubble_size << std::endl
                       << "Curr + next:      " << curr_bubble_size + next_bubble_size << std::endl
@@ -457,10 +457,10 @@ void QuinlanRubberBand::interpolateBetweenPoints(
         double distance_between_curr_and_test_point = (curr - test_point).norm();
 
 #if ENABLE_BAND_DEBUGGING
-        assert(sdf_.CheckInBounds3d(curr));
-        assert(sdf_.CheckInBounds3d(target));
-        assert(sdf_.CheckInBounds3d(interpolated_point));
-        assert(sdf_.CheckInBounds3d(test_point));
+        assert(sdf_->CheckInBounds3d(curr));
+        assert(sdf_->CheckInBounds3d(target));
+        assert(sdf_->CheckInBounds3d(interpolated_point));
+        assert(sdf_->CheckInBounds3d(test_point));
 #endif
         ROS_WARN_STREAM_COND_NAMED(outer_iteration_counter == 20, "rubber_band", "Rubber band interpolation outer loop counter at " << outer_iteration_counter << ", probably stuck in an infinite loop");
 #if ENABLE_BAND_DEBUGGING
@@ -905,8 +905,8 @@ void QuinlanRubberBand::printBandData(const EigenHelpers::VectorVector3d& test_b
 #if !ENABLE_BAND_DEBUGGING
     return;
 #endif
-    const Eigen::Vector3d min = sdf_.GetOriginTransform().translation();
-    const Eigen::Vector3d max = min + Eigen::Vector3d(sdf_.GetXSize(), sdf_.GetYSize(), sdf_.GetZSize());
+    const Eigen::Vector3d min = sdf_->GetOriginTransform().translation();
+    const Eigen::Vector3d max = min + Eigen::Vector3d(sdf_->GetXSize(), sdf_->GetYSize(), sdf_->GetZSize());
     std::cout << "SDF limits: x, y, z\n"
               << "Max:            " << max.transpose() << std::endl
               << "Min:            " << min.transpose() << std::endl

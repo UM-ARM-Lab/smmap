@@ -210,7 +210,7 @@ namespace smmap
         cover_ind_to_free_space_graph_ind = srv_data.response.cover_point_ind_to_graph_ind;
     }
 
-    inline sdf_tools::SignedDistanceField GetEnvironmentSDF(ros::NodeHandle& nh)
+    inline sdf_tools::SignedDistanceField::ConstPtr GetEnvironmentSDF(ros::NodeHandle& nh)
     {
         ROS_INFO_NAMED("ros_comms_helpers", "Getting environment sdf");
 
@@ -224,9 +224,9 @@ namespace smmap
         sdf_client.call(srv_data);
 
         // Then parse the message and return the result
-        sdf_tools::SignedDistanceField sdf;
-        sdf.LoadFromMessageRepresentation(srv_data.response.sdf);
-        CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), sdf.GetFrame());
+        sdf_tools::SignedDistanceField::Ptr sdf;
+        sdf->LoadFromMessageRepresentation(srv_data.response.sdf);
+        CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), sdf->GetFrame());
         return sdf;
     }
 }

@@ -556,8 +556,8 @@ CoverageTask::CoverageTask(
         const bool is_dijkstras_type_task = false)
     : TaskSpecification(nh, ph, vis, deformable_type, task_type, is_dijkstras_type_task)
     , environment_sdf_(GetEnvironmentSDF(nh))
-    , work_space_grid_(environment_sdf_.GetOriginTransform(),
-                       environment_sdf_.GetFrame(),
+    , work_space_grid_(environment_sdf_->GetOriginTransform(),
+                       environment_sdf_->GetFrame(),
                        GetWorldXStep(nh),
                        GetWorldYStep(nh),
                        GetWorldZStep(nh),
@@ -571,7 +571,7 @@ CoverageTask::CoverageTask(
     , error_threshold_distance_to_normal_(GetErrorThresholdDistanceToNormal(ph))
     , error_threshold_task_done_(GetErrorThresholdTaskDone(ph))
 {
-    assert(environment_sdf_.GetFrame() == GetWorldFrameName());
+    assert(environment_sdf_->GetFrame() == GetWorldFrameName());
     assert(work_space_grid_.getFrame() == GetWorldFrameName());
 }
 
@@ -1130,7 +1130,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             for (int i = 0; i < VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS; ++i)
             {
                 net_delta += combined_delta / (double)VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS;
-                net_delta = environment_sdf_.ProjectOutOfCollision3dLegacy(current_pos + net_delta) - current_pos;
+                net_delta = environment_sdf_->ProjectOutOfCollision3dLegacy(current_pos + net_delta) - current_pos;
             }
 
             progress = net_delta.squaredNorm() > VECTOR_FIELD_FOLLOWING_MIN_PROGRESS;

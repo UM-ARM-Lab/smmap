@@ -263,7 +263,7 @@ namespace smmap
 
             // Note that work_space_grid_ and the environment_sdf_ are using different
             // resolutions due to the way the SDF is created in CustomScene
-            const sdf_tools::SignedDistanceField environment_sdf_;
+            const sdf_tools::SignedDistanceField::ConstPtr environment_sdf_;
             const XYZGrid work_space_grid_;
 
             bool pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d& test_point) const;

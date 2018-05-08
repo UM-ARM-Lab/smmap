@@ -122,7 +122,7 @@ StretchingAvoidanceController::StretchingAvoidanceController(
         ros::NodeHandle& ph,
         const DeformableModel::Ptr& deformable_model,
         const RobotInterface::Ptr& robot,
-        const sdf_tools::SignedDistanceField& sdf,
+        const sdf_tools::SignedDistanceField::ConstPtr sdf,
         const std::shared_ptr<std::mt19937_64>& generator,
         const smmap_utilities::Visualizer::Ptr& vis,
         const StretchingAvoidanceControllerSolverType gripper_controller_type,
@@ -2261,7 +2261,7 @@ double StretchingAvoidanceController::gripperCollisionCheckHelper(
     {
         const auto tmp = grippers_test_poses[gripper_idx].translation();
         const Eigen::Vector4d test_point(tmp.x(), tmp.y(), tmp.z(), 1.0);
-        const auto collision_result = environment_sdf_.EstimateDistance4dLegacy(test_point);
+        const auto collision_result = environment_sdf_->EstimateDistance4dLegacy(test_point);
         if (collision_result.first < min_collision_distance)
         {
             min_collision_distance = collision_result.first;

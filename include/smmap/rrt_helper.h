@@ -114,7 +114,7 @@ namespace smmap
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
                     const RobotInterface::Ptr robot,
-                    const sdf_tools::SignedDistanceField& environment_sdf,
+                    const sdf_tools::SignedDistanceField::ConstPtr environment_sdf,
                     const smmap_utilities::Visualizer::Ptr vis,
                     const std::shared_ptr<std::mt19937_64>& generator,
                     const PRMHelper::Ptr& prm_helper,
@@ -238,7 +238,7 @@ namespace smmap
             ros::NodeHandle ph_;
             const RobotInterface::Ptr robot_;
             // TODO: replace this with a shared pointer
-            const sdf_tools::SignedDistanceField environment_sdf_;
+            const sdf_tools::SignedDistanceField::ConstPtr environment_sdf_;
 
             const smmap_utilities::Visualizer::Ptr vis_;
             const bool visualization_enabled_globally_;

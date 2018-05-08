@@ -18,7 +18,7 @@ namespace smmap
                     ros::NodeHandle& ph,
                     const DeformableModel::Ptr& deformable_model,
                     const RobotInterface::Ptr& robot,
-                    const sdf_tools::SignedDistanceField& sdf,
+                    const sdf_tools::SignedDistanceField::ConstPtr sdf,
                     const std::shared_ptr<std::mt19937_64>& generator,
                     const smmap_utilities::Visualizer::Ptr& vis,
                     const StretchingAvoidanceControllerSolverType gripper_controller_type,
@@ -136,7 +136,7 @@ namespace smmap
 
             const std::vector<GripperData> grippers_data_;
 
-            const sdf_tools::SignedDistanceField environment_sdf_;
+            const sdf_tools::SignedDistanceField::ConstPtr environment_sdf_;
             const std::shared_ptr<std::mt19937_64> generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
 

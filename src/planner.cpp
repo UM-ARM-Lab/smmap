@@ -248,63 +248,6 @@ void Planner::execute()
                     dijkstras_task_,
                     vis_,
                     generator_);
-
-        const Vector3d task_frame_lower_limits = Vector3d(
-                    GetRRTPlanningXMinBulletFrame(ph_),
-                    GetRRTPlanningYMinBulletFrame(ph_),
-                    GetRRTPlanningZMinBulletFrame(ph_));
-
-        const Vector3d task_frame_upper_limits = Vector3d(
-                    GetRRTPlanningXMaxBulletFrame(ph_),
-                    GetRRTPlanningYMaxBulletFrame(ph_),
-                    GetRRTPlanningZMaxBulletFrame(ph_));
-
-        #ifdef PRM_SAMPLING
-        prm_helper_ = std::make_shared<PRMHelper>(
-                    dijkstras_task_->environment_sdf_,
-                    vis_,
-                    generator_,
-                    robot_->getWorldToTaskFrameTf(),
-                    task_frame_lower_limits,
-                    task_frame_upper_limits,
-                    !GetDisableAllVisualizations(ph_),
-                    GetPRMNumNearest(ph_),
-                    GetPRMNumSamples(ph_),
-                    dijkstras_task_->work_space_grid_.minStepDimension());
-        prm_helper_->initializeRoadmap();
-        prm_helper_->visualize(GetVisualizePRM(ph_));
-        #else
-        prm_helper_ = nullptr;
-        #endif
-
-        // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
-        rrt_helper_ = std::unique_ptr<RRTHelper>(
-                    new RRTHelper(
-                        nh_,
-                        ph_,
-                        robot_,
-                        dijkstras_task_->environment_sdf_,
-                        vis_,
-                        generator_,
-                        prm_helper_,
-                        GetUseCBiRRTStyleProjection(ph_),
-                        GetRRTForwardTreeExtendIterations(ph_),
-                        GetRRTBackwardTreeExtendIterations(ph_),
-                        robot_->getWorldToTaskFrameTf(),
-                        task_frame_lower_limits,
-                        task_frame_upper_limits,
-                        dijkstras_task_->work_space_grid_.minStepDimension(),
-                        GetRRTMaxRobotDOFStepSize(ph_),
-                        GetRRTMinRobotDOFStepSize(ph_),
-                        GetRRTMaxGripperRotation(ph_),
-                        GetRRTGoalBias(ph_),
-                        dijkstras_task_->work_space_grid_.minStepDimension(),
-                        GetRRTMinGripperDistanceToObstacles(ph_),
-                        GetRRTHomotopyDistancePenalty(),
-                        GetRRTMaxShortcutIndexDistance(ph_),
-                        GetRRTMaxSmoothingIterations(ph_),
-                        GetRRTMaxFailedSmoothingIterations(ph_),
-                        !GetDisableAllVisualizations(ph_)));
     }
 
     if (visualize_free_space_graph_ && dijkstras_task_ != nullptr)
@@ -880,7 +823,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> Planner::detectF
                 = kinematics::applyTwist(world_state_copy.all_grippers_single_pose_, robot_command.grippers_motion_);
         for (auto& pose : world_state_copy.all_grippers_single_pose_)
         {
-            pose.translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(pose.translation(), GetRobotGripperRadius());
+            pose.translation() = dijkstras_task_->environment_sdf_->ProjectOutOfCollisionToMinimumDistance3d(pose.translation(), GetRobotGripperRadius());
         }
 
         // Update the gripper collision data
@@ -1351,13 +1294,13 @@ AllGrippersSinglePose Planner::getGripperTargets(const WorldState& world_state)
     const double min_dist_to_obstacles = 0.05;
     const Vector3d gripper0_position_pre_project = target_gripper_poses[0].translation();
     const Vector3d gripper1_position_pre_project = target_gripper_poses[1].translation();
-    target_gripper_poses[0].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(gripper0_position_pre_project, min_dist_to_obstacles);
-    target_gripper_poses[1].translation() = dijkstras_task_->environment_sdf_.ProjectOutOfCollisionToMinimumDistance3d(gripper1_position_pre_project, min_dist_to_obstacles);
+    target_gripper_poses[0].translation() = dijkstras_task_->environment_sdf_->ProjectOutOfCollisionToMinimumDistance3d(gripper0_position_pre_project, min_dist_to_obstacles);
+    target_gripper_poses[1].translation() = dijkstras_task_->environment_sdf_->ProjectOutOfCollisionToMinimumDistance3d(gripper1_position_pre_project, min_dist_to_obstacles);
 
     // Visualization
     {
-        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
-        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Orange(), 5);
+        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), rrt_helper_->gripper_a_forward_tree_color_, 1);
+        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), rrt_helper_->gripper_b_forward_tree_color_, 5);
 
         std::vector<std_msgs::ColorRGBA> colors;
         for (size_t idx = 0; idx < cluster_targets.size(); ++idx)
@@ -1434,6 +1377,64 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
 
     // Planning if we did not load a plan from file
     {
+        const Vector3d task_frame_lower_limits = Vector3d(
+                    GetRRTPlanningXMinBulletFrame(ph_),
+                    GetRRTPlanningYMinBulletFrame(ph_),
+                    GetRRTPlanningZMinBulletFrame(ph_));
+
+        const Vector3d task_frame_upper_limits = Vector3d(
+                    GetRRTPlanningXMaxBulletFrame(ph_),
+                    GetRRTPlanningYMaxBulletFrame(ph_),
+                    GetRRTPlanningZMaxBulletFrame(ph_));
+
+        #ifdef PRM_SAMPLING
+        prm_helper_ = std::make_shared<PRMHelper>(
+                    dijkstras_task_->environment_sdf_,
+                    vis_,
+                    generator_,
+                    robot_->getWorldToTaskFrameTf(),
+                    task_frame_lower_limits,
+                    task_frame_upper_limits,
+                    !GetDisableAllVisualizations(ph_),
+                    GetPRMNumNearest(ph_),
+                    GetPRMNumSamples(ph_),
+                    dijkstras_task_->work_space_grid_.minStepDimension());
+        prm_helper_->initializeRoadmap();
+        prm_helper_->visualize(GetVisualizePRM(ph_));
+        #else
+        prm_helper_ = nullptr;
+        #endif
+
+        // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
+        rrt_helper_ = std::unique_ptr<RRTHelper>(
+                    new RRTHelper(
+                        nh_,
+                        ph_,
+                        robot_,
+                        dijkstras_task_->environment_sdf_,
+                        vis_,
+                        generator_,
+                        prm_helper_,
+                        GetUseCBiRRTStyleProjection(ph_),
+                        GetRRTForwardTreeExtendIterations(ph_),
+                        GetRRTBackwardTreeExtendIterations(ph_),
+                        robot_->getWorldToTaskFrameTf(),
+                        task_frame_lower_limits,
+                        task_frame_upper_limits,
+                        dijkstras_task_->work_space_grid_.minStepDimension(),
+                        GetRRTMaxRobotDOFStepSize(ph_),
+                        GetRRTMinRobotDOFStepSize(ph_),
+                        GetRRTMaxGripperRotation(ph_),
+                        GetRRTGoalBias(ph_),
+                        dijkstras_task_->work_space_grid_.minStepDimension(),
+                        GetRRTMinGripperDistanceToObstacles(ph_),
+                        GetRRTHomotopyDistancePenalty(),
+                        GetRRTMaxShortcutIndexDistance(ph_),
+                        GetRRTMaxSmoothingIterations(ph_),
+                        GetRRTMaxFailedSmoothingIterations(ph_),
+                        !GetDisableAllVisualizations(ph_)));
+
+
         vis_->clearVisualizationsBullet();
 
         RRTGrippersRepresentation gripper_config(
@@ -1452,33 +1453,6 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
                     robot_config,
                     rubber_band_between_grippers_);
 
-//        std::cout << "RRT Start Config:\n" << start_config.print() << std::endl;
-
-
-
-//        while (true)
-//        {
-//            const AllGrippersSinglePose target_grippers_pose = getGripperTargets(world_state);
-//            const auto grippers_data = robot_->getGrippersData();
-//            for (size_t gripper_idx = 0; gripper_idx < grippers_data.size(); ++gripper_idx)
-//            {
-//                const auto solutions = robot_->getIkSolutions(grippers_data[gripper_idx].name_, target_grippers_pose[gripper_idx]);
-//                std::cout << grippers_data[gripper_idx].name_ << "_target = [\n"
-//                          << target_grippers_pose[gripper_idx].matrix() << "];\n";
-//                std::cout << "Num Solutions: " << solutions.size() << std::endl;
-//        //        for (size_t sol_idx = 0; sol_idx < solutions.size(); ++sol_idx)
-//        //        {
-//        //            std::cout << solutions[sol_idx].transpose() << std::endl;
-//        //        }
-//            }
-//            int tmp;
-//            std::cin >> tmp;
-//        }
-
-
-
-
-
 
         // Note that the rubber band part of the target is ignored at the present time
         const AllGrippersSinglePose target_grippers_pose = getGripperTargets(world_state);
@@ -1489,11 +1463,6 @@ void Planner::planGlobalGripperTrajectory(const WorldState& world_state)
         const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
         const auto rrt_results = rrt_helper_->plan(start_config, rrt_grippers_goal, time_limit);
 
-//        vis_->deleteObjects(CLUSTERING_TARGETS_NS, 1, 2);
-        vis_->clearVisualizationsBullet();
-        std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
-        vis_->clearVisualizationsBullet();
-        std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         rrt_helper_->visualizePath(rrt_results);
         std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
@@ -1690,7 +1659,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
             const double rotation_deformability = GetConstraintRotational(ph_);
 //            const double translational_deformability = GetConstraintTranslationalOldVersion(ph_);
 
-            const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+            const sdf_tools::SignedDistanceField::ConstPtr environment_sdf(GetEnvironmentSDF(nh_));
 
             model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
                                   translation_dir_deformability,
@@ -1716,7 +1685,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
             ROS_INFO_NAMED("planner", "Using dminishing model and random sampling controller");
 
             double translational_deformability, rotational_deformability;
-            const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+            const sdf_tools::SignedDistanceField::ConstPtr environment_sdf(GetEnvironmentSDF(nh_));
 
             if (ph_.getParam("translational_deformability", translational_deformability) &&
                      ph_.getParam("rotational_deformability", rotational_deformability))
@@ -1809,7 +1778,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
 
             // Constraint Model with New Controller. (MM)
             {
-                const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+                const sdf_tools::SignedDistanceField::ConstPtr environment_sdf(GetEnvironmentSDF(nh_));
 
                 const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
                 const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
@@ -1907,7 +1876,7 @@ void Planner::initializeModelAndControllerSet(const WorldState& initial_world_st
         {
             // Constraint Model
             {
-                const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
+                const sdf_tools::SignedDistanceField::ConstPtr environment_sdf(GetEnvironmentSDF(nh_));
 
                 const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
                 const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
