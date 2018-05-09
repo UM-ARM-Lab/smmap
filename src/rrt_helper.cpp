@@ -1307,41 +1307,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                         ++forward_connection_attempts_useless;
                     }
 
-
-
-
-
-//                    const std::chrono::time_point<std::chrono::steady_clock> cur_time = std::chrono::steady_clock::now();
-//                    const std::chrono::duration<double> planning_time(cur_time - start_time);
-
-//                    statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
-//                    statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
-//                    statistics_["planning_time2_forward_propogation_projection           "] = total_projection_time_;
-//                    statistics_["planning_time3_forward_propogation_collision_check      "] = total_collision_check_time_;
-//                    statistics_["planning_time4_forward_propogation_band_sim             "] = total_band_forward_propogation_time_;
-//                    statistics_["planning_time5_forward_propogation_first_order_vis      "] = total_first_order_vis_propogation_time_;
-//                    statistics_["planning_time6_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
-//                    statistics_["planning_time7_total                                    "] = planning_time.count();
-
-//                    statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless;
-//                    statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful;
-//                    statistics_["planning_size02_forward_states                          "] = (double)forward_tree_.size();
-
-//                    statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless;
-//                    statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful;
-//                    statistics_["planning_size05_backward_states                         "] = (double)backward_tree_.size();
-
-//                    statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless;
-//                    statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful;
-//                    statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made;
-
-//                    std::cout << "Connection attempted. Stats:\n";
-//                    std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
-
-
-
-
-
                     //////////////// Check for a connection between the trees, extending the forward tree if possible ////////////////
 
                     if (num_goal_directed_nodes_created > 0)
@@ -1357,33 +1322,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
 
                             // Record some statistics
                             ++forward_connections_made;
-
-//                            const std::chrono::time_point<std::chrono::steady_clock> cur_time = std::chrono::steady_clock::now();
-//                            const std::chrono::duration<double> planning_time(cur_time - start_time);
-
-//                            statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
-//                            statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
-//                            statistics_["planning_time2_forward_propogation_projection           "] = total_projection_time_;
-//                            statistics_["planning_time3_forward_propogation_collision_check      "] = total_collision_check_time_;
-//                            statistics_["planning_time4_forward_propogation_band_sim             "] = total_band_forward_propogation_time_;
-//                            statistics_["planning_time5_forward_propogation_first_order_vis      "] = total_first_order_vis_propogation_time_;
-//                            statistics_["planning_time6_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
-//                            statistics_["planning_time7_total                                    "] = planning_time.count();
-
-//                            statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless;
-//                            statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful;
-//                            statistics_["planning_size02_forward_states                          "] = (double)forward_tree_.size();
-
-//                            statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless;
-//                            statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful;
-//                            statistics_["planning_size05_backward_states                         "] = (double)backward_tree_.size();
-
-//                            statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless;
-//                            statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful;
-//                            statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made;
-
-//                            std::cout << "Connection made. Stats:\n";
-//                            std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
 
                             // March down the backward tree, propagating the band in the forward tree
                             int64_t forward_parent_idx = (int64_t)forward_tree_.size() - 1;
@@ -1497,26 +1435,26 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     const std::chrono::time_point<std::chrono::steady_clock> cur_time = std::chrono::steady_clock::now();
     const std::chrono::duration<double> planning_time(cur_time - start_time);
 
-    statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
-    statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
-    statistics_["planning_time2_forward_propogation_projection           "] = total_projection_time_;
-    statistics_["planning_time3_forward_propogation_collision_check      "] = total_collision_check_time_;
-    statistics_["planning_time4_forward_propogation_band_sim             "] = total_band_forward_propogation_time_;
-    statistics_["planning_time5_forward_propogation_first_order_vis      "] = total_first_order_vis_propogation_time_;
-    statistics_["planning_time6_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
-    statistics_["planning_time7_total                                    "] = planning_time.count();
+    planning_statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
+    planning_statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
+    planning_statistics_["planning_time2_forward_propogation_projection           "] = total_projection_time_;
+    planning_statistics_["planning_time3_forward_propogation_collision_check      "] = total_collision_check_time_;
+    planning_statistics_["planning_time4_forward_propogation_band_sim             "] = total_band_forward_propogation_time_;
+    planning_statistics_["planning_time5_forward_propogation_first_order_vis      "] = total_first_order_vis_propogation_time_;
+    planning_statistics_["planning_time6_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
+    planning_statistics_["planning_time7_total                                    "] = planning_time.count();
 
-    statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless;
-    statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful;
-    statistics_["planning_size02_forward_states                          "] = (double)forward_tree_.size();
+    planning_statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless;
+    planning_statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful;
+    planning_statistics_["planning_size02_forward_states                          "] = (double)forward_tree_.size();
 
-    statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless;
-    statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful;
-    statistics_["planning_size05_backward_states                         "] = (double)backward_tree_.size();
+    planning_statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless;
+    planning_statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful;
+    planning_statistics_["planning_size05_backward_states                         "] = (double)backward_tree_.size();
 
-    statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless;
-    statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful;
-    statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made;
+    planning_statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless;
+    planning_statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful;
+    planning_statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made;
 
     return path;
 }
@@ -1639,36 +1577,44 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         robot_->lockEnvironment();
         path = planningMainLoop();
         robot_->unlockEnvironment();
-        std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
+        std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl << std::endl;
         storePath(path);
     }
 
-    if (visualization_enabled_globally_)
+    // If we either retreived a path, or made a new one, visualize and do smoothing
+    if (path.size() != 0)
     {
-        vis_->clearVisualizationsBullet();
-        visualizePath(path);
+        if (visualization_enabled_globally_)
+        {
+            vis_->clearVisualizationsBullet();
+            visualizePath(path);
+        }
+
+        ROS_INFO_NAMED("rrt", "Playing back unsmoothed path in OpenRAVE");
+        robot_->testPathForCollision(ConvertRRTPathToRobotPath(path));
+
+        ROS_INFO_NAMED("rrt", "Starting Shortcut Smoothing");
+        robot_->lockEnvironment();
+        const bool visualize_rrt_smoothing = true;
+        const auto smoothed_path = rrtShortcutSmooth(path, visualize_rrt_smoothing);
+        robot_->unlockEnvironment();
+        storePath(smoothed_path);
+        std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(smoothing_statistics_, false, "\n") << std::endl << std::endl;
+
+        ROS_INFO_NAMED("rrt", "Playing back smoothed path in OpenRAVE");
+        robot_->testPathForCollision(ConvertRRTPathToRobotPath(smoothed_path));
+
+        if (visualization_enabled_globally_)
+        {
+            vis_->deleteObjects(RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
+        }
+
+        return smoothed_path;
     }
-
-    ROS_INFO_NAMED("rrt", "Playing back unsmoothed path in OpenRAVE");
-    robot_->testPathForCollision(ConvertRRTPathToRobotPath(path));
-
-    ROS_INFO_NAMED("rrt", "Starting Shortcut Smoothing");
-    robot_->lockEnvironment();
-    const bool visualize_rrt_smoothing = true;
-    const auto smoothed_path = rrtShortcutSmooth(path, visualize_rrt_smoothing);
-    robot_->unlockEnvironment();
-    storePath(smoothed_path);
-    std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(statistics_, false, "\n") << std::endl << std::endl;
-
-    ROS_INFO_NAMED("rrt", "Playing back smoothed path in OpenRAVE");
-    robot_->testPathForCollision(ConvertRRTPathToRobotPath(smoothed_path));
-
-    if (visualization_enabled_globally_)
+    else
     {
-        vis_->deleteObjects(RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
+        return path;
     }
-
-    return smoothed_path;
 }
 
 /* Checks the planner tree to make sure the parent-child linkages are correct
@@ -2093,6 +2039,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
     uint32_t num_iterations = 0;
     uint32_t failed_iterations = 0;
     total_projection_time_ = 0.0;
+    total_collision_check_time_ = 0.0;
     total_band_forward_propogation_time_ = 0.0;
     total_first_order_vis_propogation_time_ = 0.0;
     total_everything_included_forward_propogation_time_ = 0.0;
@@ -2356,13 +2303,14 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
     // Record the statistics and return the result
     const double smoothing_time = function_wide_stopwatch(READ);
 
-    statistics_["smoothing0_failed_iterations                            "] = (double)failed_iterations;
-    statistics_["smoothing1_iterations                                   "] = (double)num_iterations;
-    statistics_["smoothing2_forward_propogation_crrt_projection_time     "] = total_projection_time_;
-    statistics_["smoothing3_forward_propogation_band_sim_time            "] = total_band_forward_propogation_time_;
-    statistics_["smoothing4_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
-    statistics_["smoothing5_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
-    statistics_["smoothing6_total_time                                   "] = smoothing_time;
+    smoothing_statistics_["smoothing0_failed_iterations                            "] = (double)failed_iterations;
+    smoothing_statistics_["smoothing1_iterations                                   "] = (double)num_iterations;
+    smoothing_statistics_["smoothing2_forward_propogation_crrt_projection_time     "] = total_projection_time_;
+    smoothing_statistics_["smoothing3_forward_propogation_collision_check_time     "] = total_collision_check_time_;
+    smoothing_statistics_["smoothing4_forward_propogation_band_sim_time            "] = total_band_forward_propogation_time_;
+    smoothing_statistics_["smoothing5_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
+    smoothing_statistics_["smoothing6_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
+    smoothing_statistics_["smoothing7_total_time                                   "] = smoothing_time;
 
     return path;
 }

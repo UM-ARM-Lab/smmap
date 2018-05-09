@@ -1375,23 +1375,50 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         }
     }
 
+
+
+    const Vector3d task_frame_lower_limits = Vector3d(
+                GetRRTPlanningXMinBulletFrame(ph_),
+                GetRRTPlanningYMinBulletFrame(ph_),
+                GetRRTPlanningZMinBulletFrame(ph_));
+
+    const Vector3d task_frame_upper_limits = Vector3d(
+                GetRRTPlanningXMaxBulletFrame(ph_),
+                GetRRTPlanningYMaxBulletFrame(ph_),
+                GetRRTPlanningZMaxBulletFrame(ph_));
+
+    RRTGrippersRepresentation gripper_config(
+                world_state.all_grippers_single_pose_[0].translation(),
+                world_state.all_grippers_single_pose_[1].translation());
+
+    RRTRobotRepresentation robot_config;
+    if (world_state.robot_configuration_valid_)
+    {
+        robot_config.first = world_state.robot_configuration_.head<7>();
+        robot_config.second = world_state.robot_configuration_.tail<7>();
+    }
+
+    RRTNode start_config(
+                gripper_config,
+                robot_config,
+                rubber_band_between_grippers_);
+
+
+    // Note that the rubber band part of the target is ignored at the present time
+    const AllGrippersSinglePose target_grippers_pose = getGripperTargets(world_state);
+    const RRTGrippersRepresentation rrt_grippers_goal(
+        target_grippers_pose[0].translation(),
+        target_grippers_pose[1].translation());
+
+    const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
+
+
+
+
     // Planning if we did not load a plan from file
-    for (int i = 0; i < 10; ++i)
+    for (int i = 0; i < 32; ++i)
     {
         num_times_invoked++;
-
-
-
-
-        const Vector3d task_frame_lower_limits = Vector3d(
-                    GetRRTPlanningXMinBulletFrame(ph_),
-                    GetRRTPlanningYMinBulletFrame(ph_),
-                    GetRRTPlanningZMinBulletFrame(ph_));
-
-        const Vector3d task_frame_upper_limits = Vector3d(
-                    GetRRTPlanningXMaxBulletFrame(ph_),
-                    GetRRTPlanningYMaxBulletFrame(ph_),
-                    GetRRTPlanningZMaxBulletFrame(ph_));
 
         #ifdef PRM_SAMPLING
         prm_helper_ = std::make_shared<PRMHelper>(
@@ -1443,68 +1470,52 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
         vis_->clearVisualizationsBullet();
 
-        RRTGrippersRepresentation gripper_config(
-                    world_state.all_grippers_single_pose_[0].translation(),
-                    world_state.all_grippers_single_pose_[1].translation());
-
-        RRTRobotRepresentation robot_config;
-        if (world_state.robot_configuration_valid_)
-        {
-            robot_config.first = world_state.robot_configuration_.head<7>();
-            robot_config.second = world_state.robot_configuration_.tail<7>();
-        }
-
-        RRTNode start_config(
-                    gripper_config,
-                    robot_config,
-                    rubber_band_between_grippers_);
-
-
-        // Note that the rubber band part of the target is ignored at the present time
-        const AllGrippersSinglePose target_grippers_pose = getGripperTargets(world_state);
-        const RRTGrippersRepresentation rrt_grippers_goal(
-            target_grippers_pose[0].translation(),
-            target_grippers_pose[1].translation());
-
-        const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
         const auto rrt_results = rrt_helper_->plan(start_config, rrt_grippers_goal, time_limit);
 
-        rrt_helper_->visualizePath(rrt_results);
-        std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
-        global_plan_current_timestep_ = 0;
-        executing_global_trajectory_ = true;
-        if (!world_state.robot_configuration_valid_)
-        {
-            convertRRTResultIntoGripperTrajectory(world_state.all_grippers_single_pose_, rrt_results);
-        }
-        else
-        {
-            convertRRTResultIntoFullRobotTrajectory(world_state.all_grippers_single_pose_, rrt_results);
-        }
 
-        // Serialization
-        if (GetRRTStoreNewResults(ph_))
+
+        if (false)
         {
-            try
+            rrt_helper_->visualizePath(rrt_results);
+            std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
+
+            global_plan_current_timestep_ = 0;
+            executing_global_trajectory_ = true;
+            if (!world_state.robot_configuration_valid_)
             {
-                // First serialize
-                std::vector<uint8_t> buffer;
-
-                SerializeAllGrippersPoseTrajectory(global_plan_gripper_trajectory_, buffer);
-                SerializeVector<VectorXd>(global_plan_full_robot_trajectory_, buffer, &SerializeEigenType<VectorXd>);
-
-                // Compress and save to file
-                ROS_INFO_NAMED("rrt_planner_results", "Compressing and saving RRT results to file for storage");
-                const std::string rrt_file_path = GetLogFolder(nh_) + "rrt_cache_step." + PrettyPrint::PrettyPrint(num_times_invoked);
-                ZlibHelpers::CompressAndWriteToFile(buffer, rrt_file_path);
+                convertRRTResultIntoGripperTrajectory(world_state.all_grippers_single_pose_, rrt_results);
             }
-            catch (...)
+            else
             {
-                ROS_ERROR_NAMED("coverage_task", "Saving RRT results to file failed");
+                convertRRTResultIntoFullRobotTrajectory(world_state.all_grippers_single_pose_, rrt_results);
+            }
+
+            // Serialization
+            if (GetRRTStoreNewResults(ph_))
+            {
+                try
+                {
+                    // First serialize
+                    std::vector<uint8_t> buffer;
+
+                    SerializeAllGrippersPoseTrajectory(global_plan_gripper_trajectory_, buffer);
+                    SerializeVector<VectorXd>(global_plan_full_robot_trajectory_, buffer, &SerializeEigenType<VectorXd>);
+
+                    // Compress and save to file
+                    ROS_INFO_NAMED("rrt_planner_results", "Compressing and saving RRT results to file for storage");
+                    const std::string rrt_file_path = GetLogFolder(nh_) + "rrt_cache_step." + PrettyPrint::PrettyPrint(num_times_invoked);
+                    ZlibHelpers::CompressAndWriteToFile(buffer, rrt_file_path);
+                }
+                catch (...)
+                {
+                    ROS_ERROR_NAMED("coverage_task", "Saving RRT results to file failed");
+                }
             }
         }
     }
+
+    assert(false && "Path execution currently disabled.");
 
     assert(!world_state.robot_configuration_valid_ ||
            !(robot_->testPathForCollision(global_plan_full_robot_trajectory_)));

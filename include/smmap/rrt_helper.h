@@ -305,7 +305,8 @@ namespace smmap
             std::vector<RRTNode, RRTAllocator> backward_tree_;
 
             // Planning and Smoothing statistics
-            std::map<std::string, double> statistics_;
+            std::map<std::string, double> planning_statistics_;
+            std::map<std::string, double> smoothing_statistics_;
             double total_sampling_time_;
             double total_nearest_neighbour_time_;
             double total_projection_time_;
