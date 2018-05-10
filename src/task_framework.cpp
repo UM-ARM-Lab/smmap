@@ -1352,7 +1352,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
             const auto deserialized_gripper_traj = DeserializeAllGrippersPoseTrajectory(decompressed_rrt_results, 0);
             auto deserialized_bytes_read = deserialized_gripper_traj.second;
-            const auto deserialized_full_robot_traj = DeserializeVector<VectorXd>(decompressed_rrt_results, deserialized_bytes_read, &DeserializeEigenType<VectorXd>);
+            const auto deserialized_full_robot_traj = DeserializeVector<VectorXd>(decompressed_rrt_results, deserialized_bytes_read, &DeserializeEigen<VectorXd>);
             deserialized_bytes_read += deserialized_full_robot_traj.second;
 
             assert(deserialized_bytes_read == decompressed_rrt_results.size());
@@ -1500,7 +1500,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                     std::vector<uint8_t> buffer;
 
                     SerializeAllGrippersPoseTrajectory(global_plan_gripper_trajectory_, buffer);
-                    SerializeVector<VectorXd>(global_plan_full_robot_trajectory_, buffer, &SerializeEigenType<VectorXd>);
+                    SerializeVector<VectorXd>(global_plan_full_robot_trajectory_, buffer, &SerializeEigen<double, Eigen::Dynamic, 1>);
 
                     // Compress and save to file
                     ROS_INFO_NAMED("rrt_planner_results", "Compressing and saving RRT results to file for storage");

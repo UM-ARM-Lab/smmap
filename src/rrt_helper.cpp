@@ -13,9 +13,12 @@ using namespace smmap_utilities;
 using namespace arc_utilities;
 using namespace Eigen;
 
-void print(const RRTRobotRepresentation& config)
+
+std::string print(const RRTRobotRepresentation& config)
 {
-    std::cout << config.first.transpose() << "    " << config.second.transpose() << std::endl;
+    std::stringstream out;
+    out << config.first.transpose() << "  " << config.second.transpose();
+    return out.str();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -229,18 +232,17 @@ double RRTNode::distance(const RRTGrippersRepresentation& c1, const RRTGrippersR
 
 double RRTNode::distanceSquared(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2)
 {
-    #warning "!!!!!!!!!!!!!!! magic numbers in code duplicated from robot_interface.cpp !!!!!!!!!!!!"
-    VectorXd weights(7);
-//    weights << 3.6885707 ,  3.17881391,  2.53183486,  2.0392053 ,  1.48086104,  1.14257071,  0.74185964;
-    weights << 1.9206,    1.7829,    1.5912,    1.4280,    1.2169,    1.0689,    0.8613;
+    #warning message "Magic number for robot DOF weights in code"
+    static const std::vector<double> weights_std = {1.9206, 1.7829, 1.5912, 1.4280, 1.2169, 1.0689, 0.8613};
+    static const Map<const Vector7d> weights(weights_std.data());
 
-    const VectorXd& r1_first_arm     = r1.first;
-    const VectorXd& r1_second_arm    = r1.second;
-    const VectorXd& r2_first_arm     = r2.first;
-    const VectorXd& r2_second_arm    = r2.second;
+    const Vector7d& r1_first_arm     = r1.first;
+    const Vector7d& r1_second_arm    = r1.second;
+    const Vector7d& r2_first_arm     = r2.first;
+    const Vector7d& r2_second_arm    = r2.second;
 
-    const VectorXd first_arm_delta = r1_first_arm - r2_first_arm;
-    const VectorXd second_arm_delta = r1_second_arm - r2_second_arm;
+    const Vector7d first_arm_delta = r1_first_arm - r2_first_arm;
+    const Vector7d second_arm_delta = r1_second_arm - r2_second_arm;
 
     return (first_arm_delta.cwiseProduct(weights)).squaredNorm()  +
             (second_arm_delta.cwiseProduct(weights)).squaredNorm();
@@ -334,8 +336,8 @@ uint64_t RRTNode::serialize(std::vector<uint8_t>& buffer) const
 {
     const uint64_t starting_bytes = buffer.size();
 
-    arc_utilities::SerializePair<Vector3d, Vector3d>(grippers_position_, buffer, &arc_utilities::SerializeEigenType<Vector3d>, &arc_utilities::SerializeEigenType<Vector3d>);    
-    arc_utilities::SerializePair<VectorXd, VectorXd>(robot_configuration_, buffer, &arc_utilities::SerializeEigenType<VectorXd>, &arc_utilities::SerializeEigenType<VectorXd>);
+    arc_utilities::SerializePair<Vector3d, Vector3d>(grippers_position_, buffer, &arc_utilities::SerializeEigen<double, 3, 1>, &arc_utilities::SerializeEigen<double, 3, 1>);
+    arc_utilities::SerializePair<Vector7d, Vector7d>(robot_configuration_, buffer, &arc_utilities::SerializeEigen<double, 7, 1>, &arc_utilities::SerializeEigen<double, 7, 1>);
     band_->serialize(buffer);
     arc_utilities::SerializeFixedSizePOD<int64_t>(parent_index_, buffer);
     arc_utilities::SerializeVector<int64_t>(child_indices_, buffer, arc_utilities::SerializeFixedSizePOD<int64_t>);
@@ -364,12 +366,12 @@ std::pair<RRTNode, uint64_t> RRTNode::Deserialize(const std::vector<uint8_t>& bu
 
     // Deserialize the grippers position
     const auto grippers_position_deserialized = arc_utilities::DeserializePair<Vector3d, Vector3d>(
-                buffer, current_position, &arc_utilities::DeserializeEigenType<Vector3d>, &arc_utilities::DeserializeEigenType<Vector3d>);
+                buffer, current_position, &arc_utilities::DeserializeEigen<Vector3d>, &arc_utilities::DeserializeEigen<Vector3d>);
     current_position += grippers_position_deserialized.second;
 
     // Deserialize the robot configuration
-    const auto robot_configuration_deserialized = arc_utilities::DeserializePair<VectorXd, VectorXd>(
-                buffer, current_position, &arc_utilities::DeserializeEigenType<VectorXd>, &arc_utilities::DeserializeEigenType<VectorXd>);
+    const auto robot_configuration_deserialized = arc_utilities::DeserializePair<Vector7d, Vector7d>(
+                buffer, current_position, &arc_utilities::DeserializeEigen<Vector7d>, &arc_utilities::DeserializeEigen<Vector7d>);
     current_position += robot_configuration_deserialized.second;
 
     // Deserialize the rubber band
@@ -482,6 +484,13 @@ RRTHelper::RRTHelper(
     , forward_tree_extend_iterations_(forward_tree_extend_iterations)
     , backward_tree_extend_iterations_(backward_tree_extend_iterations)
 
+    , forward_nn_raw_data_(0)
+    , backward_nn_raw_data_(0)
+    , forward_nn_index_(flann::KDTreeSingleIndexParams(10, true))
+    , backward_nn_index_(flann::KDTreeSingleIndexParams(10, true))
+    , forward_next_idx_to_add_to_nn_dataset_(0)
+    , backward_next_idx_to_add_to_nn_dataset_(0)
+
     , total_sampling_time_(NAN)
     , total_nearest_neighbour_time_(NAN)
     , total_projection_time_(NAN)
@@ -505,13 +514,13 @@ RRTHelper::RRTHelper(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 int64_t RRTHelper::nearestNeighbour(
-        const std::vector<RRTNode, RRTAllocator>& tree,
+        const bool use_forward_tree,
         const RRTNode& config)
 {
     Stopwatch stopwatch;
 
-    arc_helpers::DoNotOptimize(tree);
-    int64_t nn_idx = nearestNeighbour_internal(tree, config);
+    arc_helpers::DoNotOptimize(config);
+    int64_t nn_idx = nearestNeighbour_internal(use_forward_tree, config);
     arc_helpers::DoNotOptimize(nn_idx);
 
     const double nn_time = stopwatch(READ);
@@ -521,32 +530,237 @@ int64_t RRTHelper::nearestNeighbour(
 }
 
 int64_t RRTHelper::nearestNeighbour_internal(
-        const std::vector<RRTNode, RRTAllocator>& tree,
-        const RRTNode& config) const
+        const bool use_forward_tree,
+        const RRTNode& config)
 {
-    assert(tree.size() >= 1);
+    std::vector<RRTNode, RRTAllocator>* tree = nullptr;
+    flann::KDTreeSingleIndex<flann::L2_Victor<float>>* nn_index = nullptr;
+    size_t manual_search_start_idx = 0;
 
-    const auto distance_fn = [&] (const RRTNode& c1, const RRTNode& c2)
+    static constexpr size_t GROW_THRESHOLD = 1000;
+    static constexpr size_t DIMENSIONS = 14;
+
+    if (use_forward_tree)
     {
-        double blacklist_penalty = 0.0;
-        if (c1.isBlacklisted() || c2.isBlacklisted())
+        // Check if we should rebuild the KD-Tree
+        if (forward_next_idx_to_add_to_nn_dataset_ + GROW_THRESHOLD <= forward_tree_.size())
         {
-            blacklist_penalty = NN_BLACKLIST_DISTANCE;
+//            std::cout << "Rebuilding forward tree, size = " << forward_tree_.size() << std::endl;
+
+            for (size_t idx = forward_next_idx_to_add_to_nn_dataset_; idx < forward_tree_.size(); ++idx)
+            {
+                const auto& robot_config = forward_tree_[idx].getRobotConfiguration();
+
+                for (size_t i = 0; i < 7; ++i)
+                {
+                    forward_nn_raw_data_.push_back((float)robot_config.first(i));
+                }
+                for (size_t i = 0; i < 7; ++i)
+                {
+                    forward_nn_raw_data_.push_back((float)robot_config.second(i));
+                }
+            }
+
+            flann::Matrix<float> data(forward_nn_raw_data_.data(), forward_tree_.size(), DIMENSIONS);
+            forward_nn_index_.buildIndex(data);
+            forward_next_idx_to_add_to_nn_dataset_ = forward_tree_.size();
         }
 
-        if (!planning_for_whole_robot_)
+        tree = &forward_tree_;
+        nn_index = &forward_nn_index_;
+        manual_search_start_idx = forward_next_idx_to_add_to_nn_dataset_;
+    }
+    else
+    {
+        // Check if we should rebuild the KD-Tree
+        if (backward_next_idx_to_add_to_nn_dataset_ + GROW_THRESHOLD <= backward_tree_.size())
         {
-            return blacklist_penalty + RRTNode::distanceSquared(c1.getGrippers(), c2.getGrippers());
+//            std::cout << "Rebuilding backward tree, size = " << backward_tree_.size() << std::endl;
+
+            for (size_t idx = backward_next_idx_to_add_to_nn_dataset_; idx < backward_tree_.size(); ++idx)
+            {
+                const auto& robot_config = backward_tree_[idx].getRobotConfiguration();
+
+                for (size_t i = 0; i < 7; ++i)
+                {
+                    backward_nn_raw_data_.push_back((float)robot_config.first(i));
+                }
+                for (size_t i = 0; i < 7; ++i)
+                {
+                    backward_nn_raw_data_.push_back((float)robot_config.second(i));
+                }
+            }
+
+            flann::Matrix<float> data(backward_nn_raw_data_.data(), backward_tree_.size(), DIMENSIONS);
+            backward_nn_index_.buildIndex(data);
+            backward_next_idx_to_add_to_nn_dataset_ = backward_tree_.size();
+        }
+
+        tree = &backward_tree_;
+        nn_index = &backward_nn_index_;
+        manual_search_start_idx = backward_next_idx_to_add_to_nn_dataset_;
+    }
+
+    // If we have a FLANN index to search
+    std::pair<int64_t, double> nearest(-1, std::numeric_limits<double>::infinity());
+    if (manual_search_start_idx > 0)
+    {
+        const auto& robot_config = config.getRobotConfiguration();
+        std::array<float, DIMENSIONS> std_query;
+        for (size_t i = 0; i < 7; ++i)
+        {
+            std_query[i] = (float)robot_config.first(i);
+        }
+        for (size_t i = 0; i < 7; ++i)
+        {
+            std_query[7 + i] = (float)robot_config.second(i);
+        }
+        flann::Matrix<float> query(std_query.data(), 1, DIMENSIONS);
+
+        const size_t knn = 1;
+        std::vector<std::vector<size_t>> indices(query.rows, std::vector<size_t>(knn, -1));
+        std::vector<std::vector<float>> dists(query.rows, std::vector<float>(knn, INFINITY));
+
+        const float eps = 0.0;
+        flann::SearchParams params(flann::flann_checks_t::FLANN_CHECKS_UNLIMITED, eps);
+
+
+//        nn_index->knnSearch(query, indices, dists, knn, params);
+
+
+
+        flann::KNNSimpleResultSet<float> resultSet(knn);
+        resultSet.clear();
+        nn_index->findNeighbors(resultSet, query[0], params);
+        size_t n = std::min(resultSet.size(), knn);
+        if (n == 1)
+        {
+            resultSet.copy(&indices[0][0], &dists[0][0], n, params.sorted);
         }
         else
         {
-            return blacklist_penalty + RRTNode::distanceSquared(c1.getRobotConfiguration(), c2.getRobotConfiguration());
+            std::cout << "NN returned something weird. WTF. " << n << "\n";
         }
-    };
 
-    const auto nn_results = arc_helpers::GetNearestNeighbor<RRTNode, RRTNode, RRTAllocator>(tree, config, distance_fn);
-    const int64_t nn_idx = nn_results.first;
 
+//        std::cout << "FLANN Results:\n"
+//                  << "  Indices: " << PrettyPrint::PrettyPrint(indices, true, " ")
+//                  << "  Dists:   " << PrettyPrint::PrettyPrint(dists, true, " ")
+//                  << std::endl;
+
+        nearest.first = indices[0][0];
+        nearest.second = dists[0][0];
+    }
+
+    // If we have data that isn't in the FLANN index
+    if (manual_search_start_idx < tree->size())
+    {
+        const auto distance_fn = [&] (const RRTNode& other)
+        {
+            double blacklist_penalty = 0.0;
+            if (config.isBlacklisted() || other.isBlacklisted())
+            {
+                blacklist_penalty = NN_BLACKLIST_DISTANCE;
+            }
+
+            if (!planning_for_whole_robot_)
+            {
+                return blacklist_penalty + RRTNode::distanceSquared(config.getGrippers(), other.getGrippers());
+            }
+            else
+            {
+                return blacklist_penalty + RRTNode::distanceSquared(config.getRobotConfiguration(), other.getRobotConfiguration());
+            }
+        };
+
+        std::vector<std::pair<int64_t, double>> per_thread_nearest(arc_helpers::GetNumOMPThreads(), nearest);
+        #pragma omp parallel for
+        for (size_t idx = manual_search_start_idx; idx < tree->size(); idx++)
+        {
+            const RRTNode& item = (*tree)[idx];
+            const double distance = distance_fn(item);
+            const size_t thread_num = (size_t)omp_get_thread_num();
+
+            std::pair<int64_t, double>& current_thread_nearest = per_thread_nearest[thread_num];
+            if (current_thread_nearest.second > distance)
+            {
+                current_thread_nearest.first = (int64_t)idx;
+                current_thread_nearest.second = distance;
+            }
+        }
+
+        for (size_t thread_idx = 0; thread_idx < per_thread_nearest.size(); thread_idx++)
+        {
+            std::pair<int64_t, double>& current_thread_nearest = per_thread_nearest[thread_idx];
+            if (nearest.second > current_thread_nearest.second)
+            {
+                nearest = current_thread_nearest;
+            }
+        }
+    }
+
+    // Testing to make sure things work
+    if (false)
+    {
+        const auto distance_fn = [&] (const RRTNode& c1, const RRTNode& c2)
+        {
+            double blacklist_penalty = 0.0;
+            if (c1.isBlacklisted() || c2.isBlacklisted())
+            {
+                blacklist_penalty = NN_BLACKLIST_DISTANCE;
+            }
+
+            if (!planning_for_whole_robot_)
+            {
+                return blacklist_penalty + RRTNode::distanceSquared(c1.getGrippers(), c2.getGrippers());
+            }
+            else
+            {
+                return blacklist_penalty + RRTNode::distanceSquared(c1.getRobotConfiguration(), c2.getRobotConfiguration());
+            }
+        };
+
+        std::pair<int64_t, double> nearest_brute_force = arc_helpers::GetNearestNeighbor<RRTNode, RRTNode, RRTAllocator>(*tree, config, distance_fn);
+        if (nearest_brute_force.first != nearest.first)
+        {
+            std::array<float, DIMENSIONS> stacked_config;
+            for (size_t i = 0; i < 7; ++i)
+            {
+                stacked_config[i] = (float)config.getRobotConfiguration().first(i);
+            }
+            for (size_t i = 0; i < 7; ++i)
+            {
+                stacked_config[7 + i] = (float)config.getRobotConfiguration().second(i);
+            }
+
+            std::array<float, DIMENSIONS> stacked_flann_nearest;
+            for (size_t i = 0; i < 7; ++i)
+            {
+                stacked_flann_nearest[i] = (float)(*tree)[nearest.first].getRobotConfiguration().first(i);
+            }
+            for (size_t i = 0; i < 7; ++i)
+            {
+                stacked_flann_nearest[7 + i] = (float)(*tree)[nearest.first].getRobotConfiguration().second(i);
+            }
+
+            flann::L2_Victor<float> dist_functor;
+            const double flann_dist = dist_functor(stacked_config.data(), stacked_flann_nearest.data(), DIMENSIONS, -1);
+            const double internal_dist = distance_fn(config, (*tree)[nearest.first]);
+
+            std::cout << "!!!!!!!!!!!\n"
+                      << "Config:        " << print(config.getRobotConfiguration()) << std::endl
+                      << "FLANN nearest: " << print((*tree)[nearest.first].getRobotConfiguration()) << std::endl
+                      << " Brute force nearest (idx,dist): " << PrettyPrint::PrettyPrint(nearest_brute_force, true, ",")
+                      << " FLANN nearest (idx,dist): " << PrettyPrint::PrettyPrint(nearest, true, ",")
+                      << " FLANN nearest per our dist function: " << internal_dist
+                      << " FLANN nearest per its dist function: " << flann_dist
+                      << std::endl;
+
+            assert(std::abs(flann_dist - internal_dist) < 1e-4);
+        }
+    }
+
+    const int64_t nn_idx = nearest.first;
     return nn_idx;
 }
 
@@ -840,8 +1054,8 @@ size_t RRTHelper::forwardPropogationFunction(
 
             // Interpolate in joint space to find the translation of the grippers
             const double ratio = std::min(1.0, (double)(step_index + 1) * max_robot_dof_step_size_ / total_distance);
-            const VectorXd arm_a_interpolated = EigenHelpers::Interpolate(starting_robot_configuration.first, target_robot_configuration.first, ratio);
-            const VectorXd arm_b_interpolated = EigenHelpers::Interpolate(starting_robot_configuration.second, target_robot_configuration.second, ratio);
+            const Vector7d arm_a_interpolated = EigenHelpers::Interpolate(starting_robot_configuration.first, target_robot_configuration.first, ratio);
+            const Vector7d arm_b_interpolated = EigenHelpers::Interpolate(starting_robot_configuration.second, target_robot_configuration.second, ratio);
             const RRTRobotRepresentation next_robot_configuration(arm_a_interpolated, arm_b_interpolated);
 
             const AllGrippersSinglePose next_grippers_poses = robot_->getGrippersPoses(next_robot_configuration);
@@ -955,8 +1169,8 @@ size_t RRTHelper::forwardPropogationFunction(
             const double prev_distance = RRTNode::distance(prev_robot_config, target_robot_configuration);
             const double ratio = std::min(1.0, max_gripper_step_size_ / prev_distance);
 
-            const VectorXd arm_a_interpolated = EigenHelpers::Interpolate(prev_robot_config.first, target_robot_configuration.first, ratio);
-            const VectorXd arm_b_interpolated = EigenHelpers::Interpolate(prev_robot_config.second, target_robot_configuration.second, ratio);
+            const Vector7d arm_a_interpolated = EigenHelpers::Interpolate(prev_robot_config.first, target_robot_configuration.first, ratio);
+            const Vector7d arm_b_interpolated = EigenHelpers::Interpolate(prev_robot_config.second, target_robot_configuration.second, ratio);
             const RRTRobotRepresentation next_robot_configuration_pre_projection(arm_a_interpolated, arm_b_interpolated);
             const AllGrippersSinglePose next_grippers_poses_pre_projection = robot_->getGrippersPoses(next_robot_configuration_pre_projection);
 
@@ -1256,7 +1470,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                 // Sample a random target
                 const RRTNode random_target = configSampling();
                 // Get the nearest neighbor
-                const int64_t forward_tree_nearest_neighbour_idx =  nearestNeighbour(forward_tree_, random_target);
+                const int64_t forward_tree_nearest_neighbour_idx = nearestNeighbour(true, random_target);
                 // Forward propagate towards the sampled target
                 const size_t num_random_nodes_created =
                         forwardPropogationFunction(
@@ -1278,14 +1492,14 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                 }
 
                 const bool sample_goal = uniform_unit_distribution_(*generator_) < goal_bias_;
-                if (sample_goal)
+                if (num_random_nodes_created != 0 && sample_goal)
                 {
                     // Record the index of the last node in the new branch. This is either the last item in the tree, or the nearest neighbour itself
                     const int64_t last_node_idx_in_forward_tree_branch = num_random_nodes_created > 0 ?
                                 (int64_t)forward_tree_.size() - 1 : forward_tree_nearest_neighbour_idx;
 
-                    const int64_t backward_tree_nearest_neighbour_idx =  nearestNeighbour(
-                                backward_tree_, forward_tree_[last_node_idx_in_forward_tree_branch]);
+                    const int64_t backward_tree_nearest_neighbour_idx =
+                            nearestNeighbour(false, forward_tree_[last_node_idx_in_forward_tree_branch]);
                     const RRTNode& target_in_backward_tree = backward_tree_[backward_tree_nearest_neighbour_idx];
 
                     const size_t num_goal_directed_nodes_created =
@@ -1395,7 +1609,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                 // Sample a random target
                 const RRTNode random_target = configSampling();
                 // Get the nearest neighbor
-                const int64_t backward_tree_nearest_neighbour_idx =  nearestNeighbour(backward_tree_, random_target);
+                const int64_t backward_tree_nearest_neighbour_idx = nearestNeighbour(false, random_target);
                 // Forward propagate towards the sampled target
                 const size_t num_nodes_created =
                         forwardPropogationFunction(
@@ -1547,6 +1761,21 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         backward_tree_.push_back(RRTNode(grippers_goal_position_, start.getRobotConfiguration(), start.getBand()));
     }
     assert(backward_tree_.size() > 0);
+
+    // Clear the forward tree flann data
+    forward_nn_raw_data_.clear();
+    forward_nn_raw_data_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 100000) * (start.getRobotConfiguration().first.size() + start.getRobotConfiguration().second.size()));
+//    forward_nn_dataset_ = flann::Matrix<float>();
+    forward_nn_index_ = flann::KDTreeSingleIndex<flann::L2_Victor<float>>();
+    forward_next_idx_to_add_to_nn_dataset_ = 0;
+
+    // Clear the backward tree flann data
+    backward_nn_raw_data_.clear();
+    backward_nn_raw_data_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 100000) * (start.getRobotConfiguration().first.size() + start.getRobotConfiguration().second.size()));
+//    backward_nn_dataset_ = flann::Matrix<float>();
+    backward_nn_index_ = flann::KDTreeSingleIndex<flann::L2_Victor<float>>();
+    backward_next_idx_to_add_to_nn_dataset_ = 0;
+
 
     if (visualization_enabled_globally_)
     {
@@ -1721,12 +1950,12 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::ExtractSolutionPath(
     return solution_path;
 }
 
-std::vector<Eigen::VectorXd> RRTHelper::ConvertRRTPathToRobotPath(const std::vector<RRTNode, RRTAllocator>& path)
+std::vector<VectorXd> RRTHelper::ConvertRRTPathToRobotPath(const std::vector<RRTNode, RRTAllocator>& path)
 {
     std::vector<VectorXd> robot_config_path(path.size());
     for (size_t ind = 0; ind < path.size(); ++ind)
     {
-        const std::pair<VectorXd, VectorXd>& config_pair = path[ind].getRobotConfiguration();
+        const RRTRobotRepresentation& config_pair = path[ind].getRobotConfiguration();
         VectorXd config_single_vec(config_pair.first.size() + config_pair.second.size());
         config_single_vec << config_pair.first, config_pair.second;
         robot_config_path[ind] = config_single_vec;

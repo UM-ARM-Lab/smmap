@@ -22,6 +22,11 @@ find_package(cmake_modules REQUIRED)
 find_package(Eigen3 REQUIRED)
 set(Eigen3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 
+
+
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
+find_package(Flann REQUIRED)
+
 ################################################
 ## Declare ROS messages, services and actions ##
 ################################################
@@ -36,7 +41,7 @@ catkin_package(
     INCLUDE_DIRS    include
     LIBRARIES       ${PROJECT_NAME}_KFMANDB #${PROJECT_NAME}_KFMANB ${PROJECT_NAME}_UCB
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
-    DEPENDS         Eigen3
+    DEPENDS         Eigen3 FLANN
 )
 
 ###########
@@ -50,10 +55,11 @@ include_directories(include
     ${Boost_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
+    ${FLANN_INCLUDE_DIRS}
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O2 -flto -g -Wall -Wextra -Wpedantic -Wconversion")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -Og -g -Wall -Wextra -Wpedantic -Wconversion")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O0 -g -Wall -Wextra -Wpedantic -Wconversion")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_PARALLEL_K_NEAREST_NEIGHBORS  -DENABLE_PARALLEL_ROADMAP -DENABLE_PARALLEL_DISTANCE_MATRIX")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_PARALLEL_ROADMAP -DENABLE_PARALLEL_DISTANCE_MATRIX")
 
@@ -75,8 +81,8 @@ FILE(GLOB cpp_SRC "src/*.cpp")
 
 add_library(${PROJECT_NAME}_KFMANDB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 add_dependencies(${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_KFMANDB ${catkin_LIBRARIES})
-set_target_properties(${PROJECT_NAME}_KFMANDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANDB_BANDIT")
+target_link_libraries(${PROJECT_NAME}_KFMANDB ${catkin_LIBRARIES} ${FLANN_LIBRARIES})
+set_target_properties(${PROJECT_NAME}_KFMANDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${FLANN_DEFINITIONS} -DKFMANDB_BANDIT")
 
 #add_library(${PROJECT_NAME}_KFMANB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 #add_dependencies(${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})

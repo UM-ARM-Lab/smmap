@@ -51,9 +51,9 @@ namespace smmap
         inline uint64_t serialize(std::vector<uint8_t>& buffer) const
         {
             const size_t starting_bytes = buffer.size();
-            arc_utilities::SerializeEigenType(object_configuration_, buffer);
+            arc_utilities::SerializeEigen(object_configuration_, buffer);
             SerializeAllGrippersSinglePose(all_grippers_single_pose_, buffer);
-            arc_utilities::SerializeEigenType(robot_configuration_, buffer);
+            arc_utilities::SerializeEigen(robot_configuration_, buffer);
             arc_utilities::SerializeFixedSizePOD(robot_configuration_valid_, buffer);
             SerializeCollisionDataVector(gripper_collision_data_, buffer);
             arc_utilities::SerializeFixedSizePOD(sim_time_, buffer);
@@ -66,7 +66,7 @@ namespace smmap
             uint64_t bytes_read = 0;
             WorldState result;
 
-            const auto deserialized_object = arc_utilities::DeserializeEigenType<ObjectPointSet>(buffer, current + bytes_read);
+            const auto deserialized_object = arc_utilities::DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
             result.object_configuration_ = deserialized_object.first;
             bytes_read += deserialized_object.second;
 
@@ -74,7 +74,7 @@ namespace smmap
             result.all_grippers_single_pose_ = deserialized_grippers.first;
             bytes_read += deserialized_grippers.second;
 
-            const auto deserialized_robot_config = arc_utilities::DeserializeEigenType<Eigen::VectorXd>(buffer, current + bytes_read);
+            const auto deserialized_robot_config = arc_utilities::DeserializeEigen<Eigen::VectorXd>(buffer, current + bytes_read);
             result.robot_configuration_ = deserialized_robot_config.first;
             bytes_read += deserialized_robot_config.second;
 

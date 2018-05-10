@@ -16,6 +16,8 @@
 
 namespace smmap
 {
+    typedef Eigen::Matrix<double, 7, 1> Vector7d;
+
     class RobotInterface
     {
         public:
@@ -56,7 +58,7 @@ namespace smmap
 
             AllGrippersSinglePose getGrippersPoses(const Eigen::VectorXd& robot_configuration) const;
 
-            AllGrippersSinglePose getGrippersPoses(const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration) const;
+            AllGrippersSinglePose getGrippersPoses(const std::pair<Vector7d, Vector7d>& robot_configuration) const;
 
             // This a Jacobian between the movement of the grippers (in the gripper body frame)
             // and the movement of the robot's DOF
@@ -86,9 +88,9 @@ namespace smmap
             // Only intended for use by 2 manipulators
             bool checkRobotCollision(const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration) const;
 
-            std::vector<Eigen::VectorXd> getCloseIkSolutions(const std::string& gripper, const Eigen::Isometry3d& target_pose) const;
+            std::vector<Vector7d> getCloseIkSolutions(const std::string& gripper, const Eigen::Isometry3d& target_pose) const;
 
-            std::vector<std::vector<Eigen::VectorXd>> getCloseIkSolutions(const AllGrippersSinglePose& target_poses) const;
+            std::vector<std::vector<Vector7d>> getCloseIkSolutions(const AllGrippersSinglePose& target_poses) const;
 
             std::pair<bool, Eigen::VectorXd> getGeneralIkSolution(
                     const Eigen::VectorXd& starting_config,
@@ -109,7 +111,7 @@ namespace smmap
                     const std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_fn,
                     const std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_jacobians_fn,
                     const std::function<bool(const Eigen::VectorXd& configuration)>& full_robot_collision_check_fn,
-                    const std::function<std::vector<Eigen::VectorXd>(const std::string& gripper, const Eigen::Isometry3d& target_pose)>& close_ik_solutions_fn,
+                    const std::function<std::vector<Vector7d>(const std::string& gripper, const Eigen::Isometry3d& target_pose)>& close_ik_solutions_fn,
                     const std::function<std::pair<bool, Eigen::VectorXd>(const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn,
                     const std::function<bool(const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn);
 
@@ -151,7 +153,7 @@ namespace smmap
             const double min_controller_distance_to_obstacles_;
             const Eigen::VectorXd joint_lower_limits_;
             const Eigen::VectorXd joint_upper_limits_;
-            const Eigen::VectorXd dof_weights_;
+//            const Eigen::VectorXd dof_weights_;
 
         private:
             std::thread spin_thread_;
@@ -164,7 +166,7 @@ namespace smmap
             std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_fn_;
             std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)> get_collision_points_of_interest_jacobians_fn_;
             std::function<bool(const Eigen::VectorXd& configuration)> full_robot_collision_check_fn_;
-            std::function<std::vector<Eigen::VectorXd>(const std::string& gripper, const Eigen::Isometry3d& target_pose)> close_ik_solutions_fn_;
+            std::function<std::vector<Vector7d>(const std::string& gripper, const Eigen::Isometry3d& target_pose)> close_ik_solutions_fn_;
             std::function<std::pair<bool, Eigen::VectorXd>(const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn_;
             std::function<bool(const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn_;
 

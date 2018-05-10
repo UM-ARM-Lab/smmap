@@ -940,13 +940,13 @@ void QuinlanRubberBand::printBandData(const EigenHelpers::VectorVector3d& test_b
 uint64_t QuinlanRubberBand::serialize(std::vector<uint8_t>& buffer) const
 {
     return arc_utilities::SerializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
-                                                    band_, buffer, &arc_utilities::SerializeEigenType<Eigen::Vector3d>);
+                band_, buffer, &arc_utilities::SerializeEigen<double, 3, 1>);
 }
 
 uint64_t QuinlanRubberBand::deserializeIntoSelf(const std::vector<uint8_t>& buffer, const uint64_t current)
 {
     const auto deserialized_results = arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
-                buffer, current, &arc_utilities::DeserializeEigenType<Eigen::Vector3d>);
+                buffer, current, &arc_utilities::DeserializeEigen<Eigen::Vector3d>);
     band_ = deserialized_results.first;
     return deserialized_results.second;
 }

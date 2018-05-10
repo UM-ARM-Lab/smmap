@@ -995,7 +995,7 @@ bool DijkstrasCoverageTask::saveDijkstrasResults()
         std::vector<uint8_t> buffer;
         // First serialize the graph that created the results
         ROS_INFO_NAMED("coverage_task", "Serializing the data");
-        free_space_graph_.SerializeSelf(buffer, &arc_utilities::SerializeEigenType<Eigen::Vector3d>);
+        free_space_graph_.SerializeSelf(buffer, &arc_utilities::SerializeEigen<double, 3, 1>);
 
         // Next serialize the results themselves
         const auto first_serializer = [] (const std::vector<int64_t>& vec_to_serialize, std::vector<uint8_t>& buffer)
@@ -1050,7 +1050,7 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
 
         // First check that the graph we have matches the graph that is stored
         std::vector<uint8_t> temp_buffer;
-        const uint64_t serialzed_graph_size = free_space_graph_.SerializeSelf(temp_buffer, &arc_utilities::SerializeEigenType<Eigen::Vector3d>);
+        const uint64_t serialzed_graph_size = free_space_graph_.SerializeSelf(temp_buffer, &arc_utilities::SerializeEigen<double, 3, 1>);
         const auto mismatch_results = std::mismatch(temp_buffer.begin(), temp_buffer.end(), decompressed_dijkstras_results.begin());
         if (mismatch_results.first != temp_buffer.end())
         {

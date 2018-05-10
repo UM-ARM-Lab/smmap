@@ -483,14 +483,14 @@ namespace smmap
 
             static uint64_t SerializedSize()
             {
-                return 2 * arc_utilities::SerializedSizeEigenType<Eigen::Vector3d>() + sizeof(distance_to_obstacle_);
+                return 2 * arc_utilities::SerializedSizeEigen(Eigen::Vector3d()) + sizeof(distance_to_obstacle_);
             }
 
             uint64_t serialize(std::vector<uint8_t>& buffer) const
             {
                 const size_t starting_bytes = buffer.size();
-                arc_utilities::SerializeEigenType(nearest_point_to_obstacle_, buffer);
-                arc_utilities::SerializeEigenType(obstacle_surface_normal_, buffer);
+                arc_utilities::SerializeEigen(nearest_point_to_obstacle_, buffer);
+                arc_utilities::SerializeEigen(obstacle_surface_normal_, buffer);
                 arc_utilities::SerializeFixedSizePOD(distance_to_obstacle_, buffer);
                 const size_t ending_bytes = buffer.size();
                 return ending_bytes - starting_bytes;
@@ -503,9 +503,9 @@ namespace smmap
 
                 // Do the deserialization itself
                 uint64_t bytes_read = 0;
-                const auto nearest_deserialized = arc_utilities::DeserializeEigenType<Eigen::Vector3d>(buffer, current + bytes_read);
+                const auto nearest_deserialized = arc_utilities::DeserializeEigen<Eigen::Vector3d>(buffer, current + bytes_read);
                 bytes_read += nearest_deserialized.second;
-                const auto normal_deserialized = arc_utilities::DeserializeEigenType<Eigen::Vector3d>(buffer, current + bytes_read);
+                const auto normal_deserialized = arc_utilities::DeserializeEigen<Eigen::Vector3d>(buffer, current + bytes_read);
                 bytes_read += normal_deserialized.second;
                 const auto distance_deserailzied = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current + bytes_read);
                 bytes_read += distance_deserailzied.second;

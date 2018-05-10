@@ -5,16 +5,96 @@
 #include <arc_utilities/eigen_helpers.hpp>
 #include <smmap_utilities/visualization_tools.h>
 
+#include <flann/flann.hpp>
+
 #include "smmap/rubber_band.hpp"
 #include "smmap/prm_helper.h"
 #include "smmap/robot_interface.hpp"
+
+namespace flann
+{
+    /**
+     * Squared Euclidean distance functor, optimized version
+     */
+    template<class T>
+    struct L2_Victor
+    {
+        typedef bool is_kdtree_distance;
+
+        typedef T ElementType;
+        typedef T ResultType;
+
+        /**
+         *  Compute the squared Euclidean distance between two vectors.
+         *
+         *	This is highly optimised, with loop unrolling, as it is one
+         *	of the most expensive inner loops.
+         *
+         *	The computation of squared root at the end is omitted for
+         *	efficiency.
+         */
+        template <typename Iterator1, typename Iterator2>
+        ResultType operator()(Iterator1 a, Iterator2 b, size_t size, ResultType worst_dist = -1) const
+        {
+            #warning message "Magic number for robot DOF weights in code"
+            static constexpr float DOF_WEIGHTS[] = {1.9206f, 1.7829f, 1.5912f, 1.4280f, 1.2169f, 1.0689f, 0.8613f,
+                                                    1.9206f, 1.7829f, 1.5912f, 1.4280f, 1.2169f, 1.0689f, 0.8613f};
+
+            (void)size;
+            ResultType result = 0.0;
+            ResultType diff0, diff1, diff2, diff3;
+            Iterator1 start = a;
+            float const * w = &DOF_WEIGHTS[0]; // pointer to a const float
+
+            /* Process 4 items with each loop for efficiency. */
+            while (a < start + 12)
+            {
+                diff0 = (a[0] - b[0]) * w[0];
+                diff1 = (a[1] - b[1]) * w[1];
+                diff2 = (a[2] - b[2]) * w[2];
+                diff3 = (a[3] - b[3]) * w[3];
+                result += diff0 * diff0 + diff1 * diff1 + diff2 * diff2 + diff3 * diff3;
+                a += 4;
+                b += 4;
+                w += 4;
+
+                if ((worst_dist > 0) && (result > worst_dist))
+                {
+                    return result;
+                }
+            }
+            /* Process last 2 values */
+            diff0 = (a[0] - b[0]) * w[0];
+            diff1 = (a[1] - b[1]) * w[1];
+            result += diff0 * diff0 + diff1 * diff1;
+
+            return result;
+        }
+
+        /**
+         *	Partial euclidean distance, using just one dimension. This is used by the
+         *	kd-tree when computing partial distances while traversing the tree.
+         *
+         *	Squared root is omitted for efficiency.
+         */
+        template <typename U, typename V>
+        inline ResultType accum_dist(const U& a, const V& b, int ind) const
+        {
+            #warning message "Magic number for robot DOF weights in code"
+            static constexpr float DOF_WEIGHTS2[] = {3.6885707f, 3.17881391f, 2.53183486f, 2.0392053f, 1.48086104f, 1.14257071f, 0.74185964f,
+                                                     3.6885707f, 3.17881391f, 2.53183486f, 2.0392053f, 1.48086104f, 1.14257071f, 0.74185964f};
+            return (a-b) * (a-b) * DOF_WEIGHTS2[ind];
+        }
+    };
+}
 
 namespace smmap
 {
     class RRTNode;
     typedef Eigen::aligned_allocator<RRTNode> RRTAllocator;
     typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> RRTGrippersRepresentation;
-    typedef std::pair<Eigen::VectorXd, Eigen::VectorXd> RRTRobotRepresentation;
+    typedef Eigen::Matrix<double, 7, 1> Vector7d;
+    typedef std::pair<Vector7d, Vector7d> RRTRobotRepresentation;
 
     class RRTNode
     {
@@ -142,11 +222,17 @@ namespace smmap
                     const RRTGrippersRepresentation& grippers_goal,
                     const std::chrono::duration<double>& time_limit);
 
-            static std::vector<Eigen::VectorXd> ConvertRRTPathToRobotPath(const std::vector<RRTNode, RRTAllocator>& path);
-            static bool CheckTreeLinkage(const std::vector<RRTNode, RRTAllocator>& nodes);
+
+            static std::vector<Eigen::VectorXd> ConvertRRTPathToRobotPath(
+                    const std::vector<RRTNode, RRTAllocator>& path);
+
+            static bool CheckTreeLinkage(
+                    const std::vector<RRTNode, RRTAllocator>& tree);
+
             static std::vector<RRTNode, RRTAllocator> ExtractSolutionPath(
                     const std::vector<RRTNode, RRTAllocator>& tree,
                     const int64_t goal_node_idx);
+
 
             void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
             void clearBlacklist();
@@ -188,14 +274,14 @@ namespace smmap
             ///////////////////////////////////////////////////////////////////////////////////////
 
             int64_t nearestNeighbour(
-                    const std::vector<RRTNode, RRTAllocator>& tree,
+                    const bool use_forward_tree,
                     const RRTNode& config);
 
             // Used for timing purposes
             // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
             int64_t nearestNeighbour_internal(
-                    const std::vector<RRTNode, RRTAllocator>& tree,
-                    const RRTNode& config) const;
+                    const bool use_forward_tree,
+                    const RRTNode& config);
 
             RRTNode configSampling();
             // Used for timing purposes
@@ -293,8 +379,8 @@ namespace smmap
             std::chrono::duration<double> time_limit_;
 
             std::pair<ssize_t, ssize_t> arm_dof_;
-            std::vector<Eigen::VectorXd> arm_a_goal_configurations_;
-            std::vector<Eigen::VectorXd> arm_b_goal_configurations_;
+            std::vector<Vector7d> arm_a_goal_configurations_;
+            std::vector<Vector7d> arm_b_goal_configurations_;
             RRTRobotRepresentation robot_joint_limits_upper_;
             RRTRobotRepresentation robot_joint_limits_lower_;
 
@@ -303,6 +389,13 @@ namespace smmap
             std::vector<RRTNode, RRTAllocator> forward_tree_;
             // Note that the band portion of the backward tree is invalid
             std::vector<RRTNode, RRTAllocator> backward_tree_;
+
+            std::vector<float> forward_nn_raw_data_;
+            std::vector<float> backward_nn_raw_data_;
+            flann::KDTreeSingleIndex<flann::L2_Victor<float>> forward_nn_index_;
+            flann::KDTreeSingleIndex<flann::L2_Victor<float>> backward_nn_index_;
+            size_t forward_next_idx_to_add_to_nn_dataset_;
+            size_t backward_next_idx_to_add_to_nn_dataset_;
 
             // Planning and Smoothing statistics
             std::map<std::string, double> planning_statistics_;
