@@ -200,6 +200,16 @@ namespace smmap
     }
 
 
+    void RobotInterface::resetRandomSeeds(const unsigned long seed, const unsigned long num_discards)
+    {
+        if (reset_random_seeds_fn_ == nullptr)
+        {
+            ROS_ERROR_NAMED("robot_interface", "Asked to reset random seeds, but function pointer is null");
+            return;
+        }
+        reset_random_seeds_fn_(seed, num_discards);
+    }
+
     void RobotInterface::lockEnvironment()
     {
         if (lock_env_fn_ == nullptr)
@@ -413,6 +423,7 @@ namespace smmap
     }
 
     void RobotInterface::setCallbackFunctions(
+            const std::function<void(const size_t, const size_t)>& reset_random_seeds_fn,
             const std::function<void()>& lock_env_fn,
             const std::function<void()>& unlock_env_fn,
             const std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)>& get_ee_poses_fn,
@@ -424,6 +435,7 @@ namespace smmap
             const std::function<std::pair<bool, Eigen::VectorXd>(const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn,
             const std::function<bool(const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn)
     {
+        reset_random_seeds_fn_ = reset_random_seeds_fn;
         lock_env_fn_ = lock_env_fn;
         unlock_env_fn_ = unlock_env_fn;
         get_ee_poses_fn_ = get_ee_poses_fn;

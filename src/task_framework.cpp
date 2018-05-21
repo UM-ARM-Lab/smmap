@@ -1299,8 +1299,8 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
 
     // Visualization
     {
-        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), rrt_helper_->gripper_a_forward_tree_color_, 1);
-        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), rrt_helper_->gripper_b_forward_tree_color_, 5);
+        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
+        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Red(), 5);
 
         std::vector<std_msgs::ColorRGBA> colors;
         for (size_t idx = 0; idx < cluster_targets.size(); ++idx)
@@ -1323,10 +1323,10 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
 void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 {
     static int num_times_invoked = 0;
-    num_times_invoked++;
+//    num_times_invoked++;
 //    rrt_helper_->addBandToBlacklist(rubber_band_between_grippers_->getVectorRepresentation());
 
-    if (GetRRTReuseOldResults(ph_))
+    if (false && GetRRTReuseOldResults(ph_))
     {
         // Deserialization
         try
@@ -1375,17 +1375,47 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         }
     }
 
+    // Algorithm parameters
+    const auto use_cbirrt_style_projection = GetUseCBiRRTStyleProjection(ph_);
+    const auto forward_tree_extend_iterations = GetRRTForwardTreeExtendIterations(ph_);
+    const auto backward_tree_extend_iterations = GetRRTBackwardTreeExtendIterations(ph_);
+//    const auto kd_tree_grow_threshold = ROSHelpers::GetParam<int>(ph_, "rrt/kd_tree_grow_threshold", 500);
+    const auto use_brute_force_nn = ROSHelpers::GetParam<bool>(ph_, "rrt/use_brute_force_nn", false);
+    const auto goal_bias = GetRRTGoalBias(ph_);
 
+    // Smoothing parameters
+    const auto max_shortcut_index_distance = GetRRTMaxShortcutIndexDistance(ph_);
+    const auto max_smoothing_iterations = GetRRTMaxSmoothingIterations(ph_);
+    const auto max_failed_smoothing_iterations = GetRRTMaxFailedSmoothingIterations(ph_);
 
-    const Vector3d task_frame_lower_limits = Vector3d(
+    // Task defined parameters
+    const auto task_aligned_frame = robot_->getWorldToTaskFrameTf();
+    const auto task_frame_lower_limits = Vector3d(
                 GetRRTPlanningXMinBulletFrame(ph_),
                 GetRRTPlanningYMinBulletFrame(ph_),
                 GetRRTPlanningZMinBulletFrame(ph_));
-
-    const Vector3d task_frame_upper_limits = Vector3d(
+    const auto task_frame_upper_limits = Vector3d(
                 GetRRTPlanningXMaxBulletFrame(ph_),
                 GetRRTPlanningYMaxBulletFrame(ph_),
                 GetRRTPlanningZMaxBulletFrame(ph_));
+    const auto max_gripper_step_size = dijkstras_task_->work_space_grid_.minStepDimension();
+    const auto max_robot_step_size = GetRRTMaxRobotDOFStepSize(ph_);
+    const auto min_robot_step_size = GetRRTMinRobotDOFStepSize(ph_);
+    const auto max_gripper_rotation = GetRRTMaxGripperRotation(ph_); // only matters for real robot
+    const auto goal_reached_radius = dijkstras_task_->work_space_grid_.minStepDimension();
+    const auto min_gripper_distance_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_); // only matters for simulation
+    const auto homotopy_distance_penalty = GetRRTHomotopyDistancePenalty();
+
+    // Visualization
+    const auto enable_rrt_visualizations = !GetDisableAllVisualizations(ph_);
+
+
+
+
+
+
+
+
 
     RRTGrippersRepresentation gripper_config(
                 world_state.all_grippers_single_pose_[0].translation(),
@@ -1413,12 +1443,38 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
 
 
+//    const std::vector<size_t> grow_thresholds = {1, 20, 50, 100, 200, 500, 1000};
+    const std::vector<size_t> grow_thresholds = {20};
+//    const std::vector<size_t> extend_iterations_options = {10, 20, 50, 100, 200, 500, 1000};
+
+
+
+
 
 
     // Planning if we did not load a plan from file
-    for (int i = 0; i < 32; ++i)
+//    const size_t trial_idx = 0;
+    for (size_t trial_idx = 0; trial_idx < 10; ++trial_idx)
+//    for (const auto& extend_iterations : extend_iterations_options)
+    for (const auto& kd_tree_grow_threshold : grow_thresholds)
     {
+//        const auto forward_tree_extend_iterations = extend_iterations;
+//        const auto backward_tree_extend_iterations = extend_iterations;
+
+        robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
+        flann::seed_random(seed_);
+        generator_->seed(seed_);
+        generator_->discard(trial_idx * 0xFFFF);
+        for (size_t discard_idx = 0; discard_idx < trial_idx * 0xFFFF; ++discard_idx)
+        {
+            std::rand();
+        }
         num_times_invoked++;
+
+        std::cout << "!!!!!!!!!!!!!!!!!! Invoked " << num_times_invoked << " times!!!!!!!!!!!" << std::endl;
+        std::cout << "Trial idx: " << trial_idx << std::endl;
+//        std::cout << "Extend iterations: " << extend_iterations << std::endl;
+        std::cout << "Grow threshold: " << kd_tree_grow_threshold << std::endl;
 
         #ifdef PRM_SAMPLING
         prm_helper_ = std::make_shared<PRMHelper>(
@@ -1439,34 +1495,39 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         #endif
 
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
-        rrt_helper_ = std::unique_ptr<RRTHelper>(
-                    new RRTHelper(
-                        nh_,
-                        ph_,
-                        robot_,
-                        dijkstras_task_->environment_sdf_,
-                        vis_,
-                        generator_,
-                        prm_helper_,
-                        GetUseCBiRRTStyleProjection(ph_),
-                        GetRRTForwardTreeExtendIterations(ph_),
-                        GetRRTBackwardTreeExtendIterations(ph_),
-                        robot_->getWorldToTaskFrameTf(),
-                        task_frame_lower_limits,
-                        task_frame_upper_limits,
-                        dijkstras_task_->work_space_grid_.minStepDimension(),
-                        GetRRTMaxRobotDOFStepSize(ph_),
-                        GetRRTMinRobotDOFStepSize(ph_),
-                        GetRRTMaxGripperRotation(ph_),
-                        GetRRTGoalBias(ph_),
-                        dijkstras_task_->work_space_grid_.minStepDimension(),
-                        GetRRTMinGripperDistanceToObstacles(ph_),
-                        GetRRTHomotopyDistancePenalty(),
-                        GetRRTMaxShortcutIndexDistance(ph_),
-                        GetRRTMaxSmoothingIterations(ph_),
-                        GetRRTMaxFailedSmoothingIterations(ph_),
-                        !GetDisableAllVisualizations(ph_)));
-
+        rrt_helper_ = std::make_shared<RRTHelper>(
+                    // Robot/environment related parameters
+                    nh_,
+                    ph_,
+                    robot_,
+                    dijkstras_task_->environment_sdf_,
+                    prm_helper_,
+                    generator_,
+                    // Planning algorithm parameters
+                    use_cbirrt_style_projection,
+                    forward_tree_extend_iterations,
+                    backward_tree_extend_iterations,
+                    kd_tree_grow_threshold,
+                    use_brute_force_nn,
+                    goal_bias,
+                    // Smoothing parameters
+                    max_shortcut_index_distance,
+                    max_smoothing_iterations,
+                    max_failed_smoothing_iterations,
+                    // Task defined parameters
+                    task_aligned_frame,
+                    task_frame_lower_limits,
+                    task_frame_upper_limits,
+                    max_gripper_step_size,
+                    max_robot_step_size,
+                    min_robot_step_size,
+                    max_gripper_rotation,
+                    goal_reached_radius,
+                    min_gripper_distance_to_obstacles,
+                    homotopy_distance_penalty,
+                    // Visualization
+                    vis_,
+                    enable_rrt_visualizations);
 
         vis_->clearVisualizationsBullet();
 
@@ -1514,6 +1575,11 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
             }
         }
     }
+
+
+
+
+
 
     assert(false && "Path execution currently disabled.");
 

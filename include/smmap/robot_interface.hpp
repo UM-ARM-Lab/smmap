@@ -52,7 +52,7 @@ namespace smmap
             std::vector<CollisionData> checkGripperCollision(const AllGrippersSinglePose& grippers_pose);
 
 
-
+            void resetRandomSeeds(const unsigned long seed, const unsigned long num_discards);
             void lockEnvironment();
             void unlockEnvironment();
 
@@ -104,6 +104,7 @@ namespace smmap
             bool testPathForCollision(const std::vector<Eigen::VectorXd>& path) const;
 
             void setCallbackFunctions(
+                    const std::function<void(const size_t, const size_t)>& reset_random_seeds_fn,
                     const std::function<void()>& lock_env_fn,
                     const std::function<void()>& unlock_env_fn,
                     const std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)>& get_ee_poses_fn,
@@ -159,6 +160,7 @@ namespace smmap
             std::thread spin_thread_;
 
             // Function pointers that allow for generic(ish) external robots, without explicit inheritance
+            std::function<void(const unsigned long, const unsigned long)> reset_random_seeds_fn_;
             std::function<void()> lock_env_fn_;
             std::function<void()> unlock_env_fn_;
             std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)> get_ee_poses_fn_;

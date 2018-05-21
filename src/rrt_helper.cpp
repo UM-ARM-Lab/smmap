@@ -13,6 +13,7 @@ using namespace smmap_utilities;
 using namespace arc_utilities;
 using namespace Eigen;
 
+//#define SMMAP_VERBOSE
 
 std::string print(const RRTRobotRepresentation& config)
 {
@@ -282,8 +283,9 @@ double RRTNode::robotPathDistance(const std::vector<RRTNode, RRTAllocator>& path
 std::string RRTNode::print() const
 {
     std::stringstream out;
-    out << PrettyPrint::PrettyPrint(grippers_position_, true, " ")
-        << "    " << robot_configuration_.first.transpose() << "  " << robot_configuration_.second.transpose();
+    out << parent_index_ << "    "
+//        << PrettyPrint::PrettyPrint(grippers_position_, true, " ") << "    "
+        << robot_configuration_.first.transpose() << "  " << robot_configuration_.second.transpose();
     return out.str();
 }
 
@@ -417,47 +419,46 @@ std::pair<RRTNode, uint64_t> RRTNode::Deserialize(const std::vector<uint8_t>& bu
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 RRTHelper::RRTHelper(
+        // Robot/environment related parameters
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
         const RobotInterface::Ptr robot,
         const sdf_tools::SignedDistanceField::ConstPtr environment_sdf,
-        const Visualizer::Ptr vis,
-        const std::shared_ptr<std::mt19937_64>& generator,
         const PRMHelper::Ptr& prm_helper,
-
+        const std::shared_ptr<std::mt19937_64>& generator,
+        // Planning algorithm parameters
         const bool using_cbirrt_style_projection,
         const size_t forward_tree_extend_iterations,
         const size_t backward_tree_extend_iterations,
-
-        const Isometry3d& task_aligned_frame,
-        const Vector3d& task_aligned_lower_limits,
-        const Vector3d& task_aligned_upper_limits,
+        const size_t kd_tree_grow_threshold,
+        const bool use_brute_force_nn,
+        const double goal_bias,
+        // Smoothing parameters
+        const int64_t max_shortcut_index_distance,
+        const uint32_t max_smoothing_iterations,
+        const uint32_t max_failed_smoothing_iterations,
+        // Task defined parameters
+        const Eigen::Isometry3d& task_aligned_frame,
+        const Eigen::Vector3d& task_aligned_lower_limits,
+        const Eigen::Vector3d& task_aligned_upper_limits,
         const double max_gripper_step_size,
         const double max_robot_dof_step_size,
         const double min_robot_dof_step_size,
         const double max_gripper_rotation,
-        const double goal_bias,
         const double goal_reach_radius,
         const double gripper_min_distance_to_obstacles,
         const double homotopy_distance_penalty,
-        const int64_t max_shortcut_index_distance,
-        const uint32_t max_smoothing_iterations,
-        const uint32_t max_failed_smoothing_iterations,
+        // Visualization
+        const smmap_utilities::Visualizer::Ptr vis,
         const bool visualization_enabled)
     : nh_(nh)
     , ph_(ph.getNamespace() + "/rrt")
     , robot_(robot)
     , environment_sdf_(environment_sdf)
 
-    , vis_(vis)
-    , visualization_enabled_globally_(visualization_enabled)
-//    , band_safe_color_(Visualizer::Black())
-//    , band_overstretched_color_(Visualizer::Cyan())
-    , gripper_a_forward_tree_color_(Visualizer::Magenta())
-    , gripper_b_forward_tree_color_(Visualizer::Red())
-    , gripper_a_backward_tree_color_(Visualizer::Yellow())
-    , gripper_b_backward_tree_color_(Visualizer::Cyan())
-    , band_tree_color_(Visualizer::Blue())
+    , prm_helper_(prm_helper)
+    , generator_(generator)
+    , uniform_unit_distribution_(0.0, 1.0)
 
     , task_aligned_frame_transform_(task_aligned_frame)
     , task_aligned_frame_inverse_transform_(task_aligned_frame_transform_.inverse())
@@ -472,17 +473,16 @@ RRTHelper::RRTHelper(
     , homotopy_distance_penalty_(homotopy_distance_penalty)
     , gripper_min_distance_to_obstacles_(gripper_min_distance_to_obstacles)
 
-    , max_shortcut_index_distance_(max_shortcut_index_distance)
-    , max_smoothing_iterations_(max_smoothing_iterations)
-    , max_failed_smoothing_iterations_(max_failed_smoothing_iterations)
-
-    , generator_(generator)
-    , uniform_unit_distribution_(0.0, 1.0)
-    , uniform_shortcut_smoothing_int_distribution_(1, 4)
-    , prm_helper_(prm_helper)
     , using_cbirrt_style_projection_(using_cbirrt_style_projection)
     , forward_tree_extend_iterations_(forward_tree_extend_iterations)
     , backward_tree_extend_iterations_(backward_tree_extend_iterations)
+    , use_brute_force_nn_(use_brute_force_nn)
+    , kd_tree_grow_threshold_(kd_tree_grow_threshold)
+
+    , max_shortcut_index_distance_(max_shortcut_index_distance)
+    , max_smoothing_iterations_(max_smoothing_iterations)
+    , max_failed_smoothing_iterations_(max_failed_smoothing_iterations)
+    , uniform_shortcut_smoothing_int_distribution_(1, 4)
 
     , forward_nn_raw_data_(0)
     , backward_nn_raw_data_(0)
@@ -492,12 +492,23 @@ RRTHelper::RRTHelper(
     , backward_next_idx_to_add_to_nn_dataset_(0)
 
     , total_sampling_time_(NAN)
+    , total_nearest_neighbour_index_building_time_(NAN)
+    , total_nearest_neighbour_index_searching_time_(NAN)
+    , total_nearest_neighbour_linear_searching_time_(NAN)
     , total_nearest_neighbour_time_(NAN)
     , total_projection_time_(NAN)
     , total_collision_check_time_(NAN)
     , total_band_forward_propogation_time_(NAN)
     , total_first_order_vis_propogation_time_(NAN)
     , total_everything_included_forward_propogation_time_(NAN)
+
+    , vis_(vis)
+    , visualization_enabled_globally_(visualization_enabled)
+    , gripper_a_forward_tree_color_(Visualizer::Magenta())
+    , gripper_b_forward_tree_color_(Visualizer::Red())
+    , gripper_a_backward_tree_color_(Visualizer::Yellow())
+    , gripper_b_backward_tree_color_(Visualizer::Cyan())
+    , band_tree_color_(Visualizer::Blue())
 {
     assert(task_aligned_lower_limits_.x() <= task_aligned_upper_limits_.x());
     assert(task_aligned_lower_limits_.y() <= task_aligned_upper_limits_.y());
@@ -510,8 +521,200 @@ RRTHelper::RRTHelper(
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Helper functions for extral RRT planning class
+// Helper functions for external RRT planning class
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+size_t rebuildNNIndex(flann::KDTreeSingleIndex<flann::L2_Victor<float>>& index, std::vector<float>& nn_raw_data, const std::vector<RRTNode, RRTAllocator>& tree, const size_t new_data_start_idx)
+{
+    static constexpr size_t DIMENSIONS = 14;
+
+    nn_raw_data.resize(DIMENSIONS * tree.size());
+    for (size_t idx = new_data_start_idx; idx < tree.size(); ++idx)
+    {
+        const auto& robot_config = tree[idx].getRobotConfiguration();
+
+        nn_raw_data[DIMENSIONS * idx + 0] = (float)robot_config.first(0);
+        nn_raw_data[DIMENSIONS * idx + 1] = (float)robot_config.first(1);
+        nn_raw_data[DIMENSIONS * idx + 2] = (float)robot_config.first(2);
+        nn_raw_data[DIMENSIONS * idx + 3] = (float)robot_config.first(3);
+        nn_raw_data[DIMENSIONS * idx + 4] = (float)robot_config.first(4);
+        nn_raw_data[DIMENSIONS * idx + 5] = (float)robot_config.first(5);
+        nn_raw_data[DIMENSIONS * idx + 6] = (float)robot_config.first(6);
+
+        nn_raw_data[DIMENSIONS * idx + 7] = (float)robot_config.second(0);
+        nn_raw_data[DIMENSIONS * idx + 8] = (float)robot_config.second(1);
+        nn_raw_data[DIMENSIONS * idx + 9] = (float)robot_config.second(2);
+        nn_raw_data[DIMENSIONS * idx + 10] = (float)robot_config.second(3);
+        nn_raw_data[DIMENSIONS * idx + 11] = (float)robot_config.second(4);
+        nn_raw_data[DIMENSIONS * idx + 12] = (float)robot_config.second(5);
+        nn_raw_data[DIMENSIONS * idx + 13] = (float)robot_config.second(6);
+    }
+
+
+    // A KDTree with more than 1 tree doesn't make any sense with an exact sarch apparently
+//    flann::KDTreeIndex<flann::L2_Victor<float>> test_index(flann::KDTreeIndexParams(4));
+//    test_index.addPoints(points);
+//    test_index.knnSearch()
+
+//    const float precision = 1.0f;
+//    const float build_weight = 0.05f;
+//    const float memory_weight = 0.0f;
+//    const float sample_fraction = 0.1f;
+//    flann::AutotunedIndex<flann::L2_Victor<float>> test_index(flann::AutotunedIndexParams(precision, build_weight, memory_weight, sample_fraction));
+
+
+    if (new_data_start_idx != 0)
+    {
+        flann::Matrix<float> data(&nn_raw_data[DIMENSIONS * new_data_start_idx], tree.size() - new_data_start_idx, DIMENSIONS);
+        index.addPoints(data);
+    }
+    else
+    {
+        flann::Matrix<float> data(nn_raw_data.data(), tree.size(), DIMENSIONS);
+        index.buildIndex(data);
+    }
+
+    return tree.size();
+}
+
+std::pair<int64_t, double> getNearest(const RRTRobotRepresentation& robot_config, const flann::KDTreeSingleIndex<flann::L2_Victor<float>>& index)
+{
+    static constexpr size_t DIMENSIONS = 14;
+    std::pair<int64_t, double> nearest(-1, std::numeric_limits<double>::infinity());
+
+    std::array<float, DIMENSIONS> std_query;
+    for (size_t i = 0; i < 7; ++i)
+    {
+        std_query[i] = (float)robot_config.first(i);
+    }
+    for (size_t i = 0; i < 7; ++i)
+    {
+        std_query[7 + i] = (float)robot_config.second(i);
+    }
+    flann::Matrix<float> query(std_query.data(), 1, DIMENSIONS);
+
+    const size_t knn = 1;
+    std::vector<std::vector<size_t>> indices(query.rows, std::vector<size_t>(knn, -1));
+    std::vector<std::vector<float>> dists(query.rows, std::vector<float>(knn, INFINITY));
+
+    const float eps = 0.0;
+    flann::SearchParams params(flann::flann_checks_t::FLANN_CHECKS_UNLIMITED, eps);
+    index.knnSearch(query, indices, dists, knn, params);
+    nearest.first = indices[0][0];
+    nearest.second = dists[0][0];
+
+    return nearest;
+}
+
+template <bool planning_for_whole_robot>
+std::pair<int64_t, double> getNearest(const RRTNode& config, const std::vector<RRTNode, RRTAllocator>& tree, const size_t start_idx)
+{
+//    std::cout << "linear nn start idx: " << start_idx << "\n";
+
+    std::pair<int64_t, double> nearest(-1, std::numeric_limits<double>::infinity());
+
+    const auto distance_fn = [&] (const RRTNode& other)
+    {
+        double blacklist_penalty = 0.0;
+//        if (other.isBlacklisted())
+//        {
+//            blacklist_penalty = RRTHelper::NN_BLACKLIST_DISTANCE;
+//        }
+
+        if (!planning_for_whole_robot)
+        {
+            return blacklist_penalty + RRTNode::distanceSquared(config.getGrippers(), other.getGrippers());
+        }
+        else
+        {
+            return blacklist_penalty + RRTNode::distanceSquared(config.getRobotConfiguration(), other.getRobotConfiguration());
+        }
+    };
+
+    std::vector<std::pair<int64_t, double>> per_thread_nearest(arc_helpers::GetNumOMPThreads(), nearest);
+    #pragma omp parallel for
+    for (size_t idx = start_idx; idx < tree.size(); idx++)
+    {
+        const RRTNode& item = tree[idx];
+        const double distance = distance_fn(item);
+        const size_t thread_num = (size_t)omp_get_thread_num();
+
+        std::pair<int64_t, double>& current_thread_nearest = per_thread_nearest[thread_num];
+        if (current_thread_nearest.second > distance)
+        {
+            current_thread_nearest.first = (int64_t)idx;
+            current_thread_nearest.second = distance;
+        }
+    }
+
+    for (size_t thread_idx = 0; thread_idx < per_thread_nearest.size(); thread_idx++)
+    {
+        std::pair<int64_t, double>& current_thread_nearest = per_thread_nearest[thread_idx];
+        if (nearest.second > current_thread_nearest.second)
+        {
+            nearest = current_thread_nearest;
+        }
+    }
+
+    return nearest;
+}
+
+// Searches inclusing start, exclusive end indices [start_idx, stop_idx). I.e getNearest(..., tree, 0, tree.size()) is a valid usage.
+template <bool planning_for_whole_robot>
+std::pair<int64_t, double> getNearest(const RRTNode& config, const std::vector<RRTNode, RRTAllocator>& tree, const size_t start_idx, const size_t stop_idx)
+{
+    const size_t true_stop_idx = std::min(tree.size(), stop_idx);
+    std::pair<int64_t, double> nearest(-1, std::numeric_limits<double>::infinity());
+
+    const auto distance_fn = [&] (const RRTNode& other)
+    {
+        double blacklist_penalty = 0.0;
+//        if (other.isBlacklisted())
+//        {
+//            blacklist_penalty = RRTHelper::NN_BLACKLIST_DISTANCE;
+//        }
+
+        if (!planning_for_whole_robot)
+        {
+            return blacklist_penalty + RRTNode::distanceSquared(config.getGrippers(), other.getGrippers());
+        }
+        else
+        {
+            return blacklist_penalty + RRTNode::distanceSquared(config.getRobotConfiguration(), other.getRobotConfiguration());
+        }
+    };
+
+    std::vector<std::pair<int64_t, double>> per_thread_nearest(1, nearest);//arc_helpers::GetNumOMPThreads(), nearest);
+//    #pragma omp parallel for
+    for (size_t idx = start_idx; idx < true_stop_idx; idx++)
+    {
+        const RRTNode& item = tree[idx];
+        const double distance = distance_fn(item);
+        const size_t thread_num = 1;//(size_t)omp_get_thread_num();
+
+        std::pair<int64_t, double>& current_thread_nearest = per_thread_nearest[thread_num];
+        if (current_thread_nearest.second > distance)
+        {
+            current_thread_nearest.first = (int64_t)idx;
+            current_thread_nearest.second = distance;
+        }
+    }
+
+    for (size_t thread_idx = 0; thread_idx < per_thread_nearest.size(); thread_idx++)
+    {
+        std::pair<int64_t, double>& current_thread_nearest = per_thread_nearest[thread_idx];
+        if (nearest.second > current_thread_nearest.second)
+        {
+            nearest = current_thread_nearest;
+        }
+    }
+
+    return nearest;
+}
+
+
+
+
 
 int64_t RRTHelper::nearestNeighbour(
         const bool use_forward_tree,
@@ -535,234 +738,107 @@ int64_t RRTHelper::nearestNeighbour_internal(
 {
     std::vector<RRTNode, RRTAllocator>* tree = nullptr;
     flann::KDTreeSingleIndex<flann::L2_Victor<float>>* nn_index = nullptr;
-    size_t manual_search_start_idx = 0;
-
-    static constexpr size_t GROW_THRESHOLD = 1000;
-    static constexpr size_t DIMENSIONS = 14;
+    std::vector<float>* nn_raw_data = nullptr;
+    size_t* manual_search_start_idx = nullptr;
 
     if (use_forward_tree)
     {
-        // Check if we should rebuild the KD-Tree
-        if (forward_next_idx_to_add_to_nn_dataset_ + GROW_THRESHOLD <= forward_tree_.size())
-        {
-//            std::cout << "Rebuilding forward tree, size = " << forward_tree_.size() << std::endl;
-
-            for (size_t idx = forward_next_idx_to_add_to_nn_dataset_; idx < forward_tree_.size(); ++idx)
-            {
-                const auto& robot_config = forward_tree_[idx].getRobotConfiguration();
-
-                for (size_t i = 0; i < 7; ++i)
-                {
-                    forward_nn_raw_data_.push_back((float)robot_config.first(i));
-                }
-                for (size_t i = 0; i < 7; ++i)
-                {
-                    forward_nn_raw_data_.push_back((float)robot_config.second(i));
-                }
-            }
-
-            flann::Matrix<float> data(forward_nn_raw_data_.data(), forward_tree_.size(), DIMENSIONS);
-            forward_nn_index_.buildIndex(data);
-            forward_next_idx_to_add_to_nn_dataset_ = forward_tree_.size();
-        }
-
         tree = &forward_tree_;
         nn_index = &forward_nn_index_;
-        manual_search_start_idx = forward_next_idx_to_add_to_nn_dataset_;
+        nn_raw_data = &forward_nn_raw_data_;
+        manual_search_start_idx = &forward_next_idx_to_add_to_nn_dataset_;
     }
     else
     {
-        // Check if we should rebuild the KD-Tree
-        if (backward_next_idx_to_add_to_nn_dataset_ + GROW_THRESHOLD <= backward_tree_.size())
-        {
-//            std::cout << "Rebuilding backward tree, size = " << backward_tree_.size() << std::endl;
-
-            for (size_t idx = backward_next_idx_to_add_to_nn_dataset_; idx < backward_tree_.size(); ++idx)
-            {
-                const auto& robot_config = backward_tree_[idx].getRobotConfiguration();
-
-                for (size_t i = 0; i < 7; ++i)
-                {
-                    backward_nn_raw_data_.push_back((float)robot_config.first(i));
-                }
-                for (size_t i = 0; i < 7; ++i)
-                {
-                    backward_nn_raw_data_.push_back((float)robot_config.second(i));
-                }
-            }
-
-            flann::Matrix<float> data(backward_nn_raw_data_.data(), backward_tree_.size(), DIMENSIONS);
-            backward_nn_index_.buildIndex(data);
-            backward_next_idx_to_add_to_nn_dataset_ = backward_tree_.size();
-        }
-
         tree = &backward_tree_;
         nn_index = &backward_nn_index_;
-        manual_search_start_idx = backward_next_idx_to_add_to_nn_dataset_;
+        nn_raw_data = &backward_nn_raw_data_;
+        manual_search_start_idx = &backward_next_idx_to_add_to_nn_dataset_;
+    }
+
+    // Check if we should rebuild the NN Index
+    if (!use_brute_force_nn_ &&
+        *manual_search_start_idx + kd_tree_grow_threshold_ <= tree->size())
+    {
+        #ifdef SMMAP_VERBOSE
+        ROS_INFO_STREAM_THROTTLE_NAMED(1.0, "rrt", "Forward tree? " << use_forward_tree << "    Rebuilding NN Index, size = " << tree->size());
+        #endif
+
+        Stopwatch stopwatch;
+        arc_helpers::DoNotOptimize(*manual_search_start_idx);
+        *manual_search_start_idx = rebuildNNIndex(*nn_index, *nn_raw_data, *tree, *manual_search_start_idx);
+        arc_helpers::DoNotOptimize(*manual_search_start_idx);
+        const double index_building_time = stopwatch(READ);
+        total_nearest_neighbour_index_building_time_ += index_building_time;
     }
 
     // If we have a FLANN index to search
     std::pair<int64_t, double> nearest(-1, std::numeric_limits<double>::infinity());
-    if (manual_search_start_idx > 0)
+    if (!use_brute_force_nn_ && *manual_search_start_idx > 0)
     {
-        const auto& robot_config = config.getRobotConfiguration();
-        std::array<float, DIMENSIONS> std_query;
-        for (size_t i = 0; i < 7; ++i)
-        {
-            std_query[i] = (float)robot_config.first(i);
-        }
-        for (size_t i = 0; i < 7; ++i)
-        {
-            std_query[7 + i] = (float)robot_config.second(i);
-        }
-        flann::Matrix<float> query(std_query.data(), 1, DIMENSIONS);
+        Stopwatch stopwatch;
+        arc_helpers::DoNotOptimize(config);
+        nearest = getNearest(config.getRobotConfiguration(), *nn_index);
+        arc_helpers::DoNotOptimize(nearest);
+        const double index_searching_time = stopwatch(READ);
+        total_nearest_neighbour_index_searching_time_ += index_searching_time;
 
-        const size_t knn = 1;
-        std::vector<std::vector<size_t>> indices(query.rows, std::vector<size_t>(knn, -1));
-        std::vector<std::vector<float>> dists(query.rows, std::vector<float>(knn, INFINITY));
+        // Confirm no meaningful mistaktes made
+//        const auto linear_nearest = getNearest(config, planning_for_whole_robot_, *tree, 0, *manual_search_start_idx);
+//        if (linear_nearest.first != nearest.first)
+//        {
+//            const auto& flann_near = (*tree)[nearest.first];
+//            const auto& linear_near = (*tree)[linear_nearest.first];
 
-        const float eps = 0.0;
-        flann::SearchParams params(flann::flann_checks_t::FLANN_CHECKS_UNLIMITED, eps);
+//            std::cout << "Mismatch between FLANN and Linear Search: " << " Forward tree? " << use_forward_tree << std::endl
+//                      << "FLANN:  " << " Idx: " << nearest.first        << " Dist: " << RRTNode::distanceSquared(config.getRobotConfiguration(), flann_near.getRobotConfiguration()) << " Flann Dist:  " << nearest.second << std::endl
+//                      << "Linear: " << " Idx: " << linear_nearest.first << " Dist: " << RRTNode::distanceSquared(config.getRobotConfiguration(), linear_near.getRobotConfiguration()) << std::endl
+//                      << "Target: " << config.print() << std::endl
+//                      << "FLANN:  " << flann_near.print() << std::endl
+//                      << "Linear: " << linear_near.print() << std::endl
+//                      << "Delta:  " << (flann_near.getRobotConfiguration().first - linear_near.getRobotConfiguration().first).transpose() << "  " << (flann_near.getRobotConfiguration().second - linear_near.getRobotConfiguration().second).transpose() << std::endl
+//                      << "Delta dist: " << RRTNode::distanceSquared(flann_near.getRobotConfiguration(), linear_near.getRobotConfiguration()) << std::endl
+//                      << std::endl;
 
-
-//        nn_index->knnSearch(query, indices, dists, knn, params);
-
-
-
-        flann::KNNSimpleResultSet<float> resultSet(knn);
-        resultSet.clear();
-        nn_index->findNeighbors(resultSet, query[0], params);
-        size_t n = std::min(resultSet.size(), knn);
-        if (n == 1)
-        {
-            resultSet.copy(&indices[0][0], &dists[0][0], n, params.sorted);
-        }
-        else
-        {
-            std::cout << "NN returned something weird. WTF. " << n << "\n";
-        }
-
-
-//        std::cout << "FLANN Results:\n"
-//                  << "  Indices: " << PrettyPrint::PrettyPrint(indices, true, " ")
-//                  << "  Dists:   " << PrettyPrint::PrettyPrint(dists, true, " ")
-//                  << std::endl;
-
-        nearest.first = indices[0][0];
-        nearest.second = dists[0][0];
+//            char c;
+//            std::cin >> c;
+//        }
     }
 
     // If we have data that isn't in the FLANN index
-    if (manual_search_start_idx < tree->size())
+    if (*manual_search_start_idx < tree->size())
     {
-        const auto distance_fn = [&] (const RRTNode& other)
+        Stopwatch stopwatch;
+        arc_helpers::DoNotOptimize(*manual_search_start_idx);
+
+        // Move the if statement from inside of the distance function to outside via templates
+        std::pair<int64_t, double> linear_nearest(-1, std::numeric_limits<double>::infinity());
+        if (planning_for_whole_robot_)
         {
-            double blacklist_penalty = 0.0;
-            if (config.isBlacklisted() || other.isBlacklisted())
-            {
-                blacklist_penalty = NN_BLACKLIST_DISTANCE;
-            }
-
-            if (!planning_for_whole_robot_)
-            {
-                return blacklist_penalty + RRTNode::distanceSquared(config.getGrippers(), other.getGrippers());
-            }
-            else
-            {
-                return blacklist_penalty + RRTNode::distanceSquared(config.getRobotConfiguration(), other.getRobotConfiguration());
-            }
-        };
-
-        std::vector<std::pair<int64_t, double>> per_thread_nearest(arc_helpers::GetNumOMPThreads(), nearest);
-        #pragma omp parallel for
-        for (size_t idx = manual_search_start_idx; idx < tree->size(); idx++)
-        {
-            const RRTNode& item = (*tree)[idx];
-            const double distance = distance_fn(item);
-            const size_t thread_num = (size_t)omp_get_thread_num();
-
-            std::pair<int64_t, double>& current_thread_nearest = per_thread_nearest[thread_num];
-            if (current_thread_nearest.second > distance)
-            {
-                current_thread_nearest.first = (int64_t)idx;
-                current_thread_nearest.second = distance;
-            }
+            linear_nearest = getNearest<true>(config, *tree, *manual_search_start_idx);
         }
-
-        for (size_t thread_idx = 0; thread_idx < per_thread_nearest.size(); thread_idx++)
+        else
         {
-            std::pair<int64_t, double>& current_thread_nearest = per_thread_nearest[thread_idx];
-            if (nearest.second > current_thread_nearest.second)
-            {
-                nearest = current_thread_nearest;
-            }
+            linear_nearest = getNearest<false>(config, *tree, *manual_search_start_idx);
         }
-    }
-
-    // Testing to make sure things work
-    if (false)
-    {
-        const auto distance_fn = [&] (const RRTNode& c1, const RRTNode& c2)
+        if (linear_nearest.second < nearest.second)
         {
-            double blacklist_penalty = 0.0;
-            if (c1.isBlacklisted() || c2.isBlacklisted())
-            {
-                blacklist_penalty = NN_BLACKLIST_DISTANCE;
-            }
-
-            if (!planning_for_whole_robot_)
-            {
-                return blacklist_penalty + RRTNode::distanceSquared(c1.getGrippers(), c2.getGrippers());
-            }
-            else
-            {
-                return blacklist_penalty + RRTNode::distanceSquared(c1.getRobotConfiguration(), c2.getRobotConfiguration());
-            }
-        };
-
-        std::pair<int64_t, double> nearest_brute_force = arc_helpers::GetNearestNeighbor<RRTNode, RRTNode, RRTAllocator>(*tree, config, distance_fn);
-        if (nearest_brute_force.first != nearest.first)
-        {
-            std::array<float, DIMENSIONS> stacked_config;
-            for (size_t i = 0; i < 7; ++i)
-            {
-                stacked_config[i] = (float)config.getRobotConfiguration().first(i);
-            }
-            for (size_t i = 0; i < 7; ++i)
-            {
-                stacked_config[7 + i] = (float)config.getRobotConfiguration().second(i);
-            }
-
-            std::array<float, DIMENSIONS> stacked_flann_nearest;
-            for (size_t i = 0; i < 7; ++i)
-            {
-                stacked_flann_nearest[i] = (float)(*tree)[nearest.first].getRobotConfiguration().first(i);
-            }
-            for (size_t i = 0; i < 7; ++i)
-            {
-                stacked_flann_nearest[7 + i] = (float)(*tree)[nearest.first].getRobotConfiguration().second(i);
-            }
-
-            flann::L2_Victor<float> dist_functor;
-            const double flann_dist = dist_functor(stacked_config.data(), stacked_flann_nearest.data(), DIMENSIONS, -1);
-            const double internal_dist = distance_fn(config, (*tree)[nearest.first]);
-
-            std::cout << "!!!!!!!!!!!\n"
-                      << "Config:        " << print(config.getRobotConfiguration()) << std::endl
-                      << "FLANN nearest: " << print((*tree)[nearest.first].getRobotConfiguration()) << std::endl
-                      << " Brute force nearest (idx,dist): " << PrettyPrint::PrettyPrint(nearest_brute_force, true, ",")
-                      << " FLANN nearest (idx,dist): " << PrettyPrint::PrettyPrint(nearest, true, ",")
-                      << " FLANN nearest per our dist function: " << internal_dist
-                      << " FLANN nearest per its dist function: " << flann_dist
-                      << std::endl;
-
-            assert(std::abs(flann_dist - internal_dist) < 1e-4);
+            nearest = linear_nearest;
         }
+        arc_helpers::DoNotOptimize(nearest);
+        const double linear_searching_time = stopwatch(READ);
+        total_nearest_neighbour_linear_searching_time_ += linear_searching_time;
     }
 
     const int64_t nn_idx = nearest.first;
     return nn_idx;
 }
+
+
+
+
+
+
 
 RRTNode RRTHelper::configSampling()
 {
@@ -926,11 +1002,14 @@ bool RRTHelper::goalReached(const RRTNode& node)
 
 const std::pair<bool, RRTRobotRepresentation> RRTHelper::projectToValidConfig(
         const RRTRobotRepresentation& configuration,
-        const AllGrippersSinglePose& poses) const
+        const AllGrippersSinglePose& poses,
+        const bool project_to_rotation_bound,
+        const bool project_to_translation_bound) const
 {
     AllGrippersSinglePose projected_poses = poses;
 
     // Check if we rotated the grippers too much
+    if (project_to_rotation_bound)
     {
         const double gripper_a_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_[0].rotation(), poses[0].rotation());
         const double gripper_b_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_[1].rotation(), poses[1].rotation());
@@ -953,6 +1032,7 @@ const std::pair<bool, RRTRobotRepresentation> RRTHelper::projectToValidConfig(
     }
 
     // Check if the grippers moved outside of the planning arena
+    if (project_to_translation_bound)
     {
         Eigen::Vector3d task_aligned_gripper_a_constrained_position = task_aligned_frame_inverse_transform_ * poses[0].translation();
         Eigen::Vector3d task_aligned_gripper_b_constrained_position = task_aligned_frame_inverse_transform_ * poses[1].translation();
@@ -1060,7 +1140,6 @@ size_t RRTHelper::forwardPropogationFunction(
 
             const AllGrippersSinglePose next_grippers_poses = robot_->getGrippersPoses(next_robot_configuration);
             const RRTGrippersRepresentation next_grippers_position(next_grippers_poses[0].translation(), next_grippers_poses[1].translation());
-
             // Check gripper position and rotation constraints
             {
                 // Check if we rotated the grippers too much
@@ -1175,7 +1254,14 @@ size_t RRTHelper::forwardPropogationFunction(
             const AllGrippersSinglePose next_grippers_poses_pre_projection = robot_->getGrippersPoses(next_robot_configuration_pre_projection);
 
             // Project and check the projection result for failure
-            const auto next_robot_configuration_projection_result = projectToValidConfig(next_robot_configuration_pre_projection, next_grippers_poses_pre_projection);
+            const bool project_to_rotation_bound = true;
+            const bool project_to_translation_bound = false;
+            const auto next_robot_configuration_projection_result =
+                    projectToValidConfig(
+                        next_robot_configuration_pre_projection,
+                        next_grippers_poses_pre_projection,
+                        project_to_rotation_bound,
+                        project_to_translation_bound);
             const RRTRobotRepresentation& next_robot_configuration = next_robot_configuration_projection_result.second;
             arc_helpers::DoNotOptimize(next_robot_configuration);
             const double projection_time = stopwatch(READ);
@@ -1205,6 +1291,38 @@ size_t RRTHelper::forwardPropogationFunction(
                 }
             }
 
+            const AllGrippersSinglePose next_grippers_poses = robot_->getGrippersPoses(next_robot_configuration);
+            const RRTGrippersRepresentation next_grippers_position(next_grippers_poses[0].translation(), next_grippers_poses[1].translation());
+            // Check gripper position and rotation constraints if we did not project to them
+            {
+                // Check if we rotated the grippers too much
+                if (!project_to_rotation_bound)
+                {
+                    const double gripper_a_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_[0].rotation(), next_grippers_poses[0].rotation());
+                    const double gripper_b_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_[1].rotation(), next_grippers_poses[1].rotation());
+                    if (gripper_a_rotation_dist > max_gripper_rotation_ || gripper_b_rotation_dist > max_gripper_rotation_)
+                    {
+                        break;
+                    }
+                }
+
+                // If the grippers move outside of the planning arena
+                if (!project_to_translation_bound)
+                {
+                    auto task_frame_next_grippers_position = next_grippers_position;
+                    task_frame_next_grippers_position.first = task_aligned_frame_inverse_transform_ * task_frame_next_grippers_position.first;
+                    task_frame_next_grippers_position.second = task_aligned_frame_inverse_transform_ * task_frame_next_grippers_position.second;
+
+                    if ((task_frame_next_grippers_position.first.array() > task_aligned_upper_limits_.array()).any() ||
+                        (task_frame_next_grippers_position.first.array() < task_aligned_lower_limits_.array()).any() ||
+                        (task_frame_next_grippers_position.second.array() > task_aligned_upper_limits_.array()).any() ||
+                        (task_frame_next_grippers_position.second.array() < task_aligned_lower_limits_.array()).any())
+                    {
+                        break;
+                    }
+                }
+            }
+
             // Colision checking
             {
                 stopwatch(RESET);
@@ -1218,9 +1336,6 @@ size_t RRTHelper::forwardPropogationFunction(
                     break;
                 }
             }
-
-            const AllGrippersSinglePose next_grippers_poses = robot_->getGrippersPoses(next_robot_configuration);
-            const RRTGrippersRepresentation next_grippers_position(next_grippers_poses[0].translation(), next_grippers_poses[1].translation());
 
             RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
             if (extend_band)
@@ -1420,9 +1535,15 @@ size_t RRTHelper::forwardPropogationFunction(
     return nodes_created;
 }
 
+
+
+
 std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
 {
     total_sampling_time_ = 0.0;
+    total_nearest_neighbour_index_building_time_ = 0.0;
+    total_nearest_neighbour_index_searching_time_ = 0.0;
+    total_nearest_neighbour_linear_searching_time_ = 0.0;
     total_nearest_neighbour_time_ = 0.0;
     total_projection_time_ = 0.0;
     total_collision_check_time_ = 0.0;
@@ -1443,6 +1564,156 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     int64_t goal_idx_in_forward_tree = -1;
 
 
+
+#if 0
+    std::vector<RRTRobotRepresentation> first(10000000);
+    std::vector<RRTRobotRepresentation> second(first.size());
+    std::vector<std::vector<float>> first_float_representation(first.size());
+    std::vector<std::vector<float>> second_float_representation(second.size());
+    std::vector<std::vector<double>> first_double_representation(first.size());
+    std::vector<std::vector<double>> second_double_representation(second.size());
+    for (size_t i = 0; i < first.size(); ++i)
+    {
+        const auto first_sample = robotConfigPairSampling_internal();
+        const auto second_sample = robotConfigPairSampling_internal();
+
+        std::vector<float> first_float_data = {
+            (float)first_sample.first[0],
+            (float)first_sample.first[1],
+            (float)first_sample.first[2],
+            (float)first_sample.first[3],
+            (float)first_sample.first[4],
+            (float)first_sample.first[5],
+            (float)first_sample.first[6],
+            (float)first_sample.second[0],
+            (float)first_sample.second[1],
+            (float)first_sample.second[2],
+            (float)first_sample.second[3],
+            (float)first_sample.second[4],
+            (float)first_sample.second[5],
+            (float)first_sample.second[6]
+        };
+
+        std::vector<float> second_float_data = {
+            (float)second_sample.first[0],
+            (float)second_sample.first[1],
+            (float)second_sample.first[2],
+            (float)second_sample.first[3],
+            (float)second_sample.first[4],
+            (float)second_sample.first[5],
+            (float)second_sample.first[6],
+            (float)second_sample.second[0],
+            (float)second_sample.second[1],
+            (float)second_sample.second[2],
+            (float)second_sample.second[3],
+            (float)second_sample.second[4],
+            (float)second_sample.second[5],
+            (float)second_sample.second[6]
+        };
+
+        std::vector<double> first_double_data = {
+            first_sample.first[0],
+            first_sample.first[1],
+            first_sample.first[2],
+            first_sample.first[3],
+            first_sample.first[4],
+            first_sample.first[5],
+            first_sample.first[6],
+            first_sample.second[0],
+            first_sample.second[1],
+            first_sample.second[2],
+            first_sample.second[3],
+            first_sample.second[4],
+            first_sample.second[5],
+            first_sample.second[6]
+        };
+
+        std::vector<double> second_double_data = {
+            second_sample.first[0],
+            second_sample.first[1],
+            second_sample.first[2],
+            second_sample.first[3],
+            second_sample.first[4],
+            second_sample.first[5],
+            second_sample.first[6],
+            second_sample.second[0],
+            second_sample.second[1],
+            second_sample.second[2],
+            second_sample.second[3],
+            second_sample.second[4],
+            second_sample.second[5],
+            second_sample.second[6]
+        };
+
+        first[i] = first_sample;
+        second[i] = second_sample;
+
+        first_float_representation[i] = first_float_data;
+        second_float_representation[i] = second_float_data;
+
+        first_double_representation[i] = first_double_data;
+        second_double_representation[i] = second_double_data;
+    }
+
+
+
+
+    {
+        flann::L2_Victor<float> distance;
+        Stopwatch stopwatch;
+        arc_helpers::DoNotOptimize(stopwatch);
+        for (size_t i = 0; i < first.size(); ++i)
+        {
+            const auto& first_sample = first_float_representation[i];
+            const auto& second_sample = second_float_representation[i];
+            const double d = distance(first_sample.data(), second_sample.data(), 14, -1);
+            arc_helpers::DoNotOptimize(d);
+        }
+        const auto time = stopwatch(READ);
+        arc_helpers::DoNotOptimize(time);
+        std::cout << "FLANN<float> time for " << first.size() << " distance checks:      " << time << std::endl;
+    }
+
+    {
+        flann::L2_Victor<double> distance;
+        Stopwatch stopwatch;
+        arc_helpers::DoNotOptimize(stopwatch);
+        for (size_t i = 0; i < first.size(); ++i)
+        {
+            const auto& first_sample = first_double_representation[i];
+            const auto& second_sample = second_double_representation[i];
+            const double d = distance(first_sample.data(), second_sample.data(), 14, -1);
+            arc_helpers::DoNotOptimize(d);
+        }
+        const auto time = stopwatch(READ);
+        arc_helpers::DoNotOptimize(time);
+        std::cout << "FLANN<double> time for " << first.size() << " distance checks:     " << time << std::endl;
+    }
+
+    {
+        Stopwatch stopwatch;
+        arc_helpers::DoNotOptimize(stopwatch);
+        for (size_t i = 0; i < first.size(); ++i)
+        {
+            const auto& first_sample = first[i];
+            const auto& second_sample = second[i];
+            const double d = RRTNode::distanceSquared(first_sample, second_sample);
+            arc_helpers::DoNotOptimize(d);
+        }
+        const auto time = stopwatch(READ);
+        arc_helpers::DoNotOptimize(time);
+        std::cout << "RRTNode::Distance time for " << first.size() << " distance checks: " << time << std::endl;
+    }
+#endif
+
+
+
+
+
+
+
+
+
     // Make sure we've been given a start and goal state
     assert(forward_tree_.size() > 0);
     assert(backward_tree_.size() > 0);
@@ -1458,11 +1729,12 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
 
     // Plan
     std::cout << "Starting planning..." << std::endl;
-    while (!path_found_ && (std::chrono::steady_clock::now() - start_time) < time_limit_)
+    std::chrono::duration<double> time_ellapsed = std::chrono::steady_clock::now() - start_time;
+    while (!path_found_ && time_ellapsed < time_limit_)
     {
         if (forward_iteration_)
         {
-            for (size_t itr = 0; !path_found_ && itr < forward_tree_extend_iterations_; ++itr)
+            for (size_t itr = 0; !path_found_ && itr < forward_tree_extend_iterations_ && time_ellapsed < time_limit_; ++itr)
             {
                 //////////////// Extend (connect) the first tree towards a random target ////////////////
                 const bool extend_band = true;
@@ -1597,11 +1869,18 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                         }
                     }
                 }
+
+                time_ellapsed = std::chrono::steady_clock::now() - start_time;
             }
+
+#ifdef SMMAP_VERBOSE
+                std::cout << "Forward samples useful:   " << forward_random_samples_useful << std::endl
+                          << "Forward samples useless:  " << forward_random_samples_useless << std::endl;
+#endif
         }
         else
         {
-            for (size_t itr = 0; itr < backward_tree_extend_iterations_; ++itr)
+            for (size_t itr = 0; itr < backward_tree_extend_iterations_ && time_ellapsed < time_limit_; ++itr)
             {
                 //////////////// Extend (connect) the backward tree towards a random target ////////////////
                 const bool extend_band = false;
@@ -1629,8 +1908,19 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                 {
                     ++backward_random_samples_useless;
                 }
+
+                time_ellapsed = std::chrono::steady_clock::now() - start_time;
             }
+
+#ifdef SMMAP_VERBOSE
+        std::cout << "Backward samples useful:  " << backward_random_samples_useful << std::endl
+                  << "Backward samples useless: " << backward_random_samples_useless << std::endl;
+#endif
         }
+
+#ifdef SMMAP_VERBOSE
+        std::cout << "Time ellapsed: " << time_ellapsed.count() << std::endl;
+#endif
 
         forward_iteration_ = !forward_iteration_;
     }
@@ -1650,13 +1940,16 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     const std::chrono::duration<double> planning_time(cur_time - start_time);
 
     planning_statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
+    planning_statistics_["planning_time1_1_nearest_neighbour_index_building       "] = total_nearest_neighbour_index_building_time_;
+    planning_statistics_["planning_time1_2_nearest_neighbour_index_searching      "] = total_nearest_neighbour_index_searching_time_;
+    planning_statistics_["planning_time1_3_nearest_neighbour_linear_searching     "] = total_nearest_neighbour_linear_searching_time_;
     planning_statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
-    planning_statistics_["planning_time2_forward_propogation_projection           "] = total_projection_time_;
-    planning_statistics_["planning_time3_forward_propogation_collision_check      "] = total_collision_check_time_;
-    planning_statistics_["planning_time4_forward_propogation_band_sim             "] = total_band_forward_propogation_time_;
-    planning_statistics_["planning_time5_forward_propogation_first_order_vis      "] = total_first_order_vis_propogation_time_;
-    planning_statistics_["planning_time6_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
-    planning_statistics_["planning_time7_total                                    "] = planning_time.count();
+    planning_statistics_["planning_time2_1_forward_propogation_projection         "] = total_projection_time_;
+    planning_statistics_["planning_time2_2_forward_propogation_collision_check    "] = total_collision_check_time_;
+    planning_statistics_["planning_time2_3_forward_propogation_band_sim           "] = total_band_forward_propogation_time_;
+    planning_statistics_["planning_time2_4_forward_propogation_first_order_vis    "] = total_first_order_vis_propogation_time_;
+    planning_statistics_["planning_time2_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
+    planning_statistics_["planning_time3_total                                    "] = planning_time.count();
 
     planning_statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless;
     planning_statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful;
@@ -1765,14 +2058,12 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     // Clear the forward tree flann data
     forward_nn_raw_data_.clear();
     forward_nn_raw_data_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 100000) * (start.getRobotConfiguration().first.size() + start.getRobotConfiguration().second.size()));
-//    forward_nn_dataset_ = flann::Matrix<float>();
     forward_nn_index_ = flann::KDTreeSingleIndex<flann::L2_Victor<float>>();
     forward_next_idx_to_add_to_nn_dataset_ = 0;
 
     // Clear the backward tree flann data
     backward_nn_raw_data_.clear();
     backward_nn_raw_data_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 100000) * (start.getRobotConfiguration().first.size() + start.getRobotConfiguration().second.size()));
-//    backward_nn_dataset_ = flann::Matrix<float>();
     backward_nn_index_ = flann::KDTreeSingleIndex<flann::L2_Victor<float>>();
     backward_next_idx_to_add_to_nn_dataset_ = 0;
 
@@ -1845,6 +2136,9 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         return path;
     }
 }
+
+
+
 
 /* Checks the planner tree to make sure the parent-child linkages are correct
  */
@@ -2337,7 +2631,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
             // Essentially this checks if there is a kink in the path
             if (EigenHelpers::IsApprox(path_distance, minimum_distance, 1e-6))
             {
-                std::cout << "No smoothing possible, continuing\n";
+//                std::cout << "No smoothing possible, continuing\n";
                 ++failed_iterations;
                 continue;
             }
@@ -2353,9 +2647,9 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
             if (!robotConfigurationsAreApproximatelyEqual(last_robot_configuration, target_robot_configuration))
             {
-                std::cout << "Shortcut failed, continuing"
-                          << "   Robot configuration equal? " << robotConfigurationsAreApproximatelyEqual(last_robot_configuration, target_robot_configuration)
-                          << "\n";
+//                std::cout << "Shortcut failed, continuing"
+//                          << "   Robot configuration equal? " << robotConfigurationsAreApproximatelyEqual(last_robot_configuration, target_robot_configuration)
+//                          << "\n";
                 ++failed_iterations;
                 continue;
             }
@@ -2493,10 +2787,10 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
             const bool final_band_visible_to_blacklist = isBandFirstOrderVisibileToBlacklist(*final_node_of_smoothing.getBand());
             if (!final_band_at_goal_success || final_band_visible_to_blacklist)
             {
-                std::cout << "Shortcut failed, continuing "
-                          << "    Band at goal? " << final_band_at_goal_success
-                          << "    Band visible? " << final_band_visible_to_blacklist
-                          << "\n";
+//                std::cout << "Shortcut failed, continuing "
+//                          << "    Band at goal? " << final_band_at_goal_success
+//                          << "    Band visible? " << final_band_visible_to_blacklist
+//                          << "\n";
                 ++failed_iterations;
                 continue;
             }
@@ -2504,7 +2798,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
         ///////////////////// Smoothing success - Create the new smoothed path /////////////////////////////////////////
         {
-            std::cout << "Smoothing valid\n";
+//            std::cout << "Smoothing valid\n";
 
             // Allocate space for the total smoothed path
             std::vector<RRTNode, RRTAllocator> smoothed_path;

@@ -163,7 +163,7 @@ namespace smmap
             size_t global_plan_current_timestep_;
             AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
             std::vector<Eigen::VectorXd> global_plan_full_robot_trajectory_;
-            std::unique_ptr<RRTHelper> rrt_helper_;
+            std::shared_ptr<RRTHelper> rrt_helper_;
             std::shared_ptr<PRMHelper> prm_helper_;
 
             // These are both intended only for logging purposes, the individual

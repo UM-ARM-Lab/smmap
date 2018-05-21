@@ -37,14 +37,16 @@ namespace flann
         ResultType operator()(Iterator1 a, Iterator2 b, size_t size, ResultType worst_dist = -1) const
         {
             #warning message "Magic number for robot DOF weights in code"
-            static constexpr float DOF_WEIGHTS[] = {1.9206f, 1.7829f, 1.5912f, 1.4280f, 1.2169f, 1.0689f, 0.8613f,
-                                                    1.9206f, 1.7829f, 1.5912f, 1.4280f, 1.2169f, 1.0689f, 0.8613f};
+            static constexpr ElementType DOF_WEIGHTS[] = {
+                (ElementType)1.9206, (ElementType)1.7829, (ElementType)1.5912, (ElementType)1.4280, (ElementType)1.2169, (ElementType)1.0689, (ElementType)0.8613,
+                (ElementType)1.9206, (ElementType)1.7829, (ElementType)1.5912, (ElementType)1.4280, (ElementType)1.2169, (ElementType)1.0689, (ElementType)0.8613
+            };
 
             (void)size;
             ResultType result = 0.0;
             ResultType diff0, diff1, diff2, diff3;
             Iterator1 start = a;
-            float const * w = &DOF_WEIGHTS[0]; // pointer to a const float
+            ElementType const * w = &DOF_WEIGHTS[0]; // pointer to a const ElementType
 
             /* Process 4 items with each loop for efficiency. */
             while (a < start + 12)
@@ -81,8 +83,10 @@ namespace flann
         inline ResultType accum_dist(const U& a, const V& b, int ind) const
         {
             #warning message "Magic number for robot DOF weights in code"
-            static constexpr float DOF_WEIGHTS2[] = {3.6885707f, 3.17881391f, 2.53183486f, 2.0392053f, 1.48086104f, 1.14257071f, 0.74185964f,
-                                                     3.6885707f, 3.17881391f, 2.53183486f, 2.0392053f, 1.48086104f, 1.14257071f, 0.74185964f};
+            static constexpr ElementType DOF_WEIGHTS2[] = {
+                (ElementType)3.6885707, (ElementType)3.17881391, (ElementType)2.53183486, (ElementType)2.0392053, (ElementType)1.48086104, (ElementType)1.14257071, (ElementType)0.74185964,
+                (ElementType)3.6885707, (ElementType)3.17881391, (ElementType)2.53183486, (ElementType)2.0392053, (ElementType)1.48086104, (ElementType)1.14257071, (ElementType)0.74185964
+            };
             return (a-b) * (a-b) * DOF_WEIGHTS2[ind];
         }
     };
@@ -191,16 +195,25 @@ namespace smmap
             static constexpr auto RRT_SOLUTION_RUBBER_BAND_NS    = "rrt_solution_rubber_band";
 
             RRTHelper(
+                    // Robot/environment related parameters
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
                     const RobotInterface::Ptr robot,
                     const sdf_tools::SignedDistanceField::ConstPtr environment_sdf,
-                    const smmap_utilities::Visualizer::Ptr vis,
-                    const std::shared_ptr<std::mt19937_64>& generator,
                     const PRMHelper::Ptr& prm_helper,
+                    const std::shared_ptr<std::mt19937_64>& generator,
+                    // Planning algorithm parameters
                     const bool using_cbirrt_style_projection,
                     const size_t forward_tree_extend_iterations,
                     const size_t backward_tree_extend_iterations,
+                    const size_t kd_tree_grow_threshold,
+                    const bool use_brute_force_nn,
+                    const double goal_bias,
+                    // Smoothing parameters
+                    const int64_t max_shortcut_index_distance,
+                    const uint32_t max_smoothing_iterations,
+                    const uint32_t max_failed_smoothing_iterations,
+                    // Task defined parameters
                     const Eigen::Isometry3d& task_aligned_frame,
                     const Eigen::Vector3d& task_aligned_lower_limits,
                     const Eigen::Vector3d& task_aligned_upper_limits,
@@ -208,13 +221,11 @@ namespace smmap
                     const double max_robot_dof_step_size,
                     const double min_robot_dof_step_size,
                     const double max_gripper_rotation,
-                    const double goal_bias,
                     const double goal_reach_radius,
                     const double gripper_min_distance_to_obstacles,
                     const double homotopy_distance_penalty,
-                    const int64_t max_shortcut_index_distance,
-                    const uint32_t max_smoothing_iterations,
-                    const uint32_t max_failed_smoothing_iterations,
+                    // Visualization
+                    const smmap_utilities::Visualizer::Ptr vis,
                     const bool visualization_enabled);
 
             std::vector<RRTNode, RRTAllocator> plan(
@@ -294,7 +305,9 @@ namespace smmap
 
             const std::pair<bool, RRTRobotRepresentation> projectToValidConfig(
                     const RRTRobotRepresentation& configuration,
-                    const AllGrippersSinglePose& poses) const;
+                    const AllGrippersSinglePose& poses,
+                    const bool project_to_rotation_bound,
+                    const bool project_to_translation_bound) const;
 
             size_t forwardPropogationFunction(std::vector<RRTNode, RRTAllocator>& tree_to_extend,
                     const int64_t& nearest_neighbor_idx,
@@ -325,18 +338,10 @@ namespace smmap
             const RobotInterface::Ptr robot_;
             // TODO: replace this with a shared pointer
             const sdf_tools::SignedDistanceField::ConstPtr environment_sdf_;
+            PRMHelper::Ptr prm_helper_;
+            const std::shared_ptr<std::mt19937_64> generator_;
+            std::uniform_real_distribution<double> uniform_unit_distribution_;
 
-            const smmap_utilities::Visualizer::Ptr vis_;
-            const bool visualization_enabled_globally_;
-
-        public:
-//            const std_msgs::ColorRGBA band_safe_color_;
-//            const std_msgs::ColorRGBA band_overstretched_color_;
-            const std_msgs::ColorRGBA gripper_a_forward_tree_color_;
-            const std_msgs::ColorRGBA gripper_b_forward_tree_color_;
-            const std_msgs::ColorRGBA gripper_a_backward_tree_color_;
-            const std_msgs::ColorRGBA gripper_b_backward_tree_color_;
-            const std_msgs::ColorRGBA band_tree_color_;
 
         private:
             const Eigen::Isometry3d task_aligned_frame_transform_;
@@ -352,19 +357,16 @@ namespace smmap
             const double homotopy_distance_penalty_;
             const double gripper_min_distance_to_obstacles_;
 
-            const int64_t max_shortcut_index_distance_;
-            const uint32_t max_smoothing_iterations_;
-            const uint32_t max_failed_smoothing_iterations_;
-
-            const std::shared_ptr<std::mt19937_64> generator_;
-            std::uniform_real_distribution<double> uniform_unit_distribution_;
-            std::uniform_int_distribution<int> uniform_shortcut_smoothing_int_distribution_;
-            std::uniform_int_distribution<size_t> arm_a_goal_config_int_distribution_;
-            std::uniform_int_distribution<size_t> arm_b_goal_config_int_distribution_;
-            PRMHelper::Ptr prm_helper_;
             const bool using_cbirrt_style_projection_;
             const size_t forward_tree_extend_iterations_;
             const size_t backward_tree_extend_iterations_;
+            const bool use_brute_force_nn_;
+            const size_t kd_tree_grow_threshold_;
+
+            const int64_t max_shortcut_index_distance_;
+            const uint32_t max_smoothing_iterations_;
+            const uint32_t max_failed_smoothing_iterations_;
+            std::uniform_int_distribution<int> uniform_shortcut_smoothing_int_distribution_;
 
 
             // Set/updated on each call of "rrtPlan"
@@ -381,6 +383,8 @@ namespace smmap
             std::pair<ssize_t, ssize_t> arm_dof_;
             std::vector<Vector7d> arm_a_goal_configurations_;
             std::vector<Vector7d> arm_b_goal_configurations_;
+            std::uniform_int_distribution<size_t> arm_a_goal_config_int_distribution_;
+            std::uniform_int_distribution<size_t> arm_b_goal_config_int_distribution_;
             RRTRobotRepresentation robot_joint_limits_upper_;
             RRTRobotRepresentation robot_joint_limits_lower_;
 
@@ -397,16 +401,30 @@ namespace smmap
             size_t forward_next_idx_to_add_to_nn_dataset_;
             size_t backward_next_idx_to_add_to_nn_dataset_;
 
+
             // Planning and Smoothing statistics
             std::map<std::string, double> planning_statistics_;
             std::map<std::string, double> smoothing_statistics_;
             double total_sampling_time_;
+            double total_nearest_neighbour_index_building_time_;
+            double total_nearest_neighbour_index_searching_time_;
+            double total_nearest_neighbour_linear_searching_time_;
             double total_nearest_neighbour_time_;
             double total_projection_time_;
             double total_collision_check_time_;
             double total_band_forward_propogation_time_;
             double total_first_order_vis_propogation_time_;
             double total_everything_included_forward_propogation_time_;
+
+
+            // Visualization
+            const smmap_utilities::Visualizer::Ptr vis_;
+            const bool visualization_enabled_globally_;
+            const std_msgs::ColorRGBA gripper_a_forward_tree_color_;
+            const std_msgs::ColorRGBA gripper_b_forward_tree_color_;
+            const std_msgs::ColorRGBA gripper_a_backward_tree_color_;
+            const std_msgs::ColorRGBA gripper_b_backward_tree_color_;
+            const std_msgs::ColorRGBA band_tree_color_;
     };
 }
 
