@@ -609,56 +609,38 @@ std::pair<int64_t, double> getNearest(const RRTRobotRepresentation& robot_config
 template <bool planning_for_whole_robot>
 std::pair<int64_t, double> getNearest(const RRTNode& config, const std::vector<RRTNode, RRTAllocator>& tree, const size_t start_idx)
 {
-//    std::cout << "linear nn start idx: " << start_idx << "\n";
-
     std::pair<int64_t, double> nearest(-1, std::numeric_limits<double>::infinity());
 
-    const auto distance_fn = [&] (const RRTNode& other)
+    for (size_t idx = start_idx; idx < tree.size(); idx++)
     {
-        double blacklist_penalty = 0.0;
-//        if (other.isBlacklisted())
+        const RRTNode& test_node = tree[idx];
+        double distance = 0.0;
+//        if (test_node.isBlacklisted())
 //        {
-//            blacklist_penalty = RRTHelper::NN_BLACKLIST_DISTANCE;
+//            distance += RRTHelper::NN_BLACKLIST_DISTANCE;
 //        }
 
         if (!planning_for_whole_robot)
         {
-            return blacklist_penalty + RRTNode::distanceSquared(config.getGrippers(), other.getGrippers());
+            distance += RRTNode::distanceSquared(test_node.getGrippers(), config.getGrippers());
         }
         else
         {
-            return blacklist_penalty + RRTNode::distanceSquared(config.getRobotConfiguration(), other.getRobotConfiguration());
+            distance += RRTNode::distanceSquared(test_node.getRobotConfiguration(), config.getRobotConfiguration());
         }
-    };
 
-    std::vector<std::pair<int64_t, double>> per_thread_nearest(arc_helpers::GetNumOMPThreads(), nearest);
-    #pragma omp parallel for
-    for (size_t idx = start_idx; idx < tree.size(); idx++)
-    {
-        const RRTNode& item = tree[idx];
-        const double distance = distance_fn(item);
-        const size_t thread_num = (size_t)omp_get_thread_num();
-
-        std::pair<int64_t, double>& current_thread_nearest = per_thread_nearest[thread_num];
-        if (current_thread_nearest.second > distance)
+        if (nearest.second > distance)
         {
-            current_thread_nearest.first = (int64_t)idx;
-            current_thread_nearest.second = distance;
-        }
-    }
-
-    for (size_t thread_idx = 0; thread_idx < per_thread_nearest.size(); thread_idx++)
-    {
-        std::pair<int64_t, double>& current_thread_nearest = per_thread_nearest[thread_idx];
-        if (nearest.second > current_thread_nearest.second)
-        {
-            nearest = current_thread_nearest;
+            nearest.first = (int64_t)idx;
+            nearest.second = distance;
         }
     }
 
     return nearest;
 }
 
+
+/*
 // Searches inclusing start, exclusive end indices [start_idx, stop_idx). I.e getNearest(..., tree, 0, tree.size()) is a valid usage.
 template <bool planning_for_whole_robot>
 std::pair<int64_t, double> getNearest(const RRTNode& config, const std::vector<RRTNode, RRTAllocator>& tree, const size_t start_idx, const size_t stop_idx)
@@ -711,7 +693,7 @@ std::pair<int64_t, double> getNearest(const RRTNode& config, const std::vector<R
 
     return nearest;
 }
-
+*/
 
 
 
@@ -2100,6 +2082,15 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl << std::endl;
         storePath(path);
     }
+
+    std::cout << " !!!!!!!!!!!!! Smoothing currently disabled, returning unsmooted path !!!!!" << std::endl;
+
+    return path;
+
+
+
+
+
 
     // If we either retreived a path, or made a new one, visualize and do smoothing
     if (path.size() != 0)

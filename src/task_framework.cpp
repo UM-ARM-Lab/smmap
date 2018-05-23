@@ -1379,8 +1379,8 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     const auto use_cbirrt_style_projection = GetUseCBiRRTStyleProjection(ph_);
     const auto forward_tree_extend_iterations = GetRRTForwardTreeExtendIterations(ph_);
     const auto backward_tree_extend_iterations = GetRRTBackwardTreeExtendIterations(ph_);
-//    const auto kd_tree_grow_threshold = ROSHelpers::GetParam<int>(ph_, "rrt/kd_tree_grow_threshold", 500);
-    const auto use_brute_force_nn = ROSHelpers::GetParam<bool>(ph_, "rrt/use_brute_force_nn", false);
+    const auto kd_tree_grow_threshold = GetKdTreeGrowThreshold(ph_);
+    const auto use_brute_force_nn = GetUseBruteForceNN(ph_);
     const auto goal_bias = GetRRTGoalBias(ph_);
 
     // Smoothing parameters
@@ -1443,8 +1443,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
 
 
-//    const std::vector<size_t> grow_thresholds = {1, 20, 50, 100, 200, 500, 1000};
-    const std::vector<size_t> grow_thresholds = {20};
+//    const std::vector<size_t> grow_thresholds = {20, 50, 100, 200, 500, 1000, 2000, 5000};
 //    const std::vector<size_t> extend_iterations_options = {10, 20, 50, 100, 200, 500, 1000};
 
 
@@ -1454,9 +1453,9 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
     // Planning if we did not load a plan from file
 //    const size_t trial_idx = 0;
-    for (size_t trial_idx = 0; trial_idx < 10; ++trial_idx)
+    for (size_t trial_idx = 0; trial_idx < 1; ++trial_idx)
 //    for (const auto& extend_iterations : extend_iterations_options)
-    for (const auto& kd_tree_grow_threshold : grow_thresholds)
+//    for (const auto& kd_tree_grow_threshold : grow_thresholds)
     {
 //        const auto forward_tree_extend_iterations = extend_iterations;
 //        const auto backward_tree_extend_iterations = extend_iterations;
