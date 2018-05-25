@@ -9,41 +9,6 @@
 
 namespace smmap
 {
-    inline Eigen::VectorXd GetJointLowerLimits() // radians
-    {
-        #warning "Magic number for robot joint limits in code"
-        Eigen::VectorXd lower_limits(14);
-        lower_limits << -169.9, -119.9, -169.9, -119.9, -169.9, -119.9, -174.9,
-                        -169.9, -119.9, -169.9, -119.9, -169.9, -119.9, -174.9;
-        lower_limits *= M_PI / 180.0;
-        return lower_limits;
-    }
-
-    inline Eigen::VectorXd GetJointUpperLimits() // radians
-    {
-        #warning message "Magic number for robot joint limits in code"
-        Eigen::VectorXd upper_limits(14);
-        upper_limits << 169.9, 119.9, 169.9, 119.9, 169.9, 119.9, 174.9,
-                        169.9, 119.9, 169.9, 119.9, 169.9, 119.9, 174.9;
-        upper_limits *= M_PI / 180.0;
-        return upper_limits;
-    }
-
-    //inline Eigen::VectorXd GetDOFWeights()
-    //{
-    //    #warning message "Magic number for robot DOF weights in code"
-    //    /* calculated using
-    //        lmodel = databases.linkstatistics.LinkStatisticsModel(robot)
-    //        if not lmodel.load():
-    //            lmodel.autogenerate()
-    //        lmodel.setRobotWeights()
-    //    */
-    //    Eigen::VectorXd dof_weights(14);
-    //    dof_weights << 3.6885707 ,  3.17881391,  2.53183486,  2.0392053 ,  1.48086104,  1.14257071,  0.74185964,
-    //                   3.6885707 ,  3.17881391,  2.53183486,  2.0392053 ,  1.48086104,  1.14257071,  0.74185964;
-    //    return dof_weights;
-    //}
-
     RobotInterface::RobotInterface(ros::NodeHandle& nh, ros::NodeHandle& ph)
         : nh_(nh)
         , ph_(ph)
@@ -61,9 +26,7 @@ namespace smmap
         , max_gripper_velocity_norm_(GetMaxGripperVelocityNorm(nh_))
         , max_dof_velocity_norm_(GetMaxDOFVelocityNorm(nh_))
         , min_controller_distance_to_obstacles_(GetControllerMinDistanceToObstacles(ph_))
-        , joint_lower_limits_(GetJointLowerLimits())
-        , joint_upper_limits_(GetJointUpperLimits())
-    //    , dof_weights_(GetDOFWeights())
+
         // TODO: remove this hardcoded spin period
         , spin_thread_(ROSHelpers::Spin, 0.01)
 
@@ -228,6 +191,21 @@ namespace smmap
             return;
         }
         return unlock_env_fn_();
+    }
+
+    const Eigen::VectorXd& RobotInterface::getJointLowerLimits() const
+    {
+        return joint_lower_limits_;
+    }
+
+    const Eigen::VectorXd& RobotInterface::getJointUpperLimits() const
+    {
+        return joint_upper_limits_;
+    }
+
+    const Eigen::VectorXd& RobotInterface::getJointWeights() const
+    {
+        return joint_weights_;
     }
 
     AllGrippersSinglePose RobotInterface::getGrippersPoses(const Eigen::VectorXd& robot_configuration) const
@@ -433,7 +411,8 @@ namespace smmap
             const std::function<bool(const Eigen::VectorXd& configuration)>& full_robot_collision_check_fn,
             const std::function<std::vector<Vector7d>(const std::string& gripper, const Eigen::Isometry3d& target_pose)>& close_ik_solutions_fn,
             const std::function<std::pair<bool, Eigen::VectorXd>(const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn,
-            const std::function<bool(const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn)
+            const std::function<bool(const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn,
+            const std::function<std::vector<Eigen::VectorXd>()>& get_robot_joint_info_fn)
     {
         reset_random_seeds_fn_ = reset_random_seeds_fn;
         lock_env_fn_ = lock_env_fn;
@@ -446,6 +425,15 @@ namespace smmap
         close_ik_solutions_fn_ = close_ik_solutions_fn;
         general_ik_solution_fn_ = general_ik_solution_fn;
         test_path_for_collision_fn_ = test_path_for_collision_fn;
+
+        if (get_robot_joint_info_fn != nullptr)
+        {
+            const std::vector<Eigen::VectorXd> joint_info = get_robot_joint_info_fn();
+            assert(joint_info.size() == 3 && "Joint info is assumed to be in the order [lower_limits, upper_limits, joint_weights]");
+            joint_lower_limits_ = joint_info[0];
+            joint_upper_limits_ = joint_info[1];
+            joint_weights_ = joint_info[2];
+        }
     }
 
 

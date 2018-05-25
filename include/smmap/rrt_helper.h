@@ -24,6 +24,16 @@ namespace flann
         typedef T ElementType;
         typedef T ResultType;
 
+        L2_Victor(const Eigen::VectorXd& dof_weights = Eigen::VectorXd(14))
+        {
+            assert(dof_weights.size() == 14);
+            for (int i = 0; i < 14; ++i)
+            {
+                dof_weights_[i] = (ElementType)dof_weights(i);
+                dof_weights2_[i] = (ElementType)(dof_weights(i) * dof_weights(i));
+            }
+        }
+
         /**
          *  Compute the squared Euclidean distance between two vectors.
          *
@@ -36,17 +46,11 @@ namespace flann
         template <typename Iterator1, typename Iterator2>
         ResultType operator()(Iterator1 a, Iterator2 b, size_t size, ResultType worst_dist = -1) const
         {
-            #warning message "Magic number for robot DOF weights in code"
-            static constexpr ElementType DOF_WEIGHTS[] = {
-                (ElementType)1.9206, (ElementType)1.7829, (ElementType)1.5912, (ElementType)1.4280, (ElementType)1.2169, (ElementType)1.0689, (ElementType)0.8613,
-                (ElementType)1.9206, (ElementType)1.7829, (ElementType)1.5912, (ElementType)1.4280, (ElementType)1.2169, (ElementType)1.0689, (ElementType)0.8613
-            };
-
             (void)size;
             ResultType result = 0.0;
             ResultType diff0, diff1, diff2, diff3;
             Iterator1 start = a;
-            ElementType const * w = &DOF_WEIGHTS[0]; // pointer to a const ElementType
+            ElementType const * w = &dof_weights_[0]; // pointer to a const ElementType
 
             /* Process 4 items with each loop for efficiency. */
             while (a < start + 12)
@@ -82,13 +86,12 @@ namespace flann
         template <typename U, typename V>
         inline ResultType accum_dist(const U& a, const V& b, int ind) const
         {
-            #warning message "Magic number for robot DOF weights in code"
-            static constexpr ElementType DOF_WEIGHTS2[] = {
-                (ElementType)3.6885707, (ElementType)3.17881391, (ElementType)2.53183486, (ElementType)2.0392053, (ElementType)1.48086104, (ElementType)1.14257071, (ElementType)0.74185964,
-                (ElementType)3.6885707, (ElementType)3.17881391, (ElementType)2.53183486, (ElementType)2.0392053, (ElementType)1.48086104, (ElementType)1.14257071, (ElementType)0.74185964
-            };
-            return (a-b) * (a-b) * DOF_WEIGHTS2[ind];
+            return (a-b) * (a-b) * dof_weights2_[ind];
         }
+
+    private:
+        ElementType dof_weights_[14];
+        ElementType dof_weights2_[14];
     };
 }
 
@@ -385,8 +388,6 @@ namespace smmap
             std::vector<Vector7d> arm_b_goal_configurations_;
             std::uniform_int_distribution<size_t> arm_a_goal_config_int_distribution_;
             std::uniform_int_distribution<size_t> arm_b_goal_config_int_distribution_;
-            RRTRobotRepresentation robot_joint_limits_upper_;
-            RRTRobotRepresentation robot_joint_limits_lower_;
 
             bool path_found_;
             bool forward_iteration_;

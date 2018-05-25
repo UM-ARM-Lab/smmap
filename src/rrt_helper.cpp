@@ -13,6 +13,11 @@ using namespace smmap_utilities;
 using namespace arc_utilities;
 using namespace Eigen;
 
+#warning "THIS IS STUPID! FIX THIS!"
+static RRTRobotRepresentation robot_joint_limits_lower_;
+static RRTRobotRepresentation robot_joint_limits_upper_;
+static RRTRobotRepresentation robot_joint_weights_;
+
 //#define SMMAP_VERBOSE
 
 std::string print(const RRTRobotRepresentation& config)
@@ -233,10 +238,6 @@ double RRTNode::distance(const RRTGrippersRepresentation& c1, const RRTGrippersR
 
 double RRTNode::distanceSquared(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2)
 {
-    #warning message "Magic number for robot DOF weights in code"
-    static const std::vector<double> weights_std = {1.9206, 1.7829, 1.5912, 1.4280, 1.2169, 1.0689, 0.8613};
-    static const Map<const Vector7d> weights(weights_std.data());
-
     const Vector7d& r1_first_arm     = r1.first;
     const Vector7d& r1_second_arm    = r1.second;
     const Vector7d& r2_first_arm     = r2.first;
@@ -245,8 +246,8 @@ double RRTNode::distanceSquared(const RRTRobotRepresentation& r1, const RRTRobot
     const Vector7d first_arm_delta = r1_first_arm - r2_first_arm;
     const Vector7d second_arm_delta = r1_second_arm - r2_second_arm;
 
-    return (first_arm_delta.cwiseProduct(weights)).squaredNorm()  +
-            (second_arm_delta.cwiseProduct(weights)).squaredNorm();
+    return (first_arm_delta.cwiseProduct(robot_joint_weights_.first)).squaredNorm()  +
+            (second_arm_delta.cwiseProduct(robot_joint_weights_.second)).squaredNorm();
 }
 
 double RRTNode::distance(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2)
@@ -528,7 +529,12 @@ size_t rebuildNNIndex(flann::KDTreeSingleIndex<flann::L2_Victor<float>>& index, 
 {
     static constexpr size_t DIMENSIONS = 14;
 
+    // These pointers are used to check if we need to rebuild the whole tree because the data moved,
+    // or if we can just add points
+    const float* initial_data_pointer = nn_raw_data.data();
     nn_raw_data.resize(DIMENSIONS * tree.size());
+    const float* final_data_pointer = nn_raw_data.data();
+
     for (size_t idx = new_data_start_idx; idx < tree.size(); ++idx)
     {
         const auto& robot_config = tree[idx].getRobotConfiguration();
@@ -563,11 +569,14 @@ size_t rebuildNNIndex(flann::KDTreeSingleIndex<flann::L2_Victor<float>>& index, 
 //    flann::AutotunedIndex<flann::L2_Victor<float>> test_index(flann::AutotunedIndexParams(precision, build_weight, memory_weight, sample_fraction));
 
 
-    if (new_data_start_idx != 0)
+    // If the tree has already been initialized, and the raw data did not move in memory,
+    // then we can just add the new points
+    if (new_data_start_idx != 0 && (initial_data_pointer == final_data_pointer))
     {
         flann::Matrix<float> data(&nn_raw_data[DIMENSIONS * new_data_start_idx], tree.size() - new_data_start_idx, DIMENSIONS);
         index.addPoints(data);
     }
+    // Otherwise rebuild the whole tree
     else
     {
         flann::Matrix<float> data(nn_raw_data.data(), tree.size(), DIMENSIONS);
@@ -813,6 +822,7 @@ int64_t RRTHelper::nearestNeighbour_internal(
     }
 
     const int64_t nn_idx = nearest.first;
+    assert(nn_idx >= 0);
     return nn_idx;
 }
 
@@ -1967,10 +1977,12 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         arm_dof_.first = starting_robot_configuration_.first.size();
         arm_dof_.second = starting_robot_configuration_.second.size();
 
-        robot_joint_limits_upper_.first  = robot_->joint_upper_limits_.head(arm_dof_.first);
-        robot_joint_limits_upper_.second = robot_->joint_upper_limits_.tail(arm_dof_.second);
-        robot_joint_limits_lower_.first  = robot_->joint_lower_limits_.head(arm_dof_.first);
-        robot_joint_limits_lower_.second = robot_->joint_lower_limits_.tail(arm_dof_.second);
+        robot_joint_limits_lower_.first  = robot_->getJointLowerLimits().head(arm_dof_.first);
+        robot_joint_limits_lower_.second = robot_->getJointLowerLimits().tail(arm_dof_.second);
+        robot_joint_limits_upper_.first  = robot_->getJointUpperLimits().head(arm_dof_.first);
+        robot_joint_limits_upper_.second = robot_->getJointUpperLimits().tail(arm_dof_.second);
+        robot_joint_weights_.first = robot_->getJointWeights().head(arm_dof_.first);
+        robot_joint_weights_.second = robot_->getJointWeights().head(arm_dof_.second);
 
         starting_grippers_poses_ = robot_->getGrippersPoses(starting_robot_configuration_);
         assert(starting_grippers_poses_.size() == 2);
@@ -2040,13 +2052,13 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     // Clear the forward tree flann data
     forward_nn_raw_data_.clear();
     forward_nn_raw_data_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 100000) * (start.getRobotConfiguration().first.size() + start.getRobotConfiguration().second.size()));
-    forward_nn_index_ = flann::KDTreeSingleIndex<flann::L2_Victor<float>>();
+    forward_nn_index_ = flann::KDTreeSingleIndex<flann::L2_Victor<float>>(flann::KDTreeSingleIndexParams(), flann::L2_Victor<float>(robot_->getJointWeights()));
     forward_next_idx_to_add_to_nn_dataset_ = 0;
 
     // Clear the backward tree flann data
     backward_nn_raw_data_.clear();
     backward_nn_raw_data_.reserve(ROSHelpers::GetParam(ph_, "estimated_tree_size", 100000) * (start.getRobotConfiguration().first.size() + start.getRobotConfiguration().second.size()));
-    backward_nn_index_ = flann::KDTreeSingleIndex<flann::L2_Victor<float>>();
+    backward_nn_index_ = flann::KDTreeSingleIndex<flann::L2_Victor<float>>(flann::KDTreeSingleIndexParams(), flann::L2_Victor<float>(robot_->getJointWeights()));
     backward_next_idx_to_add_to_nn_dataset_ = 0;
 
 
@@ -2083,7 +2095,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         storePath(path);
     }
 
-    std::cout << " !!!!!!!!!!!!! Smoothing currently disabled, returning unsmooted path !!!!!" << std::endl;
+    std::cout << " !!!!!!!!!!!!! Smoothing currently disabled, returning unsmoothed path !!!!!" << std::endl;
 
     return path;
 

@@ -56,6 +56,10 @@ namespace smmap
             void lockEnvironment();
             void unlockEnvironment();
 
+            const Eigen::VectorXd& getJointLowerLimits() const;
+            const Eigen::VectorXd& getJointUpperLimits() const;
+            const Eigen::VectorXd& getJointWeights() const;
+
             AllGrippersSinglePose getGrippersPoses(const Eigen::VectorXd& robot_configuration) const;
 
             AllGrippersSinglePose getGrippersPoses(const std::pair<Vector7d, Vector7d>& robot_configuration) const;
@@ -114,7 +118,8 @@ namespace smmap
                     const std::function<bool(const Eigen::VectorXd& configuration)>& full_robot_collision_check_fn,
                     const std::function<std::vector<Vector7d>(const std::string& gripper, const Eigen::Isometry3d& target_pose)>& close_ik_solutions_fn,
                     const std::function<std::pair<bool, Eigen::VectorXd>(const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn,
-                    const std::function<bool(const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn);
+                    const std::function<bool(const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn,
+                    const std::function<std::vector<Eigen::VectorXd>()>& get_robot_joint_info_fn);
 
             // Defaults the timespace to "latest available", indicted by ros::Time(0)
             Eigen::Vector3d transformToFrame(
@@ -152,9 +157,11 @@ namespace smmap
             const double max_gripper_velocity_norm_;
             const double max_dof_velocity_norm_;
             const double min_controller_distance_to_obstacles_;
-            const Eigen::VectorXd joint_lower_limits_;
-            const Eigen::VectorXd joint_upper_limits_;
-//            const Eigen::VectorXd dof_weights_;
+
+        private:
+            Eigen::VectorXd joint_lower_limits_;
+            Eigen::VectorXd joint_upper_limits_;
+            Eigen::VectorXd joint_weights_;
 
         private:
             std::thread spin_thread_;

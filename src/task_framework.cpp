@@ -1453,7 +1453,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
     // Planning if we did not load a plan from file
 //    const size_t trial_idx = 0;
-    for (size_t trial_idx = 0; trial_idx < 1; ++trial_idx)
+    for (size_t trial_idx = 0; trial_idx < 100; ++trial_idx)
 //    for (const auto& extend_iterations : extend_iterations_options)
 //    for (const auto& kd_tree_grow_threshold : grow_thresholds)
     {
@@ -1461,7 +1461,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 //        const auto backward_tree_extend_iterations = extend_iterations;
 
         robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
-        flann::seed_random(seed_);
+        flann::seed_random((unsigned int)seed_);
         generator_->seed(seed_);
         generator_->discard(trial_idx * 0xFFFF);
         for (size_t discard_idx = 0; discard_idx < trial_idx * 0xFFFF; ++discard_idx)
@@ -1473,7 +1473,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         std::cout << "!!!!!!!!!!!!!!!!!! Invoked " << num_times_invoked << " times!!!!!!!!!!!" << std::endl;
         std::cout << "Trial idx: " << trial_idx << std::endl;
 //        std::cout << "Extend iterations: " << extend_iterations << std::endl;
-        std::cout << "Grow threshold: " << kd_tree_grow_threshold << std::endl;
+//        std::cout << "Grow threshold: " << kd_tree_grow_threshold << std::endl;
 
         #ifdef PRM_SAMPLING
         prm_helper_ = std::make_shared<PRMHelper>(

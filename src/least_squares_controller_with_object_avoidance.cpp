@@ -80,8 +80,8 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
 //                      << "Jacobian:\n" << poi_jacobian << std::endl;
         }
 
-        const VectorXd min_joint_delta = input_data.robot_->joint_lower_limits_ - input_data.world_current_state_.robot_configuration_;
-        const VectorXd max_joint_delta = input_data.robot_->joint_upper_limits_ - input_data.world_current_state_.robot_configuration_;
+        const VectorXd min_joint_delta = input_data.robot_->getJointLowerLimits() - input_data.world_current_state_.robot_configuration_;
+        const VectorXd max_joint_delta = input_data.robot_->getJointUpperLimits() - input_data.world_current_state_.robot_configuration_;
 
         // TODO: weights on robot DOF in velocity norm
         suggested_robot_motion.robot_dof_motion_ = minSquaredNormLinearConstraints_SE3VelocityConstraints(

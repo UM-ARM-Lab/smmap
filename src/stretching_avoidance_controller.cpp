@@ -338,12 +338,12 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
         // Determine the search space for NOMAD, at least in terms of the decision variables only
         const double max_step_size = robot_->max_dof_velocity_norm_ * robot_->dt_;
         const Eigen::VectorXd distance_to_lower_joint_limits =
-                input_data.robot_->joint_lower_limits_ - input_data.world_current_state_.robot_configuration_;
+                input_data.robot_->getJointLowerLimits() - input_data.world_current_state_.robot_configuration_;
         const Eigen::VectorXd min_joint_delta =
                 distance_to_lower_joint_limits.unaryExpr([&max_step_size] (const double x) {return std::max(x, -max_step_size);});
 
         const Eigen::VectorXd distance_to_upper_joint_limits =
-                input_data.robot_->joint_upper_limits_ - input_data.world_current_state_.robot_configuration_;
+                input_data.robot_->getJointUpperLimits() - input_data.world_current_state_.robot_configuration_;
         const Eigen::VectorXd max_joint_delta =
                 distance_to_upper_joint_limits.unaryExpr([&max_step_size] (const double x) {return std::min(x, max_step_size);});
 
@@ -1574,11 +1574,11 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
         const double max_step_size = robot_->max_dof_velocity_norm_ * robot_->dt_;
 
         // Lower limit
-        const Eigen::VectorXd distance_to_lower_joint_limits = input_data.robot_->joint_lower_limits_ - input_data.world_current_state_.robot_configuration_;
+        const Eigen::VectorXd distance_to_lower_joint_limits = input_data.robot_->getJointLowerLimits() - input_data.world_current_state_.robot_configuration_;
         const Eigen::VectorXd min_joint_delta = distance_to_lower_joint_limits.unaryExpr([&max_step_size] (const double x) {return std::max(x, -max_step_size);});
 
         // Upper limit
-        const Eigen::VectorXd distance_to_upper_joint_limits = input_data.robot_->joint_upper_limits_ - input_data.world_current_state_.robot_configuration_;
+        const Eigen::VectorXd distance_to_upper_joint_limits = input_data.robot_->getJointUpperLimits() - input_data.world_current_state_.robot_configuration_;
         const Eigen::VectorXd max_joint_delta = distance_to_upper_joint_limits.unaryExpr([&max_step_size] (const double x) {return std::min(x, max_step_size);});
 
         // Collect the collision data needed
