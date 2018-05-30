@@ -544,10 +544,12 @@ namespace smmap
             const deformable_manipulation_msgs::ExecuteRobotMotionRequest& movement)
     {
         deformable_manipulation_msgs::ExecuteRobotMotionResponse result;
-        if (!execute_gripper_movement_client_.call(movement, result))
+        while (!execute_gripper_movement_client_.call(movement, result))
         {
-            ROS_FATAL_NAMED("robot_interface", "Sending a gripper movement to the robot failed");
-            assert(false && "Unable to send command to robot");
+            ROS_WARN_THROTTLE_NAMED(1.0, "robot_interface", "Sending a gripper movement to the robot failed, reconnecting");
+            execute_gripper_movement_client_ =
+                    nh_.serviceClient<deformable_manipulation_msgs::ExecuteRobotMotion>(GetExecuteRobotMotionTopic(nh_), true);
+            execute_gripper_movement_client_.waitForExistence();
         }
         CHECK_FRAME_NAME("robot_interface", world_frame_name_, result.world_state.header.frame_id);
         return ConvertToEigenFeedback(result.world_state);
