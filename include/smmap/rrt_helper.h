@@ -99,7 +99,7 @@ namespace smmap
 {
     class RRTNode;
     typedef Eigen::aligned_allocator<RRTNode> RRTAllocator;
-    typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> RRTGrippersRepresentation;
+    typedef std::pair<Eigen::Isometry3d, Eigen::Isometry3d> RRTGrippersRepresentation;
     typedef Eigen::Matrix<double, 7, 1> Vector7d;
     typedef std::pair<Vector7d, Vector7d> RRTRobotRepresentation;
 
@@ -110,16 +110,16 @@ namespace smmap
 
             RRTNode();
 
-            RRTNode(const RRTGrippersRepresentation& grippers_position,
+            RRTNode(const RRTGrippersRepresentation& grippers_poses,
                     const RRTRobotRepresentation& robot_configuration,
                     const RubberBand::Ptr& band);
 
-            RRTNode(const RRTGrippersRepresentation& grippers_position,
+            RRTNode(const RRTGrippersRepresentation& grippers_poses,
                     const RRTRobotRepresentation& robot_configuration,
                     const RubberBand::Ptr& band,
                     const int64_t parent_index);
 
-            RRTNode(const RRTGrippersRepresentation& grippers_position,
+            RRTNode(const RRTGrippersRepresentation& grippers_poses,
                     const RRTRobotRepresentation& robot_configuration,
                     const RubberBand::Ptr& band,
                     const int64_t parent_index,
@@ -166,7 +166,7 @@ namespace smmap
 
         private:
 
-            RRTGrippersRepresentation grippers_position_;
+            RRTGrippersRepresentation grippers_poses_;
             RRTRobotRepresentation robot_configuration_;
             RubberBand::Ptr band_;
 
@@ -300,7 +300,7 @@ namespace smmap
             RRTNode configSampling();
             // Used for timing purposes
             // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
-            RRTNode prmBasedSampling_internal();
+//            RRTNode prmBasedSampling_internal();
             RRTGrippersRepresentation posPairSampling_internal();
             RRTRobotRepresentation robotConfigPairSampling_internal();
 
@@ -375,11 +375,11 @@ namespace smmap
             // Set/updated on each call of "rrtPlan"
             bool planning_for_whole_robot_;
             RubberBand::Ptr starting_band_;
-            AllGrippersSinglePose starting_grippers_poses_;
+            RRTGrippersRepresentation starting_grippers_poses_;
             RRTRobotRepresentation starting_robot_configuration_;
 
             std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
-            RRTGrippersRepresentation grippers_goal_position_;
+            RRTGrippersRepresentation grippers_goal_poses_;
             double max_grippers_distance_;
             std::chrono::duration<double> time_limit_;
 

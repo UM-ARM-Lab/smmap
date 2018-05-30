@@ -1418,8 +1418,8 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
 
     RRTGrippersRepresentation gripper_config(
-                world_state.all_grippers_single_pose_[0].translation(),
-                world_state.all_grippers_single_pose_[1].translation());
+                world_state.all_grippers_single_pose_[0],
+                world_state.all_grippers_single_pose_[1]);
 
     RRTRobotRepresentation robot_config;
     if (world_state.robot_configuration_valid_)
@@ -1428,38 +1428,24 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         robot_config.second = world_state.robot_configuration_.tail<7>();
     }
 
-    RRTNode start_config(
+    const RRTNode start_config(
                 gripper_config,
                 robot_config,
                 rubber_band_between_grippers_);
 
 
-    // Note that the rubber band part of the target is ignored at the present time
-    const AllGrippersSinglePose target_grippers_pose = getGripperTargets(world_state);
-    const RRTGrippersRepresentation rrt_grippers_goal(
-        target_grippers_pose[0].translation(),
-        target_grippers_pose[1].translation());
-
+    const AllGrippersSinglePose target_grippers_poses_vec =
+            getGripperTargets(world_state);
+    const RRTGrippersRepresentation target_grippers_poses(
+                target_grippers_poses_vec[0],
+                target_grippers_poses_vec[1]);
     const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
-
-
-//    const std::vector<size_t> grow_thresholds = {20, 50, 100, 200, 500, 1000, 2000, 5000};
-//    const std::vector<size_t> extend_iterations_options = {10, 20, 50, 100, 200, 500, 1000};
-
-
-
 
 
 
     // Planning if we did not load a plan from file
-//    const size_t trial_idx = 0;
     for (size_t trial_idx = 0; trial_idx < 100; ++trial_idx)
-//    for (const auto& extend_iterations : extend_iterations_options)
-//    for (const auto& kd_tree_grow_threshold : grow_thresholds)
     {
-//        const auto forward_tree_extend_iterations = extend_iterations;
-//        const auto backward_tree_extend_iterations = extend_iterations;
-
         robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
         flann::seed_random((unsigned int)seed_);
         generator_->seed(seed_);
@@ -1472,8 +1458,6 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
         std::cout << "!!!!!!!!!!!!!!!!!! Invoked " << num_times_invoked << " times!!!!!!!!!!!" << std::endl;
         std::cout << "Trial idx: " << trial_idx << std::endl;
-//        std::cout << "Extend iterations: " << extend_iterations << std::endl;
-//        std::cout << "Grow threshold: " << kd_tree_grow_threshold << std::endl;
 
         #ifdef PRM_SAMPLING
         prm_helper_ = std::make_shared<PRMHelper>(
@@ -1530,7 +1514,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
         vis_->clearVisualizationsBullet();
 
-        const auto rrt_results = rrt_helper_->plan(start_config, rrt_grippers_goal, time_limit);
+        const auto rrt_results = rrt_helper_->plan(start_config, target_grippers_poses, time_limit);
 
 
 
@@ -1544,11 +1528,11 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
             executing_global_trajectory_ = true;
             if (!world_state.robot_configuration_valid_)
             {
-                convertRRTResultIntoGripperTrajectory(world_state.all_grippers_single_pose_, rrt_results);
+                convertRRTResultIntoGripperTrajectory(rrt_results);
             }
             else
             {
-                convertRRTResultIntoFullRobotTrajectory(world_state.all_grippers_single_pose_, rrt_results);
+                convertRRTResultIntoFullRobotTrajectory(rrt_results);
             }
 
             // Serialization
@@ -1587,20 +1571,16 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 }
 
 void TaskFramework::convertRRTResultIntoGripperTrajectory(
-        const AllGrippersSinglePose& starting_poses,
         const std::vector<RRTNode, RRTAllocator>& rrt_result)
 {
-    assert(starting_poses.size() == 2);
-
     AllGrippersPoseTrajectory traj;
     traj.reserve(rrt_result.size());
 
     for (size_t ind = 0; ind < rrt_result.size(); ++ind)
     {
-        AllGrippersSinglePose grippers_poses(starting_poses);
-        grippers_poses[0].translation() = rrt_result[ind].getGrippers().first;
-        grippers_poses[1].translation() = rrt_result[ind].getGrippers().second;
-
+        const AllGrippersSinglePose grippers_poses = {
+            rrt_result[ind].getGrippers().first,
+            rrt_result[ind].getGrippers().second};
         traj.push_back(grippers_poses);
     }
 
@@ -1625,7 +1605,6 @@ void TaskFramework::convertRRTResultIntoGripperTrajectory(
 }
 
 void TaskFramework::convertRRTResultIntoFullRobotTrajectory(
-        const AllGrippersSinglePose& starting_poses,
         const std::vector<RRTNode, RRTAllocator>& rrt_result)
 {
     global_plan_gripper_trajectory_.clear();
@@ -1636,9 +1615,9 @@ void TaskFramework::convertRRTResultIntoFullRobotTrajectory(
 
     for (size_t ind = 0; ind < rrt_result.size(); ++ind)
     {
-        AllGrippersSinglePose grippers_poses(starting_poses);
-        grippers_poses[0].translation() = rrt_result[ind].getGrippers().first;
-        grippers_poses[1].translation() = rrt_result[ind].getGrippers().second;
+        const AllGrippersSinglePose grippers_poses = {
+            rrt_result[ind].getGrippers().first,
+            rrt_result[ind].getGrippers().second};
         global_plan_gripper_trajectory_.push_back(grippers_poses);
 
         const std::pair<VectorXd, VectorXd>& config_pair = rrt_result[ind].getRobotConfiguration();

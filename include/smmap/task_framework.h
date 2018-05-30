@@ -93,11 +93,9 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             void convertRRTResultIntoGripperTrajectory(
-                    const AllGrippersSinglePose& starting_poses,
                     const std::vector<RRTNode, RRTAllocator>& rrt_result);
 
             void convertRRTResultIntoFullRobotTrajectory(
-                    const AllGrippersSinglePose& starting_poses,
                     const std::vector<RRTNode, RRTAllocator>& rrt_result);
 
             AllGrippersSinglePose getGripperTargets(
