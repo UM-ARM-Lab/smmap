@@ -218,14 +218,6 @@ namespace smmap
         return get_ee_poses_fn_(robot_configuration);
     }
 
-    AllGrippersSinglePose RobotInterface::getGrippersPoses(const std::pair<Vector7d, Vector7d>& robot_configuration) const
-    {
-        const auto num_dof = robot_configuration.first.size() + robot_configuration.second.size();
-        Eigen::VectorXd stacked_config(num_dof);
-        stacked_config << robot_configuration.first, robot_configuration.second;
-        return getGrippersPoses(stacked_config);
-    }
-
     // This a Jacobian between the movement of the grippers (in the gripper body frame)
     // and the movement of the robot's DOF
     Eigen::MatrixXd RobotInterface::getGrippersJacobian(const Eigen::VectorXd& robot_configuration) const
@@ -239,8 +231,8 @@ namespace smmap
     }
 
     // This looks up the points of interest as reporeted by the external robot (i.e. OpenRAVE)
-    // then querrys Bullet for the data needed to do collision avoidance, and querrys OpenRAVE for the Jacobian
-    // of the movement of the point relative to the robot DOF movement.
+    // then querrys Bullet for the data needed to do collision avoidance, and querrys OpenRAVE
+    // for the Jacobian of the movement of the point relative to the robot DOF movement.
     //
     // This includes the grippers.
     std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> RobotInterface::getPointsOfInterestCollisionData(
@@ -306,20 +298,6 @@ namespace smmap
         return result;
     }
 
-    // Only intended for use by 2 manipulators
-    std::pair<Eigen::VectorXd, Eigen::VectorXd> RobotInterface::mapGripperMotionToRobotMotion(
-            const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration,
-            const AllGrippersSinglePoseDelta& grippers_delta) const
-    {
-        const auto num_dof = robot_configuration.first.size() + robot_configuration.second.size();
-        Eigen::VectorXd stacked_config(num_dof);
-        stacked_config << robot_configuration.first, robot_configuration.second;
-        const auto stacked_result = mapGripperMotionToRobotMotion(stacked_config, grippers_delta);
-        const auto first_config = stacked_result.segment(0, robot_configuration.first.size());
-        const auto second_config = stacked_result.segment(robot_configuration.first.size(), robot_configuration.second.size());
-        return std::pair<Eigen::VectorXd, Eigen::VectorXd>(first_config, second_config);
-    }
-
     bool RobotInterface::checkRobotCollision(const Eigen::VectorXd& robot_configuration) const
     {
         if (full_robot_collision_check_fn_ == nullptr)
@@ -330,34 +308,52 @@ namespace smmap
         return full_robot_collision_check_fn_(robot_configuration);
     }
 
-    // Only intended for use by 2 manipulators
-    bool RobotInterface::checkRobotCollision(const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration) const
+    std::vector<Eigen::VectorXd> RobotInterface::getCloseIkSolutions(
+            const AllGrippersSinglePose& target_poses,
+            const double max_gripper_distance) const
     {
-        const auto num_dof = robot_configuration.first.size() + robot_configuration.second.size();
-        Eigen::VectorXd stacked_config(num_dof);
-        stacked_config << robot_configuration.first, robot_configuration.second;
-        return checkRobotCollision(stacked_config);
+        assert(target_poses.size() == grippers_data_.size() &&
+               "This function assumes that the target poses are in order, and there is one for each gripper");
+        std::vector<std::string> gripper_names(grippers_data_.size());
+
+        for (size_t idx = 0; idx < grippers_data_.size(); ++idx)
+        {
+            gripper_names[idx] = grippers_data_[idx].name_;
+        }
+
+        return getCloseIkSolutions(gripper_names, target_poses, max_gripper_distance);
     }
 
-    std::vector<Vector7d> RobotInterface::getCloseIkSolutions(const std::string& gripper, const Eigen::Isometry3d& target_pose) const
+    std::vector<Eigen::VectorXd> RobotInterface::getCloseIkSolutions(
+            const std::vector<std::string>& gripper_names,
+            const AllGrippersSinglePose& target_poses,
+            const double max_gripper_distance) const
     {
+        assert(target_poses.size() == gripper_names.size() && "Must request one pose per gripper");
+
         if (close_ik_solutions_fn_ == nullptr)
         {
             ROS_ERROR_NAMED("robot_interface", "Asked for ik solutions, but function pointer is null");
-            return std::vector<Vector7d>(0);
+            return std::vector<Eigen::VectorXd>(0);
         }
-        return close_ik_solutions_fn_(gripper, target_pose);
+
+        return close_ik_solutions_fn_(gripper_names, target_poses, max_gripper_distance);
     }
 
-    std::vector<std::vector<Vector7d>> RobotInterface::getCloseIkSolutions(const AllGrippersSinglePose& target_poses) const
+    std::pair<bool, Eigen::VectorXd> RobotInterface::getGeneralIkSolution(
+            const Eigen::VectorXd& starting_config,
+            const AllGrippersSinglePose& target_poses) const
     {
-        assert(target_poses.size() == grippers_data_.size() && "Must request one pose per gripper");
-        std::vector<std::vector<Vector7d>> solutions(grippers_data_.size());
-        for (size_t gripper_idx = 0; gripper_idx < grippers_data_.size(); ++gripper_idx)
+        assert(target_poses.size() == grippers_data_.size() &&
+               "This function assumes that the target poses are in order, and there is one for each gripper");
+        std::vector<std::string> gripper_names(grippers_data_.size());
+
+        for (size_t idx = 0; idx < grippers_data_.size(); ++idx)
         {
-            solutions[gripper_idx] = getCloseIkSolutions(grippers_data_[gripper_idx].name_, target_poses[gripper_idx]);
+            gripper_names[idx] = grippers_data_[idx].name_;
         }
-        return solutions;
+
+        return getGeneralIkSolution(starting_config, gripper_names, target_poses);
     }
 
     std::pair<bool, Eigen::VectorXd> RobotInterface::getGeneralIkSolution(
@@ -371,23 +367,6 @@ namespace smmap
             return {false, Eigen::VectorXd(0)};
         }
         return general_ik_solution_fn_(starting_config, gripper_names, target_poses);
-    }
-
-    std::pair<bool, std::pair<Eigen::VectorXd, Eigen::VectorXd>> RobotInterface::getGeneralIkSolution(
-            const std::pair<Eigen::VectorXd, Eigen::VectorXd>& robot_configuration,
-            const AllGrippersSinglePose& target_poses) const
-    {
-        const auto num_dof = robot_configuration.first.size() + robot_configuration.second.size();
-        Eigen::VectorXd stacked_config(num_dof);
-        stacked_config << robot_configuration.first, robot_configuration.second;
-
-        const std::vector<std::string> gripper_names = {grippers_data_[0].name_, grippers_data_[1].name_};
-
-        const std::pair<bool, Eigen::VectorXd> stacked_result = getGeneralIkSolution(stacked_config, gripper_names, target_poses);
-        assert(stacked_result.second.size() == num_dof);
-        const Eigen::VectorXd result_a = stacked_result.second.head(robot_configuration.first.size());
-        const Eigen::VectorXd result_b = stacked_result.second.tail(robot_configuration.second.size());
-        return {stacked_result.first, {result_a, result_b}};
     }
 
     bool RobotInterface::testPathForCollision(const std::vector<Eigen::VectorXd>& path) const
@@ -404,15 +383,15 @@ namespace smmap
             const std::function<void(const size_t, const size_t)>& reset_random_seeds_fn,
             const std::function<void()>& lock_env_fn,
             const std::function<void()>& unlock_env_fn,
-            const std::function<AllGrippersSinglePose(const Eigen::VectorXd& configuration)>& get_ee_poses_fn,
-            const std::function<Eigen::MatrixXd(const Eigen::VectorXd& configuration)>& get_grippers_jacobian_fn,
-            const std::function<std::vector<Eigen::Vector3d>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_fn,
-            const std::function<std::vector<Eigen::MatrixXd>(const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_jacobians_fn,
-            const std::function<bool(const Eigen::VectorXd& configuration)>& full_robot_collision_check_fn,
-            const std::function<std::vector<Vector7d>(const std::string& gripper, const Eigen::Isometry3d& target_pose)>& close_ik_solutions_fn,
-            const std::function<std::pair<bool, Eigen::VectorXd>(const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn,
-            const std::function<bool(const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn,
-            const std::function<std::vector<Eigen::VectorXd>()>& get_robot_joint_info_fn)
+            const std::function<std::vector<Eigen::VectorXd>()>& get_robot_joint_info_fn,
+            const std::function<AllGrippersSinglePose             (const Eigen::VectorXd& configuration)>& get_ee_poses_fn,
+            const std::function<Eigen::MatrixXd                   (const Eigen::VectorXd& configuration)>& get_grippers_jacobian_fn,
+            const std::function<std::vector<Eigen::Vector3d>      (const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_fn,
+            const std::function<std::vector<Eigen::MatrixXd>      (const Eigen::VectorXd& configuration)>& get_collision_points_of_interest_jacobians_fn,
+            const std::function<bool                              (const Eigen::VectorXd& configuration)>& full_robot_collision_check_fn,
+            const std::function<std::vector<Eigen::VectorXd>      (const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses, const double max_gripper_distance)>& close_ik_solutions_fn,
+            const std::function<std::pair<bool, Eigen::VectorXd>  (const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)>& general_ik_solution_fn,
+            const std::function<bool                              (const std::vector<Eigen::VectorXd>& path)>& test_path_for_collision_fn)
     {
         reset_random_seeds_fn_ = reset_random_seeds_fn;
         lock_env_fn_ = lock_env_fn;

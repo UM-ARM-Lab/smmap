@@ -17,20 +17,22 @@ namespace flann
      * Squared Euclidean distance functor, optimized version
      */
     template<class T>
-    struct L2_Victor
+    struct L2_weighted
     {
         typedef bool is_kdtree_distance;
 
         typedef T ElementType;
         typedef T ResultType;
+        typedef Eigen::Matrix<ElementType, Eigen::Dynamic, 1> VectorX;
 
-        L2_Victor(const Eigen::VectorXd& dof_weights = Eigen::VectorXd(14))
+        L2_weighted(const Eigen::VectorXd& dof_weights = Eigen::VectorXd::Ones(0))
         {
-            assert(dof_weights.size() == 14);
-            for (int i = 0; i < 14; ++i)
+            dof_weights_.resizeLike(dof_weights);
+            dof_weights2_.resizeLike(dof_weights);
+            for (int i = 0; i < dof_weights.rows(); ++i)
             {
-                dof_weights_[i] = (ElementType)dof_weights(i);
-                dof_weights2_[i] = (ElementType)(dof_weights(i) * dof_weights(i));
+                dof_weights_(i) = (ElementType)dof_weights(i);
+                dof_weights2_(i) = (ElementType)(dof_weights(i) * dof_weights(i));
             }
         }
 
@@ -46,35 +48,41 @@ namespace flann
         template <typename Iterator1, typename Iterator2>
         ResultType operator()(Iterator1 a, Iterator2 b, size_t size, ResultType worst_dist = -1) const
         {
-            (void)size;
-            ResultType result = 0.0;
-            ResultType diff0, diff1, diff2, diff3;
-            Iterator1 start = a;
-            ElementType const * w = &dof_weights_[0]; // pointer to a const ElementType
+//            (void)size;
+//            ResultType result = 0.0;
+//            ResultType diff0, diff1, diff2, diff3;
+//            Iterator1 start = a;
+//            ElementType const * w = &dof_weights_[0]; // pointer to a const ElementType
 
-            /* Process 4 items with each loop for efficiency. */
-            while (a < start + 12)
-            {
-                diff0 = (a[0] - b[0]) * w[0];
-                diff1 = (a[1] - b[1]) * w[1];
-                diff2 = (a[2] - b[2]) * w[2];
-                diff3 = (a[3] - b[3]) * w[3];
-                result += diff0 * diff0 + diff1 * diff1 + diff2 * diff2 + diff3 * diff3;
-                a += 4;
-                b += 4;
-                w += 4;
+//            /* Process 4 items with each loop for efficiency. */
+//            while (a < start + 12)
+//            {
+//                diff0 = (a[0] - b[0]) * w[0];
+//                diff1 = (a[1] - b[1]) * w[1];
+//                diff2 = (a[2] - b[2]) * w[2];
+//                diff3 = (a[3] - b[3]) * w[3];
+//                result += diff0 * diff0 + diff1 * diff1 + diff2 * diff2 + diff3 * diff3;
+//                a += 4;
+//                b += 4;
+//                w += 4;
 
-                if ((worst_dist > 0) && (result > worst_dist))
-                {
-                    return result;
-                }
-            }
-            /* Process last 2 values */
-            diff0 = (a[0] - b[0]) * w[0];
-            diff1 = (a[1] - b[1]) * w[1];
-            result += diff0 * diff0 + diff1 * diff1;
+//                if ((worst_dist > 0) && (result > worst_dist))
+//                {
+//                    return result;
+//                }
+//            }
+//            /* Process last 2 values */
+//            diff0 = (a[0] - b[0]) * w[0];
+//            diff1 = (a[1] - b[1]) * w[1];
+//            result += diff0 * diff0 + diff1 * diff1;
 
-            return result;
+//            return result;
+
+            (void)worst_dist;
+            const Eigen::Map<const VectorX> a_vec(a, size);
+            const Eigen::Map<const VectorX> b_vec(b, size);
+            auto delta = (a_vec - b_vec).cwiseProduct(dof_weights_);
+            return delta.squaredNorm();
         }
 
         /**
@@ -86,12 +94,12 @@ namespace flann
         template <typename U, typename V>
         inline ResultType accum_dist(const U& a, const V& b, int ind) const
         {
-            return (a-b) * (a-b) * dof_weights2_[ind];
+            return (a-b) * (a-b) * dof_weights2_(ind);
         }
 
     private:
-        ElementType dof_weights_[14];
-        ElementType dof_weights2_[14];
+        VectorX dof_weights_;
+        VectorX dof_weights2_;
     };
 }
 
@@ -100,8 +108,8 @@ namespace smmap
     class RRTNode;
     typedef Eigen::aligned_allocator<RRTNode> RRTAllocator;
     typedef std::pair<Eigen::Isometry3d, Eigen::Isometry3d> RRTGrippersRepresentation;
-    typedef Eigen::Matrix<double, 7, 1> Vector7d;
-    typedef std::pair<Vector7d, Vector7d> RRTRobotRepresentation;
+    typedef Eigen::VectorXd RRTRobotRepresentation;
+    typedef flann::KDTreeSingleIndex<flann::L2_weighted<float>> NNIndexType;
 
     class RRTNode
     {
@@ -233,8 +241,9 @@ namespace smmap
 
             std::vector<RRTNode, RRTAllocator> plan(
                     const RRTNode& start,
-                    const RRTGrippersRepresentation& grippers_goal,
-                    const std::chrono::duration<double>& time_limit);
+                    const RRTGrippersRepresentation& grippers_goal_poses,
+                    const std::chrono::duration<double>& time_limit,
+                    const bool planning_for_whole_robot);
 
 
             static std::vector<Eigen::VectorXd> ConvertRRTPathToRobotPath(
@@ -287,6 +296,12 @@ namespace smmap
             // Helper functions and data for internal rrt planning algorithm
             ///////////////////////////////////////////////////////////////////////////////////////
 
+            size_t rebuildNNIndex(
+                    NNIndexType& index,
+                    std::vector<float>& nn_raw_data,
+                    const std::vector<RRTNode, RRTAllocator>& tree,
+                    const size_t new_data_start_idx);
+
             int64_t nearestNeighbour(
                     const bool use_forward_tree,
                     const RRTNode& config);
@@ -300,7 +315,6 @@ namespace smmap
             RRTNode configSampling();
             // Used for timing purposes
             // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
-//            RRTNode prmBasedSampling_internal();
             RRTGrippersRepresentation posPairSampling_internal();
             RRTRobotRepresentation robotConfigPairSampling_internal();
 
@@ -374,20 +388,15 @@ namespace smmap
 
             // Set/updated on each call of "rrtPlan"
             bool planning_for_whole_robot_;
+            ssize_t total_dof_;
             RubberBand::Ptr starting_band_;
             RRTGrippersRepresentation starting_grippers_poses_;
             RRTRobotRepresentation starting_robot_configuration_;
 
             std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
-            RRTGrippersRepresentation grippers_goal_poses_;
             double max_grippers_distance_;
             std::chrono::duration<double> time_limit_;
-
-            std::pair<ssize_t, ssize_t> arm_dof_;
-            std::vector<Vector7d> arm_a_goal_configurations_;
-            std::vector<Vector7d> arm_b_goal_configurations_;
-            std::uniform_int_distribution<size_t> arm_a_goal_config_int_distribution_;
-            std::uniform_int_distribution<size_t> arm_b_goal_config_int_distribution_;
+            RRTGrippersRepresentation grippers_goal_poses_;
 
             bool path_found_;
             bool forward_iteration_;
@@ -397,8 +406,8 @@ namespace smmap
 
             std::vector<float> forward_nn_raw_data_;
             std::vector<float> backward_nn_raw_data_;
-            flann::KDTreeSingleIndex<flann::L2_Victor<float>> forward_nn_index_;
-            flann::KDTreeSingleIndex<flann::L2_Victor<float>> backward_nn_index_;
+            NNIndexType forward_nn_index_;
+            NNIndexType backward_nn_index_;
             size_t forward_next_idx_to_add_to_nn_dataset_;
             size_t backward_next_idx_to_add_to_nn_dataset_;
 

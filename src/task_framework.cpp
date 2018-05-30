@@ -1424,8 +1424,13 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     RRTRobotRepresentation robot_config;
     if (world_state.robot_configuration_valid_)
     {
-        robot_config.first = world_state.robot_configuration_.head<7>();
-        robot_config.second = world_state.robot_configuration_.tail<7>();
+        robot_config = world_state.robot_configuration_;
+    }
+    else
+    {
+        robot_config.resize(6);
+        robot_config.head<3>() = gripper_config.first.translation();
+        robot_config.tail<3>() = gripper_config.second.translation();
     }
 
     const RRTNode start_config(
@@ -1514,7 +1519,11 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
         vis_->clearVisualizationsBullet();
 
-        const auto rrt_results = rrt_helper_->plan(start_config, target_grippers_poses, time_limit);
+        const auto rrt_results = rrt_helper_->plan(
+                    start_config,
+                    target_grippers_poses,
+                    time_limit,
+                    world_state.robot_configuration_valid_);
 
 
 
@@ -1619,11 +1628,7 @@ void TaskFramework::convertRRTResultIntoFullRobotTrajectory(
             rrt_result[ind].getGrippers().first,
             rrt_result[ind].getGrippers().second};
         global_plan_gripper_trajectory_.push_back(grippers_poses);
-
-        const std::pair<VectorXd, VectorXd>& config_pair = rrt_result[ind].getRobotConfiguration();
-        VectorXd config_single_vec(config_pair.first.size() + config_pair.second.size());
-        config_single_vec << config_pair.first, config_pair.second;
-        global_plan_full_robot_trajectory_.push_back(config_single_vec);
+        global_plan_full_robot_trajectory_.push_back(rrt_result[ind].getRobotConfiguration());
     }
 }
 
