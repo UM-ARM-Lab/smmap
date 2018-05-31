@@ -1,5 +1,13 @@
 #include "smmap/task_framework.h"
 
+std::vector<Eigen::VectorXd> getJointInfo()
+{
+    const Eigen::VectorXd lower_limits = Eigen::VectorXd::Constant(6, -std::numeric_limits<double>::max());
+    const Eigen::VectorXd upper_limits = Eigen::VectorXd::Constant(6, std::numeric_limits<double>::max());
+    const Eigen::VectorXd weights = Eigen::VectorXd::Constant(6, 1.0);
+    return {lower_limits, upper_limits, weights};
+}
+
 int main(int argc, char* argv[])
 {
     // Read in all ROS parameters
@@ -14,7 +22,7 @@ int main(int argc, char* argv[])
                 nullptr,
                 nullptr,
                 nullptr,
-                nullptr,
+                &getJointInfo,
                 nullptr,
                 nullptr,
                 nullptr,

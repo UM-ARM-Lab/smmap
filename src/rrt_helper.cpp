@@ -572,7 +572,6 @@ std::pair<int64_t, double> getNearest(const RRTRobotRepresentation& robot_config
     return nearest;
 }
 
-template <bool planning_for_whole_robot>
 std::pair<int64_t, double> getNearest(const RRTNode& config, const std::vector<RRTNode, RRTAllocator>& tree, const size_t start_idx)
 {
     std::pair<int64_t, double> nearest(-1, std::numeric_limits<double>::infinity());
@@ -580,20 +579,7 @@ std::pair<int64_t, double> getNearest(const RRTNode& config, const std::vector<R
     for (size_t idx = start_idx; idx < tree.size(); idx++)
     {
         const RRTNode& test_node = tree[idx];
-        double distance = 0.0;
-//        if (test_node.isBlacklisted())
-//        {
-//            distance += RRTHelper::NN_BLACKLIST_DISTANCE;
-//        }
-
-        if (!planning_for_whole_robot)
-        {
-            distance += RRTNode::distanceSquared(test_node.getGrippers(), config.getGrippers());
-        }
-        else
-        {
-            distance += RRTNode::distanceSquared(test_node.getRobotConfiguration(), config.getRobotConfiguration());
-        }
+        const double distance = RRTNode::distanceSquared(test_node.getRobotConfiguration(), config.getRobotConfiguration());
 
         if (nearest.second > distance)
         {
@@ -667,27 +653,6 @@ int64_t RRTHelper::nearestNeighbour_internal(
         arc_helpers::DoNotOptimize(nearest);
         const double index_searching_time = stopwatch(READ);
         total_nearest_neighbour_index_searching_time_ += index_searching_time;
-
-        // Confirm no meaningful mistaktes made
-//        const auto linear_nearest = getNearest(config, planning_for_whole_robot_, *tree, 0, *manual_search_start_idx);
-//        if (linear_nearest.first != nearest.first)
-//        {
-//            const auto& flann_near = (*tree)[nearest.first];
-//            const auto& linear_near = (*tree)[linear_nearest.first];
-
-//            std::cout << "Mismatch between FLANN and Linear Search: " << " Forward tree? " << use_forward_tree << std::endl
-//                      << "FLANN:  " << " Idx: " << nearest.first        << " Dist: " << RRTNode::distanceSquared(config.getRobotConfiguration(), flann_near.getRobotConfiguration()) << " Flann Dist:  " << nearest.second << std::endl
-//                      << "Linear: " << " Idx: " << linear_nearest.first << " Dist: " << RRTNode::distanceSquared(config.getRobotConfiguration(), linear_near.getRobotConfiguration()) << std::endl
-//                      << "Target: " << config.print() << std::endl
-//                      << "FLANN:  " << flann_near.print() << std::endl
-//                      << "Linear: " << linear_near.print() << std::endl
-//                      << "Delta:  " << (flann_near.getRobotConfiguration().first - linear_near.getRobotConfiguration().first).transpose() << "  " << (flann_near.getRobotConfiguration().second - linear_near.getRobotConfiguration().second).transpose() << std::endl
-//                      << "Delta dist: " << RRTNode::distanceSquared(flann_near.getRobotConfiguration(), linear_near.getRobotConfiguration()) << std::endl
-//                      << std::endl;
-
-//            char c;
-//            std::cin >> c;
-//        }
     }
 
     // If we have data that isn't in the FLANN index
@@ -696,16 +661,7 @@ int64_t RRTHelper::nearestNeighbour_internal(
         Stopwatch stopwatch;
         arc_helpers::DoNotOptimize(*manual_search_start_idx);
 
-        // Move the if statement from inside of the distance function to outside via templates
-        std::pair<int64_t, double> linear_nearest(-1, std::numeric_limits<double>::infinity());
-        if (planning_for_whole_robot_)
-        {
-            linear_nearest = getNearest<true>(config, *tree, *manual_search_start_idx);
-        }
-        else
-        {
-            linear_nearest = getNearest<false>(config, *tree, *manual_search_start_idx);
-        }
+        const std::pair<int64_t, double> linear_nearest = getNearest(config, *tree, *manual_search_start_idx);
         if (linear_nearest.second < nearest.second)
         {
             nearest = linear_nearest;
@@ -730,9 +686,13 @@ RRTNode RRTHelper::configSampling()
 
     if (!planning_for_whole_robot_)
     {
+        const auto gripper_poses = posPairSampling_internal();
+        RRTRobotRepresentation robot_config(6);
+        robot_config << gripper_poses.first.translation(), gripper_poses.second.translation();
+
         sample = RRTNode(
-                    posPairSampling_internal(),
-                    starting_robot_configuration_,
+                    gripper_poses,
+                    robot_config,
                     std::make_shared<RubberBand>(*starting_band_));
     }
     else
@@ -967,7 +927,7 @@ size_t RRTHelper::forwardPropogationFunction(
 
     // Extract the target gripper pose and corresponding robot configuration
     const RRTGrippersRepresentation& target_grippers_position = target.getGrippers();
-    RRTRobotRepresentation target_robot_configuration = target.getRobotConfiguration();
+    const RRTRobotRepresentation target_robot_configuration = target.getRobotConfiguration();
 
     if (planning_for_whole_robot_ && !using_cbirrt_style_projection_)
     {
@@ -1248,21 +1208,19 @@ size_t RRTHelper::forwardPropogationFunction(
             // We could be updating the child indices of this node later, so take the value by non-const reference
             RRTNode& prev_node = tree_to_extend[parent_idx];
             const RubberBand::Ptr& prev_band = prev_node.getBand();
-            const RRTRobotRepresentation& prev_robot_config = prev_node.getRobotConfiguration();
 
             const double ratio = std::min(1.0, (double)(step_index + 1) * max_gripper_step_size_ / total_distance);
-            const Vector3d gripper_a_interpolated = EigenHelpers::Interpolate(Vector3d(starting_grippers_poses.first.translation()), Vector3d(target_grippers_position.first.translation()), ratio);
-            const Vector3d gripper_b_interpolated = EigenHelpers::Interpolate(Vector3d(starting_grippers_poses.second.translation()), Vector3d(target_grippers_position.second.translation()), ratio);
+            const RRTRobotRepresentation next_robot_configuration =
+                    EigenHelpers::Interpolate(starting_robot_configuration, target_robot_configuration, ratio);
             RRTGrippersRepresentation next_grippers_poses = starting_grippers_poses;
-            next_grippers_poses.first.translation() = gripper_a_interpolated;
-            next_grippers_poses.second.translation() = gripper_b_interpolated;
-            const RRTRobotRepresentation next_robot_configuration = prev_robot_config;
+            next_grippers_poses.first.translation() = next_robot_configuration.head<3>();
+            next_grippers_poses.second.translation() = next_robot_configuration.tail<3>();
 
             // Collision checking
             {
                 stopwatch(RESET);
-                arc_helpers::DoNotOptimize(gripper_a_interpolated);
-                bool in_collision = (gripper_a_interpolated - gripper_b_interpolated).norm() < gripper_min_distance_to_obstacles_;
+                arc_helpers::DoNotOptimize(next_grippers_poses);
+                bool in_collision = (next_grippers_poses.first.translation() - next_grippers_poses.second.translation()).norm() < gripper_min_distance_to_obstacles_;
                 arc_helpers::DoNotOptimize(in_collision);
                 const double collision_check_time_pt1 = stopwatch(READ);
                 total_collision_check_time_ += collision_check_time_pt1;
@@ -1273,12 +1231,12 @@ size_t RRTHelper::forwardPropogationFunction(
                 }
 
                 stopwatch(RESET);
-                arc_helpers::DoNotOptimize(gripper_a_interpolated);
+                arc_helpers::DoNotOptimize(next_grippers_poses);
                 // If the grippers enter collision with the environment, then return however far we were able to get
-                in_collision = (environment_sdf_->EstimateDistance3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
-                               (environment_sdf_->EstimateDistance3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_) ||
-                               (environment_sdf_->DistanceToBoundary3d(gripper_a_interpolated).first < gripper_min_distance_to_obstacles_) ||
-                               (environment_sdf_->DistanceToBoundary3d(gripper_b_interpolated).first < gripper_min_distance_to_obstacles_);
+                in_collision = (environment_sdf_->EstimateDistance3d(next_grippers_poses.first.translation()).first < gripper_min_distance_to_obstacles_) ||
+                               (environment_sdf_->EstimateDistance3d(next_grippers_poses.second.translation()).first < gripper_min_distance_to_obstacles_) ||
+                               (environment_sdf_->DistanceToBoundary3d(next_grippers_poses.first.translation()).first < gripper_min_distance_to_obstacles_) ||
+                               (environment_sdf_->DistanceToBoundary3d(next_grippers_poses.second.translation()).first < gripper_min_distance_to_obstacles_);
                 arc_helpers::DoNotOptimize(in_collision);
                 const double collision_check_time_pt2 = stopwatch(READ);
                 total_collision_check_time_ += collision_check_time_pt2;
@@ -1533,7 +1491,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                                 const RRTGrippersRepresentation& next_grippers_poses = backward_next_node.getGrippers();
                                 const RRTRobotRepresentation& next_robot_configuration = backward_next_node.getRobotConfiguration();
                                 const RubberBand::Ptr prev_band = forward_tree_[forward_parent_idx].getBand();
-            //                    backward_next_node.blacklist();
 
 
                                 RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
@@ -1716,7 +1673,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         grippers_goal_poses_.first = grippers_goal_poses_updated_vec.at(0);
         grippers_goal_poses_.second = grippers_goal_poses_updated_vec.at(1);
 
-
         for (size_t idx = 0; idx < goal_configurations.size(); ++idx)
         {
             backward_tree_.push_back(
@@ -1730,7 +1686,9 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     else
     {
         grippers_goal_poses_ = grippers_goal_poses;
-        backward_tree_.push_back(RRTNode(grippers_goal_poses_, start.getRobotConfiguration(), start.getBand()));
+        RRTRobotRepresentation goal_configuration(6);
+        goal_configuration << grippers_goal_poses_.first.translation(), grippers_goal_poses_.second.translation();
+        backward_tree_.push_back(RRTNode(grippers_goal_poses_, goal_configuration, start.getBand()));
     }
 
     // Double check that the input goal location isn't immediately impossible
