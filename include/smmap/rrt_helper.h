@@ -435,6 +435,10 @@ namespace smmap
             const std_msgs::ColorRGBA gripper_a_backward_tree_color_;
             const std_msgs::ColorRGBA gripper_b_backward_tree_color_;
             const std_msgs::ColorRGBA band_tree_color_;
+            // Used in the forward propagation function
+            int32_t tree_marker_id_;
+            size_t forward_tree_next_visualized_node_;
+            size_t backward_tree_next_visualized_node_;
     };
 }
 

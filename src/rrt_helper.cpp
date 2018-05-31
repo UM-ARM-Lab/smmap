@@ -960,9 +960,6 @@ size_t RRTHelper::forwardPropogationFunction(
                     5);
     }
 
-    static int32_t tree_marker_id = 1;
-    static size_t forward_tree_next_visualized_node = 0;
-    static size_t backward_tree_next_visualized_node = 0;
     const size_t visualization_frequency = 100;
 
     const RRTGrippersRepresentation& starting_grippers_poses = nearest_neighbour.getGrippers();
@@ -1346,8 +1343,8 @@ size_t RRTHelper::forwardPropogationFunction(
         tree_to_extend.size() % visualization_frequency == 0)
     {
         const auto starting_idx = (&tree_to_extend == &forward_tree_)
-                    ? forward_tree_next_visualized_node
-                    : backward_tree_next_visualized_node;
+                    ? forward_tree_next_visualized_node_
+                    : backward_tree_next_visualized_node_;
 
         const auto& tree_a_color = (&tree_to_extend == &forward_tree_)
                     ? gripper_a_forward_tree_color_
@@ -1364,22 +1361,22 @@ size_t RRTHelper::forwardPropogationFunction(
                     RRT_TREE_GRIPPER_A_NS,
                     RRT_TREE_GRIPPER_B_NS,
                     RRT_TREE_BAND_NS,
-                    tree_marker_id,
-                    tree_marker_id,
+                    tree_marker_id_,
+                    tree_marker_id_,
                     1,
                     tree_a_color,
                     tree_b_color,
                     band_tree_color_,
                     draw_band);
-        ++tree_marker_id;
+        ++tree_marker_id_;
 
         if (&tree_to_extend == &forward_tree_)
         {
-            forward_tree_next_visualized_node = tree_to_extend.size();
+            forward_tree_next_visualized_node_ = tree_to_extend.size();
         }
         else
         {
-            backward_tree_next_visualized_node = tree_to_extend.size();
+            backward_tree_next_visualized_node_ = tree_to_extend.size();
         }
     }
 
@@ -1456,7 +1453,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                             fwd_prop_max_steps,
                             fwd_prop_local_visualization_enabled);
 
-                // Record statistics for the randomly sampled extension
+                // Record statistics for the randomly sampled extensions
                 if (num_random_nodes_created != 0)
                 {
                     ++forward_random_samples_useful;
@@ -1466,10 +1463,24 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                     ++forward_random_samples_useless;
                 }
 
-                const bool sample_goal = uniform_unit_distribution_(*generator_) < goal_bias_;
-                if (num_random_nodes_created != 0 && sample_goal)
+                // Check if any of the new nodes reached the goal
+                for (size_t idx = forward_tree_.size() - num_random_nodes_created; idx < forward_tree_.size(); ++idx)
                 {
-                    // Record the index of the last node in the new branch. This is either the last item in the tree, or the nearest neighbour itself
+                    const RRTNode& test_node = forward_tree_[idx];
+                    if (goalReached(test_node))
+                    {
+                        path_found_ = true;
+                        goal_idx_in_forward_tree = idx;
+                        break;
+                    }
+                }
+
+                const bool sample_goal = uniform_unit_distribution_(*generator_) < goal_bias_;
+                if (num_random_nodes_created > 0 && sample_goal)
+                {
+                    // Record the index of the last node in the new branch.
+                    // This is either the last item in the tree, or the nearest neighbour itself
+                    // Given the check for num_random_nodes_created > 0 above, this will always be the last item in the tree
                     const int64_t last_node_idx_in_forward_tree_branch = num_random_nodes_created > 0 ?
                                 (int64_t)forward_tree_.size() - 1 : forward_tree_nearest_neighbour_idx;
 
@@ -1697,14 +1708,13 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     if (planning_for_whole_robot_)
     {
         const auto goal_configurations = robot_->getCloseIkSolutions(
-                    {robot_->getGrippersData()[0].name_, robot_->getGrippersData()[0].name_},
                     {grippers_goal_poses.first, grippers_goal_poses.second},
                     max_grippers_distance_);
         assert(goal_configurations.size() > 0);
 
         const auto grippers_goal_poses_updated_vec = robot_->getGrippersPoses(goal_configurations[0]);
-        grippers_goal_poses_.first = grippers_goal_poses_updated_vec[0];
-        grippers_goal_poses_.second = grippers_goal_poses_updated_vec[1];
+        grippers_goal_poses_.first = grippers_goal_poses_updated_vec.at(0);
+        grippers_goal_poses_.second = grippers_goal_poses_updated_vec.at(1);
 
 
         for (size_t idx = 0; idx < goal_configurations.size(); ++idx)
@@ -1720,19 +1730,18 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     else
     {
         grippers_goal_poses_ = grippers_goal_poses;
-        backward_tree_.push_back(RRTNode(grippers_goal_poses, start.getRobotConfiguration(), start.getBand()));
+        backward_tree_.push_back(RRTNode(grippers_goal_poses_, start.getRobotConfiguration(), start.getBand()));
     }
 
-
     // Double check that the input goal location isn't immediately impossible
-    const double first_gripper_dist_to_env = environment_sdf_->EstimateDistance3d(grippers_goal_poses.first.translation()).first;
-    const double second_gripper_dist_to_env = environment_sdf_->EstimateDistance3d(grippers_goal_poses.second.translation()).first;
+    const double first_gripper_dist_to_env = environment_sdf_->EstimateDistance3d(grippers_goal_poses_.first.translation()).first;
+    const double second_gripper_dist_to_env = environment_sdf_->EstimateDistance3d(grippers_goal_poses_.second.translation()).first;
     if (first_gripper_dist_to_env < gripper_min_distance_to_obstacles_ ||
         second_gripper_dist_to_env < gripper_min_distance_to_obstacles_ ||
-        (maxGrippersDistanceViolated(grippers_goal_poses, max_grippers_distance_) > max_grippers_distance_))
+        (maxGrippersDistanceViolated(grippers_goal_poses_, max_grippers_distance_) > max_grippers_distance_))
     {
-        const double dist_between_grippers = (grippers_goal_poses.first.translation() - grippers_goal_poses.second.translation()).norm();
-        std::cerr << "Unfeasible goal location: " << PrettyPrint::PrettyPrint(grippers_goal_poses) << std::endl;
+        const double dist_between_grippers = (grippers_goal_poses_.first.translation() - grippers_goal_poses_.second.translation()).norm();
+        std::cerr << "Unfeasible goal location: " << grippers_goal_poses_.first.translation() << "  :  " << grippers_goal_poses_.second.translation() << std::endl;
         std::cerr << "Min gripper collision distance: " << gripper_min_distance_to_obstacles_ << " Current Distances: " << first_gripper_dist_to_env << " " << second_gripper_dist_to_env << std::endl;
         std::cerr << "Max allowable distance: " << max_grippers_distance_ << " Distance beteween goal grippers: " << dist_between_grippers << std::endl;
         assert(false && "Unfeasible goal location");
@@ -1753,6 +1762,9 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
 
     if (visualization_enabled_globally_)
     {
+        tree_marker_id_ = 1;
+        forward_tree_next_visualized_node_ = 0;
+        backward_tree_next_visualized_node_ = 0;
         visualizeBlacklist();
     }
 
@@ -1774,6 +1786,15 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     }
 
     std::cout << " !!!!!!!!!!!!! Smoothing currently disabled, returning unsmoothed path !!!!!" << std::endl;
+
+    if (path.size() != 0)
+    {
+        if (visualization_enabled_globally_)
+        {
+            vis_->clearVisualizationsBullet();
+            visualizePath(path);
+        }
+    }
 
     return path;
 
