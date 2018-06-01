@@ -1349,8 +1349,10 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         const auto min_robot_step_size = GetRRTMinRobotDOFStepSize(ph_);
         const auto max_gripper_rotation = GetRRTMaxGripperRotation(ph_); // only matters for real robot
         const auto goal_reached_radius = dijkstras_task_->work_space_grid_.minStepDimension();
+//        const auto homotopy_distance_penalty = GetRRTHomotopyDistancePenalty();
         const auto min_gripper_distance_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_); // only matters for simulation
-        const auto homotopy_distance_penalty = GetRRTHomotopyDistancePenalty();
+        const auto band_distance2_scaling_factor = GetRRTBandDistance2ScalingFactor(ph_);
+        const auto band_max_points = GetRRTBandMaxPoints(ph_);
 
         // Visualization
         const auto enable_rrt_visualizations = !GetDisableAllVisualizations(ph_);
@@ -1403,7 +1405,9 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                     max_gripper_rotation,
                     goal_reached_radius,
                     min_gripper_distance_to_obstacles,
-                    homotopy_distance_penalty,
+                    // Dual stage NN checking variables
+                    band_distance2_scaling_factor,
+                    band_max_points,
                     // Visualization
                     vis_,
                     enable_rrt_visualizations);

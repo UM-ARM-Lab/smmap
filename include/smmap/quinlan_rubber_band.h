@@ -38,12 +38,15 @@ namespace smmap
 
         void setPointsAndSmooth(const EigenHelpers::VectorVector3d& points);
 
+        void overridePoints(const EigenHelpers::VectorVector3d& points);
+
         const EigenHelpers::VectorVector3d& forwardPropagateRubberBandToEndpointTargets(
                 const Eigen::Vector3d first_endpoint_target,
                 const Eigen::Vector3d second_endpoint_target,
                 bool verbose);
 
         const EigenHelpers::VectorVector3d& getVectorRepresentation() const;
+        const EigenHelpers::VectorVector3d upsampleBand(const size_t total_points) const;
 
         std::pair<Eigen::Vector3d, Eigen::Vector3d> getEndpoints() const;
 

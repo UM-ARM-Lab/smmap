@@ -25,7 +25,7 @@ namespace flann
         typedef T ResultType;
         typedef Eigen::Matrix<ElementType, Eigen::Dynamic, 1> VectorX;
 
-        L2_weighted(const Eigen::VectorXd& dof_weights = Eigen::VectorXd::Ones(0))
+        L2_weighted(const Eigen::VectorXd& dof_weights)
         {
             dof_weights_.resizeLike(dof_weights);
             dof_weights2_.resizeLike(dof_weights);
@@ -234,7 +234,8 @@ namespace smmap
                     const double max_gripper_rotation,
                     const double goal_reach_radius,
                     const double gripper_min_distance_to_obstacles,
-                    const double homotopy_distance_penalty,
+                    const double band_distance2_scaling_factor,
+                    const size_t band_max_points,
                     // Visualization
                     const smmap_utilities::Visualizer::Ptr vis,
                     const bool visualization_enabled);
@@ -312,11 +313,12 @@ namespace smmap
                     const bool use_forward_tree,
                     const RRTNode& config);
 
-            RRTNode configSampling();
+            RRTNode configSampling(const bool sample_band);
             // Used for timing purposes
             // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
             RRTGrippersRepresentation posPairSampling_internal();
             RRTRobotRepresentation robotConfigPairSampling_internal();
+            EigenHelpers::VectorVector3d bandSampling_internal();
 
             bool goalReached(const RRTNode& node);
 
@@ -371,8 +373,12 @@ namespace smmap
             const double max_gripper_rotation_;
             const double goal_bias_;
             const double goal_reach_radius_;
-            const double homotopy_distance_penalty_;
             const double gripper_min_distance_to_obstacles_;
+
+            // Use for double layer NN check
+            const double band_distance2_scaling_factor_;
+            const size_t band_max_points_;
+            const double band_max_dist2_;
 
             const bool using_cbirrt_style_projection_;
             const size_t forward_tree_extend_iterations_;
@@ -406,8 +412,8 @@ namespace smmap
 
             std::vector<float> forward_nn_raw_data_;
             std::vector<float> backward_nn_raw_data_;
-            NNIndexType forward_nn_index_;
-            NNIndexType backward_nn_index_;
+            std::shared_ptr<NNIndexType> forward_nn_index_;
+            std::shared_ptr<NNIndexType> backward_nn_index_;
             size_t forward_next_idx_to_add_to_nn_dataset_;
             size_t backward_next_idx_to_add_to_nn_dataset_;
 
@@ -419,6 +425,7 @@ namespace smmap
             double total_nearest_neighbour_index_building_time_;
             double total_nearest_neighbour_index_searching_time_;
             double total_nearest_neighbour_linear_searching_time_;
+            double total_nearest_neighbour_radius_searching_time_;
             double total_nearest_neighbour_time_;
             double total_projection_time_;
             double total_collision_check_time_;
