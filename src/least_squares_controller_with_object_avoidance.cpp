@@ -56,7 +56,7 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
     if (input_data.robot_jacobian_valid_)
     {
         const double max_robot_dof_step_size = robot_->max_dof_velocity_norm_ * robot_->dt_;
-        const double max_grippers_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
+        const double max_grippers_step_size = input_data.max_grippers_step_size_;
 
         // Build the robot DOF to deformable object jacobian
         const MatrixXd& robot_dof_to_grippers_poses_jacobian = input_data.robot_jacobian_;
@@ -137,7 +137,7 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
     }
     else
     {
-        const double max_grippers_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
+        const double max_grippers_step_size = input_data.max_grippers_step_size_;
 
         // Find the least-squares fitting to the desired object velocity
         VectorXd grippers_delta_achieve_goal;

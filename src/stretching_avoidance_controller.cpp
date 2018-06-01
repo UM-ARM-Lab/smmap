@@ -209,7 +209,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByRandomSa
     }
     else
     {
-        const double max_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
+        const double max_step_size = input_data.max_grippers_step_size_;
 
         std::vector<std::pair<AllGrippersSinglePoseDelta, double>> per_thread_optimal_command(
         #ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
@@ -472,7 +472,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
     {
         std::cerr << "Using pure tan(SE3) velocity version of optimization" << std::endl;
 
-        const double max_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
+        const double max_step_size = input_data.max_grippers_step_size_;
 
         // Return value of objective function, cost = norm(p_dot_desired - p_dot_test)
         const std::function<double(const AllGrippersSinglePoseDelta&)> eval_error_cost_fn = [&] (
@@ -979,7 +979,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
         }
 
 
-        const double max_individual_gripper_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
+        const double max_individual_gripper_step_size = input_data.max_grippers_step_size_;
         const double differencing_step_size = max_individual_gripper_step_size / 10.0;
         const double initial_gradient_step_size = max_individual_gripper_step_size / 2.0;
 
@@ -1291,7 +1291,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
     else
     {
         //////////// First, find an initial feasible point //////////////////////
-        const double max_individual_gripper_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
+        const double max_individual_gripper_step_size = input_data.max_grippers_step_size_;
 
         std::cout << "Initializing variables and functions for optimization use" << std::endl;
 
@@ -1815,7 +1815,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
     }
     else
     {
-        const double max_individual_gripper_step_size = robot_->max_gripper_velocity_norm_ * robot_->dt_;
+        const double max_individual_gripper_step_size = input_data.max_grippers_step_size_;
         const double differencing_step_size = max_individual_gripper_step_size / 100.0;
         const double initial_gradient_step_size = max_individual_gripper_step_size / 10.0;
 

@@ -1743,8 +1743,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         storePath(path);
     }
 
-    std::cout << " !!!!!!!!!!!!! Smoothing currently disabled, returning unsmoothed path !!!!!" << std::endl;
-
     if (path.size() != 0)
     {
         if (visualization_enabled_globally_)
@@ -1754,7 +1752,10 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         }
     }
 
-    return path;
+
+
+//    std::cout << " !!!!!!!!!!!!! Smoothing currently disabled, returning unsmoothed path !!!!!" << std::endl;
+//    return path;
 
 
 
@@ -2394,9 +2395,11 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                     RRTGrippersRepresentation target_poses = path.front().getGrippers();
                     target_poses.first.translation() = target_waypoints_first_gripper[waypoint_idx];
                     target_poses.second.translation() = target_waypoints_second_gripper[waypoint_idx];
+                    RRTRobotRepresentation target_config(6);
+                    target_config << target_waypoints_first_gripper[waypoint_idx], target_waypoints_second_gripper[waypoint_idx];
                     const RRTNode forward_prop_target_config(
                                 target_poses,
-                                RRTRobotRepresentation(),
+                                target_config,
                                 path.front().getBand());
 
                     const int64_t start_idx = (int64_t)smoothed_segment.size() - 1;
