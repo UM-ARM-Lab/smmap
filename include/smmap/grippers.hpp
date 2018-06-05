@@ -519,6 +519,31 @@ namespace smmap
                                                     distance_deserailzied.first),
                                       bytes_read);
             }
+
+            bool operator==(const CollisionData& other) const
+            {
+                if (nearest_point_to_obstacle_.cwiseNotEqual(nearest_point_to_obstacle_).any())
+                {
+                    return false;
+                }
+
+                if (obstacle_surface_normal_.cwiseNotEqual(other.obstacle_surface_normal_).any())
+                {
+                    return false;
+                }
+
+                if (distance_to_obstacle_ != other.distance_to_obstacle_)
+                {
+                    return false;
+                }
+
+                return true;
+            }
+
+            bool operator!=(const CollisionData& other) const
+            {
+                return !(*this == other);
+            }
     };
 
     inline std::ostream& operator<<(std::ostream& os, const smmap::CollisionData& data)

@@ -122,6 +122,7 @@ TaskSpecification::TaskSpecification(
     , default_deformability_(GetDefaultDeformability(ph_))
     , collision_scaling_factor_(GetCollisionScalingFactor(ph_))
     , max_stretch_factor_(GetMaxStretchFactor(ph_))
+    , max_band_length_(GetMaxBandLength(ph_))
     , max_time_(GetMaxTime(ph_))
 {}
 
@@ -205,6 +206,11 @@ double TaskSpecification::collisionScalingFactor() const
 double TaskSpecification::maxStretchFactor() const
 {
     return max_stretch_factor_;
+}
+
+double TaskSpecification::maxBandLength() const
+{
+    return max_band_length_;
 }
 
 double TaskSpecification::maxTime() const

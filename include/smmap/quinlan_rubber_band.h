@@ -59,7 +59,7 @@ namespace smmap
                 const std_msgs::ColorRGBA& safe_color,
                 const std_msgs::ColorRGBA& overstretched_color,
                 const int32_t id,
-                const bool visualization_enabled) const;
+                const bool visualization_enabled = true) const;
 
         void visualize(
                 const EigenHelpers::VectorVector3d& test_band,
@@ -67,14 +67,14 @@ namespace smmap
                 const std_msgs::ColorRGBA& safe_color,
                 const std_msgs::ColorRGBA& overstretched_color,
                 const int32_t id,
-                const bool visualization_enabled) const;
+                const bool visualization_enabled = true) const;
 
         void visualizeWithBubbles(
                 const std::string& marker_name,
                 const std_msgs::ColorRGBA& safe_color,
                 const std_msgs::ColorRGBA& overstretched_color,
                 const int32_t id,
-                const bool visualization_enabled) const;
+                const bool visualization_enabled = true) const;
 
         void visualizeWithBubbles(
                 const EigenHelpers::VectorVector3d& test_band,
@@ -82,7 +82,7 @@ namespace smmap
                 const std_msgs::ColorRGBA& safe_color,
                 const std_msgs::ColorRGBA& overstretched_color,
                 const int32_t id,
-                const bool visualization_enabled) const;
+                const bool visualization_enabled = true) const;
 
         uint64_t serialize(std::vector<uint8_t>& buffer) const;
         uint64_t deserializeIntoSelf(const std::vector<uint8_t>& buffer, const uint64_t current);

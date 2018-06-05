@@ -1091,7 +1091,7 @@ size_t RRTHelper::forwardPropogationFunction(
                     5);
     }
 
-    const size_t visualization_frequency = 100;
+    const size_t visualization_frequency = 1000;
 
     const RRTGrippersRepresentation& starting_grippers_poses = nearest_neighbour.getGrippers();
     const RRTRobotRepresentation& starting_robot_configuration = nearest_neighbour.getRobotConfiguration();
@@ -1507,6 +1507,9 @@ size_t RRTHelper::forwardPropogationFunction(
         {
             backward_tree_next_visualized_node_ = tree_to_extend.size();
         }
+
+        vis_->forcePublishNow();
+        vis_->purgeMarkerList();
     }
 
     arc_helpers::DoNotOptimize(nodes_created);
@@ -1830,7 +1833,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     forward_tree_.push_back(start);
 
     // Extract goal/termination information
-    max_grippers_distance_ = start.getBand()->maxSafeLength();
+    max_grippers_distance_ = starting_band_->maxSafeLength();
     time_limit_ = time_limit;
 
     // Setup the backward tree
@@ -1900,6 +1903,16 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         visualizeBlacklist();
     }
 
+
+
+//    starting_band_->visualize("rrt_starting_band", Visualizer::Black(), Visualizer::Cyan(), 1);
+//    vis_->forcePublishNow();
+//    std::cout << "Starting band length: " << starting_band_->totalLength() << " Max band length: " << starting_band_->maxSafeLength() << std::endl;
+//    std::cout << "Starting band length: " << starting_band_->totalLength() << " Max band length: " << starting_band_->maxSafeLength() << std::endl;
+
+
+
+
     ROS_INFO_NAMED("rrt", "Starting SimpleHybridRRTPlanner");
     std::vector<RRTNode, RRTAllocator> path;
     if (useStoredPath())
@@ -1913,6 +1926,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         robot_->lockEnvironment();
         path = planningMainLoop();
         robot_->unlockEnvironment();
+        visualizeBothTrees();
         std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl << std::endl;
         storePath(path);
     }
@@ -1922,7 +1936,11 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         if (visualization_enabled_globally_)
         {
             vis_->deleteAll();
+            vis_->forcePublishNow();
+            vis_->clearVisualizationsBullet();
+            visualizeBlacklist();
             visualizePath(path);
+            vis_->forcePublishNow();
         }
     }
 
@@ -1961,7 +1979,12 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
 
         if (visualization_enabled_globally_)
         {
-            vis_->deleteObjects(RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
+            vis_->deleteAll();
+            vis_->forcePublishNow();
+            vis_->clearVisualizationsBullet();
+            visualizeBlacklist();
+            visualizePath(path);
+            vis_->forcePublishNow();
         }
 
         return smoothed_path;
@@ -2742,6 +2765,45 @@ void RRTHelper::visualizeTree(
 //            std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
         }
     }
+}
+
+void RRTHelper::visualizeBothTrees() const
+{
+    vis_->deleteObjects(RRT_TREE_GRIPPER_A_NS, 0, tree_marker_id_ + 1);
+    vis_->deleteObjects(RRT_TREE_GRIPPER_B_NS, 0, tree_marker_id_ + 1);
+    vis_->deleteObjects(RRT_TREE_BAND_NS, 0, tree_marker_id_ + 1);
+
+    const bool draw_band = false;
+
+    visualizeTree(
+                forward_tree_,
+                0,
+                RRT_TREE_GRIPPER_A_NS,
+                RRT_TREE_GRIPPER_B_NS,
+                RRT_TREE_BAND_NS,
+                1,
+                1,
+                1,
+                gripper_a_forward_tree_color_,
+                gripper_b_forward_tree_color_,
+                band_tree_color_,
+                draw_band);
+
+    visualizeTree(
+                backward_tree_,
+                0,
+                RRT_TREE_GRIPPER_A_NS,
+                RRT_TREE_GRIPPER_B_NS,
+                RRT_TREE_BAND_NS,
+                2,
+                2,
+                2,
+                gripper_a_backward_tree_color_,
+                gripper_b_backward_tree_color_,
+                band_tree_color_,
+                draw_band);
+
+    vis_->forcePublishNow();
 }
 
 void RRTHelper::visualizePath(const std::vector<RRTNode, RRTAllocator>& path) const

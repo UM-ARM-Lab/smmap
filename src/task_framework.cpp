@@ -35,8 +35,8 @@ using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 #pragma message "Magic number - reward scaling factor starting value"
 #define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
 
-//#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 1
-#define ENABLE_LOCAL_CONTROLLER_LOAD_SAVE 0
+//#define ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE 1
+#define ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE 0
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal helpers
@@ -200,7 +200,7 @@ TaskFramework::TaskFramework(ros::NodeHandle& nh,
     , visualize_predicted_motion_(!GetDisableAllVisualizations(ph) && GetVisualizeObjectPredictedMotion(ph_))
     , visualize_free_space_graph_(!GetDisableAllVisualizations(ph) && GetVisualizeFreeSpaceGraph(ph_))
 {
-    ROS_INFO_STREAM_NAMED("planner", "Using seed " << std::hex << seed_ );
+    ROS_INFO_STREAM_NAMED("task_framework", "Using seed " << std::hex << seed_ );
     initializePlannerLogging();
     initializeControllerLogging();
 }
@@ -226,9 +226,14 @@ void TaskFramework::execute()
         // Extract the maximum distance between the grippers
         // This assumes that the starting position of the grippers is at the maximum "unstretched" distance
         const auto& grippers_starting_poses = world_feedback.all_grippers_single_pose_;
-        const double max_band_distance =
+        const double max_calced_band_distance =
                 (grippers_starting_poses[0].translation() - grippers_starting_poses[1].translation()).norm()
                 * dijkstras_task_->maxStretchFactor();
+        ROS_ERROR_STREAM_COND_NAMED(!CloseEnough(max_calced_band_distance, dijkstras_task_->maxBandLength(), 1e-3),
+                                    "task_framework",
+                                    "Calc'd max band distance is: " << max_calced_band_distance <<
+                                    " but the ros param saved distance is " << dijkstras_task_->maxBandLength() <<
+                                    ". Double check the stored value in the roslaunch file.");
 
         // Find the shortest path through the object, between the grippers, while follow nodes of the object.
         // Used to determine the starting position of the rubber band at each timestep
@@ -244,7 +249,7 @@ void TaskFramework::execute()
                     world_feedback, path_between_grippers_through_object_);
         rubber_band_between_grippers_ = std::make_shared<RubberBand>(
                     starting_band_points,
-                    max_band_distance,
+                    dijkstras_task_->maxBandLength(),
                     dijkstras_task_,
                     vis_,
                     generator_);
@@ -262,12 +267,12 @@ void TaskFramework::execute()
         const WorldState world_state = world_feedback;
         world_feedback = sendNextCommand(world_state);
 
-        if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()
+         if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()
                      || task_specification_->taskDone(world_feedback)))
         {
-            ROS_INFO_NAMED("planner", "------------------------------- End of Task -------------------------------------------");
+            ROS_INFO_NAMED("task_framework", "------------------------------- End of Task -------------------------------------------");
             const double current_error = task_specification_->calculateError(world_feedback);
-            ROS_INFO_STREAM_NAMED("planner", "   Planner/Task sim time " << world_feedback.sim_time_ << "\t Error: " << current_error);
+            ROS_INFO_STREAM_NAMED("task_framework", "   Planner/Task sim time " << world_feedback.sim_time_ << "\t Error: " << current_error);
 
             vis_->deleteAll();
             std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
@@ -295,11 +300,24 @@ void TaskFramework::execute()
  * @return
  */
 WorldState TaskFramework::sendNextCommand(
-        const WorldState& world_state)
+        WorldState world_state)
 {
-    ROS_INFO_NAMED("planner", "---------------------------- Start of Loop -----------------------------------------");
+#if ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE
+    if (useStoredWorldState())
+    {
+        const auto world_state_and_band = loadStoredWorldState();
+        world_state = world_state_and_band.first;
+        rubber_band_between_grippers_ = world_state_and_band.second;
+    }
+    else
+    {
+        storeWorldState(world_state, rubber_band_between_grippers_);
+    }
+#endif
+
+    ROS_INFO_NAMED("task_framework", "---------------------------- Start of Loop -----------------------------------------");
     const double current_error = task_specification_->calculateError(world_state);
-    ROS_INFO_STREAM_NAMED("planner", "Planner/Task sim time " << world_state.sim_time_ << "\t Error: " << current_error);
+    ROS_INFO_STREAM_NAMED("task_framework", "Planner/Task sim time " << world_state.sim_time_ << "\t Error: " << current_error);
 
     if (enable_stuck_detection_)
     {
@@ -313,7 +331,7 @@ WorldState TaskFramework::sendNextCommand(
         {
             Stopwatch stopwatch;
             const bool global_plan_will_overstretch = predictStuckForGlobalPlannerResults();
-            ROS_INFO_STREAM_NAMED("planner", "Determined if global planner needed in          " << stopwatch(READ) << " seconds");
+            ROS_INFO_STREAM_NAMED("task_framework", "Determined if global planner needed in          " << stopwatch(READ) << " seconds");
 
             if (global_plan_will_overstretch)
             {
@@ -322,8 +340,8 @@ WorldState TaskFramework::sendNextCommand(
                 vis_->deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 2);
                 vis_->deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(2 * max_lookahead_steps_) + 2);
 
-                ROS_WARN_NAMED("planner", "Invoking global planner as the current plan will overstretch the deformable object");
-                ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
+                ROS_WARN_NAMED("task_framework", "Invoking global planner as the current plan will overstretch the deformable object");
+                ROS_INFO_NAMED("task_framework", "----------------------------------------------------------------------------");
             }
         }
         // Check if the local controller will be stuck
@@ -334,7 +352,7 @@ WorldState TaskFramework::sendNextCommand(
             const bool global_planner_needed_due_to_overstretch = globalPlannerNeededDueToOverstretch(world_state);
             const bool global_planner_needed_due_to_lack_of_progress = globalPlannerNeededDueToLackOfProgress();
             arc_helpers::DoNotOptimize(global_planner_needed_due_to_lack_of_progress);
-            ROS_INFO_STREAM_NAMED("planner", "Determined if global planner needed in " << stopwatch(READ) << " seconds");
+            ROS_INFO_STREAM_NAMED("task_framework", "Determined if global planner needed in " << stopwatch(READ) << " seconds");
 
             if (global_planner_needed_due_to_overstretch || global_planner_needed_due_to_lack_of_progress)
             {
@@ -344,9 +362,9 @@ WorldState TaskFramework::sendNextCommand(
 
                 vis_->deleteAll();
 
-                ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "planner", "Invoking global planner due to overstretch");
-                ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "planner", "Invoking global planner due to collision");
-                ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
+                ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "task_framework", "Invoking global planner due to overstretch");
+                ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "task_framework", "Invoking global planner due to collision");
+                ROS_INFO_NAMED("task_framework", "----------------------------------------------------------------------------");
             }
         }
 
@@ -385,7 +403,7 @@ WorldState TaskFramework::sendNextCommand(
     }
     else
     {
-        ROS_WARN_NAMED("planner", "Unable to do future constraint violation detection");
+        ROS_WARN_NAMED("task_framework", "Unable to do future constraint violation detection");
         return sendNextCommandUsingLocalController(world_state);
     }
 }
@@ -396,42 +414,31 @@ WorldState TaskFramework::sendNextCommand(
  * @return
  */
 WorldState TaskFramework::sendNextCommandUsingLocalController(
-        WorldState world_state)
+        const WorldState& current_world_state)
 {
-#if ENABLE_LOCAL_CONTROLLER_LOAD_SAVE
-    if (useStoredWorldState())
-    {
-        loadStoredWorldState(world_state);
-    }
-    else
-    {
-        storeWorldState(world_state);
-    }
-#endif
-
     Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
 
-    vis_->visualizeCloth("controller_input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
+    vis_->visualizeCloth("controller_input_deformable_object", current_world_state.object_configuration_, Visualizer::Green(0.5), 1);
 
     // Temporaries needed here bercause model_input_data takes things by reference
-    const DesiredDirection desired_object_manipulation_direction = task_specification_->calculateDesiredDirection(world_state);
-    const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian(world_state.robot_configuration_);
+    const DesiredDirection desired_object_manipulation_direction = task_specification_->calculateDesiredDirection(current_world_state);
+    const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian(current_world_state.robot_configuration_);
     // Build the constraints for the gippers and other points of interest on the robot - includes the grippers
     const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data_ =
-            robot_->getPointsOfInterestCollisionData(world_state.robot_configuration_);
+            robot_->getPointsOfInterestCollisionData(current_world_state.robot_configuration_);
     const DeformableController::InputData model_input_data(
-                world_state,
+                current_world_state,
                 desired_object_manipulation_direction,
                 robot_,
                 robot_dof_to_grippers_poses_jacobian,
-                world_state.robot_configuration_valid_,
+                current_world_state.robot_configuration_valid_,
                 poi_collision_data_,
                 robot_->max_gripper_velocity_norm_ * robot_->dt_);
 
     if (visualize_desired_motion_)
     {
-        visualizeDesiredMotion(world_state, model_input_data.desired_object_motion_.error_correction_);
+        visualizeDesiredMotion(current_world_state, model_input_data.desired_object_motion_.error_correction_);
 //        std::this_thread::sleep_for(std::chrono::duration<double>(2.0));
     }
 
@@ -439,10 +446,10 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(*generator_);
 
     const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
-    ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
+    ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "task_framework", "Using model index " << model_to_use);
 
     // Querry each model for it's best gripper delta
-    ROS_INFO_STREAM_NAMED("planner", "Generating model suggestions");
+    ROS_INFO_STREAM_NAMED("task_framework", "Generating model suggestions");
     stopwatch(RESET);
     std::vector<DeformableController::OutputData> suggested_robot_commands(num_models_);
     std::vector<double> controller_computation_time(num_models_, 0.0);
@@ -460,21 +467,21 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
             controller_computation_time[model_ind] = individual_controller_stopwatch(READ);
 
             // Measure the time it took to pick a model
-            ROS_DEBUG_STREAM_NAMED("planner", model_ind << "th Controller get suggested motion in          " << controller_computation_time[model_ind] << " seconds");
+            ROS_DEBUG_STREAM_NAMED("task_framework", model_ind << "th Controller get suggested motion in          " << controller_computation_time[model_ind] << " seconds");
         }
     }
     // Measure the time it took to pick a model
     const DeformableController::OutputData& selected_command = suggested_robot_commands[(size_t)model_to_use];
-    ROS_INFO_STREAM_NAMED("planner", "Calculated model suggestions and picked one in  " << stopwatch(READ) << " seconds");
-    if (world_state.robot_configuration_valid_)
+    ROS_INFO_STREAM_NAMED("task_framework", "Calculated model suggestions and picked one in  " << stopwatch(READ) << " seconds");
+    if (current_world_state.robot_configuration_valid_)
     {
-        ROS_INFO_STREAM_NAMED("planner", "Robot DOF motion: " << selected_command.robot_dof_motion_.transpose());
+        ROS_INFO_STREAM_NAMED("task_framework", "Robot DOF motion: " << selected_command.robot_dof_motion_.transpose());
     }
     for (size_t ind = 0; ind < selected_command.grippers_motion_.size(); ++ind)
     {
-        ROS_INFO_STREAM_NAMED("planner", "Gripper " << ind << " motion: " << selected_command.grippers_motion_[ind].transpose());
+        ROS_INFO_STREAM_NAMED("task_framework", "Gripper " << ind << " motion: " << selected_command.grippers_motion_[ind].transpose());
     }
-    ROS_INFO_STREAM_NAMED("planner", "Selected command gripper action norm:  " << MultipleGrippersVelocity6dNorm(selected_command.grippers_motion_));
+    ROS_INFO_STREAM_NAMED("task_framework", "Selected command gripper action norm:  " << MultipleGrippersVelocity6dNorm(selected_command.grippers_motion_));
 
     // Collect feedback data for logging purposes
     std::vector<WorldState> individual_model_results(num_models_);
@@ -491,19 +498,19 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
         for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
         {
             poses_to_test[model_ind] = kinematics::applyTwist(
-                        world_state.all_grippers_single_pose_, suggested_robot_commands[model_ind].grippers_motion_);
+                        current_world_state.all_grippers_single_pose_, suggested_robot_commands[model_ind].grippers_motion_);
 
             configurations_to_test[model_ind] =
-                    world_state.robot_configuration_ + suggested_robot_commands[model_ind].robot_dof_motion_;
+                    current_world_state.robot_configuration_ + suggested_robot_commands[model_ind].robot_dof_motion_;
         }
-        robot_->testRobotMotion(poses_to_test, configurations_to_test, world_state.robot_configuration_valid_, test_feedback_fn);
+        robot_->testRobotMotion(poses_to_test, configurations_to_test, current_world_state.robot_configuration_valid_, test_feedback_fn);
 
-        ROS_INFO_STREAM_NAMED("planner", "Collected data to calculate regret in " << stopwatch(READ) << " seconds");
+        ROS_INFO_STREAM_NAMED("task_framework", "Collected data to calculate regret in " << stopwatch(READ) << " seconds");
     }
 
     if (visualize_gripper_motion_)
     {
-        ROS_WARN_THROTTLE_NAMED(1.0, "planner", "Asked to visualize grippper motion but this is disabled. Manually enable the type of visualization you want.");
+        ROS_WARN_THROTTLE_NAMED(1.0, "task_framework", "Asked to visualize grippper motion but this is disabled. Manually enable the type of visualization you want.");
 
 //        for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
 //        {
@@ -526,22 +533,22 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
     }
 
     // Execute the command
-    ROS_INFO_STREAM_NAMED("planner", "Sending command to robot");
-    const auto all_grippers_single_pose = kinematics::applyTwist(world_state.all_grippers_single_pose_, selected_command.grippers_motion_);
-    const auto robot_configuration = world_state.robot_configuration_ + selected_command.robot_dof_motion_;
+    ROS_INFO_STREAM_NAMED("task_framework", "Sending command to robot");
+    const auto all_grippers_single_pose = kinematics::applyTwist(current_world_state.all_grippers_single_pose_, selected_command.grippers_motion_);
+    const auto robot_configuration = current_world_state.robot_configuration_ + selected_command.robot_dof_motion_;
     // Measure execution time
     stopwatch(RESET);
     arc_helpers::DoNotOptimize(all_grippers_single_pose);
     const WorldState world_feedback = robot_->commandRobotMotion(
                 all_grippers_single_pose,
                 robot_configuration,
-                world_state.robot_configuration_valid_);
+                current_world_state.robot_configuration_valid_);
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
 
     if (visualize_predicted_motion_)
     {
-        ROS_WARN_THROTTLE_NAMED(1.0, "planner", "Asked to visualize predicted motion but this is disabled. Manually enable the type of visualization you want.");
+        ROS_WARN_THROTTLE_NAMED(1.0, "task_framework", "Asked to visualize predicted motion but this is disabled. Manually enable the type of visualization you want.");
 
 //        const ObjectPointSet& object_delta_constrained = suggested_robot_commands[0].object_motion_;
 //        const ObjectPointSet& object_delta_diminishing = suggested_robot_commands[1].object_motion_;
@@ -577,13 +584,13 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
     std::vector<double> model_prediction_errors_unweighted(model_list_.size(), 0.0);
     if (collect_results_for_all_models_)
     {
-        ROS_INFO_NAMED("planner", "Calculating model predictions based on real motion taken");
+        ROS_INFO_NAMED("task_framework", "Calculating model predictions based on real motion taken");
 
-        const ObjectPointSet true_object_delta = world_feedback.object_configuration_ - world_state.object_configuration_;
+        const ObjectPointSet true_object_delta = world_feedback.object_configuration_ - current_world_state.object_configuration_;
 
         for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
         {
-            const ObjectPointSet predicted_delta = model_list_[model_ind]->getObjectDelta(world_state, selected_command.grippers_motion_);
+            const ObjectPointSet predicted_delta = model_list_[model_ind]->getObjectDelta(current_world_state, selected_command.grippers_motion_);
             const ObjectPointSet prediction_error_sq = (predicted_delta - true_object_delta).cwiseAbs2();
 
             const Map<const VectorXd> error_sq_as_vector(prediction_error_sq.data(), prediction_error_sq.size());
@@ -592,15 +599,15 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
         }
     }
 
-    ROS_INFO_NAMED("planner", "Updating models");
-    updateModels(world_state, model_input_data.desired_object_motion_.error_correction_, suggested_robot_commands, model_to_use, world_feedback);
+    ROS_INFO_NAMED("task_framework", "Updating models");
+    updateModels(current_world_state, model_input_data.desired_object_motion_.error_correction_, suggested_robot_commands, model_to_use, world_feedback);
 
     const double controller_time = function_wide_stopwatch(READ) - robot_execution_time;
-    ROS_INFO_STREAM_NAMED("planner", "Total local controller time                     " << controller_time << " seconds");
+    ROS_INFO_STREAM_NAMED("task_framework", "Total local controller time                     " << controller_time << " seconds");
 
-    ROS_INFO_NAMED("planner", "Logging data");
-    logPlannerData(world_state, world_feedback, individual_model_results, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use);
-    controllerLogData(world_state, world_feedback, individual_model_results, model_input_data, controller_computation_time, model_prediction_errors_weighted, model_prediction_errors_unweighted);
+    ROS_INFO_NAMED("task_framework", "Logging data");
+    logPlannerData(current_world_state, world_feedback, individual_model_results, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use);
+    controllerLogData(current_world_state, world_feedback, individual_model_results, model_input_data, controller_computation_time, model_prediction_errors_weighted, model_prediction_errors_unweighted);
 
     return world_feedback;
 }
@@ -624,7 +631,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
     ++global_plan_current_timestep_;
     if (global_plan_current_timestep_ == global_plan_gripper_trajectory_.size())
     {
-        ROS_INFO_NAMED("planner", "Global plan finished, resetting grippers pose history and error history");
+        ROS_INFO_NAMED("task_framework", "Global plan finished, resetting grippers pose history and error history");
 
         executing_global_trajectory_ = false;
         grippers_pose_history_.clear();
@@ -704,8 +711,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
     // sizeOfLargest(...) should be at least 2, so this assert should always be true
     assert(actual_lookahead_steps <= max_lookahead_steps_);
 
-    ROS_INFO_STREAM_NAMED("planner", "Calculated projected cloth paths                 - Version 1 - in " << stopwatch(READ) << " seconds");
-    ROS_INFO_STREAM_NAMED("planner", "Max lookahead steps: " << max_lookahead_steps_ << " Actual steps: " << actual_lookahead_steps);
+    ROS_INFO_STREAM_NAMED("task_framework", "Calculated projected cloth paths                 - Version 1 - in " << stopwatch(READ) << " seconds");
+    ROS_INFO_STREAM_NAMED("task_framework", "Max lookahead steps: " << max_lookahead_steps_ << " Actual steps: " << actual_lookahead_steps);
 
     visualizeProjectedPaths(projected_deformable_point_paths, visualization_enabled);
     projected_deformable_point_paths_and_projected_virtual_rubber_bands.first = projected_deformable_point_paths;
@@ -713,7 +720,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Constraint violation Version 2a - Vector field forward "simulation" - rubber band
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    ROS_INFO_STREAM_NAMED("planner", "Starting future constraint violation detection   - Version 2a - Total steps taken " << actual_lookahead_steps);
+    ROS_INFO_STREAM_NAMED("task_framework", "Starting future constraint violation detection   - Version 2a - Total steps taken " << actual_lookahead_steps);
     assert(num_models_ == 1 && starting_world_state.all_grippers_single_pose_.size() == 2);
     const auto& correspondences = dijkstras_task_->getCoverPointCorrespondences(starting_world_state);
 
@@ -795,7 +802,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
         // Finish collecting the gripper collision data
         world_state_copy.gripper_collision_data_ = collision_check_future.get();
     }
-    ROS_INFO_STREAM_NAMED("planner", "Calculated future constraint violation detection - Version 2a - in " << function_wide_stopwatch(READ) << " seconds");
+    ROS_INFO_STREAM_NAMED("task_framework", "Calculated future constraint violation detection - Version 2a - in " << function_wide_stopwatch(READ) << " seconds");
 
     vis_->deleteObjects(PROJECTED_BAND_NS, (int32_t)actual_lookahead_steps + 2, (int32_t)max_lookahead_steps_ + 2);
     vis_->deleteObjects(PROJECTED_GRIPPER_NS, (int32_t)(2 * actual_lookahead_steps) + 2, (int32_t)(2 * max_lookahead_steps_) + 2);
@@ -897,6 +904,9 @@ bool TaskFramework::globalPlannerNeededDueToLackOfProgress()
 
 bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization_enabled)
 {
+    //#warning "!!!!!!! Global plan overstretch check disabled!!!!!"
+    //return false;
+
     assert(global_plan_current_timestep_ < global_plan_gripper_trajectory_.size());
 
     // TODO: Move to class wide location, currently in 2 positions in this file
@@ -926,6 +936,11 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
     }
 
     // TODO: delete old visualization markers if the remainder of the path is short
+
+    if (overstretch_predicted)
+    {
+        vis_->forcePublishNow();
+    }
 
     return overstretch_predicted;
 }
@@ -1349,6 +1364,8 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     rrt_helper_->addBandToBlacklist(rubber_band_between_grippers_->getVectorRepresentation());
 
     vis_->deleteAll();
+    vis_->forcePublishNow();
+    vis_->clearVisualizationsBullet();
 
     if (GetRRTReuseOldResults(ph_))
     {
@@ -1422,7 +1439,11 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                     robot_config,
                     rubber_band_between_grippers_);
 
+//        #warning "!!!!!!!!!!!!!!!!!!!! Grippers RRT goal manually specified for all plans after the first !!!!!!!!!"
+//        const AllGrippersSinglePose target_grippers_poses_vec = num_times_invoked > 1 ?
+//                    world_state.all_grippers_single_pose_ : getGripperTargets(world_state);
         const AllGrippersSinglePose target_grippers_poses_vec = getGripperTargets(world_state);
+
         const RRTGrippersRepresentation target_grippers_poses(
                     target_grippers_poses_vec[0],
                     target_grippers_poses_vec[1]);
@@ -1574,7 +1595,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
             if (ph_.getParam("translational_deformability", translational_deformability) &&
                      ph_.getParam("rotational_deformability", rotational_deformability))
             {
-                ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                ROS_INFO_STREAM_NAMED("task_framework", "Overriding deformability values to "
                                        << translational_deformability << " "
                                        << rotational_deformability);
             }
@@ -1582,7 +1603,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
             {
                 translational_deformability = task_specification_->defaultDeformability();
                 rotational_deformability = task_specification_->defaultDeformability();
-                ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                ROS_INFO_STREAM_NAMED("task_framework", "Using default deformability value of "
                                        << task_specification_->defaultDeformability());
             }
 
@@ -1612,7 +1633,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
         }
         case CONSTRAINT_SINGLE_MODEL_CONSTRAINT_CONTROLLER:
         {
-            ROS_INFO_NAMED("planner", "Using constraint model and random sampling controller");
+            ROS_INFO_NAMED("task_framework", "Using constraint model and random sampling controller");
 
             const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
             const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
@@ -1642,7 +1663,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
         }
         case DIMINISHING_RIGIDITY_SINGLE_MODEL_CONSTRAINT_CONTROLLER:
         {
-            ROS_INFO_NAMED("planner", "Using dminishing model and random sampling controller");
+            ROS_INFO_NAMED("task_framework", "Using dminishing model and random sampling controller");
 
             double translational_deformability, rotational_deformability;
             const sdf_tools::SignedDistanceField::ConstPtr environment_sdf(GetEnvironmentSDF(nh_));
@@ -1650,7 +1671,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
             if (ph_.getParam("translational_deformability", translational_deformability) &&
                      ph_.getParam("rotational_deformability", rotational_deformability))
             {
-                ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                ROS_INFO_STREAM_NAMED("task_framework", "Overriding deformability values to "
                                        << translational_deformability << " "
                                        << rotational_deformability);
             }
@@ -1658,7 +1679,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
             {
                 translational_deformability = task_specification_->defaultDeformability();
                 rotational_deformability = task_specification_->defaultDeformability();
-                ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                ROS_INFO_STREAM_NAMED("task_framework", "Using default deformability value of "
                                        << task_specification_->defaultDeformability());
             }
 
@@ -1704,7 +1725,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                                    optimization_enabled));
                 }
             }
-            ROS_INFO_STREAM_NAMED("planner", "Num diminishing rigidity models: "
+            ROS_INFO_STREAM_NAMED("task_framework", "Num diminishing rigidity models: "
                                    << std::floor((deform_max - deform_min) / deform_step));
 
             ////////////////////////////////////////////////////////////////////////
@@ -1728,13 +1749,13 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                                    task_specification_->collisionScalingFactor(),
                                                    optimization_enabled));
             }
-            ROS_INFO_STREAM_NAMED("planner", "Num adaptive Jacobian models: "
+            ROS_INFO_STREAM_NAMED("task_framework", "Num adaptive Jacobian models: "
                                    << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
             break;
         }
         case MULTI_MODEL_CONTROLLER_TEST:
         {
-            ROS_INFO_NAMED("planner", "Using multiple model-controller sets");
+            ROS_INFO_NAMED("task_framework", "Using multiple model-controller sets");
 
             // Constraint Model with New Controller. (MM)
             {
@@ -1773,7 +1794,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                 if (ph_.getParam("translational_deformability", translational_deformability) &&
                          ph_.getParam("rotational_deformability", rotational_deformability))
                 {
-                    ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                    ROS_INFO_STREAM_NAMED("task_framework", "Overriding deformability values to "
                                            << translational_deformability << " "
                                            << rotational_deformability);
                 }
@@ -1781,7 +1802,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                 {
                     translational_deformability = task_specification_->defaultDeformability();
                     rotational_deformability = task_specification_->defaultDeformability();
-                    ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                    ROS_INFO_STREAM_NAMED("task_framework", "Using default deformability value of "
                                            << task_specification_->defaultDeformability());
                 }
 
@@ -1808,7 +1829,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                 if (ph_.getParam("translational_deformability", translational_deformability) &&
                          ph_.getParam("rotational_deformability", rotational_deformability))
                 {
-                    ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                    ROS_INFO_STREAM_NAMED("task_framework", "Overriding deformability values to "
                                            << translational_deformability << " "
                                            << rotational_deformability);
                 }
@@ -1816,7 +1837,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                 {
                     translational_deformability = task_specification_->defaultDeformability();
                     rotational_deformability = task_specification_->defaultDeformability();
-                    ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                    ROS_INFO_STREAM_NAMED("task_framework", "Using default deformability value of "
                                            << task_specification_->defaultDeformability());
                 }
 
@@ -1861,7 +1882,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                 if (ph_.getParam("translational_deformability", translational_deformability) &&
                          ph_.getParam("rotational_deformability", rotational_deformability))
                 {
-                    ROS_INFO_STREAM_NAMED("planner", "Overriding deformability values to "
+                    ROS_INFO_STREAM_NAMED("task_framework", "Overriding deformability values to "
                                            << translational_deformability << " "
                                            << rotational_deformability);
                 }
@@ -1869,7 +1890,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                 {
                     translational_deformability = task_specification_->defaultDeformability();
                     rotational_deformability = task_specification_->defaultDeformability();
-                    ROS_INFO_STREAM_NAMED("planner", "Using default deformability value of "
+                    ROS_INFO_STREAM_NAMED("task_framework", "Using default deformability value of "
                                            << task_specification_->defaultDeformability());
                 }
 
@@ -1886,7 +1907,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
         }
         default:
         {
-            ROS_FATAL_NAMED("planner", "Invalid trial type, this should not be possible.");
+            ROS_FATAL_NAMED("task_framework", "Invalid trial type, this should not be possible.");
             assert(false && "Invalid trial type, this should not be possible.");
         }
     }
@@ -1899,7 +1920,7 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
 void TaskFramework::createBandits()
 {
     num_models_ = (ssize_t)model_list_.size();
-    ROS_INFO_STREAM_NAMED("planner", "Generating bandits for " << num_models_ << " bandits");
+    ROS_INFO_STREAM_NAMED("task_framework", "Generating bandits for " << num_models_ << " bandits");
 
 #ifdef UCB_BANDIT
     model_utility_bandit_ = UCB1Normal<std::mt19937_64>(num_models_);
@@ -2107,7 +2128,7 @@ void TaskFramework::initializePlannerLogging()
     if (planner_logging_enabled_)
     {
         const std::string log_folder = GetLogFolder(nh_);
-        ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
+        ROS_INFO_STREAM_NAMED("task_framework", "Logging to " << log_folder);
 
         Log::Log seed_log(log_folder + "seed.txt", false);
         LOG_STREAM(seed_log, std::hex << seed_);
@@ -2151,7 +2172,7 @@ void TaskFramework::initializeControllerLogging()
     if(controller_logging_enabled_)
     {
         const std::string log_folder = GetLogFolder(nh_);
-        ROS_INFO_STREAM_NAMED("planner", "Logging to " << log_folder);
+        ROS_INFO_STREAM_NAMED("task_framework", "Logging to " << log_folder);
 
         Log::Log seed_log(log_folder + "seed.txt", false);
         LOG_STREAM(seed_log, std::hex << seed_);
@@ -2318,8 +2339,8 @@ void TaskFramework::controllerLogData(
                 max_stretching = std::max(max_stretching, this_stretching_factor);
             }
             current_stretching_factor[model_ind] = max_stretching;
-            ROS_INFO_STREAM_NAMED("planner", "average desired p dot is       " << desired_p_dot_avg_norm);
-            ROS_INFO_STREAM_NAMED("planner", "max pointwise desired p dot is " << desired_p_dot_max);
+            ROS_INFO_STREAM_NAMED("task_framework", "average desired p dot is       " << desired_p_dot_avg_norm);
+            ROS_INFO_STREAM_NAMED("task_framework", "max pointwise desired p dot is " << desired_p_dot_max);
         }
 
         // Do the actual logging itself
@@ -2351,7 +2372,7 @@ void TaskFramework::controllerLogData(
 
 
 
-void TaskFramework::storeWorldState(const WorldState& world_state)
+void TaskFramework::storeWorldState(const WorldState& world_state, const RubberBand::Ptr band)
 {
     try
     {
@@ -2370,7 +2391,11 @@ void TaskFramework::storeWorldState(const WorldState& world_state)
 
         std::vector<uint8_t> buffer;
         world_state.serialize(buffer);
+        band->serialize(buffer);
         ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
+
+        const auto deserialized_results = WorldState::Deserialize(buffer, 0);
+        assert(deserialized_results.first == world_state);
     }
     catch (const std::exception& e)
     {
@@ -2378,8 +2403,10 @@ void TaskFramework::storeWorldState(const WorldState& world_state)
     }
 }
 
-void TaskFramework::loadStoredWorldState(WorldState& world_state)
+std::pair<WorldState, RubberBand::Ptr> TaskFramework::loadStoredWorldState()
 {
+    std::pair<WorldState, RubberBand::Ptr> deserialized_result;
+
     try
     {
         const auto log_folder = GetLogFolder(nh_);
@@ -2399,14 +2426,18 @@ void TaskFramework::loadStoredWorldState(WorldState& world_state)
         ROS_INFO_STREAM("Loading world state from " << full_path);
 
         const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(full_path);
-        const auto deserialized_results = WorldState::Deserialize(buffer, 0);
-        world_state = deserialized_results.first;
+        const auto deserialized_world_state = WorldState::Deserialize(buffer, 0);
+        deserialized_result.first = deserialized_world_state.first;
 
+        deserialized_result.second = std::make_shared<RubberBand>(*rubber_band_between_grippers_);
+        deserialized_result.second->deserializeIntoSelf(buffer, deserialized_world_state.second);
     }
     catch (const std::exception& e)
     {
         ROS_ERROR_STREAM("Failed to load stored world_state: "  <<  e.what());
     }
+
+    return deserialized_result;
 }
 
 bool TaskFramework::useStoredWorldState() const

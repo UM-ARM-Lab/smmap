@@ -92,6 +92,62 @@ namespace smmap
 
             return {result, bytes_read};
         }
+
+        bool operator==(const WorldState& other) const
+        {
+            if (object_configuration_.cwiseNotEqual(other.object_configuration_).any())
+            {
+                return false;
+            }
+
+            if (all_grippers_single_pose_.size() != other.all_grippers_single_pose_.size())
+            {
+                return false;
+            }
+
+            for (size_t idx = 0; idx < all_grippers_single_pose_.size(); ++ idx)
+            {
+                if (all_grippers_single_pose_[idx].matrix().cwiseNotEqual(other.all_grippers_single_pose_[idx].matrix()).any())
+                {
+                    return false;
+                }
+            }
+
+            if (robot_configuration_.cwiseNotEqual(other.robot_configuration_).any())
+            {
+                return false;
+            }
+
+            if (robot_configuration_valid_ != other.robot_configuration_valid_)
+            {
+                return false;
+            }
+
+            if (gripper_collision_data_.size() != other.gripper_collision_data_.size())
+            {
+                return false;
+            }
+
+            for (size_t idx = 0; idx < gripper_collision_data_.size(); ++idx)
+            {
+                if (gripper_collision_data_[idx] != other.gripper_collision_data_[idx])
+                {
+                    return false;
+                }
+            }
+
+            if (sim_time_ != other.sim_time_)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        bool operator!=(const WorldState& other) const
+        {
+            return !(*this == other);
+        }
     };
 
     /**

@@ -282,6 +282,8 @@ namespace smmap
                     const std_msgs::ColorRGBA& color_band,
                     const bool draw_band) const;
 
+            void visualizeBothTrees() const;
+
             void visualizePath(const std::vector<RRTNode, RRTAllocator>& path) const;
 
             void visualizeBlacklist() const;

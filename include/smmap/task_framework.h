@@ -61,11 +61,12 @@ namespace smmap
             // Sending gripper commands
             ////////////////////////////////////////////////////////////////////
 
+            // TODO: figure out a good way to pass by const reference (Eigen consistency)
             WorldState sendNextCommand(
-                    const WorldState& current_world_state);
+                    WorldState current_world_state);
 
             WorldState sendNextCommandUsingLocalController(
-                    WorldState current_world_state);
+                    const WorldState& current_world_state);
 
             WorldState sendNextCommandUsingGlobalGripperPlannerResults(
                     const WorldState& current_world_state);
@@ -150,7 +151,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             const bool enable_stuck_detection_;
-            std::shared_ptr<RubberBand> rubber_band_between_grippers_;
+            RubberBand::Ptr rubber_band_between_grippers_;
             std::vector<ssize_t> path_between_grippers_through_object_;
             const size_t max_lookahead_steps_;
             const size_t max_grippers_pose_history_length_;
@@ -206,8 +207,8 @@ namespace smmap
                     const std::vector<double>& model_prediction_errors_weighted,
                     const std::vector<double>& model_prediction_errors_unweighted);
 
-            void storeWorldState(const WorldState& world_state);
-            void loadStoredWorldState(WorldState& world_state);
+            void storeWorldState(const WorldState& world_state, const RubberBand::Ptr band);
+            std::pair<WorldState, RubberBand::Ptr> loadStoredWorldState();
             bool useStoredWorldState() const;
 
             const bool planner_logging_enabled_;
