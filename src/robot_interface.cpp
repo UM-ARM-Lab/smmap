@@ -167,7 +167,7 @@ namespace smmap
     {
         if (reset_random_seeds_fn_ == nullptr)
         {
-            ROS_ERROR_NAMED("robot_interface", "Asked to reset random seeds, but function pointer is null");
+            ROS_ERROR_ONCE_NAMED("robot_interface", "Asked to reset random seeds, but function pointer is null");
             return;
         }
         reset_random_seeds_fn_(seed, num_discards);
@@ -177,7 +177,7 @@ namespace smmap
     {
         if (lock_env_fn_ == nullptr)
         {
-            ROS_ERROR_NAMED("robot_interface", "Asked to lock environment, but function pointer is null");
+            ROS_ERROR_ONCE_NAMED("robot_interface", "Asked to lock environment, but function pointer is null");
             return;
         }
         return lock_env_fn_();
@@ -187,7 +187,7 @@ namespace smmap
     {
         if (unlock_env_fn_ == nullptr)
         {
-            ROS_ERROR_NAMED("robot_interface", "Asked to unlock environment, but function pointer is null");
+            ROS_ERROR_ONCE_NAMED("robot_interface", "Asked to unlock environment, but function pointer is null");
             return;
         }
         return unlock_env_fn_();
@@ -212,7 +212,7 @@ namespace smmap
     {
         if (get_ee_poses_fn_ == nullptr)
         {
-            ROS_ERROR_NAMED("robot_interface", "Asked for gripper poses (with robot_configuration input), but function pointer is null");
+            ROS_ERROR_ONCE_NAMED("robot_interface", "Asked for gripper poses (with robot_configuration input), but function pointer is null");
             return AllGrippersSinglePose();
         }
         return get_ee_poses_fn_(robot_configuration);
@@ -224,7 +224,7 @@ namespace smmap
     {
         if (get_grippers_jacobian_fn_ == nullptr)
         {
-            ROS_ERROR_NAMED("robot_interface", "Asked for robot jacobian, but function pointer is null");
+            ROS_ERROR_ONCE_NAMED("robot_interface", "Asked for robot jacobian, but function pointer is null");
             return Eigen::MatrixXd();
         }
         return get_grippers_jacobian_fn_(robot_configuration);
@@ -240,7 +240,7 @@ namespace smmap
     {
         if (get_collision_points_of_interest_fn_ == nullptr || get_collision_points_of_interest_jacobians_fn_ == nullptr)
         {
-            ROS_ERROR_NAMED("robot_interface", "Asked for POI collision data, but function pointer is null");
+            ROS_ERROR_ONCE_NAMED("robot_interface", "Asked for POI collision data, but function pointer is null");
             return std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>>();
         }
 
@@ -302,7 +302,7 @@ namespace smmap
     {
         if (full_robot_collision_check_fn_ == nullptr)
         {
-            ROS_ERROR_NAMED("robot_interface", "Asked for robot collision check, but function pointer is null");
+            ROS_ERROR_ONCE_NAMED("robot_interface", "Asked for robot collision check, but function pointer is null");
             return true;
         }
         return full_robot_collision_check_fn_(robot_configuration);
@@ -333,7 +333,7 @@ namespace smmap
 
         if (close_ik_solutions_fn_ == nullptr)
         {
-            ROS_ERROR_NAMED("robot_interface", "Asked for ik solutions, but function pointer is null");
+            ROS_ERROR_ONCE_NAMED("robot_interface", "Asked for ik solutions, but function pointer is null");
             return std::vector<Eigen::VectorXd>(0);
         }
 
@@ -363,7 +363,7 @@ namespace smmap
     {
         if (general_ik_solution_fn_ == nullptr)
         {
-            ROS_ERROR_NAMED("robot_interface", "Asked for generalik solution, but function pointer is null");
+            ROS_ERROR_ONCE_NAMED("robot_interface", "Asked for generalik solution, but function pointer is null");
             return {false, Eigen::VectorXd(0)};
         }
         return general_ik_solution_fn_(starting_config, gripper_names, target_poses);
@@ -373,7 +373,7 @@ namespace smmap
     {
         if (test_path_for_collision_fn_ == nullptr)
         {
-            ROS_ERROR_NAMED("robot_interface", "Asked for test_path_for_collision_fn_, but function pointer is null");
+            ROS_ERROR_ONCE_NAMED("robot_interface", "Asked for test_path_for_collision_fn_, but function pointer is null");
             return true;
         }
         return test_path_for_collision_fn_(path);

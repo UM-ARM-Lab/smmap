@@ -269,10 +269,7 @@ void TaskFramework::execute()
             const double current_error = task_specification_->calculateError(world_feedback);
             ROS_INFO_STREAM_NAMED("planner", "   Planner/Task sim time " << world_feedback.sim_time_ << "\t Error: " << current_error);
 
-            vis_->deleteObjects(PROJECTED_BAND_NS, 1, 30);
-            vis_->clearVisualizationsBullet();
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
-            vis_->clearVisualizationsBullet();
+            vis_->deleteAll();
             std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
             if (world_feedback.sim_time_ - start_time >= task_specification_->maxTime())
@@ -322,8 +319,8 @@ WorldState TaskFramework::sendNextCommand(
             {
                 planning_needed = true;
 
-                vis_->deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
-                vis_->deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
+                vis_->deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 2);
+                vis_->deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(2 * max_lookahead_steps_) + 2);
 
                 ROS_WARN_NAMED("planner", "Invoking global planner as the current plan will overstretch the deformable object");
                 ROS_INFO_NAMED("planner", "----------------------------------------------------------------------------");
@@ -345,15 +342,7 @@ WorldState TaskFramework::sendNextCommand(
 
                 std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
-//                vis_->deleteObjects(DESIRED_DELTA_NS, 1, 100);
-//                vis_->deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(4 * max_lookahead_steps_) + 10);
-//                vis_->deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 10);
-//                vis_->deleteObjects(PROJECTED_POINT_PATH_NS,         1, 2);
-//                vis_->deleteObjects(PROJECTED_POINT_PATH_LINES_NS,   1, 2);
-
-                vis_->clearVisualizationsBullet();
-                std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
-                vis_->clearVisualizationsBullet();
+                vis_->deleteAll();
 
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "planner", "Invoking global planner due to overstretch");
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "planner", "Invoking global planner due to collision");
@@ -423,11 +412,7 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
     Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
 
-    vis_->visualizeCloth("input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
-    vis_->visualizeCloth("input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
-    vis_->visualizeCloth("input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
-    vis_->visualizeCloth("input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
-    vis_->visualizeCloth("input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
+    vis_->visualizeCloth("controller_input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
 
     // Temporaries needed here bercause model_input_data takes things by reference
     const DesiredDirection desired_object_manipulation_direction = task_specification_->calculateDesiredDirection(world_state);
@@ -451,17 +436,7 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
     }
 
     // Pick an arm to use
-
-
-
-
-
     const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(*generator_);
-
-
-
-
-
 
     const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "planner", "Using model index " << model_to_use);
@@ -526,13 +501,9 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
         ROS_INFO_STREAM_NAMED("planner", "Collected data to calculate regret in " << stopwatch(READ) << " seconds");
     }
 
-
-
-
-
     if (visualize_gripper_motion_)
     {
-        ROS_WARN_THROTTLE_NAMED(1.0, "planner", "Asked to visualize grippper motion but this is disabled");
+        ROS_WARN_THROTTLE_NAMED(1.0, "planner", "Asked to visualize grippper motion but this is disabled. Manually enable the type of visualization you want.");
 
 //        for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
 //        {
@@ -554,8 +525,6 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
 //        }
     }
 
-
-
     // Execute the command
     ROS_INFO_STREAM_NAMED("planner", "Sending command to robot");
     const auto all_grippers_single_pose = kinematics::applyTwist(world_state.all_grippers_single_pose_, selected_command.grippers_motion_);
@@ -570,40 +539,38 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
 
-
-
     if (visualize_predicted_motion_)
     {
-        const ObjectPointSet& object_delta_constrained = suggested_robot_commands[0].object_motion_;
-        const ObjectPointSet& object_delta_diminishing = suggested_robot_commands[1].object_motion_;
+        ROS_WARN_THROTTLE_NAMED(1.0, "planner", "Asked to visualize predicted motion but this is disabled. Manually enable the type of visualization you want.");
 
+//        const ObjectPointSet& object_delta_constrained = suggested_robot_commands[0].object_motion_;
+//        const ObjectPointSet& object_delta_diminishing = suggested_robot_commands[1].object_motion_;
 
-        vis_->visualizeObjectDelta(
-                    "constraint_model_prediction",
-                    world_state.object_configuration_,
-                    world_state.object_configuration_ + 50.0 * object_delta_constrained,
-                    Visualizer::Cyan());
+//        vis_->visualizeObjectDelta(
+//                    "constraint_model_prediction",
+//                    world_state.object_configuration_,
+//                    world_state.object_configuration_ + 50.0 * object_delta_constrained,
+//                    Visualizer::Cyan());
 
-        vis_->visualizeObjectDelta(
-                    "diminishing_model_prediction",
-                    world_state.object_configuration_,
-                    world_state.object_configuration_ + 50.0 * object_delta_diminishing,
-                    Visualizer::Red(0.3f));
+//        vis_->visualizeObjectDelta(
+//                    "diminishing_model_prediction",
+//                    world_state.object_configuration_,
+//                    world_state.object_configuration_ + 50.0 * object_delta_diminishing,
+//                    Visualizer::Red(0.3f));
 
-        const ObjectPointSet true_object_delta = world_feedback.object_configuration_ - world_state.object_configuration_;
+//        const ObjectPointSet true_object_delta = world_feedback.object_configuration_ - world_state.object_configuration_;
 
-        vis_->visualizeObjectDelta(
-                    "true_object_delta",
-                    world_state.object_configuration_,
-                    world_state.object_configuration_ + 50.0 * true_object_delta,
-                    Visualizer::Green());
+//        vis_->visualizeObjectDelta(
+//                    "true_object_delta",
+//                    world_state.object_configuration_,
+//                    world_state.object_configuration_ + 50.0 * true_object_delta,
+//                    Visualizer::Green());
 
 //        task_specification_->visualizeDeformableObject(
 //                PREDICTED_DELTA_NS,
 //                world_state.object_configuration_ + object_delta,
 //                Visualizer::Blue());
     }
-
 
     #warning "!!!!!!!!!!!!!!! This data collection is only valid if the robot took the actual action requested!!!!!!!!!!!!!!!!!"
     std::vector<double> model_prediction_errors_weighted(model_list_.size(), 0.0);
@@ -621,11 +588,9 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
 
             const Map<const VectorXd> error_sq_as_vector(prediction_error_sq.data(), prediction_error_sq.size());
             model_prediction_errors_weighted[model_ind] = error_sq_as_vector.dot(desired_object_manipulation_direction.error_correction_.weight);
-
             model_prediction_errors_unweighted[model_ind] = prediction_error_sq.sum();
         }
     }
-
 
     ROS_INFO_NAMED("planner", "Updating models");
     updateModels(world_state, model_input_data.desired_object_motion_.error_correction_, suggested_robot_commands, model_to_use, world_feedback);
@@ -665,14 +630,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
         grippers_pose_history_.clear();
         error_history_.clear();
 
-        std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
-        vis_->clearVisualizationsBullet();
-        std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
-        vis_->clearVisualizationsBullet();
-
-//        vis_->deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_A_NS,   1, 2);
-//        vis_->deleteObjects(RRTHelper::RRT_SOLUTION_GRIPPER_B_NS,   1, 2);
-//        vis_->deleteObjects(RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS, 1, 2);
+        vis_->deleteAll();
     }
 
     const std::vector<WorldState> fake_all_models_results(num_models_, world_feedback);
@@ -720,6 +678,13 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
     Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
 
+//    // Clear out any old visualizations first in order to ensure the visualization is roughly synced
+//    // TODO: This delete then re-add can cause visual flickering.
+//    //       Putting just a statement like this at the end can cause visual lag.
+//    //       Enable a version of vis_->publish xyz that can address this (potentially a "pause" function, or similar)
+//    vis_->deleteObjects(PROJECTED_BAND_NS, 0, (int32_t)max_lookahead_steps_ + 2);
+//    vis_->deleteObjects(PROJECTED_GRIPPER_NS, 0, (int32_t)(2 * max_lookahead_steps_) + 2);
+
     assert(task_specification_->is_dijkstras_type_task_ && starting_world_state.all_grippers_single_pose_.size() == 2);
     std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 
@@ -728,14 +693,6 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
     const static std_msgs::ColorRGBA rubber_band_safe_color = Visualizer::Black();
     const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
     const bool band_verbose = false;
-
-    vis_->clearVisualizationsBullet();
-
-    vis_->deleteObjects(PROJECTED_BAND_NS, 1, (int32_t)max_lookahead_steps_ + 10);
-    vis_->deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
-    vis_->deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
-    vis_->deleteObjects(PROJECTED_GRIPPER_NS, 1, (int32_t)(4 * max_lookahead_steps_) + 10);
-
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Constraint violation Version 1 - Purely cloth overstretch
@@ -751,11 +708,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
     ROS_INFO_STREAM_NAMED("planner", "Max lookahead steps: " << max_lookahead_steps_ << " Actual steps: " << actual_lookahead_steps);
 
     visualizeProjectedPaths(projected_deformable_point_paths, visualization_enabled);
-
-//    std::cout << "paths = [\n" << PrettyPrint::PrettyPrint(projected_deformable_point_paths, false, "\n") << "];\n";
-
     projected_deformable_point_paths_and_projected_virtual_rubber_bands.first = projected_deformable_point_paths;
-
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Constraint violation Version 2a - Vector field forward "simulation" - rubber band
@@ -764,21 +717,10 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
     assert(num_models_ == 1 && starting_world_state.all_grippers_single_pose_.size() == 2);
     const auto& correspondences = dijkstras_task_->getCoverPointCorrespondences(starting_world_state);
 
-
-    vis_->clearVisualizationsBullet();
-
-    rubber_band_between_grippers_->visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
-
-    vis_->deleteObjects(PROJECTED_POINT_PATH_NS, 1, 2);
-    vis_->deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 1, 2);
-    vis_->deleteObjects(PROJECTED_GRIPPER_NS, 1, (int32_t)(4 * max_lookahead_steps_) + 10);
-
-
-
-
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     WorldState world_state_copy = starting_world_state;
     RubberBand rubber_band_between_grippers_copy = *rubber_band_between_grippers_.get();
+    rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
 
     projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.reserve(actual_lookahead_steps);
     for (size_t t = 0; t < actual_lookahead_steps; ++t)
@@ -848,12 +790,15 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
 
         // Visualize
         rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
-        vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color, (int32_t)(4 * t) + 1);
+        vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color, (int32_t)(2 * t) + 2);
 
         // Finish collecting the gripper collision data
         world_state_copy.gripper_collision_data_ = collision_check_future.get();
     }
     ROS_INFO_STREAM_NAMED("planner", "Calculated future constraint violation detection - Version 2a - in " << function_wide_stopwatch(READ) << " seconds");
+
+    vis_->deleteObjects(PROJECTED_BAND_NS, (int32_t)actual_lookahead_steps + 2, (int32_t)max_lookahead_steps_ + 2);
+    vis_->deleteObjects(PROJECTED_GRIPPER_NS, (int32_t)(2 * actual_lookahead_steps) + 2, (int32_t)(2 * max_lookahead_steps_) + 2);
 
     return projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 }
@@ -861,27 +806,17 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
 bool TaskFramework::globalPlannerNeededDueToOverstretch(
         const WorldState& current_world_state)
 {
-//    static bool returned_true_by_default_once = false;
+    static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(ph_);
 
+//    static bool returned_true_by_default_once = false;
 //    if (!returned_true_by_default_once)
 //    {
 //        returned_true_by_default_once = true;
 //        return true;
 //    }
 
-
-
-
-
-
-
-
-
-
-
-    static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(ph_);
-
-    const auto detection_results = detectFutureConstraintViolations(current_world_state);
+    const bool visualization_enabled = true;
+    const auto detection_results = detectFutureConstraintViolations(current_world_state, visualization_enabled);
     const auto& projected_rubber_bands = detection_results.second;
 
     if (projected_rubber_bands.size() == 0)
@@ -962,12 +897,6 @@ bool TaskFramework::globalPlannerNeededDueToLackOfProgress()
 
 bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization_enabled)
 {
-    return false;
-
-
-
-
-
     assert(global_plan_current_timestep_ < global_plan_gripper_trajectory_.size());
 
     // TODO: Move to class wide location, currently in 2 positions in this file
@@ -993,8 +922,10 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
 
         // Visualize
         rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
-        vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, grippers_pose, gripper_color, (int32_t)(4 * t) + 1);
+        vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, grippers_pose, gripper_color, (int32_t)(2 * t) + 2);
     }
+
+    // TODO: delete old visualization markers if the remainder of the path is short
 
     return overstretch_predicted;
 }
@@ -1415,8 +1346,9 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
     static int num_times_invoked = 0;
     num_times_invoked++;
-
     rrt_helper_->addBandToBlacklist(rubber_band_between_grippers_->getVectorRepresentation());
+
+    vis_->deleteAll();
 
     if (GetRRTReuseOldResults(ph_))
     {
@@ -1516,7 +1448,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
 
 
-            vis_->clearVisualizationsBullet();
+            vis_->deleteAll();
 
             const auto rrt_results = rrt_helper_->plan(
                         start_config,

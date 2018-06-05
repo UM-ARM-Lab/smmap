@@ -1921,7 +1921,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     {
         if (visualization_enabled_globally_)
         {
-            vis_->clearVisualizationsBullet();
+            vis_->deleteAll();
             visualizePath(path);
         }
     }
@@ -1941,7 +1941,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     {
         if (visualization_enabled_globally_)
         {
-            vis_->clearVisualizationsBullet();
+            vis_->deleteAll();
             visualizePath(path);
         }
 
@@ -2400,7 +2400,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
         if (visualization_enabled_globally_ && visualization_enabled_locally)
         {
-            vis_->clearVisualizationsBullet();
+            vis_->deleteAll();
         }
 
         ///////////////////// Determine which nodes to try to shortcut between /////////////////////////////////////////
@@ -2775,7 +2775,7 @@ void RRTHelper::visualizePath(const std::vector<RRTNode, RRTAllocator>& path) co
 
         vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.005, 0.005, 0.005), gripper_a_forward_tree_color_, 1);
         vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.005, 0.005, 0.005), gripper_b_forward_tree_color_, 1);
-        vis_->visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
+//        vis_->visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
     }
 }
 
