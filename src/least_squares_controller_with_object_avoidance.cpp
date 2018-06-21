@@ -55,7 +55,7 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
 
     if (input_data.robot_jacobian_valid_)
     {
-        const double max_robot_dof_step_size = robot_->max_dof_velocity_norm_ * robot_->dt_;
+        const double max_robot_dof_step_size = input_data.max_robot_dof_step_size_;
         const double max_grippers_step_size = input_data.max_grippers_step_size_;
 
         // Build the robot DOF to deformable object jacobian

@@ -24,7 +24,8 @@ namespace smmap
                             const Eigen::MatrixXd& robot_jacobian,
                             const bool robot_jacobian_valid,
                             const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>>& poi_collision_data,
-                            const double max_step_size)
+                            const double max_step_size,
+                            const double max_robot_dof_step_size)
                         : world_current_state_(world_current_state)
                         , desired_object_motion_(desired_object_motion)
                         , robot_(robot)
@@ -32,6 +33,7 @@ namespace smmap
                         , robot_jacobian_valid_(robot_jacobian_valid)
                         , poi_collision_data_(poi_collision_data)
                         , max_grippers_step_size_(max_step_size)
+                        , max_robot_dof_step_size_(max_robot_dof_step_size)
                     {}
 
                     const WorldState world_current_state_;
@@ -41,6 +43,7 @@ namespace smmap
                     const bool robot_jacobian_valid_;
                     const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> poi_collision_data_;
                     const double max_grippers_step_size_;
+                    const double max_robot_dof_step_size_;
             };
 
             struct OutputData

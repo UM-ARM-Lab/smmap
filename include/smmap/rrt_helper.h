@@ -191,19 +191,21 @@ namespace smmap
             static constexpr double NN_BLACKLIST_DISTANCE = std::numeric_limits<double>::max() - 1e10;
 
             // Topic names used for publishing visualization data
-            static constexpr auto RRT_BLACKLISTED_GOAL_BANDS_NS  = "rrt_blacklisted_goal_bands";
-            static constexpr auto RRT_GOAL_TESTING_NS            = "rrt_goal_testing";
+            static constexpr char RRT_BLACKLISTED_GOAL_BANDS_NS[]   = "rrt_blacklisted_goal_bands";
+            static constexpr char RRT_GOAL_TESTING_NS[]               = "rrt_goal_testing";
 
-            static constexpr auto RRT_TREE_GRIPPER_A_NS          = "rrt_tree_gripper_a";
-            static constexpr auto RRT_TREE_GRIPPER_B_NS          = "rrt_tree_gripper_b";
-            static constexpr auto RRT_TREE_BAND_NS               = "rrt_tree_band";
+            static constexpr char RRT_FORWARD_TREE_GRIPPER_A_NS[]   = "rrt_forward_tree_gripper_a";
+            static constexpr char RRT_FORWARD_TREE_GRIPPER_B_NS[]   = "rrt_forward_tree_gripper_b";
+            static constexpr char RRT_BACKWARD_TREE_GRIPPER_A_NS[]  = "rrt_backward_tree_gripper_a";
+            static constexpr char RRT_BACKWARD_TREE_GRIPPER_B_NS[]  = "rrt_backward_tree_gripper_b";
+            static constexpr char RRT_TREE_BAND_NS[]                = "rrt_tree_band";
 
-            static constexpr auto RRT_SAMPLE_NS                  = "rrt_sample";
-            static constexpr auto RRT_FORWARD_PROP_START_NS      = "rrt_forward_prop_start";
+            static constexpr char RRT_SAMPLE_NS[]                   = "rrt_sample";
+            static constexpr char RRT_FORWARD_PROP_START_NS[]       = "rrt_forward_prop_start";
 
-            static constexpr auto RRT_SOLUTION_GRIPPER_A_NS      = "rrt_solution_gripper_a";
-            static constexpr auto RRT_SOLUTION_GRIPPER_B_NS      = "rrt_solution_gripper_b";
-            static constexpr auto RRT_SOLUTION_RUBBER_BAND_NS    = "rrt_solution_rubber_band";
+            static constexpr char RRT_SOLUTION_GRIPPER_A_NS[]       = "rrt_solution_gripper_a";
+            static constexpr char RRT_SOLUTION_GRIPPER_B_NS[]       = "rrt_solution_gripper_b";
+            static constexpr char RRT_SOLUTION_RUBBER_BAND_NS[]     = "rrt_solution_rubber_band";
 
             RRTHelper(
                     // Robot/environment related parameters

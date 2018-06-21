@@ -434,7 +434,8 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
                 robot_dof_to_grippers_poses_jacobian,
                 current_world_state.robot_configuration_valid_,
                 poi_collision_data_,
-                robot_->max_gripper_velocity_norm_ * robot_->dt_);
+                robot_->max_gripper_velocity_norm_ * robot_->dt_,
+                robot_->max_dof_velocity_norm_ * robot_->dt_);
 
     if (visualize_desired_motion_)
     {
@@ -742,6 +743,13 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
         const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian(world_state_copy.robot_configuration_);
         const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data_ =
                 robot_->getPointsOfInterestCollisionData(world_state_copy.robot_configuration_);
+
+        const double normal_motion_grippers_max_step = robot_->max_gripper_velocity_norm_ * robot_->dt_;
+        const double forward_prediction_grippers_max_step = dijkstras_task_->work_space_grid_.minStepDimension() * 1.1;
+        const double velocity_scale_factor = forward_prediction_grippers_max_step / normal_motion_grippers_max_step;
+        const double normal_motion_robot_dof_max_step = robot_->max_dof_velocity_norm_ * robot_->dt_;
+        const double forward_prediction_robot_dof_max_step = velocity_scale_factor * normal_motion_robot_dof_max_step * 2.0;
+
         const DeformableController::InputData model_input_data(
                     world_state_copy,
                     desired_object_manipulation_direction,
@@ -749,7 +757,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
                     robot_dof_to_grippers_poses_jacobian,
                     world_state_copy.robot_configuration_valid_,
                     poi_collision_data_,
-                    dijkstras_task_->work_space_grid_.minStepDimension());
+                    forward_prediction_grippers_max_step,
+                    forward_prediction_robot_dof_max_step);
 
         const DeformableController::OutputData robot_command = controller_list_[0]->getGripperMotion(model_input_data);
 
@@ -815,12 +824,12 @@ bool TaskFramework::globalPlannerNeededDueToOverstretch(
 {
     static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(ph_);
 
-//    static bool returned_true_by_default_once = false;
-//    if (!returned_true_by_default_once)
-//    {
-//        returned_true_by_default_once = true;
-//        return true;
-//    }
+    static bool returned_true_by_default_once = false;
+    if (!returned_true_by_default_once)
+    {
+        returned_true_by_default_once = true;
+        return true;
+    }
 
     const bool visualization_enabled = true;
     const auto detection_results = detectFutureConstraintViolations(current_world_state, visualization_enabled);
@@ -1301,7 +1310,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         const auto band_max_points = GetRRTBandMaxPoints(ph_);
 
         // Visualization
-        const auto enable_rrt_visualizations = !GetDisableAllVisualizations(ph_);
+        const auto enable_rrt_visualizations = GetVisualizeRRT(ph_);
 
         #ifdef PRM_SAMPLING
         prm_helper_ = std::make_shared<PRMHelper>(
@@ -1361,7 +1370,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
     static int num_times_invoked = 0;
     num_times_invoked++;
-    rrt_helper_->addBandToBlacklist(rubber_band_between_grippers_->getVectorRepresentation());
+//    rrt_helper_->addBandToBlacklist(rubber_band_between_grippers_->getVectorRepresentation());
 
     vis_->deleteAll();
     vis_->forcePublishNow();
@@ -1470,6 +1479,8 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
 
             vis_->deleteAll();
+            vis_->forcePublishNow();
+            vis_->purgeMarkerList();
 
             const auto rrt_results = rrt_helper_->plan(
                         start_config,

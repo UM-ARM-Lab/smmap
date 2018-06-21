@@ -1282,16 +1282,22 @@ DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCo
     // For each node on the object, record the distance to the corresponding target points
     for (size_t deform_idx = 0; (ssize_t)deform_idx < num_nodes_; ++deform_idx)
     {
+        // Ensure that regardless of the sensed point, we are working with a point that is in the valid volume
         const Eigen::Vector3d& deformable_point         = world_state.object_configuration_.col(deform_idx);
-        const ssize_t nearest_idx_in_free_space_graph   = work_space_grid_.worldPosToGridIndexClamped(deformable_point);
+        const Eigen::Vector3d point_in_free_space       = environment_sdf_->ProjectIntoValidVolume3d(deformable_point);
+        const ssize_t nearest_idx_in_free_space_graph   = work_space_grid_.worldPosToGridIndexClamped(point_in_free_space);
 
-        // Extract the correct part of each data structure
+        // Extract the correct part of each data structure - each deformable point can correspond to multiple target points
         const std::vector<ssize_t>& current_correspondences             = correspondences_external.correspondences_[deform_idx];
         EigenHelpers::VectorVector3d& current_correspondences_next_step = correspondences_external.correspondences_next_step_[deform_idx];
         std::vector<double>& current_correspondences_distances          = correspondences_external.correspondences_distances_[deform_idx];
         std::vector<bool>& current_correspondences_is_covered           = correspondences_external.correspondences_is_covered_[deform_idx];
 
-        // Itterate through the correspondences, recording all the data needed for other parts of the system
+//        std::cerr << "Deformable point: " << deformable_point.transpose() << std::endl
+//                  << "  Nearest idx in free space graph: " << nearest_idx_in_free_space_graph << std::endl
+//                  << "  num correspondences: " << current_correspondences.size() << std::endl;
+
+        // Iterate through the correspondences, recording all the data needed for other parts of the system
         current_correspondences_next_step.reserve(current_correspondences.size());
         current_correspondences_distances.reserve(current_correspondences.size());
         current_correspondences_is_covered.reserve(current_correspondences.size());
@@ -1316,6 +1322,7 @@ DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCo
                 const ssize_t target_ind_in_free_space_graph    = dijkstras_individual_result.first[(size_t)nearest_idx_in_free_space_graph];
                 const double dijkstras_distance                 = dijkstras_individual_result.second[(size_t)nearest_idx_in_free_space_graph];
 
+//                std::cerr << "Correspondece idx: " << correspondence_idx << std::endl;
 //                std::cerr << "Target ind in free space graph: " << target_ind_in_free_space_graph << std::endl;
 //                std::cerr << "Dijkstras_distance: " << dijkstras_distance << std::endl;
 
