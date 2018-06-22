@@ -1376,6 +1376,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     vis_->forcePublishNow();
     vis_->clearVisualizationsBullet();
 
+    global_plan_full_robot_trajectory_.clear();
     if (GetRRTReuseOldResults(ph_))
     {
         // Deserialization
@@ -1417,7 +1418,6 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
             {
                 throw_arc_exception(std::runtime_error, "Loaded plan did not pass collision validation");
             }
-            return;
         }
         catch (...)
         {
@@ -1426,6 +1426,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     }
 
     // Planning if we did not load a plan from file
+    while (global_plan_full_robot_trajectory_.size() == 0)
     {
         const RRTGrippersRepresentation gripper_config(
                     world_state.all_grippers_single_pose_[0],
@@ -1525,6 +1526,10 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
             }
         }
     }
+
+    std::cout << "Waiting on keystroke before executing trajectory\n";
+    std::getchar();
+    std::cout << std::endl;
 
     assert(!world_state.robot_configuration_valid_ ||
            !(robot_->testPathForCollision(global_plan_full_robot_trajectory_)));

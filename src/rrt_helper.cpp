@@ -1125,7 +1125,7 @@ size_t RRTHelper::forwardPropogationFunction(
                     5);
     }
 
-    const size_t visualization_frequency = 10;
+    const size_t visualization_frequency = 100;
 
     const RRTGrippersRepresentation& starting_grippers_poses = nearest_neighbour.getGrippers();
     const RRTRobotRepresentation& starting_robot_configuration = nearest_neighbour.getRobotConfiguration();
@@ -1512,16 +1512,16 @@ size_t RRTHelper::forwardPropogationFunction(
         tree_to_extend.size() % visualization_frequency == 0)
     {
         const auto starting_idx = (&tree_to_extend == &forward_tree_)
-                    ? forward_tree_next_visualized_node_
-                    : backward_tree_next_visualized_node_;
+                ? forward_tree_next_visualized_node_
+                : backward_tree_next_visualized_node_;
 
         const auto& tree_a_color = (&tree_to_extend == &forward_tree_)
-                    ? gripper_a_forward_tree_color_
-                    : gripper_a_backward_tree_color_;
+                ? gripper_a_forward_tree_color_
+                : gripper_a_backward_tree_color_;
 
         const auto& tree_b_color = (&tree_to_extend == &forward_tree_)
-                    ? gripper_b_forward_tree_color_
-                    : gripper_b_backward_tree_color_;
+                ? gripper_b_forward_tree_color_
+                : gripper_b_backward_tree_color_;
 
         const auto& tree_a_ns = (&tree_to_extend == &forward_tree_)
                 ? RRT_FORWARD_TREE_GRIPPER_A_NS
