@@ -1,8 +1,11 @@
+#include <thread>
+
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/serialization_eigen.hpp>
+#include <arc_utilities/shortcut_smoothing.hpp>
+
 #include "smmap/quinlan_rubber_band.h"
-#include <thread>
 
 using namespace smmap;
 using namespace smmap_utilities;
@@ -157,28 +160,40 @@ const EigenHelpers::VectorVector3d& QuinlanRubberBand::getVectorRepresentation()
 const EigenHelpers::VectorVector3d QuinlanRubberBand::upsampleBand(const size_t total_points) const
 {
     assert(total_points >= band_.size());
-    const int num_even_splits = (int)std::floor((float)total_points/(float)band_.size());
-    const int num_leftover_points = (int)total_points - (int)(band_.size() * num_even_splits);
-    assert(num_leftover_points >= 0);
+//    const int num_even_splits = (int)std::floor((float)total_points/(float)band_.size());
+//    const int num_leftover_points = (int)total_points - (int)(band_.size() * num_even_splits);
+//    assert(num_leftover_points >= 0);
 
-    EigenHelpers::VectorVector3d upsampled_band;
-    upsampled_band.reserve(total_points);
+//    EigenHelpers::VectorVector3d upsampled_band;
+//    upsampled_band.reserve(total_points);
 
-    for (size_t idx = 0; idx < band_.size(); ++idx)
+//    for (size_t idx = 0; idx < band_.size(); ++idx)
+//    {
+//        // Insert num_even_splits copies of each point, plus 1 more if the current index
+//        // gets an extra copy due to an uneven split
+//        if ((int)idx < num_leftover_points)
+//        {
+//            upsampled_band.insert(upsampled_band.end(), num_even_splits + 1, band_[idx]);
+//        }
+//        else
+//        {
+//            upsampled_band.insert(upsampled_band.end(), num_even_splits, band_[idx]);
+//        }
+//    }
+
+//    return upsampled_band;
+
+    const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
     {
-        // Insert num_even_splits copies of each point, plus 1 more if the current index
-        // gets an extra copy due to an uneven split
-        if ((int)idx < num_leftover_points)
-        {
-            upsampled_band.insert(upsampled_band.end(), num_even_splits + 1, band_[idx]);
-        }
-        else
-        {
-            upsampled_band.insert(upsampled_band.end(), num_even_splits, band_[idx]);
-        }
-    }
+        return (v1 - v2).norm();
+    };
 
-    return upsampled_band;
+    const auto interpolate_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2, const double ratio)
+    {
+        return EigenHelpers::Interpolate(v1, v2, ratio);
+    };
+
+    return shortcut_smoothing::UpsamplePath<Eigen::Vector3d>(band_, total_points, distance_fn, interpolate_fn);
 }
 
 std::pair<Eigen::Vector3d, Eigen::Vector3d> QuinlanRubberBand::getEndpoints() const

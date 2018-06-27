@@ -263,7 +263,7 @@ namespace smmap
             void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
             void clearBlacklist();
 
-            bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const;
+            bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band_input) const;
             bool isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band);
 
             ///////////////////////////////////////////////////////////////////////////////////////

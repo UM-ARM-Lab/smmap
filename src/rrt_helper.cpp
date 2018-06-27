@@ -7,6 +7,7 @@
 #include <arc_utilities/timing.hpp>
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
+#include <arc_utilities/shortcut_smoothing.hpp>
 
 using namespace smmap;
 using namespace smmap_utilities;
@@ -2208,8 +2209,23 @@ void RRTHelper::clearBlacklist()
     blacklisted_goal_rubber_bands_.clear();
 }
 
-bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_band) const
+bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_band_input) const
 {
+    const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
+    {
+        return (v1 - v2).norm();
+    };
+    const auto interpolation_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2, const double ratio)
+    {
+        return EigenHelpers::Interpolate(v1, v2, ratio);
+    };
+
+    const auto test_band = shortcut_smoothing::ResamplePath(
+        test_band_input,
+        environment_sdf_->GetResolution(),
+        distance_fn,
+        interpolation_fn);
+
     for (size_t idx = 0; idx < blacklisted_goal_rubber_bands_.size(); idx++)
     {
         const VectorVector3d& blacklisted_path = blacklisted_goal_rubber_bands_[idx];

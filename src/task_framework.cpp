@@ -335,13 +335,20 @@ WorldState TaskFramework::sendNextCommand(
 
             if (global_plan_will_overstretch)
             {
+                ROS_WARN_NAMED("task_framework", "Invoking global planner as the current plan will overstretch the deformable object");
+                ROS_INFO_NAMED("task_framework", "----------------------------------------------------------------------------");
+
                 planning_needed = true;
+
+                vis_->forcePublishNow();
+                vis_->forcePublishNow();
+
+                std::cout << "Waiting on character to continue" << std::endl;
+                std::getchar();
+
 
                 vis_->deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 2);
                 vis_->deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(2 * max_lookahead_steps_) + 2);
-
-                ROS_WARN_NAMED("task_framework", "Invoking global planner as the current plan will overstretch the deformable object");
-                ROS_INFO_NAMED("task_framework", "----------------------------------------------------------------------------");
             }
         }
         // Check if the local controller will be stuck
@@ -824,12 +831,12 @@ bool TaskFramework::globalPlannerNeededDueToOverstretch(
 {
     static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(ph_);
 
-    static bool returned_true_by_default_once = false;
-    if (!returned_true_by_default_once)
-    {
-        returned_true_by_default_once = true;
-        return true;
-    }
+//    static bool returned_true_by_default_once = false;
+//    if (!returned_true_by_default_once)
+//    {
+//        returned_true_by_default_once = true;
+//        return true;
+//    }
 
     const bool visualization_enabled = true;
     const auto detection_results = detectFutureConstraintViolations(current_world_state, visualization_enabled);
@@ -852,7 +859,7 @@ bool TaskFramework::globalPlannerNeededDueToOverstretch(
         // Apply a low pass filter to the band length to try and remove "blips" in the estimate
         filtered_band_length = annealing_factor * filtered_band_length + (1.0 - annealing_factor) * band_length;
         // If the band is currently overstretched, and not in free space, then predict future problems
-        if (filtered_band_length > band.maxSafeLength() && !CloseEnough(band_length, distance_between_endpoints, 1e-6))
+        if (filtered_band_length > band.maxSafeLength() && !CloseEnough(band_length, distance_between_endpoints, 1e-3))
         {
             return true;
         }
@@ -1241,9 +1248,7 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
     }
 
     // Project the targets out of collision
-    #warning "HACK!!!!!!!!!!!!!!!!!!!!!!!!!!!! MAGIC NUMBERS FOR LIVE ROBOT"
-//    const double min_dist_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_) * GetRRTTargetMinDistanceScaleFactor(ph_);
-    const double min_dist_to_obstacles = 0.05;
+    const double min_dist_to_obstacles = std::max(GetControllerMinDistanceToObstacles(ph_), GetRRTMinGripperDistanceToObstacles(ph_)) * GetRRTTargetMinDistanceScaleFactor(ph_);
     const Vector3d gripper0_position_pre_project = target_gripper_poses[0].translation();
     const Vector3d gripper1_position_pre_project = target_gripper_poses[1].translation();
     target_gripper_poses[0].translation() = dijkstras_task_->environment_sdf_->ProjectOutOfCollisionToMinimumDistance3d(gripper0_position_pre_project, min_dist_to_obstacles);
@@ -1370,7 +1375,22 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
     static int num_times_invoked = 0;
     num_times_invoked++;
-//    rrt_helper_->addBandToBlacklist(rubber_band_between_grippers_->getVectorRepresentation());
+
+    // Resample the band for the purposes of first order vis checking
+    const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
+    {
+        return (v1 - v2).norm();
+    };
+    const auto interpolation_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2, const double ratio)
+    {
+        return EigenHelpers::Interpolate(v1, v2, ratio);
+    };
+    rrt_helper_->addBandToBlacklist(
+                shortcut_smoothing::ResamplePath(
+                    rubber_band_between_grippers_->getVectorRepresentation(),
+                    dijkstras_task_->environment_sdf_->GetResolution(),
+                    distance_fn,
+                    interpolation_fn));
 
     vis_->deleteAll();
     vis_->forcePublishNow();
@@ -1427,6 +1447,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
     // Planning if we did not load a plan from file
     while (global_plan_full_robot_trajectory_.size() == 0)
+//    for (size_t trial_idx = 0; trial_idx < 20; ++trial_idx)
     {
         const RRTGrippersRepresentation gripper_config(
                     world_state.all_grippers_single_pose_[0],
@@ -1449,9 +1470,6 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                     robot_config,
                     rubber_band_between_grippers_);
 
-//        #warning "!!!!!!!!!!!!!!!!!!!! Grippers RRT goal manually specified for all plans after the first !!!!!!!!!"
-//        const AllGrippersSinglePose target_grippers_poses_vec = num_times_invoked > 1 ?
-//                    world_state.all_grippers_single_pose_ : getGripperTargets(world_state);
         const AllGrippersSinglePose target_grippers_poses_vec = getGripperTargets(world_state);
 
         const RRTGrippersRepresentation target_grippers_poses(
@@ -1462,7 +1480,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
 
 
-    //    for (size_t trial_idx = 0; trial_idx < 1; ++trial_idx)
+    //    for (size_t trial_idx = 0; trial_idx < 20; ++trial_idx)
         {
     //        robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
     //        flann::seed_random((unsigned int)seed_);
@@ -1474,8 +1492,8 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     //        }
     //        num_times_invoked++;
 
-    //        std::cout << "!!!!!!!!!!!!!!!!!! Invoked " << num_times_invoked << " times!!!!!!!!!!!" << std::endl;
-    //        std::cout << "Trial idx: " << trial_idx << std::endl;
+            std::cout << "!!!!!!!!!!!!!!!!!! Invoked " << num_times_invoked << " times!!!!!!!!!!!" << std::endl;
+//            std::cout << "Trial idx: " << trial_idx << std::endl;
 
 
 

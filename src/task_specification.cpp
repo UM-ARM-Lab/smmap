@@ -849,7 +849,7 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateErrorCorrectionDeltaFixedCo
     for (ssize_t deform_idx = 0; deform_idx < num_nodes_; ++deform_idx)
     {
         const std::vector<ssize_t>& current_correspondences     = correspondences[deform_idx];
-        const Eigen::Vector3d& deformable_point                 = world_state.object_configuration_.col(deform_idx);
+        const Eigen::Vector3d& deformable_point                 = environment_sdf_->ProjectOutOfCollision3d(world_state.object_configuration_.col(deform_idx));
         const ssize_t deformable_point_idx_in_free_space_graph  = work_space_grid_.worldPosToGridIndexClamped(deformable_point);
 
         for (size_t correspondence_idx = 0; correspondence_idx < current_correspondences.size(); ++correspondence_idx)
@@ -1102,7 +1102,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
         const std::vector<ssize_t>& cover_point_assignments,
         const size_t maximum_itterations) const
 {
-    Eigen::Vector3d current_pos = starting_pos;
+    Eigen::Vector3d current_pos = environment_sdf_->ProjectOutOfCollision3d(starting_pos);
     EigenHelpers::VectorVector3d trajectory(1, current_pos);
 
     bool progress = cover_point_assignments.size() > 0;
@@ -1284,7 +1284,7 @@ DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCo
     {
         // Ensure that regardless of the sensed point, we are working with a point that is in the valid volume
         const Eigen::Vector3d& deformable_point         = world_state.object_configuration_.col(deform_idx);
-        const Eigen::Vector3d point_in_free_space       = environment_sdf_->ProjectIntoValidVolume3d(deformable_point);
+        const Eigen::Vector3d point_in_free_space       = environment_sdf_->ProjectOutOfCollision3d(deformable_point);
         const ssize_t nearest_idx_in_free_space_graph   = work_space_grid_.worldPosToGridIndexClamped(point_in_free_space);
 
         // Extract the correct part of each data structure - each deformable point can correspond to multiple target points
@@ -1293,9 +1293,20 @@ DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCo
         std::vector<double>& current_correspondences_distances          = correspondences_external.correspondences_distances_[deform_idx];
         std::vector<bool>& current_correspondences_is_covered           = correspondences_external.correspondences_is_covered_[deform_idx];
 
-//        std::cerr << "Deformable point: " << deformable_point.transpose() << std::endl
+//        std::cerr << "Deformable point:    " << deformable_point.transpose() << std::endl
+//                  << "Point in free space: " << point_in_free_space.transpose() << std::endl
 //                  << "  Nearest idx in free space graph: " << nearest_idx_in_free_space_graph << std::endl
 //                  << "  num correspondences: " << current_correspondences.size() << std::endl;
+
+//        std::cerr << "  SDF dist pre: "
+//                  << " In bounds:" << environment_sdf_->CheckInBounds3d(deformable_point)
+//                  << " Dist: " << environment_sdf_->Get3d(deformable_point)
+//                  << std::endl;
+
+//        std::cerr << "  SDF dist post: "
+//                  << " In bounds:" << environment_sdf_->CheckInBounds3d(point_in_free_space)
+//                  << " Dist: " << environment_sdf_->Get3d(point_in_free_space)
+//                  << std::endl;
 
         // Iterate through the correspondences, recording all the data needed for other parts of the system
         current_correspondences_next_step.reserve(current_correspondences.size());
