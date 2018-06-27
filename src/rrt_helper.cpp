@@ -1594,9 +1594,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     size_t forward_connection_attempts_useless = 0;
     size_t forward_connections_made = 0;
 
-    path_found_ = false;
-    int64_t goal_idx_in_forward_tree = -1;
-
     // Make sure we've been given a start and goal state
     assert(forward_tree_.size() > 0);
     assert(backward_tree_.size() > 0);
@@ -1605,7 +1602,9 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     assert(CheckTreeLinkage(backward_tree_));
 
     const std::chrono::time_point<std::chrono::steady_clock> start_time = std::chrono::steady_clock::now();
-    forward_iteration_ = false;
+    bool forward_iteration = false;
+    bool path_found = false;
+    int64_t goal_idx_in_forward_tree = -1;
 
     const bool fwd_prop_local_visualization_enabled = true;
     const size_t fwd_prop_max_steps = 32;
@@ -1613,13 +1612,13 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     // Plan
     std::cout << "Starting planning..." << std::endl;
     std::chrono::duration<double> time_ellapsed = std::chrono::steady_clock::now() - start_time;
-    while (!path_found_ && time_ellapsed < time_limit_)
+    while (!path_found && time_ellapsed < time_limit_)
     {
-        if (forward_iteration_)
+        if (forward_iteration)
         {
             ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Starting forward iteration. Tree size: " << forward_tree_.size());
 
-            for (size_t itr = 0; !path_found_ && itr < forward_tree_extend_iterations_ && time_ellapsed < time_limit_; ++itr)
+            for (size_t itr = 0; !path_found && itr < forward_tree_extend_iterations_ && time_ellapsed < time_limit_; ++itr)
             {
                 ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Inner iteration # " << itr);
 
@@ -1630,7 +1629,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                 // Sample a random target
                 const RRTNode random_target = configSampling(sample_band);
                 // Get the nearest neighbor
-                const int64_t forward_tree_nearest_neighbour_idx = nearestNeighbour(forward_iteration_, random_target);
+                const int64_t forward_tree_nearest_neighbour_idx = nearestNeighbour(forward_iteration, random_target);
                 // Forward propagate towards the sampled target
                 const size_t num_random_nodes_created =
                         forwardPropogationFunction(
@@ -1666,7 +1665,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                     const RRTNode& test_node = forward_tree_[idx];
                     if (goalReached(test_node))
                     {
-                        path_found_ = true;
+                        path_found = true;
                         goal_idx_in_forward_tree = idx;
                         break;
                     }
@@ -1759,7 +1758,10 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                                     break;
                                 }
 
-                                next_band->visualize("bispace_connect_bands", Visualizer::Blue(), Visualizer::Blue(), (int)forward_parent_idx + 1, true);
+                                if (visualization_enabled_globally_)
+                                {
+                                    next_band->visualize("bispace_connect_bands", Visualizer::Blue(), Visualizer::Blue(), (int)forward_parent_idx + 1, true);
+                                }
 
                                 // The new configuation is valid, add it to the forward tree
                                 const RRTNode next_node(
@@ -1773,7 +1775,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
 
                                 if (goalReached(next_node))
                                 {
-                                    path_found_ = true;
+                                    path_found = true;
                                     goal_idx_in_forward_tree = new_node_idx;
                                     break;
                                 }
@@ -1805,7 +1807,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                 // Sample a random target
                 const RRTNode random_target = configSampling(sample_band);
                 // Get the nearest neighbor
-                const int64_t backward_tree_nearest_neighbour_idx = nearestNeighbour(forward_iteration_, random_target);
+                const int64_t backward_tree_nearest_neighbour_idx = nearestNeighbour(forward_iteration, random_target);
                 // Forward propagate towards the sampled target
                 const size_t num_nodes_created =
                         forwardPropogationFunction(
@@ -1840,19 +1842,22 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
 
             ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Ending backward iteration. Tree size: " << backward_tree_.size());
         }
-        forward_iteration_ = !forward_iteration_;
+        forward_iteration = !forward_iteration;
         ROS_INFO_COND(SMMAP_RRT_VERBOSE, "");
 //        std::cout << "Waiting for a char\n"; std::getchar();
     }
 
-    std::cout << "Finished planning, for better or worse" << std::endl;
+    std::cout << "Finished planning, for better or worse. Path found? " << path_found << std::endl;
 
+    std::cout << "Checking forward tree linkage" << std::endl;
     assert(CheckTreeLinkage(forward_tree_));
+    std::cout << "Checking backward tree linkage" << std::endl;
     assert(CheckTreeLinkage(backward_tree_));
 
     std::vector<RRTNode, RRTAllocator> path;
-    if (path_found_)
+    if (path_found)
     {
+        std::cout << "Extracting solution path" << std::endl;
         path = ExtractSolutionPath(forward_tree_, goal_idx_in_forward_tree);
     }
 
@@ -2009,7 +2014,11 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         robot_->lockEnvironment();
         path = planningMainLoop();
         robot_->unlockEnvironment();
-        visualizeBothTrees();
+        if (visualization_enabled_globally_)
+        {
+            std::cout << "Visualizing tree." << std::endl;
+            visualizeBothTrees();
+        }
         std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl << std::endl;
         storePath(path);
     }

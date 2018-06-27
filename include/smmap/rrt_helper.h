@@ -408,8 +408,6 @@ namespace smmap
             std::chrono::duration<double> time_limit_;
             RRTGrippersRepresentation grippers_goal_poses_;
 
-            bool path_found_;
-            bool forward_iteration_;
             std::vector<RRTNode, RRTAllocator> forward_tree_;
             // Note that the band portion of the backward tree is invalid
             std::vector<RRTNode, RRTAllocator> backward_tree_;
