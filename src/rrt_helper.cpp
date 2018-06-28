@@ -2055,19 +2055,19 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
             visualizePath(path);
         }
 
-        ROS_INFO_NAMED("rrt", "Playing back unsmoothed path in OpenRAVE");
-        robot_->testPathForCollision(ConvertRRTPathToRobotPath(path));
+//        ROS_INFO_NAMED("rrt", "Playing back unsmoothed path in OpenRAVE");
+//        robot_->testPathForCollision(ConvertRRTPathToRobotPath(path));
 
         ROS_INFO_NAMED("rrt", "Starting Shortcut Smoothing");
         robot_->lockEnvironment();
-        const bool visualize_rrt_smoothing = true;
+        const bool visualize_rrt_smoothing = visualization_enabled_globally_ && true;
         const auto smoothed_path = rrtShortcutSmooth(path, visualize_rrt_smoothing);
         robot_->unlockEnvironment();
         storePath(smoothed_path);
         std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(smoothing_statistics_, false, "\n") << std::endl << std::endl;
 
-        ROS_INFO_NAMED("rrt", "Playing back smoothed path in OpenRAVE");
-        robot_->testPathForCollision(ConvertRRTPathToRobotPath(smoothed_path));
+//        ROS_INFO_NAMED("rrt", "Playing back smoothed path in OpenRAVE");
+//        robot_->testPathForCollision(ConvertRRTPathToRobotPath(smoothed_path));
 
         if (visualization_enabled_globally_)
         {

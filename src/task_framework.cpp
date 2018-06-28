@@ -253,6 +253,97 @@ void TaskFramework::execute()
                     dijkstras_task_,
                     vis_,
                     generator_);
+
+        // Algorithm parameters
+        const auto use_cbirrt_style_projection = GetUseCBiRRTStyleProjection(ph_);
+        const auto forward_tree_extend_iterations = GetRRTForwardTreeExtendIterations(ph_);
+        const auto backward_tree_extend_iterations = GetRRTBackwardTreeExtendIterations(ph_);
+        const auto kd_tree_grow_threshold = GetKdTreeGrowThreshold(ph_);
+        const auto use_brute_force_nn = GetUseBruteForceNN(ph_);
+        const auto goal_bias = GetRRTGoalBias(ph_);
+
+        // Smoothing parameters
+        const auto max_shortcut_index_distance = GetRRTMaxShortcutIndexDistance(ph_);
+        const auto max_smoothing_iterations = GetRRTMaxSmoothingIterations(ph_);
+        const auto max_failed_smoothing_iterations = GetRRTMaxFailedSmoothingIterations(ph_);
+
+        // Task defined parameters
+        const auto task_aligned_frame = robot_->getWorldToTaskFrameTf();
+        const auto task_frame_lower_limits = Vector3d(
+                    GetRRTPlanningXMinBulletFrame(ph_),
+                    GetRRTPlanningYMinBulletFrame(ph_),
+                    GetRRTPlanningZMinBulletFrame(ph_));
+        const auto task_frame_upper_limits = Vector3d(
+                    GetRRTPlanningXMaxBulletFrame(ph_),
+                    GetRRTPlanningYMaxBulletFrame(ph_),
+                    GetRRTPlanningZMaxBulletFrame(ph_));
+        const auto max_gripper_step_size = dijkstras_task_->work_space_grid_.minStepDimension();
+        const auto max_robot_step_size = GetRRTMaxRobotDOFStepSize(ph_);
+        const auto min_robot_step_size = GetRRTMinRobotDOFStepSize(ph_);
+        const auto max_gripper_rotation = GetRRTMaxGripperRotation(ph_); // only matters for real robot
+        const auto goal_reached_radius = dijkstras_task_->work_space_grid_.minStepDimension();
+//        const auto homotopy_distance_penalty = GetRRTHomotopyDistancePenalty();
+        const auto min_gripper_distance_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_); // only matters for simulation
+        const auto band_distance2_scaling_factor = GetRRTBandDistance2ScalingFactor(ph_);
+        const auto band_max_points = GetRRTBandMaxPoints(ph_);
+
+        // Visualization
+        const auto enable_rrt_visualizations = GetVisualizeRRT(ph_);
+
+        #ifdef PRM_SAMPLING
+        prm_helper_ = std::make_shared<PRMHelper>(
+                    dijkstras_task_->environment_sdf_,
+                    vis_,
+                    generator_,
+                    robot_->getWorldToTaskFrameTf(),
+                    task_frame_lower_limits,
+                    task_frame_upper_limits,
+                    !GetDisableAllVisualizations(ph_),
+                    GetPRMNumNearest(ph_),
+                    GetPRMNumSamples(ph_),
+                    dijkstras_task_->work_space_grid_.minStepDimension());
+        prm_helper_->initializeRoadmap();
+        prm_helper_->visualize(GetVisualizePRM(ph_));
+        #else
+        prm_helper_ = nullptr;
+        #endif
+
+        // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
+        rrt_helper_ = std::make_shared<RRTHelper>(
+                    // Robot/environment related parameters
+                    nh_,
+                    ph_,
+                    robot_,
+                    dijkstras_task_->environment_sdf_,
+                    prm_helper_,
+                    generator_,
+                    // Planning algorithm parameters
+                    use_cbirrt_style_projection,
+                    forward_tree_extend_iterations,
+                    backward_tree_extend_iterations,
+                    kd_tree_grow_threshold,
+                    use_brute_force_nn,
+                    goal_bias,
+                    // Smoothing parameters
+                    max_shortcut_index_distance,
+                    max_smoothing_iterations,
+                    max_failed_smoothing_iterations,
+                    // Task defined parameters
+                    task_aligned_frame,
+                    task_frame_lower_limits,
+                    task_frame_upper_limits,
+                    max_gripper_step_size,
+                    max_robot_step_size,
+                    min_robot_step_size,
+                    max_gripper_rotation,
+                    goal_reached_radius,
+                    min_gripper_distance_to_obstacles,
+                    // Dual stage NN checking variables
+                    band_distance2_scaling_factor,
+                    band_max_points,
+                    // Visualization
+                    vis_,
+                    enable_rrt_visualizations);
     }
 
     if (visualize_free_space_graph_ && dijkstras_task_ != nullptr)
@@ -341,14 +432,20 @@ WorldState TaskFramework::sendNextCommand(
                 planning_needed = true;
 
                 vis_->forcePublishNow();
-                vis_->forcePublishNow();
 
                 std::cout << "Waiting on character to continue" << std::endl;
                 std::getchar();
 
+                vis_->deleteObjects(PROJECTED_POINT_PATH_NS, 0, 30);
+                vis_->deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 0, 30);
+                vis_->deleteObjects(PROJECTED_BAND_NS, 0, 30);
+                vis_->deleteObjects(PROJECTED_GRIPPER_NS, 0, 30);
+                vis_->forcePublishNow();
+                vis_->forcePublishNow();
 
-                vis_->deleteObjects(PROJECTED_BAND_NS,               1, (int32_t)max_lookahead_steps_ + 2);
-                vis_->deleteObjects(PROJECTED_GRIPPER_NS,            1, (int32_t)(2 * max_lookahead_steps_) + 2);
+                vis_->deleteAll();
+                vis_->forcePublishNow();
+                vis_->purgeMarkerList();
             }
         }
         // Check if the local controller will be stuck
@@ -645,7 +742,19 @@ WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
         grippers_pose_history_.clear();
         error_history_.clear();
 
+        visualization_msgs::Marker marker;
+        marker.action = visualization_msgs::Marker::DELETEALL;
+        vis_->publish(marker);
+        vis_->forcePublishNow();
+
         vis_->deleteAll();
+        vis_->forcePublishNow();
+        vis_->forcePublishNow();
+        vis_->purgeMarkerList();
+        vis_->deleteObjects(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, 0, 30);
+        vis_->deleteObjects(CLUSTERING_RESULTS_PRE_PROJECT_NS, 0, 10);
+        vis_->deleteObjects(CLUSTERING_RESULTS_POST_PROJECT_NS, 0, 10);
+        vis_->deleteObjects(CLUSTERING_TARGETS_NS, 0, 10);
     }
 
     const std::vector<WorldState> fake_all_models_results(num_models_, world_feedback);
@@ -822,6 +931,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
 
     vis_->deleteObjects(PROJECTED_BAND_NS, (int32_t)actual_lookahead_steps + 2, (int32_t)max_lookahead_steps_ + 2);
     vis_->deleteObjects(PROJECTED_GRIPPER_NS, (int32_t)(2 * actual_lookahead_steps) + 2, (int32_t)(2 * max_lookahead_steps_) + 2);
+    vis_->forcePublishNow();
+    vis_->forcePublishNow();
 
     return projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 }
@@ -858,6 +969,12 @@ bool TaskFramework::globalPlannerNeededDueToOverstretch(
 
         // Apply a low pass filter to the band length to try and remove "blips" in the estimate
         filtered_band_length = annealing_factor * filtered_band_length + (1.0 - annealing_factor) * band_length;
+
+        std::cout << "Band length:          " << band_length << std::endl;
+        std::cout << "Filtered band length: " << filtered_band_length << std::endl;
+        std::cout << "Max band length:      " << band.maxSafeLength() << std::endl;
+        std::cout << "distance between endpoints: " << distance_between_endpoints << std::endl;
+
         // If the band is currently overstretched, and not in free space, then predict future problems
         if (filtered_band_length > band.maxSafeLength() && !CloseEnough(band_length, distance_between_endpoints, 1e-3))
         {
@@ -983,33 +1100,7 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
         cluster_targets.push_back(dijkstras_task_->cover_points_.col(cover_idx));
     }
 
-
-
-
-//    cluster_targets.clear();
-//    ros::ServiceClient get_object_current_config =
-//            nh_.serviceClient<deformable_manipulation_msgs::GetPointSet>(GetObjectCurrentConfigurationTopic(nh_));
-//    deformable_manipulation_msgs::GetPointSet srv_data;
-//    assert(get_object_current_config.call(srv_data));
-
-//    for(size_t idx = 0; idx < srv_data.response.points.size(); ++idx)
-//    {
-//        cluster_targets.push_back(GeometryPointToEigenVector3d(srv_data.response.points[idx]));
-//    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-    vis_->visualizePoints(CLUSTERING_TARGETS_NS, cluster_targets, Visualizer::Blue(), 1);
+//    vis_->visualizePoints(CLUSTERING_TARGETS_NS, cluster_targets, Visualizer::Blue(), 1);
 
     const Matrix3Xd cluster_targets_as_matrix = VectorEigenVector3dToEigenMatrix3Xd(cluster_targets);
     const MatrixXd distance_matrix = CalculateSquaredDistanceMatrix(cluster_targets_as_matrix);
@@ -1265,6 +1356,7 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
             colors.push_back(arc_helpers::GenerateUniqueColor<std_msgs::ColorRGBA>(cluster_labels[idx] + 2, 0.5));
         }
         vis_->visualizeCubes(CLUSTERING_TARGETS_NS, cluster_targets, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), colors, 10);
+        vis_->forcePublishNow();
     }
 
 
@@ -1279,100 +1371,6 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
 
 void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 {
-    if (rrt_helper_ == nullptr)
-    {
-        // Algorithm parameters
-        const auto use_cbirrt_style_projection = GetUseCBiRRTStyleProjection(ph_);
-        const auto forward_tree_extend_iterations = GetRRTForwardTreeExtendIterations(ph_);
-        const auto backward_tree_extend_iterations = GetRRTBackwardTreeExtendIterations(ph_);
-        const auto kd_tree_grow_threshold = GetKdTreeGrowThreshold(ph_);
-        const auto use_brute_force_nn = GetUseBruteForceNN(ph_);
-        const auto goal_bias = GetRRTGoalBias(ph_);
-
-        // Smoothing parameters
-        const auto max_shortcut_index_distance = GetRRTMaxShortcutIndexDistance(ph_);
-        const auto max_smoothing_iterations = GetRRTMaxSmoothingIterations(ph_);
-        const auto max_failed_smoothing_iterations = GetRRTMaxFailedSmoothingIterations(ph_);
-
-        // Task defined parameters
-        const auto task_aligned_frame = robot_->getWorldToTaskFrameTf();
-        const auto task_frame_lower_limits = Vector3d(
-                    GetRRTPlanningXMinBulletFrame(ph_),
-                    GetRRTPlanningYMinBulletFrame(ph_),
-                    GetRRTPlanningZMinBulletFrame(ph_));
-        const auto task_frame_upper_limits = Vector3d(
-                    GetRRTPlanningXMaxBulletFrame(ph_),
-                    GetRRTPlanningYMaxBulletFrame(ph_),
-                    GetRRTPlanningZMaxBulletFrame(ph_));
-        const auto max_gripper_step_size = dijkstras_task_->work_space_grid_.minStepDimension();
-        const auto max_robot_step_size = GetRRTMaxRobotDOFStepSize(ph_);
-        const auto min_robot_step_size = GetRRTMinRobotDOFStepSize(ph_);
-        const auto max_gripper_rotation = GetRRTMaxGripperRotation(ph_); // only matters for real robot
-        const auto goal_reached_radius = dijkstras_task_->work_space_grid_.minStepDimension();
-//        const auto homotopy_distance_penalty = GetRRTHomotopyDistancePenalty();
-        const auto min_gripper_distance_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_); // only matters for simulation
-        const auto band_distance2_scaling_factor = GetRRTBandDistance2ScalingFactor(ph_);
-        const auto band_max_points = GetRRTBandMaxPoints(ph_);
-
-        // Visualization
-        const auto enable_rrt_visualizations = GetVisualizeRRT(ph_);
-
-        #ifdef PRM_SAMPLING
-        prm_helper_ = std::make_shared<PRMHelper>(
-                    dijkstras_task_->environment_sdf_,
-                    vis_,
-                    generator_,
-                    robot_->getWorldToTaskFrameTf(),
-                    task_frame_lower_limits,
-                    task_frame_upper_limits,
-                    !GetDisableAllVisualizations(ph_),
-                    GetPRMNumNearest(ph_),
-                    GetPRMNumSamples(ph_),
-                    dijkstras_task_->work_space_grid_.minStepDimension());
-        prm_helper_->initializeRoadmap();
-        prm_helper_->visualize(GetVisualizePRM(ph_));
-        #else
-        prm_helper_ = nullptr;
-        #endif
-
-        // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
-        rrt_helper_ = std::make_shared<RRTHelper>(
-                    // Robot/environment related parameters
-                    nh_,
-                    ph_,
-                    robot_,
-                    dijkstras_task_->environment_sdf_,
-                    prm_helper_,
-                    generator_,
-                    // Planning algorithm parameters
-                    use_cbirrt_style_projection,
-                    forward_tree_extend_iterations,
-                    backward_tree_extend_iterations,
-                    kd_tree_grow_threshold,
-                    use_brute_force_nn,
-                    goal_bias,
-                    // Smoothing parameters
-                    max_shortcut_index_distance,
-                    max_smoothing_iterations,
-                    max_failed_smoothing_iterations,
-                    // Task defined parameters
-                    task_aligned_frame,
-                    task_frame_lower_limits,
-                    task_frame_upper_limits,
-                    max_gripper_step_size,
-                    max_robot_step_size,
-                    min_robot_step_size,
-                    max_gripper_rotation,
-                    goal_reached_radius,
-                    min_gripper_distance_to_obstacles,
-                    // Dual stage NN checking variables
-                    band_distance2_scaling_factor,
-                    band_max_points,
-                    // Visualization
-                    vis_,
-                    enable_rrt_visualizations);
-    }
-
     static int num_times_invoked = 0;
     num_times_invoked++;
 
@@ -1392,8 +1390,15 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                     distance_fn,
                     interpolation_fn));
 
+    visualization_msgs::Marker marker;
+    marker.action = visualization_msgs::Marker::DELETEALL;
+    vis_->publish(marker);
+    vis_->forcePublishNow();
+
     vis_->deleteAll();
     vis_->forcePublishNow();
+    vis_->forcePublishNow();
+    vis_->purgeMarkerList();
     vis_->clearVisualizationsBullet();
 
     global_plan_full_robot_trajectory_.clear();
@@ -1545,12 +1550,12 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         }
     }
 
-    std::cout << "Waiting on keystroke before executing trajectory\n";
-    std::getchar();
-    std::cout << std::endl;
+//    std::cout << "Waiting on keystroke before executing trajectory\n";
+//    std::getchar();
+//    std::cout << std::endl;
 
-    assert(!world_state.robot_configuration_valid_ ||
-           !(robot_->testPathForCollision(global_plan_full_robot_trajectory_)));
+//    assert(!world_state.robot_configuration_valid_ ||
+//           !(robot_->testPathForCollision(global_plan_full_robot_trajectory_)));
 }
 
 void TaskFramework::convertRRTResultIntoGripperTrajectory(

@@ -64,35 +64,63 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
                 grippers_poses_to_object_jacobian * robot_dof_to_grippers_poses_jacobian;
 
         const size_t num_poi = input_data.poi_collision_data_.size();
-        std::vector<RowVectorXd> linear_constraints_linear_terms(num_poi);
-        std::vector<double> linear_constraints_affine_terms(num_poi);
+        std::vector<RowVectorXd> linear_constraint_linear_terms(num_poi);
+        std::vector<double> linear_constraint_affine_terms(num_poi);
         for (size_t poi_ind = 0; poi_ind < num_poi; ++poi_ind)
         {
             const CollisionData& collision_data = input_data.poi_collision_data_[poi_ind].first;
             const MatrixXd& poi_jacobian = input_data.poi_collision_data_[poi_ind].second;
-            linear_constraints_linear_terms[poi_ind] =
+            linear_constraint_linear_terms[poi_ind] =
                     -collision_data.obstacle_surface_normal_.transpose() * poi_jacobian;
 
-            linear_constraints_affine_terms[poi_ind] =
+            linear_constraint_affine_terms[poi_ind] =
                     collision_data.distance_to_obstacle_ - robot_->min_controller_distance_to_obstacles_;
 
 //            std::cout << "Poi ind: " << poi_ind << " Dist to obstacle: " << collision_data.distance_to_obstacle_ << " Min dist: " << robot_->min_controller_distance_to_obstacles_ << std::endl
 //                      << "Jacobian:\n" << poi_jacobian << std::endl;
         }
 
+        const VectorXd& joint_weights = input_data.robot_->getJointWeights();
+        std::vector<MatrixXd> quadratic_constraint_quadratic_terms;
+        std::vector<RowVectorXd> quadratic_constraint_linear_terms;
+        std::vector<double> quadratic_constraint_affine_terms;
+        if (joint_weights.size() == 16)
+        {
+            ROS_WARN_THROTTLE(4.0, "Assuming that we are using Val, and each arm is to be treated independently, with the last 2 DOF for the torso");
+
+            MatrixXd arm1_weights = joint_weights.asDiagonal();
+            arm1_weights.block<7, 7>(7, 7).setZero();
+            quadratic_constraint_quadratic_terms.push_back(arm1_weights);
+
+            MatrixXd arm2_weights = joint_weights.asDiagonal();
+            arm2_weights.block<7, 7>(0, 0).setZero();
+            quadratic_constraint_quadratic_terms.push_back(arm2_weights);
+
+            quadratic_constraint_linear_terms.resize(2, RowVectorXd::Zero(joint_weights.size()));
+            quadratic_constraint_affine_terms.resize(2, max_robot_dof_step_size);
+        }
+        else
+        {
+            quadratic_constraint_quadratic_terms.push_back(joint_weights.asDiagonal());
+            quadratic_constraint_linear_terms.push_back(RowVectorXd::Zero(joint_weights.size()));
+            quadratic_constraint_affine_terms.push_back(max_robot_dof_step_size);
+        }
+
+
         const VectorXd min_joint_delta = input_data.robot_->getJointLowerLimits() - input_data.world_current_state_.robot_configuration_;
         const VectorXd max_joint_delta = input_data.robot_->getJointUpperLimits() - input_data.world_current_state_.robot_configuration_;
 
-        // TODO: weights on robot DOF in velocity norm
-        suggested_robot_motion.robot_dof_motion_ = minSquaredNormLinearConstraints_SE3VelocityConstraints(
+        suggested_robot_motion.robot_dof_motion_ = minSquaredNormLinearConstraintsQuadraticConstraints_SE3VelocityConstraints(
                     robot_dof_to_deformable_object_jacobian,
                     desired_object_motion.delta,
                     desired_object_motion.weight,
-                    max_robot_dof_step_size,
                     robot_dof_to_grippers_poses_jacobian,
                     max_grippers_step_size,
-                    linear_constraints_linear_terms,
-                    linear_constraints_affine_terms,
+                    linear_constraint_linear_terms,
+                    linear_constraint_affine_terms,
+                    quadratic_constraint_quadratic_terms,
+                    quadratic_constraint_linear_terms,
+                    quadratic_constraint_affine_terms,
                     min_joint_delta,
                     max_joint_delta);
 
