@@ -365,8 +365,13 @@ void TaskFramework::execute()
             const double current_error = task_specification_->calculateError(world_feedback);
             ROS_INFO_STREAM_NAMED("task_framework", "   Planner/Task sim time " << world_feedback.sim_time_ << "\t Error: " << current_error);
 
-            vis_->deleteAll();
-            std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
+
+            vis_->purgeMarkerList();
+            visualization_msgs::Marker marker;
+            marker.action = visualization_msgs::Marker::DELETEALL;
+            vis_->publish(marker);
+            vis_->forcePublishNow();
+            vis_->purgeMarkerList();
 
             if (world_feedback.sim_time_ - start_time >= task_specification_->maxTime())
             {
@@ -436,14 +441,10 @@ WorldState TaskFramework::sendNextCommand(
                 std::cout << "Waiting on character to continue" << std::endl;
                 std::getchar();
 
-                vis_->deleteObjects(PROJECTED_POINT_PATH_NS, 0, 30);
-                vis_->deleteObjects(PROJECTED_POINT_PATH_LINES_NS, 0, 30);
-                vis_->deleteObjects(PROJECTED_BAND_NS, 0, 30);
-                vis_->deleteObjects(PROJECTED_GRIPPER_NS, 0, 30);
-                vis_->forcePublishNow();
-                vis_->forcePublishNow();
-
-                vis_->deleteAll();
+                vis_->purgeMarkerList();
+                visualization_msgs::Marker marker;
+                marker.action = visualization_msgs::Marker::DELETEALL;
+                vis_->publish(marker);
                 vis_->forcePublishNow();
                 vis_->purgeMarkerList();
             }
@@ -461,10 +462,6 @@ WorldState TaskFramework::sendNextCommand(
             if (global_planner_needed_due_to_overstretch || global_planner_needed_due_to_lack_of_progress)
             {
                 planning_needed = true;
-
-                std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
-
-                vis_->deleteAll();
 
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "task_framework", "Invoking global planner due to overstretch");
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "task_framework", "Invoking global planner due to collision");
@@ -742,19 +739,12 @@ WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
         grippers_pose_history_.clear();
         error_history_.clear();
 
+        vis_->purgeMarkerList();
         visualization_msgs::Marker marker;
         marker.action = visualization_msgs::Marker::DELETEALL;
         vis_->publish(marker);
         vis_->forcePublishNow();
-
-        vis_->deleteAll();
-        vis_->forcePublishNow();
-        vis_->forcePublishNow();
-        vis_->purgeMarkerList();
-        vis_->deleteObjects(CLUSTERING_RESULTS_ASSIGNED_CENTERS_NS, 0, 30);
-        vis_->deleteObjects(CLUSTERING_RESULTS_PRE_PROJECT_NS, 0, 10);
-        vis_->deleteObjects(CLUSTERING_RESULTS_POST_PROJECT_NS, 0, 10);
-        vis_->deleteObjects(CLUSTERING_TARGETS_NS, 0, 10);
+	vis_->purgeMarkerList();
     }
 
     const std::vector<WorldState> fake_all_models_results(num_models_, world_feedback);
@@ -921,18 +911,27 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
         projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.push_back(rubber_band_between_grippers_copy);
 
         // Visualize
-        rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
-        vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color, (int32_t)(2 * t) + 2);
+        if (visualization_enabled)
+        {
+            rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
+            vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color, (int32_t)(2 * t) + 2);
+        }
 
         // Finish collecting the gripper collision data
         world_state_copy.gripper_collision_data_ = collision_check_future.get();
     }
     ROS_INFO_STREAM_NAMED("task_framework", "Calculated future constraint violation detection - Version 2a - in " << function_wide_stopwatch(READ) << " seconds");
 
-    vis_->deleteObjects(PROJECTED_BAND_NS, (int32_t)actual_lookahead_steps + 2, (int32_t)max_lookahead_steps_ + 2);
-    vis_->deleteObjects(PROJECTED_GRIPPER_NS, (int32_t)(2 * actual_lookahead_steps) + 2, (int32_t)(2 * max_lookahead_steps_) + 2);
-    vis_->forcePublishNow();
-    vis_->forcePublishNow();
+    // Add duplicates of the last state to clear out any old visualizations
+    if (visualization_enabled)
+    {
+        for (size_t t = actual_lookahead_steps; t < max_lookahead_steps_; ++t)
+        {
+            rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
+            vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color, (int32_t)(2 * t) + 2);
+        }
+        vis_->forcePublishNow();
+    }
 
     return projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 }
@@ -970,10 +969,10 @@ bool TaskFramework::globalPlannerNeededDueToOverstretch(
         // Apply a low pass filter to the band length to try and remove "blips" in the estimate
         filtered_band_length = annealing_factor * filtered_band_length + (1.0 - annealing_factor) * band_length;
 
-        std::cout << "Band length:          " << band_length << std::endl;
-        std::cout << "Filtered band length: " << filtered_band_length << std::endl;
-        std::cout << "Max band length:      " << band.maxSafeLength() << std::endl;
-        std::cout << "distance between endpoints: " << distance_between_endpoints << std::endl;
+//        std::cout << "Band length:          " << band_length << std::endl;
+//        std::cout << "Filtered band length: " << filtered_band_length << std::endl;
+//        std::cout << "Max band length:      " << band.maxSafeLength() << std::endl;
+//        std::cout << "distance between endpoints: " << distance_between_endpoints << std::endl;
 
         // If the band is currently overstretched, and not in free space, then predict future problems
         if (filtered_band_length > band.maxSafeLength() && !CloseEnough(band_length, distance_between_endpoints, 1e-3))
@@ -1052,11 +1051,14 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
 
     bool overstretch_predicted = false;
     const size_t traj_waypoints_per_large_step = (size_t)std::floor(dijkstras_task_->work_space_grid_.minStepDimension() / robot_->dt_ / robot_->max_gripper_velocity_norm_);
-    for (size_t t = 0; (t < max_lookahead_steps_) &&
-                       (global_plan_current_timestep_ + t * traj_waypoints_per_large_step < global_plan_gripper_trajectory_.size()); ++t)
+
+    for (size_t t = 0; t < max_lookahead_steps_; ++t)
     {
+        // Always predict the full number of steps, duplicating the last point in the path as needed
+        const size_t next_idx = std::min(global_plan_gripper_trajectory_.size() - 1, global_plan_current_timestep_+ t * traj_waypoints_per_large_step);
+
         // Forward project the band and check for overstretch
-        const auto& grippers_pose = global_plan_gripper_trajectory_[global_plan_current_timestep_ + t * traj_waypoints_per_large_step];
+        const auto& grippers_pose = global_plan_gripper_trajectory_[next_idx];
         rubber_band_between_grippers_copy.forwardPropagateRubberBandToEndpointTargets(
                     grippers_pose[0].translation(),
                     grippers_pose[1].translation(),
@@ -1068,12 +1070,7 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
         vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, grippers_pose, gripper_color, (int32_t)(2 * t) + 2);
     }
 
-    // TODO: delete old visualization markers if the remainder of the path is short
-
-    if (overstretch_predicted)
-    {
-        vis_->forcePublishNow();
-    }
+    vis_->forcePublishNow();
 
     return overstretch_predicted;
 }
@@ -1390,16 +1387,12 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                     distance_fn,
                     interpolation_fn));
 
+    vis_->purgeMarkerList();
     visualization_msgs::Marker marker;
     marker.action = visualization_msgs::Marker::DELETEALL;
     vis_->publish(marker);
     vis_->forcePublishNow();
-
-    vis_->deleteAll();
-    vis_->forcePublishNow();
-    vis_->forcePublishNow();
     vis_->purgeMarkerList();
-    vis_->clearVisualizationsBullet();
 
     global_plan_full_robot_trajectory_.clear();
     if (GetRRTReuseOldResults(ph_))
@@ -1499,12 +1492,6 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
             std::cout << "!!!!!!!!!!!!!!!!!! Invoked " << num_times_invoked << " times!!!!!!!!!!!" << std::endl;
 //            std::cout << "Trial idx: " << trial_idx << std::endl;
-
-
-
-            vis_->deleteAll();
-            vis_->forcePublishNow();
-            vis_->purgeMarkerList();
 
             const auto rrt_results = rrt_helper_->plan(
                         start_config,
