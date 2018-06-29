@@ -32,6 +32,10 @@ using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
+const static std_msgs::ColorRGBA PREDICTION_GRIPPER_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
+const static std_msgs::ColorRGBA PREDICTION_RUBBER_BAND_SAFE_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.0f, 1.0f);
+const static std_msgs::ColorRGBA PREDICTION_RUBBER_BAND_VIOLATION_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
+
 #pragma message "Magic number - reward scaling factor starting value"
 #define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
 
@@ -431,22 +435,10 @@ WorldState TaskFramework::sendNextCommand(
 
             if (global_plan_will_overstretch)
             {
-                ROS_WARN_NAMED("task_framework", "Invoking global planner as the current plan will overstretch the deformable object");
-                ROS_INFO_NAMED("task_framework", "----------------------------------------------------------------------------");
-
                 planning_needed = true;
 
-                vis_->forcePublishNow();
-
-                std::cout << "Waiting on character to continue" << std::endl;
-                std::getchar();
-
-                vis_->purgeMarkerList();
-                visualization_msgs::Marker marker;
-                marker.action = visualization_msgs::Marker::DELETEALL;
-                vis_->publish(marker);
-                vis_->forcePublishNow();
-                vis_->purgeMarkerList();
+                ROS_WARN_NAMED("task_framework", "Invoking global planner as the current plan will overstretch the deformable object");
+                ROS_INFO_NAMED("task_framework", "----------------------------------------------------------------------------");
             }
         }
         // Check if the local controller will be stuck
@@ -472,6 +464,15 @@ WorldState TaskFramework::sendNextCommand(
         // If we need to (re)plan due to the local controller getting stuck, or the gobal plan failing, then do so
         if (planning_needed)
         {
+            std::getchar();
+
+            vis_->purgeMarkerList();
+            visualization_msgs::Marker marker;
+            marker.action = visualization_msgs::Marker::DELETEALL;
+            vis_->publish(marker);
+            vis_->forcePublishNow();
+            vis_->purgeMarkerList();
+
             planGlobalGripperTrajectory(world_state);
         }
 
@@ -504,7 +505,7 @@ WorldState TaskFramework::sendNextCommand(
     }
     else
     {
-        ROS_WARN_NAMED("task_framework", "Unable to do future constraint violation detection");
+        ROS_WARN_ONCE_NAMED("task_framework", "Unable to do future constraint violation detection");
         return sendNextCommandUsingLocalController(world_state);
     }
 }
@@ -785,27 +786,16 @@ void TaskFramework::visualizeProjectedPaths(
     }
 }
 
-std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::detectFutureConstraintViolations(
+std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::projectFutureSystemState(
         const WorldState& starting_world_state,
         const bool visualization_enabled)
 {
     Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
 
-//    // Clear out any old visualizations first in order to ensure the visualization is roughly synced
-//    // TODO: This delete then re-add can cause visual flickering.
-//    //       Putting just a statement like this at the end can cause visual lag.
-//    //       Enable a version of vis_->publish xyz that can address this (potentially a "pause" function, or similar)
-//    vis_->deleteObjects(PROJECTED_BAND_NS, 0, (int32_t)max_lookahead_steps_ + 2);
-//    vis_->deleteObjects(PROJECTED_GRIPPER_NS, 0, (int32_t)(2 * max_lookahead_steps_) + 2);
-
     assert(task_specification_->is_dijkstras_type_task_ && starting_world_state.all_grippers_single_pose_.size() == 2);
     std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 
-    // TODO: Move to class wide location, currently in 2 locations in this file
-    const static std_msgs::ColorRGBA gripper_color = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
-    const static std_msgs::ColorRGBA rubber_band_safe_color = Visualizer::Black();
-    const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
     const bool band_verbose = false;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -834,7 +824,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     WorldState world_state_copy = starting_world_state;
     RubberBand rubber_band_between_grippers_copy = *rubber_band_between_grippers_.get();
-    rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, 1, visualization_enabled);
+    rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, 1, visualization_enabled);
 
     projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.reserve(actual_lookahead_steps);
     for (size_t t = 0; t < actual_lookahead_steps; ++t)
@@ -856,7 +846,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
         const double normal_motion_robot_dof_max_step = robot_->max_dof_velocity_norm_ * robot_->dt_;
         const double forward_prediction_robot_dof_max_step = velocity_scale_factor * normal_motion_robot_dof_max_step * 2.0;
 
-        const DeformableController::InputData model_input_data(
+        const DeformableController::InputData input_data(
                     world_state_copy,
                     desired_object_manipulation_direction,
                     robot_,
@@ -866,7 +856,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
                     forward_prediction_grippers_max_step,
                     forward_prediction_robot_dof_max_step);
 
-        const DeformableController::OutputData robot_command = controller_list_[0]->getGripperMotion(model_input_data);
+        const DeformableController::OutputData robot_command = controller_list_[0]->getGripperMotion(input_data);
 
         /*
            Things to be updated in world_state_copy after "executing" a robot commad
@@ -913,8 +903,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
         // Visualize
         if (visualization_enabled)
         {
-            rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
-            vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color, (int32_t)(2 * t) + 2);
+            rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, (int32_t)t + 2, visualization_enabled);
+            vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, PREDICTION_GRIPPER_COLOR, (int32_t)(2 * t) + 2);
         }
 
         // Finish collecting the gripper collision data
@@ -927,8 +917,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::d
     {
         for (size_t t = actual_lookahead_steps; t < max_lookahead_steps_; ++t)
         {
-            rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
-            vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, gripper_color, (int32_t)(2 * t) + 2);
+            rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, (int32_t)t + 2, visualization_enabled);
+            vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, PREDICTION_GRIPPER_COLOR, (int32_t)(2 * t) + 2);
         }
         vis_->forcePublishNow();
     }
@@ -941,16 +931,9 @@ bool TaskFramework::globalPlannerNeededDueToOverstretch(
 {
     static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(ph_);
 
-//    static bool returned_true_by_default_once = false;
-//    if (!returned_true_by_default_once)
-//    {
-//        returned_true_by_default_once = true;
-//        return true;
-//    }
-
     const bool visualization_enabled = true;
-    const auto detection_results = detectFutureConstraintViolations(current_world_state, visualization_enabled);
-    const auto& projected_rubber_bands = detection_results.second;
+    const auto projection_results = projectFutureSystemState(current_world_state, visualization_enabled);
+    const auto& projected_rubber_bands = projection_results.second;
 
     if (projected_rubber_bands.size() == 0)
     {
@@ -1041,10 +1024,6 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
 
     assert(global_plan_current_timestep_ < global_plan_gripper_trajectory_.size());
 
-    // TODO: Move to class wide location, currently in 2 positions in this file
-    const static std_msgs::ColorRGBA gripper_color = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
-    const static std_msgs::ColorRGBA rubber_band_safe_color = Visualizer::Black();
-    const static std_msgs::ColorRGBA rubber_band_violation_color = Visualizer::Cyan();
     constexpr bool band_verbose = false;
 
     RubberBand rubber_band_between_grippers_copy = *rubber_band_between_grippers_;
@@ -1066,8 +1045,8 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
         overstretch_predicted |= rubber_band_between_grippers_copy.isOverstretched();
 
         // Visualize
-        rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, rubber_band_safe_color, rubber_band_violation_color, (int32_t)t + 2, visualization_enabled);
-        vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, grippers_pose, gripper_color, (int32_t)(2 * t) + 2);
+        rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, (int32_t)t + 2, visualization_enabled);
+        vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, grippers_pose, PREDICTION_GRIPPER_COLOR, (int32_t)(2 * t) + 2);
     }
 
     vis_->forcePublishNow();

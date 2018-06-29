@@ -128,12 +128,7 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
         object_delta_as_vector = robot_dof_to_deformable_object_jacobian * suggested_robot_motion.robot_dof_motion_;
 
         const VectorXd grippers_motion = robot_dof_to_grippers_poses_jacobian * suggested_robot_motion.robot_dof_motion_;
-        for (size_t gripper_ind = 0; gripper_ind < num_grippers; ++gripper_ind)
-        {
-            suggested_robot_motion.grippers_motion_[gripper_ind] = grippers_motion.segment<6>(gripper_ind * 3);
-        }
-
-
+        suggested_robot_motion.grippers_motion_ = EigenVectorXToVectorEigenVector<double, 6>(grippers_motion);
 
 
 
@@ -153,6 +148,77 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
 //        std::cout << "Weights = [" << desired_object_motion.weight.transpose() << "]';\n";
 //        std::cout << "Cloth_jacobian = [\n" << grippers_poses_to_object_jacobian << "];\n";
 //        std::cout << "Robot_jacobian = [\n" << robot_dof_to_grippers_poses_jacobian << "];\n";
+//        std::cout << "Full_jacobian = [\n" << robot_dof_to_deformable_object_jacobian << "];\n";
+
+
+
+
+
+
+
+
+//        std::cout << "max_se3_norm = " << max_grippers_step_size << ";\n";
+
+//        std::cout << "J_matrix = [\n" << J << "];\n";
+
+
+//        std::cout << "A_matrix = [\n" << A << "];\n";
+//        std::cout << "b_vector = [" << b.transpose() << "]';\n";
+//        std::cout << "Weights  = [" << weights.transpose() << "]';\n";
+
+
+
+//        std::cout << "Linear_constraint_linear_terms = [\n";
+//        for (size_t idx = 0; idx < linear_constraint_linear_terms.size(); ++idx)
+//        {
+//            std::cout << linear_constraint_linear_terms[idx] << std::endl;
+//        }
+//        std::cout << "];\n";
+
+//        std::cout << "Linear_constraint_affine_terms = [";
+//        for (size_t idx = 0; idx < linear_constraint_affine_terms.size(); ++idx)
+//        {
+//            std::cout << linear_constraint_affine_terms[idx] << " ";
+//        }
+//        std::cout << "]';\n";
+
+
+
+//        std::cout << "Quadratic_constraint_quadratic_terms = [\n";
+//        for (size_t idx = 0; idx < quadratic_constraint_quadratic_terms.size(); ++idx)
+//        {
+//            std::cout << quadratic_constraint_quadratic_terms[idx] << std::endl;
+//        }
+//        std::cout << "];\n";
+
+//        std::cout << "Quadratic_constraint_linear_terms = [\n";
+//        for (size_t idx = 0; idx < quadratic_constraint_linear_terms.size(); ++idx)
+//        {
+//            std::cout << quadratic_constraint_linear_terms[idx] << std::endl;
+//        }
+//        std::cout << "];\n";
+
+//        std::cout << "Quadratic_constraint_affine_terms = [";
+//        for (size_t idx = 0; idx < quadratic_constraint_affine_terms.size(); ++idx)
+//        {
+//            std::cout << quadratic_constraint_affine_terms[idx] << " ";
+//        }
+//        std::cout << "]';\n";
+
+
+
+//        std::cout << "delta_lower_bound = [" << min_joint_delta.transpose() << "]';\n";
+//        std::cout << "delta_upper_bound = [" << max_joint_delta.transpose() << "]';\n";
+
+
+
+//        std::cout << "full_robot_dof_motion = [" << suggested_robot_motion.robot_dof_motion_.transpose() << "]';\n";
+
+
+//        std::cout << std::endl;
+//        assert(false);
+
+
 
 
 

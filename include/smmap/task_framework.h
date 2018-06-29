@@ -79,7 +79,7 @@ namespace smmap
                     const std::vector<EigenHelpers::VectorVector3d>& projected_paths,
                     const bool visualization_enabled);
 
-            std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<RubberBand>> detectFutureConstraintViolations(
+            std::pair<std::vector<EigenHelpers::VectorVector3d>, std::vector<RubberBand>> projectFutureSystemState(
                     const WorldState& current_world_state,
                     const bool visualization_enabled);
 
