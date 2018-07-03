@@ -464,17 +464,18 @@ WorldState TaskFramework::sendNextCommand(
         // If we need to (re)plan due to the local controller getting stuck, or the gobal plan failing, then do so
         if (planning_needed)
         {
-            std::getchar();
-
             vis_->purgeMarkerList();
             visualization_msgs::Marker marker;
             marker.action = visualization_msgs::Marker::DELETEALL;
             vis_->publish(marker);
-            vis_->forcePublishNow();
+            vis_->forcePublishNow(0.5);
             vis_->purgeMarkerList();
 
             planGlobalGripperTrajectory(world_state);
         }
+
+//        std::cout << "Waiting for keystroke" << std::endl;
+//        std::getchar();
 
         // Execute a single step in the global plan, or use the local controller if we have no plan to follow
         WorldState world_feedback;

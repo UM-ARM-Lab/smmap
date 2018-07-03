@@ -1,4 +1,5 @@
 #include "smmap/rrt_helper.h"
+#include "smmap/task_framework.h"
 
 #include <thread>
 #include <arc_utilities/arc_helpers.hpp>
@@ -1126,7 +1127,8 @@ size_t RRTHelper::forwardPropogationFunction(
                     5);
     }
 
-    const size_t visualization_frequency = 100;
+    const size_t visualization_period = 100;
+    const size_t force_vis_publish_period = 10;
 
     const RRTGrippersRepresentation& starting_grippers_poses = nearest_neighbour.getGrippers();
     const RRTRobotRepresentation& starting_robot_configuration = nearest_neighbour.getRobotConfiguration();
@@ -1507,10 +1509,28 @@ size_t RRTHelper::forwardPropogationFunction(
     const size_t nodes_at_end_of_propogation = tree_to_extend.size();
     const size_t nodes_created = nodes_at_end_of_propogation - nodes_at_start_of_propogation;
 
+    bool visualize = false;
     if (visualization_enabled_globally_ &&
         visualization_enabled_locally &&
-        nodes_created > 0 &&
-        tree_to_extend.size() % visualization_frequency == 0)
+        nodes_created > 0)
+    {
+        if (&tree_to_extend == &forward_tree_)
+        {
+            if (tree_to_extend.size() - forward_tree_next_visualized_node_ >= visualization_period)
+            {
+                visualize = true;
+            }
+        }
+        else
+        {
+            if (tree_to_extend.size() - backward_tree_next_visualized_node_ >= visualization_period)
+            {
+                visualize = true;
+            }
+        }
+    }
+
+    if (visualize)
     {
         const auto starting_idx = (&tree_to_extend == &forward_tree_)
                 ? forward_tree_next_visualized_node_
@@ -1532,7 +1552,7 @@ size_t RRTHelper::forwardPropogationFunction(
                 ? RRT_FORWARD_TREE_GRIPPER_B_NS
                 : RRT_BACKWARD_TREE_GRIPPER_B_NS;
 
-        const bool draw_band = false;
+        const bool draw_band = extend_band;
         visualizeTree(
                     tree_to_extend,
                     starting_idx,
@@ -1547,7 +1567,6 @@ size_t RRTHelper::forwardPropogationFunction(
                     band_tree_color_,
                     draw_band);
         ++tree_marker_id_;
-        vis_->forcePublishNow();
 
         if (&tree_to_extend == &forward_tree_)
         {
@@ -1558,8 +1577,11 @@ size_t RRTHelper::forwardPropogationFunction(
             backward_tree_next_visualized_node_ = tree_to_extend.size();
         }
 
-        vis_->forcePublishNow();
-        vis_->purgeMarkerList();
+        if (tree_marker_id_ % force_vis_publish_period == 0)
+        {
+            vis_->forcePublishNow();
+            vis_->purgeMarkerList();
+        }
     }
 
     arc_helpers::DoNotOptimize(nodes_created);
@@ -2014,45 +2036,28 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         robot_->lockEnvironment();
         path = planningMainLoop();
         robot_->unlockEnvironment();
+        std::cout << "RRT Helper Planning Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl << std::endl;
+        storePath(path);
+
         if (visualization_enabled_globally_)
         {
             std::cout << "Visualizing tree." << std::endl;
             visualizeBothTrees();
-        }
-        std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl << std::endl;
-        storePath(path);
-    }
-
-    if (path.size() != 0)
-    {
-        if (visualization_enabled_globally_)
-        {
-            vis_->deleteAll();
-            vis_->forcePublishNow();
-            vis_->clearVisualizationsBullet();
             visualizeBlacklist();
             visualizePath(path);
-            vis_->forcePublishNow();
+            vis_->forcePublishNow(0.5);
         }
     }
-
-
-
-//    std::cout << " !!!!!!!!!!!!! Smoothing currently disabled, returning unsmoothed path !!!!!" << std::endl;
-//    return path;
-
-
-
-
-
 
     // If we either retreived a path, or made a new one, visualize and do smoothing
     if (path.size() != 0)
     {
         if (visualization_enabled_globally_)
         {
-            vis_->deleteAll();
+            deleteTreeVisualizations();
+            visualizeBlacklist();
             visualizePath(path);
+            vis_->forcePublishNow(0.05);
         }
 
 //        ROS_INFO_NAMED("rrt", "Playing back unsmoothed path in OpenRAVE");
@@ -2061,30 +2066,24 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         ROS_INFO_NAMED("rrt", "Starting Shortcut Smoothing");
         robot_->lockEnvironment();
         const bool visualize_rrt_smoothing = visualization_enabled_globally_ && true;
-        const auto smoothed_path = rrtShortcutSmooth(path, visualize_rrt_smoothing);
+        path = rrtShortcutSmooth(path, visualize_rrt_smoothing);
         robot_->unlockEnvironment();
-        storePath(smoothed_path);
-        std::cout << "RRT Helper Internal Statistics:\n" << PrettyPrint::PrettyPrint(smoothing_statistics_, false, "\n") << std::endl << std::endl;
+        storePath(path);
+        std::cout << "RRT Helper Smoothing Statistics:\n" << PrettyPrint::PrettyPrint(smoothing_statistics_, false, "\n") << std::endl << std::endl;
 
 //        ROS_INFO_NAMED("rrt", "Playing back smoothed path in OpenRAVE");
 //        robot_->testPathForCollision(ConvertRRTPathToRobotPath(smoothed_path));
 
         if (visualization_enabled_globally_)
         {
-            vis_->deleteAll();
-            vis_->forcePublishNow();
-            vis_->clearVisualizationsBullet();
             visualizeBlacklist();
             visualizePath(path);
-            vis_->forcePublishNow();
+            vis_->forcePublishNow(0.05);
         }
 
-        return smoothed_path;
     }
-    else
-    {
-        return path;
-    }
+
+    return path;
 }
 
 
@@ -2528,11 +2527,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
     {
         ++num_iterations;
 
-        if (visualization_enabled_globally_ && visualization_enabled_locally)
-        {
-            vis_->deleteAll();
-        }
-
         ///////////////////// Determine which nodes to try to shortcut between /////////////////////////////////////////
 
         const int64_t base_index = (int64_t)std::uniform_int_distribution<size_t>(0, path.size() - 1)(*generator_);
@@ -2854,35 +2848,17 @@ void RRTHelper::visualizeTree(
         }
 
         vis_->visualizeLines(ns_a, gripper_a_tree_start_points, gripper_a_tree_end_points, color_a, id_a);
-//        vis_->visualizeLines(ns_a, gripper_a_tree_start_points, gripper_a_tree_end_points, color_a, id_a);
-//        vis_->visualizeLines(ns_a, gripper_a_tree_start_points, gripper_a_tree_end_points, color_a, id_a);
-//        ros::spinOnce();
-//        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
         vis_->visualizeLines(ns_b, gripper_b_tree_start_points, gripper_b_tree_end_points, color_b, id_b);
-//        vis_->visualizeLines(ns_b, gripper_b_tree_start_points, gripper_b_tree_end_points, color_b, id_b);
-//        vis_->visualizeLines(ns_b, gripper_b_tree_start_points, gripper_b_tree_end_points, color_b, id_b);
-//        ros::spinOnce();
-//        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
         if (draw_band)
         {
             vis_->visualizeLines(ns_band, band_line_start_points, band_line_end_points, color_band, id_band);
-//            vis_->visualizeLines(ns_band, band_line_start_points, band_line_end_points, color_band, id_band);
-//            vis_->visualizeLines(ns_band, band_line_start_points, band_line_end_points, color_band, id_band);
-//            ros::spinOnce();
-//            std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
         }
     }
 }
 
 void RRTHelper::visualizeBothTrees() const
 {
-    vis_->deleteObjects(RRT_FORWARD_TREE_GRIPPER_A_NS, 0, tree_marker_id_ + 1);
-    vis_->deleteObjects(RRT_FORWARD_TREE_GRIPPER_B_NS, 0, tree_marker_id_ + 1);
-    vis_->deleteObjects(RRT_BACKWARD_TREE_GRIPPER_A_NS, 0, tree_marker_id_ + 1);
-    vis_->deleteObjects(RRT_BACKWARD_TREE_GRIPPER_B_NS, 0, tree_marker_id_ + 1);
-    vis_->deleteObjects(RRT_TREE_BAND_NS, 0, tree_marker_id_ + 1);
-    vis_->forcePublishNow();
-    vis_->purgeMarkerList();
+    deleteTreeVisualizations();
 
     const bool draw_band = false;
 
@@ -2915,6 +2891,19 @@ void RRTHelper::visualizeBothTrees() const
                 draw_band);
 
     vis_->forcePublishNow();
+}
+
+void RRTHelper::deleteTreeVisualizations() const
+{
+    vis_->purgeMarkerList();
+    visualization_msgs::Marker marker;
+    marker.action = visualization_msgs::Marker::DELETEALL;
+    vis_->publish(marker);
+    vis_->forcePublishNow(0.01);
+    vis_->purgeMarkerList();
+
+    vis_->visualizeCubes(TaskFramework::CLUSTERING_RESULTS_POST_PROJECT_NS, {grippers_goal_poses_.first.translation()}, Vector3d::Ones() * environment_sdf_->GetResolution() * 2.0, gripper_a_forward_tree_color_, 1);
+    vis_->visualizeCubes(TaskFramework::CLUSTERING_RESULTS_POST_PROJECT_NS, {grippers_goal_poses_.second.translation()}, Vector3d::Ones() * environment_sdf_->GetResolution() * 2.0, gripper_b_forward_tree_color_, 5);
 }
 
 void RRTHelper::visualizePath(const std::vector<RRTNode, RRTAllocator>& path) const

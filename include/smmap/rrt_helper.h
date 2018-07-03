@@ -286,6 +286,8 @@ namespace smmap
 
             void visualizeBothTrees() const;
 
+            void deleteTreeVisualizations() const;
+
             void visualizePath(const std::vector<RRTNode, RRTAllocator>& path) const;
 
             void visualizeBlacklist() const;
