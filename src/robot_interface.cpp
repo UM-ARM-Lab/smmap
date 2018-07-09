@@ -405,14 +405,18 @@ namespace smmap
         general_ik_solution_fn_ = general_ik_solution_fn;
         test_path_for_collision_fn_ = test_path_for_collision_fn;
 
-        if (get_robot_joint_info_fn != nullptr)
-        {
-            const std::vector<Eigen::VectorXd> joint_info = get_robot_joint_info_fn();
-            assert(joint_info.size() == 3 && "Joint info is assumed to be in the order [lower_limits, upper_limits, joint_weights]");
-            joint_lower_limits_ = joint_info[0];
-            joint_upper_limits_ = joint_info[1];
-            joint_weights_ = joint_info[2];
-        }
+        // Verify the joint info makes sense - this is a guard against bad data flowwing downhill in the RRT
+        assert(get_robot_joint_info_fn != nullptr);
+
+        const std::vector<Eigen::VectorXd> joint_info = get_robot_joint_info_fn();
+        assert(joint_info.size() == 3 && "Joint info is assumed to be in the order [lower_limits, upper_limits, joint_weights]");
+        joint_lower_limits_ = joint_info[0];
+        joint_upper_limits_ = joint_info[1];
+        joint_weights_ = joint_info[2];
+
+        assert(joint_weights_.size() > 0);
+        assert(joint_weights_.size() == joint_lower_limits_.size());
+        assert(joint_weights_.size() == joint_upper_limits_.size());
     }
 
 

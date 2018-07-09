@@ -318,8 +318,8 @@ void TaskFramework::execute()
                     nh_,
                     ph_,
                     robot_,
+                    world_feedback.robot_configuration_valid_,
                     dijkstras_task_->environment_sdf_,
-                    prm_helper_,
                     generator_,
                     // Planning algorithm parameters
                     use_cbirrt_style_projection,
@@ -1476,8 +1476,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
             const auto rrt_results = rrt_helper_->plan(
                         start_config,
                         target_grippers_poses,
-                        time_limit,
-                        world_state.robot_configuration_valid_);
+                        time_limit);
 
             rrt_helper_->visualizePath(rrt_results);
     //        std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
@@ -1534,8 +1533,8 @@ void TaskFramework::convertRRTResultIntoGripperTrajectory(
     for (size_t ind = 0; ind < rrt_result.size(); ++ind)
     {
         const AllGrippersSinglePose grippers_poses = {
-            rrt_result[ind].getGrippers().first,
-            rrt_result[ind].getGrippers().second};
+            rrt_result[ind].grippers().first,
+            rrt_result[ind].grippers().second};
         traj.push_back(grippers_poses);
     }
 
@@ -1571,10 +1570,10 @@ void TaskFramework::convertRRTResultIntoFullRobotTrajectory(
     for (size_t ind = 0; ind < rrt_result.size(); ++ind)
     {
         const AllGrippersSinglePose grippers_poses = {
-            rrt_result[ind].getGrippers().first,
-            rrt_result[ind].getGrippers().second};
+            rrt_result[ind].grippers().first,
+            rrt_result[ind].grippers().second};
         global_plan_gripper_trajectory_.push_back(grippers_poses);
-        global_plan_full_robot_trajectory_.push_back(rrt_result[ind].getRobotConfiguration());
+        global_plan_full_robot_trajectory_.push_back(rrt_result[ind].robotConfiguration());
     }
 }
 

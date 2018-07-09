@@ -8,7 +8,6 @@
 #include <flann/flann.hpp>
 
 #include "smmap/rubber_band.hpp"
-#include "smmap/prm_helper.h"
 #include "smmap/robot_interface.hpp"
 
 namespace flann
@@ -39,45 +38,12 @@ namespace flann
         /**
          *  Compute the squared Euclidean distance between two vectors.
          *
-         *	This is highly optimised, with loop unrolling, as it is one
-         *	of the most expensive inner loops.
-         *
          *	The computation of squared root at the end is omitted for
          *	efficiency.
          */
         template <typename Iterator1, typename Iterator2>
         ResultType operator()(Iterator1 a, Iterator2 b, size_t size, ResultType worst_dist = -1) const
         {
-//            (void)size;
-//            ResultType result = 0.0;
-//            ResultType diff0, diff1, diff2, diff3;
-//            Iterator1 start = a;
-//            ElementType const * w = &dof_weights_[0]; // pointer to a const ElementType
-
-//            /* Process 4 items with each loop for efficiency. */
-//            while (a < start + 12)
-//            {
-//                diff0 = (a[0] - b[0]) * w[0];
-//                diff1 = (a[1] - b[1]) * w[1];
-//                diff2 = (a[2] - b[2]) * w[2];
-//                diff3 = (a[3] - b[3]) * w[3];
-//                result += diff0 * diff0 + diff1 * diff1 + diff2 * diff2 + diff3 * diff3;
-//                a += 4;
-//                b += 4;
-//                w += 4;
-
-//                if ((worst_dist > 0) && (result > worst_dist))
-//                {
-//                    return result;
-//                }
-//            }
-//            /* Process last 2 values */
-//            diff0 = (a[0] - b[0]) * w[0];
-//            diff1 = (a[1] - b[1]) * w[1];
-//            result += diff0 * diff0 + diff1 * diff1;
-
-//            return result;
-
             (void)worst_dist;
             const Eigen::Map<const VectorX> a_vec(a, size);
             const Eigen::Map<const VectorX> b_vec(b, size);
@@ -125,19 +91,22 @@ namespace smmap
             RRTNode(const RRTGrippersRepresentation& grippers_poses,
                     const RRTRobotRepresentation& robot_configuration,
                     const RubberBand::Ptr& band,
+                    const double cost_to_come,
                     const int64_t parent_index);
 
             RRTNode(const RRTGrippersRepresentation& grippers_poses,
                     const RRTRobotRepresentation& robot_configuration,
                     const RubberBand::Ptr& band,
+                    const double cost_to_come,
                     const int64_t parent_index,
                     const std::vector<int64_t>& child_indices);
 
             bool isInitialized() const;
 
-            const RRTGrippersRepresentation& getGrippers() const;
-            const RRTRobotRepresentation& getRobotConfiguration() const;
-            const RubberBand::Ptr& getBand() const;
+            const RRTGrippersRepresentation& grippers() const;
+            const RRTRobotRepresentation& robotConfiguration() const;
+            const RubberBand::Ptr& band() const;
+            double costToCome() const;
 
             int64_t getParentIndex() const;
             void setParentIndex(const int64_t parent_index);
@@ -147,28 +116,12 @@ namespace smmap
             void addChildIndex(const int64_t child_index);
             void removeChildIndex(const int64_t child_index);
 
-            bool isBlacklisted() const;
-            void blacklist();
-
-            double distance(const RRTNode& other) const;
-            static double distance(const RRTNode& c1, const RRTNode& c2);
-            static double distanceSquared(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
-            static double distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
-            static double distanceSquared(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2);
-            static double distance(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2);
-
-            static double grippersPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index);
-            static double robotPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index);
-
-
 
             std::string print() const;
 
             bool operator==(const RRTNode& other) const;
 
             uint64_t serialize(std::vector<uint8_t>& buffer) const;
-//            std::pair<RRTConfig, uint64_t> deserialize(const std::vector<uint8_t>& buffer, const uint64_t current);
-
             static uint64_t Serialize(const RRTNode& config, std::vector<uint8_t>& buffer);
             static std::pair<RRTNode, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current, const RubberBand& starting_band);
 
@@ -177,12 +130,30 @@ namespace smmap
             RRTGrippersRepresentation grippers_poses_;
             RRTRobotRepresentation robot_configuration_;
             RubberBand::Ptr band_;
+            double cost_to_come_;
 
             // Book keeping
             int64_t parent_index_;
             std::vector<int64_t> child_indices_;
             bool initialized_;
-            bool blacklisted_;
+    };
+
+    class RRTDistance
+    {
+        public:
+            static const RRTRobotRepresentation& GetJointWeights();
+            static void SetJointWeights(const RRTRobotRepresentation joint_weights);
+
+            static double DistanceSquared(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
+            static double Distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2);
+            static double DistanceSquared(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2);
+            static double Distance(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2);
+
+            static double GrippersPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index);
+            static double RobotPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index);
+
+        private:
+            static RRTRobotRepresentation joint_weights_;
     };
 
     class RRTHelper
@@ -212,8 +183,8 @@ namespace smmap
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
                     const RobotInterface::Ptr robot,
+                    const bool planning_for_whole_robot,
                     const sdf_tools::SignedDistanceField::ConstPtr environment_sdf,
-                    const PRMHelper::Ptr& prm_helper,
                     const std::shared_ptr<std::mt19937_64>& generator,
                     // Planning algorithm parameters
                     const bool using_cbirrt_style_projection,
@@ -242,11 +213,9 @@ namespace smmap
                     const smmap_utilities::Visualizer::Ptr vis,
                     const bool visualization_enabled);
 
-            std::vector<RRTNode, RRTAllocator> plan(
-                    const RRTNode& start,
+            std::vector<RRTNode, RRTAllocator> plan(const RRTNode& start,
                     const RRTGrippersRepresentation& grippers_goal_poses,
-                    const std::chrono::duration<double>& time_limit,
-                    const bool planning_for_whole_robot);
+                    const std::chrono::duration<double>& time_limit);
 
 
             static std::vector<Eigen::VectorXd> ConvertRRTPathToRobotPath(
@@ -361,9 +330,8 @@ namespace smmap
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
             const RobotInterface::Ptr robot_;
-            // TODO: replace this with a shared pointer
+            const bool planning_for_whole_robot_;
             const sdf_tools::SignedDistanceField::ConstPtr environment_sdf_;
-            PRMHelper::Ptr prm_helper_;
             const std::shared_ptr<std::mt19937_64> generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
 
@@ -373,6 +341,12 @@ namespace smmap
             const Eigen::Isometry3d task_aligned_frame_inverse_transform_;
             const Eigen::Vector3d task_aligned_lower_limits_;
             const Eigen::Vector3d task_aligned_upper_limits_;
+
+            const RRTRobotRepresentation robot_joint_lower_limits_;
+            const RRTRobotRepresentation robot_joint_upper_limits_;
+            const RRTRobotRepresentation robot_joint_weights_;
+            const ssize_t total_dof_;
+
             const double max_gripper_step_size_;
             const double max_robot_dof_step_size_;
             const double min_robot_dof_step_size_;
@@ -399,8 +373,6 @@ namespace smmap
 
 
             // Set/updated on each call of "rrtPlan"
-            bool planning_for_whole_robot_;
-            ssize_t total_dof_;
             RubberBand::Ptr starting_band_;
             RRTGrippersRepresentation starting_grippers_poses_;
             RRTRobotRepresentation starting_robot_configuration_;

@@ -16,15 +16,13 @@ using namespace arc_utilities;
 using namespace Eigen;
 using namespace EigenHelpers;
 
-#warning "THIS IS STUPID! FIX THIS!"
-static RRTRobotRepresentation robot_joint_limits_lower_;
-static RRTRobotRepresentation robot_joint_limits_upper_;
-static RRTRobotRepresentation robot_joint_weights_;
-
+#warning "!!!!!!!!! Magic number !!!!!!!!!!!"
 #define GRIPPER_TRANSLATION_IS_APPROX_DIST 0.001
-
 //#define SMMAP_RRT_VERBOSE true
 #define SMMAP_RRT_VERBOSE false
+
+
+RRTRobotRepresentation RRTDistance::joint_weights_;
 
 constexpr char RRTHelper::RRT_BLACKLISTED_GOAL_BANDS_NS[];
 constexpr char RRTHelper::RRT_GOAL_TESTING_NS[];
@@ -100,10 +98,10 @@ static inline bool maxGrippersDistanceViolated(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 RRTNode::RRTNode()
-    : parent_index_(-1)
+    : cost_to_come_(std::numeric_limits<double>::infinity())
+    , parent_index_(-1)
     , child_indices_(0)
     , initialized_(false)
-    , blacklisted_(false)
 {}
 
 RRTNode::RRTNode(
@@ -113,39 +111,41 @@ RRTNode::RRTNode(
     : grippers_poses_(grippers_poses)
     , robot_configuration_(robot_configuration)
     , band_(band)
+    , cost_to_come_(0.0)
     , parent_index_(-1)
     , child_indices_(0)
     , initialized_(true)
-    , blacklisted_(false)
 {}
 
 RRTNode::RRTNode(
         const RRTGrippersRepresentation& grippers_poses,
         const RRTRobotRepresentation& robot_configuration,
         const RubberBand::Ptr& band,
+        const double cost_to_come,
+        const int64_t parent_index)
+    : grippers_poses_(grippers_poses)
+    , robot_configuration_(robot_configuration)
+    , band_(band)
+    , cost_to_come_(cost_to_come)
+    , parent_index_(parent_index)
+    , child_indices_(0)
+    , initialized_(true)
+{}
+
+RRTNode::RRTNode(
+        const RRTGrippersRepresentation& grippers_poses,
+        const RRTRobotRepresentation& robot_configuration,
+        const RubberBand::Ptr& band,
+        const double cost_to_come,
         const int64_t parent_index,
         const std::vector<int64_t>& child_indices)
     : grippers_poses_(grippers_poses)
     , robot_configuration_(robot_configuration)
     , band_(band)
+    , cost_to_come_(cost_to_come)
     , parent_index_(parent_index)
     , child_indices_(child_indices)
     , initialized_(true)
-    , blacklisted_(false)
-{}
-
-RRTNode::RRTNode(
-        const RRTGrippersRepresentation& grippers_poses,
-        const RRTRobotRepresentation& robot_configuration,
-        const RubberBand::Ptr& band,
-        const int64_t parent_index)
-    : grippers_poses_(grippers_poses)
-    , robot_configuration_(robot_configuration)
-    , band_(band)
-    , parent_index_(parent_index)
-    , child_indices_(0)
-    , initialized_(true)
-    , blacklisted_(false)
 {}
 
 bool RRTNode::isInitialized() const
@@ -153,19 +153,24 @@ bool RRTNode::isInitialized() const
     return initialized_;
 }
 
-const RRTGrippersRepresentation& RRTNode::getGrippers() const
+const RRTGrippersRepresentation& RRTNode::grippers() const
 {
     return grippers_poses_;
 }
 
-const RRTRobotRepresentation& RRTNode::getRobotConfiguration() const
+const RRTRobotRepresentation& RRTNode::robotConfiguration() const
 {
     return robot_configuration_;
 }
 
-const RubberBand::Ptr& RRTNode::getBand() const
+const RubberBand::Ptr& RRTNode::band() const
 {
     return band_;
+}
+
+double RRTNode::costToCome() const
+{
+    return cost_to_come_;
 }
 
 
@@ -216,89 +221,6 @@ void RRTNode::removeChildIndex(const int64_t child_index)
 }
 
 
-bool RRTNode::isBlacklisted() const
-{
-    return blacklisted_;
-}
-
-void RRTNode::blacklist()
-{
-    blacklisted_ = true;
-}
-
-
-// Returned distance is the Euclidian distance of two grippers posistions
-double RRTNode::distance(const RRTNode& other) const
-{
-    return RRTNode::distance(*this, other);
-}
-
-double RRTNode::distance(const RRTNode& c1, const RRTNode& c2)
-{
-    assert(false && "Not updated in a while");
-#ifdef DTW_DISTANCE
-    const auto distance_fn = [] (const Vector3d p1, const Vector3d p2)
-    {
-        return (p1 - p2).norm();
-    };
-    return simple_dtw::ComputeDTWDistance(c1.getBand().getVectorRepresentation(), c2.getBand().getVectorRepresentation(), distance_fn);
-#endif
-    return RRTNode::distance(c1.getGrippers(), c2.getGrippers());
-}
-
-// Note that this does only translational distance
-double RRTNode::distanceSquared(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2)
-{
-    const auto& c1_first_gripper     = c1.first.translation();
-    const auto& c1_second_gripper    = c1.second.translation();
-    const auto& c2_first_gripper     = c2.first.translation();
-    const auto& c2_second_gripper    = c2.second.translation();
-    return (c1_first_gripper - c2_first_gripper).squaredNorm() +
-            (c1_second_gripper - c2_second_gripper).squaredNorm();
-}
-
-double RRTNode::distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2)
-{
-    return std::sqrt(distanceSquared(c1, c2));
-}
-
-double RRTNode::distanceSquared(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2)
-{
-    const auto delta = r1 - r2;
-    return (delta.cwiseProduct(robot_joint_weights_)).squaredNorm();
-}
-
-double RRTNode::distance(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2)
-{
-    return std::sqrt(distanceSquared(r1, r2));
-}
-
-// Only calculates the distance travelled by the grippers, not the entire band
-double RRTNode::grippersPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index)
-{
-    assert(start_index < end_index);
-    assert(end_index < path.size());
-    double path_distance = 0;
-    for (size_t idx = start_index; idx < end_index; ++idx)
-    {
-        path_distance += RRTNode::distance(path[idx].getGrippers(), path[idx + 1].getGrippers());
-    }
-    return path_distance;
-}
-
-double RRTNode::robotPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index)
-{
-    assert(start_index < end_index);
-    assert(end_index < path.size());
-    double path_distance = 0;
-    for (size_t idx = start_index; idx < end_index; ++idx)
-    {
-        path_distance += RRTNode::distance(path[idx].getRobotConfiguration(), path[idx + 1].getRobotConfiguration());
-    }
-    return path_distance;
-}
-
-
 std::string RRTNode::print() const
 {
     std::stringstream out;
@@ -335,6 +257,11 @@ bool RRTNode::operator==(const RRTNode& other) const
         }
     }
 
+    if (cost_to_come_ != other.cost_to_come_)
+    {
+        return false;
+    }
+
     if (parent_index_ != other.parent_index_)
     {
         return false;
@@ -360,10 +287,10 @@ uint64_t RRTNode::serialize(std::vector<uint8_t>& buffer) const
     arc_utilities::SerializePair<Isometry3d, Isometry3d>(grippers_poses_, buffer, &arc_utilities::SerializeEigen<Isometry3d>, &arc_utilities::SerializeEigen<Isometry3d>);
     arc_utilities::SerializeEigen<double, Dynamic, 1>(robot_configuration_, buffer);
     band_->serialize(buffer);
+    arc_utilities::SerializeFixedSizePOD<double>(cost_to_come_, buffer);
     arc_utilities::SerializeFixedSizePOD<int64_t>(parent_index_, buffer);
     arc_utilities::SerializeVector<int64_t>(child_indices_, buffer, arc_utilities::SerializeFixedSizePOD<int64_t>);
     arc_utilities::SerializeFixedSizePOD<uint8_t>((uint8_t)initialized_, buffer);
-    arc_utilities::SerializeFixedSizePOD<uint8_t>((uint8_t)blacklisted_, buffer);
 
     const uint64_t ending_bytes = buffer.size();
 
@@ -398,6 +325,10 @@ std::pair<RRTNode, uint64_t> RRTNode::Deserialize(const std::vector<uint8_t>& bu
     auto band = std::make_shared<RubberBand>(starting_band);
     current_position += band->deserializeIntoSelf(buffer, current_position);
 
+    // Deserialize the cost to come
+    const auto cost_to_come_deserialized = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
+    current_position += cost_to_come_deserialized.second;
+
     // Deserialize the parent index
     const auto parent_index_deserialized = arc_utilities::DeserializeFixedSizePOD<int64_t>(buffer, current_position);
     current_position += parent_index_deserialized.second;
@@ -410,22 +341,84 @@ std::pair<RRTNode, uint64_t> RRTNode::Deserialize(const std::vector<uint8_t>& bu
     const auto initialized_deserialized = arc_utilities::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
     current_position += initialized_deserialized.second;
 
-    // Deserialize the initialized
-    const auto blacklisted_deserialized = arc_utilities::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
-    current_position += blacklisted_deserialized.second;
-
     // Build the resulting node
     RRTNode deserialized(
                 grippers_poses_deserialized.first,
                 robot_configuration_deserialized.first,
                 band,
+                cost_to_come_deserialized.first,
                 parent_index_deserialized.first,
                 child_indices_deserialized.first);
     deserialized.initialized_ = (bool)initialized_deserialized.first;
-    deserialized.blacklisted_ = (bool)blacklisted_deserialized.first;
 
     const uint64_t bytes_read = current_position - current;
     return std::make_pair(deserialized, bytes_read);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////           RRTDistance functions                    /////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+const RRTRobotRepresentation& RRTDistance::GetJointWeights()
+{
+    return joint_weights_;
+}
+
+void RRTDistance::SetJointWeights(const RRTRobotRepresentation joint_weights)
+{
+    joint_weights_ = joint_weights;
+}
+
+// Note that this does only translational distance
+double RRTDistance::DistanceSquared(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2)
+{
+    const auto& c1_first_gripper     = c1.first.translation();
+    const auto& c1_second_gripper    = c1.second.translation();
+    const auto& c2_first_gripper     = c2.first.translation();
+    const auto& c2_second_gripper    = c2.second.translation();
+    return (c1_first_gripper - c2_first_gripper).squaredNorm() +
+            (c1_second_gripper - c2_second_gripper).squaredNorm();
+}
+
+double RRTDistance::Distance(const RRTGrippersRepresentation& c1, const RRTGrippersRepresentation& c2)
+{
+    return std::sqrt(DistanceSquared(c1, c2));
+}
+
+double RRTDistance::DistanceSquared(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2)
+{
+    const auto delta = r1 - r2;
+    return (delta.cwiseProduct(joint_weights_)).squaredNorm();
+}
+
+double RRTDistance::Distance(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2)
+{
+    return std::sqrt(DistanceSquared(r1, r2));
+}
+
+// Only calculates the distance travelled by the grippers, not the entire band
+double RRTDistance::GrippersPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index)
+{
+    assert(start_index < end_index);
+    assert(end_index < path.size());
+    double path_distance = 0;
+    for (size_t idx = start_index; idx < end_index; ++idx)
+    {
+        path_distance += Distance(path[idx].grippers(), path[idx + 1].grippers());
+    }
+    return path_distance;
+}
+
+double RRTDistance::RobotPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index)
+{
+    assert(start_index < end_index);
+    assert(end_index < path.size());
+    double path_distance = 0;
+    for (size_t idx = start_index; idx < end_index; ++idx)
+    {
+        path_distance += Distance(path[idx].robotConfiguration(), path[idx + 1].robotConfiguration());
+    }
+    return path_distance;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -441,8 +434,8 @@ RRTHelper::RRTHelper(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
         const RobotInterface::Ptr robot,
+        const bool planning_for_whole_robot,
         const sdf_tools::SignedDistanceField::ConstPtr environment_sdf,
-        const PRMHelper::Ptr& prm_helper,
         const std::shared_ptr<std::mt19937_64>& generator,
         // Planning algorithm parameters
         const bool using_cbirrt_style_projection,
@@ -473,9 +466,9 @@ RRTHelper::RRTHelper(
     : nh_(nh)
     , ph_(ph.getNamespace() + "/rrt")
     , robot_(robot)
+    , planning_for_whole_robot_(planning_for_whole_robot)
     , environment_sdf_(environment_sdf)
 
-    , prm_helper_(prm_helper)
     , generator_(generator)
     , uniform_unit_distribution_(0.0, 1.0)
 
@@ -483,6 +476,12 @@ RRTHelper::RRTHelper(
     , task_aligned_frame_inverse_transform_(task_aligned_frame_transform_.inverse())
     , task_aligned_lower_limits_(task_aligned_lower_limits)
     , task_aligned_upper_limits_(task_aligned_upper_limits)
+
+    , robot_joint_lower_limits_(robot_->getJointLowerLimits())
+    , robot_joint_upper_limits_(robot_->getJointUpperLimits())
+    , robot_joint_weights_(robot_->getJointWeights())
+    , total_dof_(robot_joint_weights_.size())
+
     , max_gripper_step_size_(max_gripper_step_size)
     , max_robot_dof_step_size_(max_robot_dof_step_size)
     , min_robot_dof_step_size_(min_robot_dof_step_size)
@@ -538,9 +537,10 @@ RRTHelper::RRTHelper(
     assert(task_aligned_lower_limits_.z() <= task_aligned_upper_limits_.z());
     assert(max_gripper_step_size_ > 0.0);
     assert(goal_reach_radius_ > 0.0);
-//    assert(homotopy_distance_penalty_ >= 0.0);
     assert(max_shortcut_index_distance_ > 0);
     assert(gripper_min_distance_to_obstacles_ > 0.0);
+
+    RRTDistance::SetJointWeights(robot_joint_weights_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -561,7 +561,7 @@ size_t RRTHelper::rebuildNNIndex(
 
     for (size_t idx = new_data_start_idx; idx < tree.size(); ++idx)
     {
-        const RRTRobotRepresentation& robot_config = tree[idx].getRobotConfiguration();
+        const RRTRobotRepresentation& robot_config = tree[idx].robotConfiguration();
         const VectorXf robot_config_float = robot_config.cast<float>();
         memcpy(&nn_raw_data[total_dof_ * idx], robot_config_float.data(), total_dof_ * sizeof(float));
     }
@@ -615,7 +615,7 @@ std::pair<int64_t, double> getNearest(
     for (size_t idx = start_idx; idx < tree.size(); idx++)
     {
         const RRTNode& test_node = tree[idx];
-        const double distance2 = RRTNode::distanceSquared(test_node.getRobotConfiguration(), robot_config);
+        const double distance2 = RRTDistance::DistanceSquared(test_node.robotConfiguration(), robot_config);
 
         if (nearest.second > distance2)
         {
@@ -665,7 +665,7 @@ std::vector<std::pair<int64_t, double>> radiusSearch(
     for (size_t idx = start_idx; idx < tree.size(); idx++)
     {
         const RRTNode& test_node = tree[idx];
-        const double distance2 = RRTNode::distanceSquared(test_node.getRobotConfiguration(), robot_config);
+        const double distance2 = RRTDistance::DistanceSquared(test_node.robotConfiguration(), robot_config);
 
         if (distance2 <= radius2)
         {
@@ -687,13 +687,13 @@ int64_t getNearestFullConfig(
 
     double min_dist2 = std::numeric_limits<double>::infinity();
     int64_t min_idx = -1;
-    const VectorVector3d& config_band_path = config.getBand()->getVectorRepresentation();
+    const VectorVector3d& config_band_path = config.band()->getVectorRepresentation();
     const VectorXd config_band_path_vec = VectorEigenVectorToEigenVectorX(config_band_path);
 
     // Search through the first set of potential nearest nodes
     for (const auto& item : radius_search_set_1)
     {
-        const auto& test_band = tree[item.first].getBand();
+        const auto& test_band = tree[item.first].band();
         const auto test_band_path = test_band->upsampleBand(config_band_path.size());
         const auto test_band_path_vec = VectorEigenVectorToEigenVectorX(test_band_path);
 
@@ -709,7 +709,7 @@ int64_t getNearestFullConfig(
     // Search through the second set of potential nearest nodes
     for (const auto& item : radius_search_set_2)
     {
-        const auto& test_band = tree[item.first].getBand();
+        const auto& test_band = tree[item.first].band();
         const auto test_band_path = test_band->upsampleBand(config_band_path.size());
         const auto test_band_path_vec = VectorEigenVectorToEigenVectorX(test_band_path);
 
@@ -768,7 +768,7 @@ int64_t RRTHelper::nearestNeighbour_internal(
         manual_search_start_idx = &backward_next_idx_to_add_to_nn_dataset_;
     }
 
-    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.nn", "Querry:                    " << config.getRobotConfiguration().transpose());
+    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.nn", "Querry:                    " << config.robotConfiguration().transpose());
 
     // Check if we should rebuild the NN Index
     if (!use_brute_force_nn_ &&
@@ -796,7 +796,7 @@ int64_t RRTHelper::nearestNeighbour_internal(
     {
         Stopwatch stopwatch;
         arc_helpers::DoNotOptimize(config);
-        nearest = getNearest(config.getRobotConfiguration(), *nn_index);
+        nearest = getNearest(config.robotConfiguration(), *nn_index);
         arc_helpers::DoNotOptimize(nearest);
         const double index_searching_time = stopwatch(READ);
         total_nearest_neighbour_index_searching_time_ += index_searching_time;
@@ -808,7 +808,7 @@ int64_t RRTHelper::nearestNeighbour_internal(
         Stopwatch stopwatch;
         arc_helpers::DoNotOptimize(*manual_search_start_idx);
 
-        const std::pair<int64_t, double> linear_nearest = getNearest(config.getRobotConfiguration(), *tree, *manual_search_start_idx);
+        const std::pair<int64_t, double> linear_nearest = getNearest(config.robotConfiguration(), *tree, *manual_search_start_idx);
         if (linear_nearest.second < nearest.second)
         {
             nearest = linear_nearest;
@@ -830,14 +830,14 @@ int64_t RRTHelper::nearestNeighbour_internal(
         std::vector<std::pair<int64_t, double>> flann_radius_result;
         if (!use_brute_force_nn_ && *manual_search_start_idx > 0)
         {
-            flann_radius_result = radiusSearch(config.getRobotConfiguration(), *nn_index, nearest.second + band_max_dist2_);
+            flann_radius_result = radiusSearch(config.robotConfiguration(), *nn_index, nearest.second + band_max_dist2_);
         }
 
         // If we have data that isn't in the FLANN index
         std::vector<std::pair<int64_t, double>> linear_radius_result;
         if (*manual_search_start_idx < tree->size())
         {
-            linear_radius_result = radiusSearch(config.getRobotConfiguration(), *tree, *manual_search_start_idx, nearest.second + band_max_dist2_);
+            linear_radius_result = radiusSearch(config.robotConfiguration(), *tree, *manual_search_start_idx, nearest.second + band_max_dist2_);
         }
 
         // Search both sets of results for the nearest neighbour in the
@@ -886,12 +886,12 @@ RRTNode RRTHelper::configSampling(const bool sample_band)
                     std::make_shared<RubberBand>(*starting_band_));
     }
 
-    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.sampling", "Random robot config: " << sample.getRobotConfiguration().transpose());
+    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.sampling", "Random robot config: " << sample.robotConfiguration().transpose());
 
     if (sample_band)
     {
 //        ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.sampling", "Sampling random band");
-        sample.getBand()->overridePoints(bandSampling_internal());
+        sample.band()->overridePoints(bandSampling_internal());
     }
 
 
@@ -900,26 +900,6 @@ RRTNode RRTHelper::configSampling(const bool sample_band)
     total_sampling_time_ += sampling_time;
     return sample;
 }
-
-//RRTNode RRTHelper::prmBasedSampling_internal()
-//{
-//    const RRTGrippersRepresentation rand_grippers_sample = posPairSampling_internal();
-//    const bool goal_is_target_config = gripperPositionsAreApproximatelyEqual(grippers_goal_position_, rand_grippers_sample);
-
-//    // If we've sampled the goal, then keep sampling until the result is not visible to the blacklist
-//    VectorVector3d band_path;
-//    do
-//    {
-//        band_path = prm_helper_->getRandomPath(rand_grippers_sample.first, rand_grippers_sample.second);
-//    }
-//    while (goal_is_target_config && isBandFirstOrderVisibileToBlacklist(band_path));
-
-//    RubberBand::Ptr band = std::make_shared<RubberBand>(*starting_band_);
-//    band->setPointsWithoutSmoothing(band_path);
-//    band->visualize(PRMHelper::PRM_RANDOM_PATH_NS, Visualizer::Orange(), Visualizer::Orange(), 1, visualization_enabled_globally_);
-
-//    return RRTNode(rand_grippers_sample, starting_robot_configuration_, band);
-//}
 
 RRTGrippersRepresentation RRTHelper::posPairSampling_internal()
 {
@@ -967,7 +947,7 @@ RRTRobotRepresentation RRTHelper::robotConfigPairSampling_internal()
     RRTRobotRepresentation rand_sample(total_dof_);
     for (ssize_t idx = 0; idx < total_dof_; ++idx)
     {
-        rand_sample(idx) = Interpolate(robot_joint_limits_lower_(idx), robot_joint_limits_upper_(idx), uniform_unit_distribution_(*generator_));
+        rand_sample(idx) = Interpolate(robot_joint_lower_limits_(idx), robot_joint_upper_limits_(idx), uniform_unit_distribution_(*generator_));
     }
     return rand_sample;
 }
@@ -992,7 +972,7 @@ VectorVector3d RRTHelper::bandSampling_internal()
 bool RRTHelper::goalReached(const RRTNode& node)
 {
     // Check if the grippers are close enough to the goal position
-    if (RRTNode::distance(node.getGrippers(), grippers_goal_poses_) > goal_reach_radius_)
+    if (RRTDistance::Distance(node.grippers(), grippers_goal_poses_) > goal_reach_radius_)
     {
         return false;
     }
@@ -1000,8 +980,8 @@ bool RRTHelper::goalReached(const RRTNode& node)
     // Check if the grippers have been rotated too far
     if (planning_for_whole_robot_)
     {
-        const double gripper_a_rotation_dist = Distance(starting_grippers_poses_.first.rotation(), node.getGrippers().first.rotation());
-        const double gripper_b_rotation_dist = Distance(starting_grippers_poses_.second.rotation(), node.getGrippers().second.rotation());
+        const double gripper_a_rotation_dist = Distance(starting_grippers_poses_.first.rotation(), node.grippers().first.rotation());
+        const double gripper_b_rotation_dist = Distance(starting_grippers_poses_.second.rotation(), node.grippers().second.rotation());
         if (gripper_a_rotation_dist > max_gripper_rotation_ || gripper_b_rotation_dist > max_gripper_rotation_)
         {
             return false;
@@ -1009,12 +989,12 @@ bool RRTHelper::goalReached(const RRTNode& node)
 
         if (visualization_enabled_globally_)
         {
-            vis_->visualizeLineStrip(RRT_GOAL_TESTING_NS, node.getBand()->getVectorRepresentation(), Visualizer::White(), 1, 0.01);
+            vis_->visualizeLineStrip(RRT_GOAL_TESTING_NS, node.band()->getVectorRepresentation(), Visualizer::White(), 1, 0.01);
         }
     }
 
     // Only accept paths that are different from those on the blacklist
-    if (isBandFirstOrderVisibileToBlacklist(*node.getBand()))
+    if (isBandFirstOrderVisibileToBlacklist(*node.band()))
     {
         return false;
     }
@@ -1095,18 +1075,18 @@ size_t RRTHelper::forwardPropogationFunction(
     {
         vis_->visualizeCubes(
                     RRT_FORWARD_PROP_START_NS,
-                    {nearest_neighbour.getGrippers().first.translation()},
+                    {nearest_neighbour.grippers().first.translation()},
                     Vector3d(0.01, 0.01, 0.01),
                     gripper_a_forward_tree_color_,
                     1);
         vis_->visualizeCubes(
                     RRT_FORWARD_PROP_START_NS,
-                    {nearest_neighbour.getGrippers().second.translation()},
+                    {nearest_neighbour.grippers().second.translation()},
                     Vector3d(0.01, 0.01, 0.01),
                     gripper_b_forward_tree_color_,
                     5);
 
-        nearest_neighbour.getBand()->visualize(
+        nearest_neighbour.band()->visualize(
                     RRT_FORWARD_PROP_START_NS,
                     Visualizer::Green(),
                     Visualizer::Green(),
@@ -1115,13 +1095,13 @@ size_t RRTHelper::forwardPropogationFunction(
 
         vis_->visualizeCubes(
                     RRT_SAMPLE_NS,
-                    {target.getGrippers().first.translation()},
+                    {target.grippers().first.translation()},
                     Vector3d(0.01, 0.01, 0.01),
                     gripper_a_forward_tree_color_,
                     1);
         vis_->visualizeCubes(
                     RRT_SAMPLE_NS,
-                    {target.getGrippers().second.translation()},
+                    {target.grippers().second.translation()},
                     Vector3d(0.01, 0.01, 0.01),
                     gripper_b_forward_tree_color_,
                     5);
@@ -1130,17 +1110,17 @@ size_t RRTHelper::forwardPropogationFunction(
     const size_t visualization_period = 100;
     const size_t force_vis_publish_period = 10;
 
-    const RRTGrippersRepresentation& starting_grippers_poses = nearest_neighbour.getGrippers();
-    const RRTRobotRepresentation& starting_robot_configuration = nearest_neighbour.getRobotConfiguration();
+    const RRTGrippersRepresentation& starting_grippers_poses = nearest_neighbour.grippers();
+    const RRTRobotRepresentation& starting_robot_config = nearest_neighbour.robotConfiguration();
 
     // Extract the target gripper pose and corresponding robot configuration
-//    const RRTGrippersRepresentation& target_grippers_position = target.getGrippers();
-    const RRTRobotRepresentation target_robot_configuration = target.getRobotConfiguration();
+//    const RRTGrippersRepresentation& target_grippers_position = target.grippers();
+    const RRTRobotRepresentation target_robot_config = target.robotConfiguration();
 
     if (planning_for_whole_robot_ && !using_cbirrt_style_projection_)
     {
         // Allocate space for potential children
-        const double total_distance = RRTNode::distance(nearest_neighbour.getRobotConfiguration(), target_robot_configuration);
+        const double total_distance = RRTDistance::Distance(nearest_neighbour.robotConfiguration(), target_robot_config);
         const uint32_t max_total_steps = (uint32_t)ceil(total_distance / max_robot_dof_step_size_);
         tree_to_extend.reserve(tree_to_extend.size() + max_total_steps);
 
@@ -1150,14 +1130,13 @@ size_t RRTHelper::forwardPropogationFunction(
         {
             // We could be updating the child indices of this node later, so take the value by non-const reference
             RRTNode& prev_node = tree_to_extend[parent_idx];
-            const RubberBand::Ptr& prev_band = prev_node.getBand();
+            const RubberBand::Ptr& prev_band = prev_node.band();
 
             // Interpolate in joint space to find the translation of the grippers
             const double ratio = std::min(1.0, (double)(step_index + 1) * max_robot_dof_step_size_ / total_distance);
-            const RRTRobotRepresentation next_robot_configuration =
-                    Interpolate(starting_robot_configuration, target_robot_configuration, ratio);
+            const RRTRobotRepresentation next_robot_config = Interpolate(starting_robot_config, target_robot_config, ratio);
 
-            const AllGrippersSinglePose next_grippers_poses_vector = robot_->getGrippersPoses(next_robot_configuration);
+            const AllGrippersSinglePose next_grippers_poses_vector = robot_->getGrippersPoses(next_robot_config);
             const RRTGrippersRepresentation next_grippers_poses(next_grippers_poses_vector[0], next_grippers_poses_vector[1]);
             // Check gripper position and rotation constraints
             {
@@ -1192,9 +1171,9 @@ size_t RRTHelper::forwardPropogationFunction(
             // Collision checking
             {
                 stopwatch(RESET);
-                arc_helpers::DoNotOptimize(next_robot_configuration);
-                const bool in_collision = robot_->checkRobotCollision(next_robot_configuration);
-                arc_helpers::DoNotOptimize(next_robot_configuration);
+                arc_helpers::DoNotOptimize(next_robot_config);
+                const bool in_collision = robot_->checkRobotCollision(next_robot_config);
+                arc_helpers::DoNotOptimize(next_robot_config);
                 const double collision_check_time = stopwatch(READ);
                 total_collision_check_time_ += collision_check_time;
                 if (in_collision)
@@ -1245,7 +1224,11 @@ size_t RRTHelper::forwardPropogationFunction(
             }
 
             // The new configuation is valid, add it to the tree
-            const RRTNode next_node(next_grippers_poses, next_robot_configuration, next_band, parent_idx);
+            const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
+            const double additional_cost = RRTDistance::Distance(prev_robot_config, next_robot_config);
+            const double next_cost_to_come = prev_node.costToCome() + additional_cost;
+
+            const RRTNode next_node(next_grippers_poses, next_robot_config, next_band, next_cost_to_come, parent_idx);
             tree_to_extend.push_back(next_node);
             const int64_t new_node_idx = (int64_t)tree_to_extend.size() - 1;
             prev_node.addChildIndex(new_node_idx);
@@ -1267,38 +1250,36 @@ size_t RRTHelper::forwardPropogationFunction(
 
             // We could be updating the child indices of this node later, so take the value by non-const reference
             const RRTNode& prev_node = tree_to_extend[parent_idx];
-            const RubberBand::Ptr& prev_band = prev_node.getBand();
-            const RRTRobotRepresentation& prev_robot_config = prev_node.getRobotConfiguration();
+            const RubberBand::Ptr& prev_band = prev_node.band();
+            const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
 
-            const double prev_distance = RRTNode::distance(prev_robot_config, target_robot_configuration);
+            const double prev_distance = RRTDistance::Distance(prev_robot_config, target_robot_config);
             const double ratio = std::min(1.0, max_gripper_step_size_ / prev_distance);
-            const RRTRobotRepresentation next_robot_configuration_pre_projection =
-                    Interpolate(prev_robot_config, target_robot_configuration, ratio);
-            const AllGrippersSinglePose next_grippers_poses_pre_projection =
-                    robot_->getGrippersPoses(next_robot_configuration_pre_projection);
+            const RRTRobotRepresentation next_robot_config_pre_projection = Interpolate(prev_robot_config, target_robot_config, ratio);
+            const AllGrippersSinglePose next_grippers_poses_pre_projection = robot_->getGrippersPoses(next_robot_config_pre_projection);
 
             // Project and check the projection result for failure
             const bool project_to_rotation_bound = true;
             const bool project_to_translation_bound = false;
-            const auto next_robot_configuration_projection_result =
+            const auto next_robot_config_projection_result =
                     projectToValidConfig(
-                        next_robot_configuration_pre_projection,
+                        next_robot_config_pre_projection,
                         next_grippers_poses_pre_projection,
                         project_to_rotation_bound,
                         project_to_translation_bound);
-            const RRTRobotRepresentation& next_robot_configuration = next_robot_configuration_projection_result.second;
-            arc_helpers::DoNotOptimize(next_robot_configuration);
+            const RRTRobotRepresentation& next_robot_config = next_robot_config_projection_result.second;
+            arc_helpers::DoNotOptimize(next_robot_config);
             const double projection_time = stopwatch(READ);
             total_projection_time_ += projection_time;
 
             // Check if the projection failed
-            if (!next_robot_configuration_projection_result.first)
+            if (!next_robot_config_projection_result.first)
             {
                 break;
             }
 
             // Check if we made any progress
-            const double current_distance = RRTNode::distance(target_robot_configuration, next_robot_configuration);
+            const double current_distance = RRTDistance::Distance(target_robot_config, next_robot_config);
             if (current_distance > prev_distance - min_robot_dof_step_size_ &&
                 current_distance < prev_distance + min_robot_dof_step_size_)
             {
@@ -1308,14 +1289,14 @@ size_t RRTHelper::forwardPropogationFunction(
             // Check the distance to the previous previous value as well (if it exists)
             if (step_index >= 1)
             {
-                const RRTRobotRepresentation& ancient_robot_config = (tree_to_extend.end() - 2)->getRobotConfiguration();
-                if (RRTNode::distance(ancient_robot_config, next_robot_configuration) < min_robot_dof_step_size_)
+                const RRTRobotRepresentation& ancient_robot_config = (tree_to_extend.end() - 2)->robotConfiguration();
+                if (RRTDistance::Distance(ancient_robot_config, next_robot_config) < min_robot_dof_step_size_)
                 {
                     break;
                 }
             }
 
-            const AllGrippersSinglePose next_grippers_poses_vector = robot_->getGrippersPoses(next_robot_configuration);
+            const AllGrippersSinglePose next_grippers_poses_vector = robot_->getGrippersPoses(next_robot_config);
             const RRTGrippersRepresentation next_grippers_poses(next_grippers_poses_vector[0], next_grippers_poses_vector[1]);
             // Check gripper position and rotation constraints if we did not project to them
             {
@@ -1350,9 +1331,9 @@ size_t RRTHelper::forwardPropogationFunction(
             // Colision checking
             {
                 stopwatch(RESET);
-                arc_helpers::DoNotOptimize(next_robot_configuration);
-                const bool in_collision = robot_->checkRobotCollision(next_robot_configuration);
-                arc_helpers::DoNotOptimize(next_robot_configuration);
+                arc_helpers::DoNotOptimize(next_robot_config);
+                const bool in_collision = robot_->checkRobotCollision(next_robot_config);
+                arc_helpers::DoNotOptimize(next_robot_config);
                 const double collision_check_time = stopwatch(READ);
                 total_collision_check_time_ += collision_check_time;
                 if (in_collision)
@@ -1399,7 +1380,10 @@ size_t RRTHelper::forwardPropogationFunction(
             }
 
             // The new configuation is valid, add it to the tree
-            const RRTNode next_node(next_grippers_poses, next_robot_configuration, next_band, parent_idx);
+            const double additional_cost = RRTDistance::Distance(prev_robot_config, next_robot_config);
+            const double next_cost_to_come = prev_node.costToCome() + additional_cost;
+
+            const RRTNode next_node(next_grippers_poses, next_robot_config, next_band, next_cost_to_come, parent_idx);
             tree_to_extend.push_back(next_node);
             const int64_t new_node_idx = (int64_t)tree_to_extend.size() - 1;
             tree_to_extend[parent_idx].addChildIndex(new_node_idx);
@@ -1411,7 +1395,7 @@ size_t RRTHelper::forwardPropogationFunction(
     else
     {
         // Allocate space for potential children
-        const double total_distance = RRTNode::distance(nearest_neighbour.getGrippers(), target.getGrippers());
+        const double total_distance = RRTDistance::Distance(nearest_neighbour.grippers(), target.grippers());
         const uint32_t max_total_steps = (uint32_t)ceil(total_distance / max_gripper_step_size_);
         tree_to_extend.reserve(tree_to_extend.size() + max_total_steps);
 
@@ -1421,14 +1405,14 @@ size_t RRTHelper::forwardPropogationFunction(
         {
             // We could be updating the child indices of this node later, so take the value by non-const reference
             RRTNode& prev_node = tree_to_extend[parent_idx];
-            const RubberBand::Ptr& prev_band = prev_node.getBand();
+            const RubberBand::Ptr& prev_band = prev_node.band();
 
             const double ratio = std::min(1.0, (double)(step_index + 1) * max_gripper_step_size_ / total_distance);
-            const RRTRobotRepresentation next_robot_configuration =
-                    Interpolate(starting_robot_configuration, target_robot_configuration, ratio);
+            const RRTRobotRepresentation next_robot_config =
+                    Interpolate(starting_robot_config, target_robot_config, ratio);
             RRTGrippersRepresentation next_grippers_poses = starting_grippers_poses;
-            next_grippers_poses.first.translation() = next_robot_configuration.head<3>();
-            next_grippers_poses.second.translation() = next_robot_configuration.tail<3>();
+            next_grippers_poses.first.translation() = next_robot_config.head<3>();
+            next_grippers_poses.second.translation() = next_robot_config.tail<3>();
 
             // Collision checking
             {
@@ -1496,7 +1480,11 @@ size_t RRTHelper::forwardPropogationFunction(
             }
 
             // The new configuation is valid, add it to the tree
-            const RRTNode next_node(next_grippers_poses, next_robot_configuration, next_band, parent_idx);
+            const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
+            const double additional_cost = RRTDistance::Distance(prev_robot_config, next_robot_config);
+            const double next_cost_to_come = prev_node.costToCome() + additional_cost;
+
+            const RRTNode next_node(next_grippers_poses, next_robot_config, next_band, next_cost_to_come, parent_idx);
             tree_to_extend.push_back(next_node);
             const int64_t new_node_idx = (int64_t)tree_to_extend.size() - 1;
             prev_node.addChildIndex(new_node_idx);
@@ -1668,7 +1656,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                 for (size_t idx = forward_tree_.size() - num_random_nodes_created; idx < forward_tree_.size(); ++idx)
                 {
                     const RRTNode& node = forward_tree_[idx];
-                    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Node idx: " << idx << " Parent: " << node.getParentIndex() << " Config: " << node.getRobotConfiguration().transpose());
+                    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Node idx: " << idx << " Parent: " << node.getParentIndex() << " Config: " << node.robotConfiguration().transpose());
                 }
 
                 // Record statistics for the randomly sampled extensions
@@ -1729,8 +1717,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                     if (num_goal_directed_nodes_created > 0)
                     {
                         const bool connection_made = planning_for_whole_robot_ ?
-                                    robotConfigurationsAreApproximatelyEqual(forward_tree_.back().getRobotConfiguration(), target_in_backward_tree.getRobotConfiguration()) :
-                                    gripperPositionsAreApproximatelyEqual(forward_tree_.back().getGrippers(), target_in_backward_tree.getGrippers());
+                                    robotConfigurationsAreApproximatelyEqual(forward_tree_.back().robotConfiguration(), target_in_backward_tree.robotConfiguration()) :
+                                    gripperPositionsAreApproximatelyEqual(forward_tree_.back().grippers(), target_in_backward_tree.grippers());
 
                         if (connection_made)
                         {
@@ -1745,11 +1733,13 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                             int64_t backward_next_idx = backward_tree_nearest_neighbour_idx;
                             while (backward_next_idx >= 0)
                             {
+                                const RRTNode& prev_node = forward_tree_[forward_parent_idx];
+                                const RubberBand::Ptr prev_band = prev_node.band();
+
                                 assert(backward_next_idx < (int64_t)backward_tree_.size());
                                 RRTNode& backward_next_node = backward_tree_[backward_next_idx];
-                                const RRTGrippersRepresentation& next_grippers_poses = backward_next_node.getGrippers();
-                                const RRTRobotRepresentation& next_robot_configuration = backward_next_node.getRobotConfiguration();
-                                const RubberBand::Ptr prev_band = forward_tree_[forward_parent_idx].getBand();
+                                const RRTGrippersRepresentation& next_grippers_poses = backward_next_node.grippers();
+                                const RRTRobotRepresentation& next_robot_config = backward_next_node.robotConfiguration();
 
 
                                 RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
@@ -1786,13 +1776,19 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                                 }
 
                                 // The new configuation is valid, add it to the forward tree
+                                const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
+                                const double additional_cost = RRTDistance::Distance(prev_robot_config, next_robot_config);
+                                const double next_cost_to_come = prev_node.costToCome() + additional_cost;
+
                                 const RRTNode next_node(
                                             next_grippers_poses,
-                                            next_robot_configuration,
+                                            next_robot_config,
                                             next_band,
+                                            next_cost_to_come,
                                             forward_parent_idx);
                                 forward_tree_.push_back(next_node);
                                 const int64_t new_node_idx = (int64_t)forward_tree_.size() - 1;
+                                // Note that we do not use prev_node here as the push_back may have caused a reallocation
                                 forward_tree_[forward_parent_idx].addChildIndex(new_node_idx);
 
                                 if (goalReached(next_node))
@@ -1846,7 +1842,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                 for (size_t idx = backward_tree_.size() - num_nodes_created; idx < backward_tree_.size(); ++idx)
                 {
                     const RRTNode& node = backward_tree_[idx];
-                    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Node idx: " << idx << " Parent: " << node.getParentIndex() << " Config: " << node.getRobotConfiguration().transpose());
+                    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Node idx: " << idx << " Parent: " << node.getParentIndex() << " Config: " << node.robotConfiguration().transpose());
                 }
 
                 // Record statistics for the randomly sampled extension
@@ -1920,22 +1916,14 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
 std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         const RRTNode& start,
         const RRTGrippersRepresentation& grippers_goal_poses,
-        const std::chrono::duration<double>& time_limit,
-        const bool planning_for_whole_robot)
+        const std::chrono::duration<double>& time_limit)
 {
     const auto estimated_tree_size = ROSHelpers::GetParam(ph_, "estimated_tree_size", 100000);
 
-    // Extract robot information
-    planning_for_whole_robot_ = planning_for_whole_robot;
-    total_dof_ = start.getRobotConfiguration().size();
-    robot_joint_limits_lower_ = robot_->getJointLowerLimits();
-    robot_joint_limits_upper_ = robot_->getJointUpperLimits();
-    robot_joint_weights_ = robot_->getJointWeights();
-
     // Extract start information
-    starting_band_ = std::make_shared<RubberBand>(*start.getBand());
-    starting_robot_configuration_ = start.getRobotConfiguration();
-    starting_grippers_poses_ = start.getGrippers();
+    starting_band_ = std::make_shared<RubberBand>(*start.band());
+    starting_robot_configuration_ = start.robotConfiguration();
+    starting_grippers_poses_ = start.grippers();
 
     // Setup the forward tree
     forward_tree_.clear();
@@ -1967,7 +1955,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
                         RRTNode(
                             grippers_goal_poses_,
                             goal_configurations[idx],
-                            start.getBand()));
+                            start.band()));
         }
 
     }
@@ -1976,7 +1964,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         grippers_goal_poses_ = grippers_goal_poses;
         RRTRobotRepresentation goal_configuration(6);
         goal_configuration << grippers_goal_poses_.first.translation(), grippers_goal_poses_.second.translation();
-        backward_tree_.push_back(RRTNode(grippers_goal_poses_, goal_configuration, start.getBand()));
+        backward_tree_.push_back(RRTNode(grippers_goal_poses_, goal_configuration, start.band()));
     }
 
     // Double check that the input goal location isn't immediately impossible
@@ -2198,7 +2186,7 @@ std::vector<VectorXd> RRTHelper::ConvertRRTPathToRobotPath(const std::vector<RRT
     std::vector<VectorXd> robot_config_path(path.size());
     for (size_t ind = 0; ind < path.size(); ++ind)
     {
-        robot_config_path[ind] =  path[ind].getRobotConfiguration();
+        robot_config_path[ind] =  path[ind].robotConfiguration();
     }
     return robot_config_path;
 }
@@ -2322,17 +2310,17 @@ static VectorVector3d findFirstGripperWaypoints(
     assert(end_index < path.size());
 
     // The start of the path is clearly the first 'kink'
-    VectorVector3d gripper_path_kinks(1, path[start_index].getGrippers().first.translation());
+    VectorVector3d gripper_path_kinks(1, path[start_index].grippers().first.translation());
 
     size_t last_kink = start_index;
-    Vector3d last_kink_gripper_position = path[last_kink].getGrippers().first.translation();
+    Vector3d last_kink_gripper_position = path[last_kink].grippers().first.translation();
     double path_distance = 0.0;
 
     // We don't include the last index because it is clearly the last 'kink'
     for (size_t idx = start_index; idx < end_index - 1; ++idx)
     {
-        const Vector3d& current_gripper_position = path[idx].getGrippers().first.translation();
-        const Vector3d& next_gripper_position    = path[idx + 1].getGrippers().first.translation();
+        const Vector3d& current_gripper_position = path[idx].grippers().first.translation();
+        const Vector3d& next_gripper_position    = path[idx + 1].grippers().first.translation();
         path_distance += (next_gripper_position - current_gripper_position).norm();
         const double straight_line_distance = (next_gripper_position - last_kink_gripper_position).norm();
 
@@ -2340,12 +2328,12 @@ static VectorVector3d findFirstGripperWaypoints(
         if (!IsApprox(straight_line_distance, path_distance, 1e-6))
         {
             last_kink = idx;
-            last_kink_gripper_position = path[last_kink].getGrippers().first.translation();
+            last_kink_gripper_position = path[last_kink].grippers().first.translation();
             path_distance = (next_gripper_position - current_gripper_position).norm();
             gripper_path_kinks.push_back(last_kink_gripper_position);
         }
     }
-    gripper_path_kinks.push_back(path[end_index].getGrippers().first.translation());
+    gripper_path_kinks.push_back(path[end_index].grippers().first.translation());
 
     return gripper_path_kinks;
 }
@@ -2359,17 +2347,17 @@ static VectorVector3d findSecondGripperWaypoints(
     assert(end_index < path.size());
 
     // The start of the path is clearly the first 'kink'
-    VectorVector3d gripper_path_kinks(1, path[start_index].getGrippers().second.translation());
+    VectorVector3d gripper_path_kinks(1, path[start_index].grippers().second.translation());
 
     size_t last_kink = start_index;
-    Vector3d last_kink_gripper_position = path[last_kink].getGrippers().second.translation();
+    Vector3d last_kink_gripper_position = path[last_kink].grippers().second.translation();
     double path_distance = 0;
 
     // We don't include the last index because it is clearly the last 'kink'
     for (size_t idx = start_index; idx < end_index - 1; ++idx)
     {
-        const Vector3d& current_gripper_position = path[idx].getGrippers().second.translation();
-        const Vector3d& next_gripper_position    = path[idx + 1].getGrippers().second.translation();
+        const Vector3d& current_gripper_position = path[idx].grippers().second.translation();
+        const Vector3d& next_gripper_position    = path[idx + 1].grippers().second.translation();
         path_distance += (next_gripper_position - current_gripper_position).norm();
         const double straight_line_distance = (next_gripper_position - last_kink_gripper_position).norm();
 
@@ -2382,7 +2370,7 @@ static VectorVector3d findSecondGripperWaypoints(
             gripper_path_kinks.push_back(last_kink_gripper_position);
         }
     }
-    gripper_path_kinks.push_back(path[end_index].getGrippers().second.translation());
+    gripper_path_kinks.push_back(path[end_index].grippers().second.translation());
 
     return gripper_path_kinks;
 }
@@ -2435,14 +2423,14 @@ std::pair<bool, std::vector<RRTNode, RRTAllocator>> RRTHelper::forwardSimulateGr
     assert(start_index < path.size());
 
     // Verify that the endpoints of the rubber band match the start of the grippers path
-    if (!bandEndpointsMatchGripperPositions(rubber_band, path[start_index].getGrippers()))
+    if (!bandEndpointsMatchGripperPositions(rubber_band, path[start_index].grippers()))
     {
         std::cerr << "Inside forwardSimulateGrippersPath\n";
         std::cerr << "initial rubber band endpoints:\n"
                   << PrettyPrint::PrettyPrint(rubber_band.getEndpoints()) << std::endl;
 
         std::cerr << "path gripper positions:\n"
-                  << PrettyPrint::PrettyPrint(path[start_index].getGrippers()) << std::endl;
+                  << PrettyPrint::PrettyPrint(path[start_index].grippers()) << std::endl;
 
         assert(false && "Band endpoints do not match recorded gripper positions");
     }
@@ -2453,8 +2441,8 @@ std::pair<bool, std::vector<RRTNode, RRTAllocator>> RRTHelper::forwardSimulateGr
     {
         resulting_path.reserve(path.size() - start_index);
         resulting_path.push_back(
-                    RRTNode(path[start_index].getGrippers(),
-                            path[start_index].getRobotConfiguration(),
+                    RRTNode(path[start_index].grippers(),
+                            path[start_index].robotConfiguration(),
                             std::make_shared<RubberBand>(rubber_band)));
     }
 
@@ -2467,7 +2455,7 @@ std::pair<bool, std::vector<RRTNode, RRTAllocator>> RRTHelper::forwardSimulateGr
     {
         // Forward simulate the band
         stopwatch(RESET);
-        const auto& ending_grippers_pos = path[path_idx].getGrippers();
+        const auto& ending_grippers_pos = path[path_idx].grippers();
         rubber_band.forwardPropagateRubberBandToEndpointTargets(
                     ending_grippers_pos.first.translation(),
                     ending_grippers_pos.second.translation(),
@@ -2481,13 +2469,13 @@ std::pair<bool, std::vector<RRTNode, RRTAllocator>> RRTHelper::forwardSimulateGr
 //        const double first_order_vis_time = stopwatch(READ);
 //        total_first_order_vis_propogation_time_ += first_order_vis_time;
         resulting_path.push_back(RRTNode(
-                                     path[path_idx].getGrippers(),
-                                     path[path_idx].getRobotConfiguration(),
+                                     path[path_idx].grippers(),
+                                     path[path_idx].robotConfiguration(),
                                      std::make_shared<RubberBand>(rubber_band)));
 
         // Record if the band is overstretched
         band_is_overstretched = rubber_band.isOverstretched();
-        band_got_stuck = !bandEndpointsMatchGripperPositions(rubber_band, path[path_idx].getGrippers());
+        band_got_stuck = !bandEndpointsMatchGripperPositions(rubber_band, path[path_idx].grippers());
 
         ++path_idx;
     }
@@ -2569,8 +2557,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         if (planning_for_whole_robot_)
         {
             // Check if the edge possibly can be smoothed
-            const double minimum_distance = RRTNode::distance(smoothing_start_config.getRobotConfiguration(), smoothing_end_config.getRobotConfiguration());
-            const double path_distance = RRTNode::robotPathDistance(path, smoothing_start_index, smoothing_end_index);
+            const double minimum_distance = RRTDistance::Distance(smoothing_start_config.robotConfiguration(), smoothing_end_config.robotConfiguration());
+            const double path_distance = RRTDistance::RobotPathDistance(path, smoothing_start_index, smoothing_end_index);
             // Essentially this checks if there is a kink in the path
             if (IsApprox(path_distance, minimum_distance, 1e-6))
             {
@@ -2585,8 +2573,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
             forwardPropogationFunction(smoothed_segment, start_idx, smoothing_end_config, fwd_prop_extend_band, fwd_prop_max_steps, fwd_prop_local_visualization_enabled);
 
             // Check if the rubber band gets overstretched while propogating the grippers/robot on the new path
-            const auto& target_robot_configuration = smoothing_end_config.getRobotConfiguration();
-            const auto& last_robot_configuration = smoothed_segment.back().getRobotConfiguration();
+            const auto& target_robot_configuration = smoothing_end_config.robotConfiguration();
+            const auto& last_robot_configuration = smoothed_segment.back().robotConfiguration();
 
             if (!robotConfigurationsAreApproximatelyEqual(last_robot_configuration, target_robot_configuration))
             {
@@ -2599,7 +2587,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
             // We still need to check that the rubber band can still reach the goal correctly from this state,
             // so we'll forward propogate along the rest of the trajectory to check feasibility
-            end_of_smoothing_to_goal_results = forwardSimulateGrippersPath(path, smoothing_end_index, *smoothed_segment.back().getBand());
+            end_of_smoothing_to_goal_results = forwardSimulateGrippersPath(path, smoothing_end_index, *smoothed_segment.back().band());
         }
         else
         {
@@ -2612,8 +2600,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
             if (smoothing_type == 1 || smoothing_type == 2)
             {
                 // Check if the edge possibly can be smoothed
-                const double minimum_distance = RRTNode::distance(smoothing_start_config.getGrippers(), smoothing_end_config.getGrippers());
-                const double path_distance = RRTNode::grippersPathDistance(path, smoothing_start_index, smoothing_end_index);
+                const double minimum_distance = RRTDistance::Distance(smoothing_start_config.grippers(), smoothing_end_config.grippers());
+                const double path_distance = RRTDistance::GrippersPathDistance(path, smoothing_start_index, smoothing_end_index);
                 // Essentially this checks if there is a kink in the path
                 if (IsApprox(path_distance, minimum_distance, 1e-6))
                 {
@@ -2638,8 +2626,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                 // Smooth the first gripper
                 if (smoothing_type == 3)
                 {
-                    const auto& first_gripper_start_pos = smoothing_start_config.getGrippers().first.translation();
-                    const auto& first_gripper_end_pos = smoothing_end_config.getGrippers().first.translation();
+                    const auto& first_gripper_start_pos = smoothing_start_config.grippers().first.translation();
+                    const auto& first_gripper_end_pos = smoothing_end_config.grippers().first.translation();
 
                     // Check if there is room for improvement for the first gripper
                     const double minimum_distance = (first_gripper_end_pos - first_gripper_start_pos).norm();
@@ -2661,8 +2649,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                 // Smooth the second gripper
                 else
                 {
-                    const auto& second_gripper_start_pos = smoothing_start_config.getGrippers().second.translation();
-                    const auto& second_gripper_end_pos = smoothing_end_config.getGrippers().second.translation();
+                    const auto& second_gripper_start_pos = smoothing_start_config.grippers().second.translation();
+                    const auto& second_gripper_end_pos = smoothing_end_config.grippers().second.translation();
 
                     // Check if there is room for improvement for the second gripper
                     const double minimum_distance = (second_gripper_end_pos - second_gripper_start_pos).norm();
@@ -2690,7 +2678,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                 smoothed_segment.push_back(smoothing_start_config);
                 for (size_t waypoint_idx = 1; waypoint_idx < num_waypoints; ++waypoint_idx)
                 {
-                    RRTGrippersRepresentation target_poses = path.front().getGrippers();
+                    RRTGrippersRepresentation target_poses = path.front().grippers();
                     target_poses.first.translation() = target_waypoints_first_gripper[waypoint_idx];
                     target_poses.second.translation() = target_waypoints_second_gripper[waypoint_idx];
                     RRTRobotRepresentation target_config(6);
@@ -2698,7 +2686,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                     const RRTNode forward_prop_target_config(
                                 target_poses,
                                 target_config,
-                                path.front().getBand());
+                                path.front().band());
 
                     const int64_t start_idx = (int64_t)smoothed_segment.size() - 1;
                     forwardPropogationFunction(smoothed_segment, start_idx, forward_prop_target_config, fwd_prop_extend_band, fwd_prop_max_steps, fwd_prop_local_visualization_enabled);
@@ -2710,8 +2698,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
             }
 
             // Check if the rubber band gets overstretched while propogating the grippers on the new path
-            const auto& target_gripper_position = smoothing_end_config.getGrippers();
-            const auto& last_gripper_position = smoothed_segment.back().getGrippers();
+            const auto& target_gripper_position = smoothing_end_config.grippers();
+            const auto& last_gripper_position = smoothed_segment.back().grippers();
             if (!gripperPositionsAreApproximatelyEqual(last_gripper_position, target_gripper_position))
             {
                 ++failed_iterations;
@@ -2720,7 +2708,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
             // We still need to check that the rubber band can still reach the goal correctly from this state,
             // so we'll forward propogate along the rest of the trajectory to check feasibility
-            end_of_smoothing_to_goal_results = forwardSimulateGrippersPath(path, smoothing_end_index, *smoothed_segment.back().getBand());
+            end_of_smoothing_to_goal_results = forwardSimulateGrippersPath(path, smoothing_end_index, *smoothed_segment.back().band());
         }
 
         const bool final_band_at_goal_success = end_of_smoothing_to_goal_results.first;
@@ -2730,7 +2718,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         // homotopy class while following the tail of the starting trajectory
         {
             const auto& final_node_of_smoothing = end_of_smoothing_to_goal_path_.back();
-            const bool final_band_visible_to_blacklist = isBandFirstOrderVisibileToBlacklist(*final_node_of_smoothing.getBand());
+            const bool final_band_visible_to_blacklist = isBandFirstOrderVisibileToBlacklist(*final_node_of_smoothing.band());
             if (!final_band_at_goal_success || final_band_visible_to_blacklist)
             {
 //                std::cout << "Shortcut failed, continuing "
@@ -2826,7 +2814,7 @@ void RRTHelper::visualizeTree(
 
             if (draw_band)
             {
-                const VectorVector3d& band_vec = curr.getBand()->getVectorRepresentation();
+                const VectorVector3d& band_vec = curr.band()->getVectorRepresentation();
                 for (size_t band_idx = 0; band_idx + 1 < band_vec.size(); ++band_idx)
                 {
                     band_line_start_points.push_back(band_vec[band_idx]);
@@ -2839,11 +2827,11 @@ void RRTHelper::visualizeTree(
                 const RRTNode& parent = tree[curr.getParentIndex()];
 
                 // Add edges from the parent to the current node
-                gripper_a_tree_start_points.push_back(parent.getGrippers().first.translation());
-                gripper_b_tree_start_points.push_back(parent.getGrippers().second.translation());
+                gripper_a_tree_start_points.push_back(parent.grippers().first.translation());
+                gripper_b_tree_start_points.push_back(parent.grippers().second.translation());
 
-                gripper_a_tree_end_points.push_back(curr.getGrippers().first.translation());
-                gripper_b_tree_end_points.push_back(curr.getGrippers().second.translation());
+                gripper_a_tree_end_points.push_back(curr.grippers().first.translation());
+                gripper_b_tree_end_points.push_back(curr.grippers().second.translation());
             }
         }
 
@@ -2919,8 +2907,8 @@ void RRTHelper::visualizePath(const std::vector<RRTNode, RRTAllocator>& path) co
     for (int32_t ind = 0; ind < (int32_t)path.size(); ++ind)
     {
         const RRTNode& config = path[ind];
-        const RRTGrippersRepresentation& gripper_positions = config.getGrippers();
-        const RubberBand::Ptr& rubber_band = config.getBand();
+        const RRTGrippersRepresentation& gripper_positions = config.grippers();
+        const RubberBand::Ptr& rubber_band = config.band();
 
         gripper_a_cubes.push_back(gripper_positions.first.translation());
         gripper_b_cubes.push_back(gripper_positions.second.translation());
