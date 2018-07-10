@@ -20,6 +20,8 @@ using namespace arc_utilities;
 #define VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS   (10)
 #define VECTOR_FIELD_FOLLOWING_MIN_PROGRESS     (1e-6)
 
+//#define ENABLE_PROJECTION
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////// Task Specification /////////////////////////////////////////////////////////
@@ -849,7 +851,11 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateErrorCorrectionDeltaFixedCo
     for (ssize_t deform_idx = 0; deform_idx < num_nodes_; ++deform_idx)
     {
         const std::vector<ssize_t>& current_correspondences     = correspondences[deform_idx];
+        #ifdef ENABLE_PROJECTION
         const Eigen::Vector3d& deformable_point                 = environment_sdf_->ProjectOutOfCollision3d(world_state.object_configuration_.col(deform_idx));
+        #else
+        const Eigen::Vector3d& deformable_point                 = world_state.object_configuration_.col(deform_idx);
+        #endif
         const ssize_t deformable_point_idx_in_free_space_graph  = work_space_grid_.worldPosToGridIndexClamped(deformable_point);
 
         for (size_t correspondence_idx = 0; correspondence_idx < current_correspondences.size(); ++correspondence_idx)
@@ -1096,55 +1102,80 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
     }
 }
 
+Eigen::Vector3d DijkstrasCoverageTask::sumVectorFields(
+        const std::vector<ssize_t>& cover_point_assignments,
+        const Eigen::Vector3d& querry_loc) const
+{
+    Eigen::Vector3d summed_dijkstras_deltas(0, 0, 0);
+
+    const ssize_t graph_aligned_querry_ind = work_space_grid_.worldPosToGridIndexClamped(querry_loc);
+    const Eigen::Vector3d& graph_aligned_querry_point = free_space_graph_.GetNodeImmutable(graph_aligned_querry_ind).GetValueImmutable();
+
+    // Combine the vector fields from each assignment
+    for (size_t assignment_ind = 0; assignment_ind < cover_point_assignments.size(); ++assignment_ind)
+    {
+        // Each entry in dijktras_results_[cover_ind] is a (next_node, distance to goal) pair
+        const ssize_t cover_ind = cover_point_assignments[assignment_ind];
+        const auto& vector_field = dijkstras_results_[(size_t)cover_ind].first;
+        const ssize_t target_ind_in_work_space_graph = vector_field[(size_t)graph_aligned_querry_ind];
+
+        const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(target_ind_in_work_space_graph).GetValueImmutable();
+        summed_dijkstras_deltas += (target_point - graph_aligned_querry_point);
+    }
+
+    return summed_dijkstras_deltas;
+}
+
 // Note that this is only used for predicting if the local controller will get stuck
 EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
         const Eigen::Vector3d& starting_pos,
         const std::vector<ssize_t>& cover_point_assignments,
-        const size_t maximum_itterations) const
+        const size_t maximum_iterations) const
 {
+    static const double min_outer_progress_squared = std::pow(work_space_grid_.minStepDimension() / 2.0, 2);
+
+    #ifdef ENABLE_PROJECTION
     Eigen::Vector3d current_pos = environment_sdf_->ProjectOutOfCollision3d(starting_pos);
+    #else
+    Eigen::Vector3d current_pos = starting_pos;
+    #endif
     EigenHelpers::VectorVector3d trajectory(1, current_pos);
 
-    bool progress = cover_point_assignments.size() > 0;
-    for (size_t ittr = 0; progress && ittr < maximum_itterations; ++ittr)
+    bool outer_progress = cover_point_assignments.size() > 0;
+    for (size_t itr = 0; outer_progress && itr < maximum_iterations; ++itr)
     {
-        Eigen::Vector3d summed_dijkstras_deltas(0, 0, 0);
+        Eigen::Vector3d updated_pos = current_pos;
 
-        const ssize_t deformable_point_ind_in_work_space_graph = work_space_grid_.worldPosToGridIndexClamped(current_pos);
-
-        // Combine the vector fields from each assignment
-        for (size_t assignment_ind = 0; assignment_ind < cover_point_assignments.size(); ++assignment_ind)
+        // Split the delta up into smaller steps to simulate "pulling" the cloth along with constant obstacle collision resolution
+        bool inner_progress = true;
+        for (int i = 0; inner_progress && i  < VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS; ++i)
         {
-            const ssize_t cover_ind = cover_point_assignments[assignment_ind];
-            const ssize_t target_ind_in_work_space_graph = dijkstras_results_[(size_t)cover_ind].first[(size_t)deformable_point_ind_in_work_space_graph];
+            const Eigen::Vector3d summed_dijkstras_deltas = sumVectorFields(cover_point_assignments, updated_pos);
 
-            const ssize_t graph_aligned_current_ind = work_space_grid_.worldPosToGridIndexClamped(current_pos);
-            const Eigen::Vector3d& graph_aligned_current_pos = free_space_graph_.GetNodeImmutable(graph_aligned_current_ind).GetValueImmutable();
-            const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(target_ind_in_work_space_graph).GetValueImmutable();
+            // If the combined vector field has minimal movement, then stop.
+            if (summed_dijkstras_deltas.squaredNorm() <= min_outer_progress_squared)
+            {
+                break;
+            }
 
-            summed_dijkstras_deltas += (target_point - graph_aligned_current_pos);
-        }
-
-        // If the combined vector moves us at least some minimum distance, then accept the delta.
-        progress = summed_dijkstras_deltas.squaredNorm() > std::pow(work_space_grid_.minStepDimension() / 2.0, 2);
-        if (progress)
-        {
+            // Scale the delta to the size of the grid to normalize for number of corespondeces
             const Eigen::Vector3d combined_delta = summed_dijkstras_deltas.normalized() * work_space_grid_.minStepDimension();
 
-            // Split the delta up into smaller steps to simulate "pulling" the cloth along with constant obstacle collision resolution
-            Eigen::Vector3d net_delta = Eigen::Vector3d::Zero();
-            for (int i = 0; i < VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS; ++i)
-            {
-                net_delta += combined_delta / (double)VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS;
-                net_delta = environment_sdf_->ProjectOutOfCollision3dLegacy(current_pos + net_delta) - current_pos;
-            }
+            const Eigen::Vector3d micro_delta = combined_delta/ (double)VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS;
+            const Eigen::Vector3d projected_pos = environment_sdf_->ProjectOutOfCollision3dLegacy(updated_pos + micro_delta);
 
-            progress = net_delta.squaredNorm() > VECTOR_FIELD_FOLLOWING_MIN_PROGRESS;
-            if (progress)
+            inner_progress = (projected_pos - updated_pos).squaredNorm() > VECTOR_FIELD_FOLLOWING_MIN_PROGRESS;
+            if (inner_progress)
             {
-                current_pos += net_delta;
-                trajectory.push_back(current_pos);
+                updated_pos = projected_pos;
             }
+        }
+
+        outer_progress = (current_pos - updated_pos).squaredNorm() > min_outer_progress_squared;
+        if (outer_progress)
+        {
+            current_pos = updated_pos;
+            trajectory.push_back(current_pos);
         }
     }
 
@@ -1284,7 +1315,12 @@ DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCo
     {
         // Ensure that regardless of the sensed point, we are working with a point that is in the valid volume
         const Eigen::Vector3d& deformable_point         = world_state.object_configuration_.col(deform_idx);
+        #ifdef ENABLE_PROJECTION
         const Eigen::Vector3d point_in_free_space       = environment_sdf_->ProjectOutOfCollision3d(deformable_point);
+        #else
+        const Eigen::Vector3d point_in_free_space = deformable_point;
+        #endif
+
         const ssize_t nearest_idx_in_free_space_graph   = work_space_grid_.worldPosToGridIndexClamped(point_in_free_space);
 
         // Extract the correct part of each data structure - each deformable point can correspond to multiple target points

@@ -408,6 +408,7 @@ WorldState TaskFramework::sendNextCommand(
         const auto world_state_and_band = loadStoredWorldState();
         world_state = world_state_and_band.first;
         rubber_band_between_grippers_ = world_state_and_band.second;
+        vis_->visualizeCloth("controller_input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
     }
     else
     {
@@ -521,8 +522,6 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
 {
     Stopwatch stopwatch;
     Stopwatch function_wide_stopwatch;
-
-    vis_->visualizeCloth("controller_input_deformable_object", current_world_state.object_configuration_, Visualizer::Green(0.5), 1);
 
     // Temporaries needed here bercause model_input_data takes things by reference
     const DesiredDirection desired_object_manipulation_direction = task_specification_->calculateDesiredDirection(current_world_state);

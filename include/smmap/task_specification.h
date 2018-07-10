@@ -385,6 +385,10 @@ namespace smmap
             bool saveDijkstrasResults();
             bool loadDijkstrasResults();
 
+            Eigen::Vector3d sumVectorFields(
+                    const std::vector<ssize_t>& cover_point_assignments,
+                    const Eigen::Vector3d& querry_loc) const;
+
             EigenHelpers::VectorVector3d followCoverPointAssignments(
                     const Eigen::Vector3d& starting_pos,
                     const std::vector<ssize_t>& cover_point_assignments,

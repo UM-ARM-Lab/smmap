@@ -1682,7 +1682,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                 }
 
                 const bool sample_goal = uniform_unit_distribution_(*generator_) < goal_bias_;
-                if (sample_goal)
+                if (backward_tree_.size() > 0 && sample_goal)
                 {
                     // Record the index of the last node in the new branch.
                     // This is either the last item in the tree, or the nearest neighbour itself
