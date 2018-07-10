@@ -444,6 +444,7 @@ RRTHelper::RRTHelper(
         const size_t kd_tree_grow_threshold,
         const bool use_brute_force_nn,
         const double goal_bias,
+        const double best_near_radius,
         // Smoothing parameters
         const int64_t max_shortcut_index_distance,
         const uint32_t max_smoothing_iterations,
@@ -499,6 +500,7 @@ RRTHelper::RRTHelper(
     , backward_tree_extend_iterations_(backward_tree_extend_iterations)
     , use_brute_force_nn_(use_brute_force_nn)
     , kd_tree_grow_threshold_(kd_tree_grow_threshold)
+    , best_near_radius2_(best_near_radius * best_near_radius)
 
     , max_shortcut_index_distance_(max_shortcut_index_distance)
     , max_smoothing_iterations_(max_smoothing_iterations)
@@ -517,7 +519,9 @@ RRTHelper::RRTHelper(
     , total_nearest_neighbour_index_searching_time_(NAN)
     , total_nearest_neighbour_linear_searching_time_(NAN)
     , total_nearest_neighbour_radius_searching_time_(NAN)
+    , total_nearest_neighbour_best_searching_time_(NAN)
     , total_nearest_neighbour_time_(NAN)
+    , total_forward_kinematics_time_(NAN)
     , total_projection_time_(NAN)
     , total_collision_check_time_(NAN)
     , total_band_forward_propogation_time_(NAN)
@@ -676,7 +680,7 @@ std::vector<std::pair<int64_t, double>> radiusSearch(
     return near;
 }
 
-int64_t getNearestFullConfig(
+std::pair<int64_t, double> getNearestFullConfig(
         const RRTNode& config,
         const std::vector<RRTNode, RRTAllocator>& tree,
         const double band_distance2_scaling_factor_,
@@ -723,8 +727,45 @@ int64_t getNearestFullConfig(
     }
 
     assert(min_idx >= 0);
-    return min_idx;
+    return {min_idx, std::sqrt(min_dist2)};
 }
+
+std::pair<int64_t, double> getBestFullConfig(
+        const std::vector<RRTNode, RRTAllocator>& tree,
+        const std::vector<std::pair<int64_t, double>>& radius_search_set_1,
+        const std::vector<std::pair<int64_t, double>>& radius_search_set_2)
+{
+    assert(radius_search_set_1.size() + radius_search_set_2.size() > 0);
+
+    double min_cost = std::numeric_limits<double>::infinity();
+    int64_t min_idx = -1;
+
+    // Search through the first set of potential best nodes
+    for (const auto& item : radius_search_set_1)
+    {
+        const auto test_cost = tree[item.first].costToCome();
+        if (test_cost < min_cost)
+        {
+            min_idx = item.first;
+            min_cost = test_cost;
+        }
+    }
+
+    // Search through the second set of potential nearest nodes
+    for (const auto& item : radius_search_set_2)
+    {
+        const auto test_cost = tree[item.first].costToCome();
+        if (test_cost < min_cost)
+        {
+            min_idx = item.first;
+            min_cost = test_cost;
+        }
+    }
+
+    assert(min_idx >= 0);
+    return {min_idx, min_cost};
+}
+
 
 int64_t RRTHelper::nearestNeighbour(
         const bool use_forward_tree,
@@ -733,16 +774,25 @@ int64_t RRTHelper::nearestNeighbour(
     Stopwatch stopwatch;
 
     arc_helpers::DoNotOptimize(config);
-    int64_t nn_idx = nearestNeighbour_internal(use_forward_tree, config);
+    int64_t nn_idx = -1;
+    if (use_forward_tree)
+    {
+        nn_idx = nearestBestNeighbourFullSpace(config);
+    }
+    else
+    {
+        nn_idx = nearestNeighbourRobotSpace(false, config).first;
+    }
     arc_helpers::DoNotOptimize(nn_idx);
 
     const double nn_time = stopwatch(READ);
     total_nearest_neighbour_time_ += nn_time;
 
+    assert(nn_idx >= 0);
     return nn_idx;
 }
 
-int64_t RRTHelper::nearestNeighbour_internal(
+std::pair<int64_t, double> RRTHelper::nearestNeighbourRobotSpace(
         const bool use_forward_tree,
         const RRTNode& config)
 {
@@ -818,44 +868,72 @@ int64_t RRTHelper::nearestNeighbour_internal(
         total_nearest_neighbour_linear_searching_time_ += linear_searching_time;
     }
 
+    assert(nearest.first >= 0);
+    return nearest;
+}
 
+int64_t RRTHelper::nearestBestNeighbourFullSpace(
+        const RRTNode &config)
+{
+    const std::pair<int64_t, double> nearest_robot_space = nearestNeighbourRobotSpace(true, config);
 
-    // If we are searching the forward tree, then we need to do more work to account for the band
-    if (use_forward_tree)
+    Stopwatch stopwatch;
+    arc_helpers::DoNotOptimize(nearest_robot_space);
+
+    // If we have a FLANN index to search
+    std::vector<std::pair<int64_t, double>> flann_radius_result;
+    if (!use_brute_force_nn_ && forward_next_idx_to_add_to_nn_dataset_ > 0)
     {
-        Stopwatch stopwatch;
-        arc_helpers::DoNotOptimize(nn_index);
+        flann_radius_result = radiusSearch(config.robotConfiguration(), *forward_nn_index_, nearest_robot_space.second + band_max_dist2_);
+    }
 
-        // If we have a FLANN index to search
-        std::vector<std::pair<int64_t, double>> flann_radius_result;
-        if (!use_brute_force_nn_ && *manual_search_start_idx > 0)
+    // If we have data that isn't in the FLANN index
+    std::vector<std::pair<int64_t, double>> linear_radius_result;
+    if (forward_next_idx_to_add_to_nn_dataset_ < forward_tree_.size())
+    {
+        linear_radius_result = radiusSearch(config.robotConfiguration(), forward_tree_, forward_next_idx_to_add_to_nn_dataset_, nearest_robot_space.second + band_max_dist2_);
+    }
+
+    // Search both sets of results for the nearest neighbour in the
+    // full configuration space, including the band
+    const std::pair<int64_t, double> nearest_full_space = getNearestFullConfig(config, forward_tree_, band_distance2_scaling_factor_, flann_radius_result, linear_radius_result);
+
+    arc_helpers::DoNotOptimize(nearest_full_space);
+    const double radius_searching_time = stopwatch(READ);
+    total_nearest_neighbour_radius_searching_time_ += radius_searching_time;
+
+    // Perform a "best" subsearch if needed
+    if (nearest_full_space.second <= best_near_radius2_ + band_max_dist2_)
+    {
+        auto flann_best_near_radius_result = flann_radius_result;
+        auto linear_best_near_radius_result = linear_radius_result;
+
+        // If the radius search that we already did is too small, then do a new search
+        //   Note that due to the dual layer buisness, we are bloating the radius by a small amount (max band distance).
+        arc_helpers::DoNotOptimize(nearest_robot_space);
+        stopwatch(RESET);
+        if (nearest_robot_space.second < best_near_radius2_)
         {
-            flann_radius_result = radiusSearch(config.robotConfiguration(), *nn_index, nearest.second + band_max_dist2_);
+            if (!use_brute_force_nn_ && forward_next_idx_to_add_to_nn_dataset_ > 0)
+            {
+                flann_best_near_radius_result = radiusSearch(config.robotConfiguration(), *forward_nn_index_, best_near_radius2_);
+            }
+            if (forward_next_idx_to_add_to_nn_dataset_ < forward_tree_.size())
+            {
+                linear_best_near_radius_result = radiusSearch(config.robotConfiguration(), forward_tree_, forward_next_idx_to_add_to_nn_dataset_, best_near_radius2_);
+            }
         }
 
-        // If we have data that isn't in the FLANN index
-        std::vector<std::pair<int64_t, double>> linear_radius_result;
-        if (*manual_search_start_idx < tree->size())
-        {
-            linear_radius_result = radiusSearch(config.robotConfiguration(), *tree, *manual_search_start_idx, nearest.second + band_max_dist2_);
-        }
+        const std::pair<int64_t, double> best_full_space = getBestFullConfig(forward_tree_, flann_best_near_radius_result, linear_best_near_radius_result);
+        arc_helpers::DoNotOptimize(best_full_space);
 
-        // Search both sets of results for the nearest neighbour in the
-        // full configuration space, including the bad
-        const int64_t nearest_idx = getNearestFullConfig(config, *tree, band_distance2_scaling_factor_, flann_radius_result, linear_radius_result);
-
-        const double radius_searching_time = stopwatch(READ);
-        arc_helpers::DoNotOptimize(nearest_idx);
-        total_nearest_neighbour_radius_searching_time_ += radius_searching_time;
-
-        assert(nearest_idx >= 0);
-        return nearest_idx;
+        assert(best_full_space.first >= 0);
+        return best_full_space.first;
     }
     else
     {
-        const int64_t nearest_idx = nearest.first;
-        assert(nearest_idx >= 0);
-        return nearest_idx;
+        assert(nearest_full_space.first >= 0);
+        return nearest_full_space.first;
     }
 }
 
@@ -1136,8 +1214,15 @@ size_t RRTHelper::forwardPropogationFunction(
             const double ratio = std::min(1.0, (double)(step_index + 1) * max_robot_dof_step_size_ / total_distance);
             const RRTRobotRepresentation next_robot_config = Interpolate(starting_robot_config, target_robot_config, ratio);
 
-            const AllGrippersSinglePose next_grippers_poses_vector = robot_->getGrippersPoses(next_robot_config);
+            stopwatch(RESET);
+            arc_helpers::DoNotOptimize(next_robot_config);
+            robot_->setActiveDOFValues(next_robot_config);
+            const AllGrippersSinglePose next_grippers_poses_vector = robot_->getGrippersPosesFunctionPointer();
             const RRTGrippersRepresentation next_grippers_poses(next_grippers_poses_vector[0], next_grippers_poses_vector[1]);
+            arc_helpers::DoNotOptimize(next_grippers_poses);
+            const double forward_kinematics_time = stopwatch(READ);
+            total_forward_kinematics_time_ += forward_kinematics_time;
+
             // Check gripper position and rotation constraints
             {
                 // Check if we rotated the grippers too much
@@ -1171,9 +1256,7 @@ size_t RRTHelper::forwardPropogationFunction(
             // Collision checking
             {
                 stopwatch(RESET);
-                arc_helpers::DoNotOptimize(next_robot_config);
-                const bool in_collision = robot_->checkRobotCollision(next_robot_config);
-                arc_helpers::DoNotOptimize(next_robot_config);
+                const bool in_collision = robot_->checkRobotCollision();
                 const double collision_check_time = stopwatch(READ);
                 total_collision_check_time_ += collision_check_time;
                 if (in_collision)
@@ -1248,7 +1331,6 @@ size_t RRTHelper::forwardPropogationFunction(
             stopwatch(RESET);
             arc_helpers::DoNotOptimize(parent_idx);
 
-            // We could be updating the child indices of this node later, so take the value by non-const reference
             const RRTNode& prev_node = tree_to_extend[parent_idx];
             const RubberBand::Ptr& prev_band = prev_node.band();
             const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
@@ -1256,7 +1338,15 @@ size_t RRTHelper::forwardPropogationFunction(
             const double prev_distance = RRTDistance::Distance(prev_robot_config, target_robot_config);
             const double ratio = std::min(1.0, max_gripper_step_size_ / prev_distance);
             const RRTRobotRepresentation next_robot_config_pre_projection = Interpolate(prev_robot_config, target_robot_config, ratio);
-            const AllGrippersSinglePose next_grippers_poses_pre_projection = robot_->getGrippersPoses(next_robot_config_pre_projection);
+
+            stopwatch(RESET);
+            arc_helpers::DoNotOptimize(next_robot_config_pre_projection);
+            robot_->setActiveDOFValues(next_robot_config_pre_projection);
+            const AllGrippersSinglePose next_grippers_poses_pre_projection = robot_->getGrippersPosesFunctionPointer();
+            arc_helpers::DoNotOptimize(next_grippers_poses_pre_projection);
+            const double forward_kinematics_time_part1 = stopwatch(READ);
+            total_forward_kinematics_time_ += forward_kinematics_time_part1;
+
 
             // Project and check the projection result for failure
             const bool project_to_rotation_bound = true;
@@ -1296,8 +1386,15 @@ size_t RRTHelper::forwardPropogationFunction(
                 }
             }
 
-            const AllGrippersSinglePose next_grippers_poses_vector = robot_->getGrippersPoses(next_robot_config);
+            stopwatch(RESET);
+            arc_helpers::DoNotOptimize(next_robot_config);
+            robot_->setActiveDOFValues(next_robot_config);
+            const AllGrippersSinglePose next_grippers_poses_vector = robot_->getGrippersPosesFunctionPointer();
             const RRTGrippersRepresentation next_grippers_poses(next_grippers_poses_vector[0], next_grippers_poses_vector[1]);
+            arc_helpers::DoNotOptimize(next_grippers_poses);
+            const double forward_kinematics_time_part2 = stopwatch(READ);
+            total_forward_kinematics_time_ += forward_kinematics_time_part2;
+
             // Check gripper position and rotation constraints if we did not project to them
             {
                 // Check if we rotated the grippers too much
@@ -1331,9 +1428,7 @@ size_t RRTHelper::forwardPropogationFunction(
             // Colision checking
             {
                 stopwatch(RESET);
-                arc_helpers::DoNotOptimize(next_robot_config);
-                const bool in_collision = robot_->checkRobotCollision(next_robot_config);
-                arc_helpers::DoNotOptimize(next_robot_config);
+                const bool in_collision = robot_->checkRobotCollision();
                 const double collision_check_time = stopwatch(READ);
                 total_collision_check_time_ += collision_check_time;
                 if (in_collision)
@@ -1589,7 +1684,9 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     total_nearest_neighbour_index_searching_time_ = 0.0;
     total_nearest_neighbour_linear_searching_time_ = 0.0;
     total_nearest_neighbour_radius_searching_time_ = 0.0;
+    total_nearest_neighbour_best_searching_time_ = 0.0;
     total_nearest_neighbour_time_ = 0.0;
+    total_forward_kinematics_time_ = 0.0;
     total_projection_time_ = 0.0;
     total_collision_check_time_ = 0.0;
     total_band_forward_propogation_time_ = 0.0;
@@ -1887,11 +1984,13 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     planning_statistics_["planning_time1_2_nearest_neighbour_index_searching      "] = total_nearest_neighbour_index_searching_time_;
     planning_statistics_["planning_time1_3_nearest_neighbour_linear_searching     "] = total_nearest_neighbour_linear_searching_time_;
     planning_statistics_["planning_time1_4_nearest_neighbour_radius_searching     "] = total_nearest_neighbour_radius_searching_time_;
+    planning_statistics_["planning_time1_4_nearest_neighbour_best_searching       "] = total_nearest_neighbour_best_searching_time_;
     planning_statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
-    planning_statistics_["planning_time2_1_forward_propogation_projection         "] = total_projection_time_;
-    planning_statistics_["planning_time2_2_forward_propogation_collision_check    "] = total_collision_check_time_;
-    planning_statistics_["planning_time2_3_forward_propogation_band_sim           "] = total_band_forward_propogation_time_;
-    planning_statistics_["planning_time2_4_forward_propogation_first_order_vis    "] = total_first_order_vis_propogation_time_;
+    planning_statistics_["planning_time2_1_forward_propogation_fk                 "] = total_forward_kinematics_time_;
+    planning_statistics_["planning_time2_2_forward_propogation_projection         "] = total_projection_time_;
+    planning_statistics_["planning_time2_3_forward_propogation_collision_check    "] = total_collision_check_time_;
+    planning_statistics_["planning_time2_4_forward_propogation_band_sim           "] = total_band_forward_propogation_time_;
+    planning_statistics_["planning_time2_5_forward_propogation_first_order_vis    "] = total_first_order_vis_propogation_time_;
     planning_statistics_["planning_time2_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
     planning_statistics_["planning_time3_total                                    "] = planning_time.count();
 
@@ -1945,7 +2044,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
                     max_grippers_distance_);
         assert(goal_configurations.size() > 0);
 
-        const auto grippers_goal_poses_updated_vec = robot_->getGrippersPoses(goal_configurations[0]);
+        robot_->setActiveDOFValues(goal_configurations[0]);
+        const auto grippers_goal_poses_updated_vec = robot_->getGrippersPosesFunctionPointer();
         grippers_goal_poses_.first = grippers_goal_poses_updated_vec.at(0);
         grippers_goal_poses_.second = grippers_goal_poses_updated_vec.at(1);
 
@@ -1975,9 +2075,13 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         (maxGrippersDistanceViolated(grippers_goal_poses_, max_grippers_distance_) > max_grippers_distance_))
     {
         const double dist_between_grippers = (grippers_goal_poses_.first.translation() - grippers_goal_poses_.second.translation()).norm();
-        std::cerr << "Unfeasible goal location: " << grippers_goal_poses_.first.translation() << "  :  " << grippers_goal_poses_.second.translation() << std::endl;
+        std::cerr << "Unfeasible goal location: " << grippers_goal_poses_.first.translation().transpose() << "  :  " << grippers_goal_poses_.second.translation().transpose() << std::endl;
         std::cerr << "Min gripper collision distance: " << gripper_min_distance_to_obstacles_ << " Current Distances: " << first_gripper_dist_to_env << " " << second_gripper_dist_to_env << std::endl;
         std::cerr << "Max allowable distance: " << max_grippers_distance_ << " Distance beteween goal grippers: " << dist_between_grippers << std::endl;
+
+        vis_->visualizeGrippers("weird_gripper_goals", {grippers_goal_poses_.first, grippers_goal_poses_.second}, Visualizer::Red(), 1);
+        std::getchar();
+
         assert(false && "Unfeasible goal location");
     }
 
@@ -2464,10 +2568,6 @@ std::pair<bool, std::vector<RRTNode, RRTAllocator>> RRTHelper::forwardSimulateGr
         total_band_forward_propogation_time_ += forward_propogation_time;
 
         // Store the band in the results
-//        stopwatch(RESET);
-//        const bool is_first_order_visible = isBandFirstOrderVisibileToBlacklist(rubber_band);
-//        const double first_order_vis_time = stopwatch(READ);
-//        total_first_order_vis_propogation_time_ += first_order_vis_time;
         resulting_path.push_back(RRTNode(
                                      path[path_idx].grippers(),
                                      path[path_idx].robotConfiguration(),
@@ -2497,6 +2597,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
     uint32_t num_iterations = 0;
     uint32_t failed_iterations = 0;
+    total_forward_kinematics_time_ = 0.0;
     total_projection_time_ = 0.0;
     total_collision_check_time_ = 0.0;
     total_band_forward_propogation_time_ = 0.0;
@@ -2762,12 +2863,13 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 
     smoothing_statistics_["smoothing0_failed_iterations                            "] = (double)failed_iterations;
     smoothing_statistics_["smoothing1_iterations                                   "] = (double)num_iterations;
-    smoothing_statistics_["smoothing2_forward_propogation_crrt_projection_time     "] = total_projection_time_;
-    smoothing_statistics_["smoothing3_forward_propogation_collision_check_time     "] = total_collision_check_time_;
-    smoothing_statistics_["smoothing4_forward_propogation_band_sim_time            "] = total_band_forward_propogation_time_;
-    smoothing_statistics_["smoothing5_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
-    smoothing_statistics_["smoothing6_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
-    smoothing_statistics_["smoothing7_total_time                                   "] = smoothing_time;
+    smoothing_statistics_["smoothing2_forward_propogation_fk_time                  "] = total_forward_kinematics_time_;
+    smoothing_statistics_["smoothing3_forward_propogation_crrt_projection_time     "] = total_projection_time_;
+    smoothing_statistics_["smoothing4_forward_propogation_collision_check_time     "] = total_collision_check_time_;
+    smoothing_statistics_["smoothing5_forward_propogation_band_sim_time            "] = total_band_forward_propogation_time_;
+    smoothing_statistics_["smoothing6_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
+    smoothing_statistics_["smoothing7_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
+    smoothing_statistics_["smoothing8_total_time                                   "] = smoothing_time;
 
     return path;
 }

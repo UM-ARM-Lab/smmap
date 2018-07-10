@@ -193,6 +193,7 @@ namespace smmap
                     const size_t kd_tree_grow_threshold,
                     const bool use_brute_force_nn,
                     const double goal_bias,
+                    const double best_near_radius,
                     // Smoothing parameters
                     const int64_t max_shortcut_index_distance,
                     const uint32_t max_smoothing_iterations,
@@ -278,14 +279,17 @@ namespace smmap
                     const std::vector<RRTNode, RRTAllocator>& tree,
                     const size_t new_data_start_idx);
 
+            // Used for timing purposes
+            // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
             int64_t nearestNeighbour(
                     const bool use_forward_tree,
                     const RRTNode& config);
 
-            // Used for timing purposes
-            // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
-            int64_t nearestNeighbour_internal(
+            std::pair<int64_t, double> nearestNeighbourRobotSpace(
                     const bool use_forward_tree,
+                    const RRTNode& config);
+
+            int64_t nearestBestNeighbourFullSpace(
                     const RRTNode& config);
 
             RRTNode configSampling(const bool sample_band);
@@ -355,7 +359,7 @@ namespace smmap
             const double goal_reach_radius_;
             const double gripper_min_distance_to_obstacles_;
 
-            // Use for double layer NN check
+            // Used for double layer NN check
             const double band_distance2_scaling_factor_;
             const size_t band_max_points_;
             const double band_max_dist2_;
@@ -365,6 +369,7 @@ namespace smmap
             const size_t backward_tree_extend_iterations_;
             const bool use_brute_force_nn_;
             const size_t kd_tree_grow_threshold_;
+            const double best_near_radius2_;
 
             const int64_t max_shortcut_index_distance_;
             const uint32_t max_smoothing_iterations_;
@@ -402,7 +407,9 @@ namespace smmap
             double total_nearest_neighbour_index_searching_time_;
             double total_nearest_neighbour_linear_searching_time_;
             double total_nearest_neighbour_radius_searching_time_;
+            double total_nearest_neighbour_best_searching_time_;
             double total_nearest_neighbour_time_;
+            double total_forward_kinematics_time_;
             double total_projection_time_;
             double total_collision_check_time_;
             double total_band_forward_propogation_time_;

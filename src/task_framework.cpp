@@ -265,6 +265,7 @@ void TaskFramework::execute()
         const auto kd_tree_grow_threshold = GetKdTreeGrowThreshold(ph_);
         const auto use_brute_force_nn = GetUseBruteForceNN(ph_);
         const auto goal_bias = GetRRTGoalBias(ph_);
+        const auto best_near_radius = GetRRTBestNearRadius(ph_);
 
         // Smoothing parameters
         const auto max_shortcut_index_distance = GetRRTMaxShortcutIndexDistance(ph_);
@@ -328,6 +329,7 @@ void TaskFramework::execute()
                     kd_tree_grow_threshold,
                     use_brute_force_nn,
                     goal_bias,
+                    best_near_radius,
                     // Smoothing parameters
                     max_shortcut_index_distance,
                     max_smoothing_iterations,
@@ -525,10 +527,10 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
 
     // Temporaries needed here bercause model_input_data takes things by reference
     const DesiredDirection desired_object_manipulation_direction = task_specification_->calculateDesiredDirection(current_world_state);
-    const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian(current_world_state.robot_configuration_);
+    // It is assumed that the robot's internal state matches that that is passed to us, so we do not need to set active dof values
+    const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian();
     // Build the constraints for the gippers and other points of interest on the robot - includes the grippers
-    const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data_ =
-            robot_->getPointsOfInterestCollisionData(current_world_state.robot_configuration_);
+    const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data_ = robot_->getPointsOfInterestCollisionData();
     const DeformableController::InputData model_input_data(
                 current_world_state,
                 desired_object_manipulation_direction,
@@ -836,9 +838,9 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
         desired_object_manipulation_direction.stretching_correction_ = ObjectDeltaAndWeight(world_state_copy.object_configuration_.size());
         desired_object_manipulation_direction.combined_correction_ = desired_object_manipulation_direction.error_correction_;
 
-        const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian(world_state_copy.robot_configuration_);
-        const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data_ =
-                robot_->getPointsOfInterestCollisionData(world_state_copy.robot_configuration_);
+        // It is assumed that the robot's internal state matches that that is passed to us, so we do not need to set active dof values
+        const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian();
+        const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data_ = robot_->getPointsOfInterestCollisionData();
 
         const double normal_motion_grippers_max_step = robot_->max_gripper_velocity_norm_ * robot_->dt_;
         const double forward_prediction_grippers_max_step = dijkstras_task_->work_space_grid_.minStepDimension() * 1.1;
@@ -882,6 +884,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
 
         // Move the robot DOF forward
         world_state_copy.robot_configuration_ += robot_command.robot_dof_motion_;
+        robot_->setActiveDOFValues(world_state_copy.robot_configuration_);
 
         // Move the cloth forward - copy the "projected" state of the cloth into the world_state_copy
         world_state_copy.sim_time_ += robot_->dt_;
@@ -922,6 +925,9 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
         }
         vis_->forcePublishNow();
     }
+
+    // Revert the robot state back to what it was before this was called
+    robot_->setActiveDOFValues(starting_world_state.robot_configuration_);
 
     return projected_deformable_point_paths_and_projected_virtual_rubber_bands;
 }
@@ -1448,14 +1454,11 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                     rubber_band_between_grippers_);
 
         const AllGrippersSinglePose target_grippers_poses_vec = getGripperTargets(world_state);
-
         const RRTGrippersRepresentation target_grippers_poses(
                     target_grippers_poses_vec[0],
                     target_grippers_poses_vec[1]);
 
         const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
-
-
 
     //    for (size_t trial_idx = 0; trial_idx < 20; ++trial_idx)
         {

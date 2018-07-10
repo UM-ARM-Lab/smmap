@@ -376,8 +376,8 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
 
         // Note that NOMAD wants all constraints in the form c(x) <= 0
         // Return the min distance of the points of interest to the obstacles, minus the required clearance
-        const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> poi_collision_data =
-                robot_->getPointsOfInterestCollisionData(input_data.world_current_state_.robot_configuration_);
+        // It is assumed that the robot's internal state matches that that is passed to us, so we do not need to set active dof values
+        const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> poi_collision_data = robot_->getPointsOfInterestCollisionData();
         const double required_obstacle_clearance = input_data.robot_->min_controller_distance_to_obstacles_;
         const std::function<double(const Eigen::VectorXd&)> collision_constraint_fn = [&] (
                 const Eigen::VectorXd& test_robot_motion)
@@ -1582,8 +1582,8 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
         const Eigen::VectorXd max_joint_delta = distance_to_upper_joint_limits.unaryExpr([&max_step_size] (const double x) {return std::min(x, max_step_size);});
 
         // Collect the collision data needed
-        const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> poi_collision_data =
-                robot_->getPointsOfInterestCollisionData(input_data.world_current_state_.robot_configuration_);
+        // It is assumed that the robot's internal state matches that that is passed to us, so we do not need to set active dof values
+        const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> poi_collision_data = robot_->getPointsOfInterestCollisionData();
         const double required_obstacle_clearance = input_data.robot_->min_controller_distance_to_obstacles_;
         // Calculate the matrics needed once for the projection
         std::vector<Eigen::RowVectorXd> M_matrices(poi_collision_data.size());

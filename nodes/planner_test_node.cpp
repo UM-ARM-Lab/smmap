@@ -30,6 +30,7 @@ int main(int argc, char* argv[])
                 nullptr,
                 nullptr,
                 nullptr,
+                nullptr,
                 nullptr);
     smmap_utilities::Visualizer::Ptr vis = std::make_shared<smmap_utilities::Visualizer>(nh, ph, true);
     smmap::TaskSpecification::Ptr task_specification(smmap::TaskSpecification::MakeTaskSpecification(nh, ph, vis));
