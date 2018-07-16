@@ -470,6 +470,8 @@ WorldState TaskFramework::sendNextCommand(
             vis_->purgeMarkerList();
             visualization_msgs::Marker marker;
             marker.action = visualization_msgs::Marker::DELETEALL;
+            marker.header.frame_id = "world_origin";
+            marker.header.stamp = ros::Time::now();
             vis_->publish(marker);
             vis_->forcePublishNow(0.5);
             vis_->purgeMarkerList();
@@ -745,6 +747,8 @@ WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
         vis_->purgeMarkerList();
         visualization_msgs::Marker marker;
         marker.action = visualization_msgs::Marker::DELETEALL;
+        marker.header.frame_id = "world_origin";
+        marker.header.stamp = ros::Time::now();
         vis_->publish(marker);
         vis_->forcePublishNow();
 	vis_->purgeMarkerList();
@@ -1375,6 +1379,8 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     vis_->purgeMarkerList();
     visualization_msgs::Marker marker;
     marker.action = visualization_msgs::Marker::DELETEALL;
+    marker.header.frame_id = "world_origin";
+    marker.header.stamp = ros::Time::now();
     vis_->publish(marker);
     vis_->forcePublishNow();
     vis_->purgeMarkerList();
@@ -1429,9 +1435,11 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     }
 
     // Planning if we did not load a plan from file
-    while (global_plan_full_robot_trajectory_.size() == 0)
-//    for (size_t trial_idx = 0; trial_idx < 20; ++trial_idx)
+//    while (global_plan_full_robot_trajectory_.size() == 0)
     {
+        num_times_invoked++;
+        std::cout << "!!!!!!!!!!!!!!!!!! Invoked " << num_times_invoked << " times!!!!!!!!!!!" << std::endl;
+
         const RRTGrippersRepresentation gripper_config(
                     world_state.all_grippers_single_pose_[0],
                     world_state.all_grippers_single_pose_[1]);
@@ -1460,20 +1468,30 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
         const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
 
-    //    for (size_t trial_idx = 0; trial_idx < 20; ++trial_idx)
+        for (size_t trial_idx = 0; trial_idx < 100; ++trial_idx)
         {
-    //        robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
-    //        flann::seed_random((unsigned int)seed_);
-    //        generator_->seed(seed_);
-    //        generator_->discard(trial_idx * 0xFFFF);
-    //        for (size_t discard_idx = 0; discard_idx < trial_idx * 0xFFFF; ++discard_idx)
-    //        {
-    //            std::rand();
-    //        }
-    //        num_times_invoked++;
+            robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
+            flann::seed_random((unsigned int)seed_);
+            generator_->seed(seed_);
+            generator_->discard(trial_idx * 0xFFFF);
+            for (size_t discard_idx = 0; discard_idx < trial_idx * 0xFFFF; ++discard_idx)
+            {
+                std::rand();
+            }
 
-            std::cout << "!!!!!!!!!!!!!!!!!! Invoked " << num_times_invoked << " times!!!!!!!!!!!" << std::endl;
-//            std::cout << "Trial idx: " << trial_idx << std::endl;
+            std::cout << "Trial idx: " << trial_idx << std::endl;
+
+            // Found using MATLAB, so these are MATLAB indices (1 based)
+            const std::vector<size_t> trial_failures = {5, 11, 12, 15, 18, 21, 47, 49, 54, 65, 69, 72, 76, 82};
+            if (std::find(trial_failures.begin(), trial_failures.end(), trial_idx + 1) != trial_failures.end())
+            {
+                std::cout << "Bad trial, waiting for user input before continuing.\n";
+                std::getchar();
+            }
+            else
+            {
+//                continue;
+            }
 
             const auto rrt_results = rrt_helper_->plan(
                         start_config,
@@ -1481,7 +1499,6 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                         time_limit);
 
             rrt_helper_->visualizePath(rrt_results);
-    //        std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
             global_plan_current_timestep_ = 0;
             executing_global_trajectory_ = true;
@@ -1518,9 +1535,8 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         }
     }
 
-//    std::cout << "Waiting on keystroke before executing trajectory\n";
-//    std::getchar();
-//    std::cout << std::endl;
+    std::cout << "Waiting on keystroke before executing trajectory" << std::endl;
+    std::getchar();
 
 //    assert(!world_state.robot_configuration_valid_ ||
 //           !(robot_->testPathForCollision(global_plan_full_robot_trajectory_)));

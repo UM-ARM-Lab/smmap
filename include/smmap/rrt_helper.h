@@ -99,7 +99,8 @@ namespace smmap
                     const RubberBand::Ptr& band,
                     const double cost_to_come,
                     const int64_t parent_index,
-                    const std::vector<int64_t>& child_indices);
+                    const std::vector<int64_t>& child_indices,
+                    const std::vector<int64_t>& other_tree_target_indices_blacklist);
 
             bool isInitialized() const;
 
@@ -116,6 +117,10 @@ namespace smmap
             void addChildIndex(const int64_t child_index);
             void removeChildIndex(const int64_t child_index);
 
+            const std::vector<int64_t>& getOtherTreeBlacklistIndices() const;
+            void clearOtherTreeBlacklistIndices();
+            void addOtherTreeBlacklistIndex(const int64_t blacklist_index);
+            void removeOtherTreeBlacklistIndex(const int64_t blacklist_index);
 
             std::string print() const;
 
@@ -135,6 +140,7 @@ namespace smmap
             // Book keeping
             int64_t parent_index_;
             std::vector<int64_t> child_indices_;
+            std::vector<int64_t> other_tree_target_indices_blacklist_;
             bool initialized_;
     };
 

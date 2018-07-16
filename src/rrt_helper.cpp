@@ -81,7 +81,7 @@ static inline bool maxGrippersDistanceViolated(
         const Vector3d& gripper_b_pos,
         const double max_dist)
 {
-    return (gripper_a_pos - gripper_b_pos).norm() > max_dist;
+    return (gripper_a_pos - gripper_b_pos).squaredNorm() > (max_dist * max_dist);
 }
 
 static inline bool maxGrippersDistanceViolated(
@@ -90,7 +90,7 @@ static inline bool maxGrippersDistanceViolated(
 {
     const auto& gripper_a_pos = grippers.first.translation();
     const auto& gripper_b_pos = grippers.second.translation();
-    return (gripper_a_pos - gripper_b_pos).norm() > max_dist;
+    return (gripper_a_pos - gripper_b_pos).squaredNorm() > (max_dist * max_dist);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -129,6 +129,7 @@ RRTNode::RRTNode(
     , cost_to_come_(cost_to_come)
     , parent_index_(parent_index)
     , child_indices_(0)
+    , other_tree_target_indices_blacklist_(0)
     , initialized_(true)
 {}
 
@@ -138,13 +139,15 @@ RRTNode::RRTNode(
         const RubberBand::Ptr& band,
         const double cost_to_come,
         const int64_t parent_index,
-        const std::vector<int64_t>& child_indices)
+        const std::vector<int64_t>& child_indices,
+        const std::vector<int64_t>& other_tree_target_indices_blacklist)
     : grippers_poses_(grippers_poses)
     , robot_configuration_(robot_configuration)
     , band_(band)
     , cost_to_come_(cost_to_come)
     , parent_index_(parent_index)
     , child_indices_(child_indices)
+    , other_tree_target_indices_blacklist_(other_tree_target_indices_blacklist)
     , initialized_(true)
 {}
 
@@ -221,6 +224,42 @@ void RRTNode::removeChildIndex(const int64_t child_index)
 }
 
 
+const std::vector<int64_t>& RRTNode::getOtherTreeBlacklistIndices() const
+{
+    return other_tree_target_indices_blacklist_;
+}
+
+void RRTNode::clearOtherTreeBlacklistIndices()
+{
+    other_tree_target_indices_blacklist_.clear();
+}
+
+void RRTNode::addOtherTreeBlacklistIndex(const int64_t blacklist_index)
+{
+    for (size_t idx = 0; idx < other_tree_target_indices_blacklist_.size(); idx++)
+    {
+        if (other_tree_target_indices_blacklist_[idx] == blacklist_index)
+        {
+            return;
+        }
+    }
+    other_tree_target_indices_blacklist_.push_back(blacklist_index);
+}
+
+void RRTNode::removeOtherTreeBlacklistIndex(const int64_t blacklist_index)
+{
+    std::vector<int64_t> new_blacklist_indices;
+    for (size_t idx = 0; idx < child_indices_.size(); idx++)
+    {
+        if (other_tree_target_indices_blacklist_[idx] != blacklist_index)
+        {
+            new_blacklist_indices.push_back(other_tree_target_indices_blacklist_[idx]);
+        }
+    }
+    other_tree_target_indices_blacklist_ = new_blacklist_indices;
+}
+
+
 std::string RRTNode::print() const
 {
     std::stringstream out;
@@ -272,6 +311,11 @@ bool RRTNode::operator==(const RRTNode& other) const
         return false;
     }
 
+    if (other_tree_target_indices_blacklist_ != other.other_tree_target_indices_blacklist_)
+    {
+        return false;
+    }
+
     if (initialized_ != other.initialized_)
     {
         return false;
@@ -290,6 +334,7 @@ uint64_t RRTNode::serialize(std::vector<uint8_t>& buffer) const
     arc_utilities::SerializeFixedSizePOD<double>(cost_to_come_, buffer);
     arc_utilities::SerializeFixedSizePOD<int64_t>(parent_index_, buffer);
     arc_utilities::SerializeVector<int64_t>(child_indices_, buffer, arc_utilities::SerializeFixedSizePOD<int64_t>);
+    arc_utilities::SerializeVector<int64_t>(other_tree_target_indices_blacklist_, buffer, arc_utilities::SerializeFixedSizePOD<int64_t>);
     arc_utilities::SerializeFixedSizePOD<uint8_t>((uint8_t)initialized_, buffer);
 
     const uint64_t ending_bytes = buffer.size();
@@ -337,6 +382,10 @@ std::pair<RRTNode, uint64_t> RRTNode::Deserialize(const std::vector<uint8_t>& bu
     const auto child_indices_deserialized = arc_utilities::DeserializeVector<int64_t>(buffer, current_position, &arc_utilities::DeserializeFixedSizePOD<int64_t>);
     current_position += child_indices_deserialized.second;
 
+    // Deserialize the blacklisted indices
+    const auto blacklisted_indices_deserialized = arc_utilities::DeserializeVector<int64_t>(buffer, current_position, &arc_utilities::DeserializeFixedSizePOD<int64_t>);
+    current_position += blacklisted_indices_deserialized.second;
+
     // Deserialize the initialized
     const auto initialized_deserialized = arc_utilities::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
     current_position += initialized_deserialized.second;
@@ -348,7 +397,8 @@ std::pair<RRTNode, uint64_t> RRTNode::Deserialize(const std::vector<uint8_t>& bu
                 band,
                 cost_to_come_deserialized.first,
                 parent_index_deserialized.first,
-                child_indices_deserialized.first);
+                child_indices_deserialized.first,
+                blacklisted_indices_deserialized.first);
     deserialized.initialized_ = (bool)initialized_deserialized.first;
 
     const uint64_t bytes_read = current_position - current;
@@ -689,8 +739,8 @@ std::pair<int64_t, double> getNearestFullConfig(
 {
     assert(radius_search_set_1.size() + radius_search_set_2.size() > 0);
 
-    double min_dist2 = std::numeric_limits<double>::infinity();
-    int64_t min_idx = -1;
+    std::pair<int64_t, double> nearest(-1, std::numeric_limits<double>::infinity());
+
     const VectorVector3d& config_band_path = config.band()->getVectorRepresentation();
     const VectorXd config_band_path_vec = VectorEigenVectorToEigenVectorX(config_band_path);
 
@@ -703,10 +753,10 @@ std::pair<int64_t, double> getNearestFullConfig(
 
         const double band_distance2 = (config_band_path_vec - test_band_path_vec).squaredNorm();
         const double total_distance2 = item.second + band_distance2_scaling_factor_ * band_distance2;
-        if (total_distance2 < min_dist2)
+        if (total_distance2 < nearest.second)
         {
-            min_idx = item.first;
-            min_dist2 = total_distance2;
+            nearest.first = item.first;
+            nearest.second = total_distance2;
         }
     }
 
@@ -719,15 +769,14 @@ std::pair<int64_t, double> getNearestFullConfig(
 
         const double band_distance2 = (config_band_path_vec - test_band_path_vec).squaredNorm();
         const double total_distance2 = item.second + band_distance2_scaling_factor_ * band_distance2;
-        if (total_distance2 < min_dist2)
+        if (total_distance2 < nearest.second)
         {
-            min_idx = item.first;
-            min_dist2 = total_distance2;
+            nearest.first = item.first;
+            nearest.second = total_distance2;
         }
     }
 
-    assert(min_idx >= 0);
-    return {min_idx, std::sqrt(min_dist2)};
+    return nearest;
 }
 
 std::pair<int64_t, double> getBestFullConfig(
@@ -781,7 +830,7 @@ int64_t RRTHelper::nearestNeighbour(
     }
     else
     {
-        nn_idx = nearestNeighbourRobotSpace(false, config).first;
+        nn_idx = nearestNeighbourRobotSpace(use_forward_tree, config).first;
     }
     arc_helpers::DoNotOptimize(nn_idx);
 
@@ -824,7 +873,7 @@ std::pair<int64_t, double> RRTHelper::nearestNeighbourRobotSpace(
     if (!use_brute_force_nn_ &&
         *manual_search_start_idx + kd_tree_grow_threshold_ <= tree->size())
     {
-        ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.nn", "Rebuilding FLANN index");
+        ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.nn", "Rebuilding FLANN index; forward tree? " << use_forward_tree);
         ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.nn", "RRT tree size: " << tree->size());
         ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.nn", "Initial manual search start idx: " << manual_search_start_idx);
         ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.nn", "Initial FLANN index size: " << nn_index->size());
@@ -896,7 +945,8 @@ int64_t RRTHelper::nearestBestNeighbourFullSpace(
 
     // Search both sets of results for the nearest neighbour in the
     // full configuration space, including the band
-    const std::pair<int64_t, double> nearest_full_space = getNearestFullConfig(config, forward_tree_, band_distance2_scaling_factor_, flann_radius_result, linear_radius_result);
+    const std::pair<int64_t, double> nearest_full_space =
+            getNearestFullConfig(config, forward_tree_, band_distance2_scaling_factor_, flann_radius_result, linear_radius_result);
 
     arc_helpers::DoNotOptimize(nearest_full_space);
     const double radius_searching_time = stopwatch(READ);
@@ -1272,13 +1322,13 @@ size_t RRTHelper::forwardPropogationFunction(
                 //// Duplicated from pure gripper vesion below version below ////
 
                 stopwatch(RESET);
-                arc_helpers::DoNotOptimize(rubber_band_verbose);
+                arc_helpers::DoNotOptimize(next_band);
                 // Forward simulate the rubber band to test this transition
                 next_band->forwardPropagateRubberBandToEndpointTargets(
                             next_grippers_poses.first.translation(),
                             next_grippers_poses.second.translation(),
                             rubber_band_verbose);
-                arc_helpers::DoNotOptimize(next_band->getVectorRepresentation());
+                arc_helpers::DoNotOptimize(next_band);
                 const double band_forward_propogation_time = stopwatch(READ);
                 total_band_forward_propogation_time_ += band_forward_propogation_time;
 
@@ -1325,13 +1375,14 @@ size_t RRTHelper::forwardPropogationFunction(
         int64_t parent_idx = nearest_neighbor_idx;
         // Only accept at most max_new_states new states, if there are more, then we're probably stuck in some sort of bad configuration for IK
         // TODO: distinguish between smoothing and exploration for this check
+        tree_to_extend.reserve(tree_to_extend.size() + max_projected_new_states);
         uint32_t step_index = 0;
         while (step_index < max_projected_new_states)
         {
             stopwatch(RESET);
             arc_helpers::DoNotOptimize(parent_idx);
 
-            const RRTNode& prev_node = tree_to_extend[parent_idx];
+            RRTNode& prev_node = tree_to_extend[parent_idx];
             const RubberBand::Ptr& prev_band = prev_node.band();
             const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
 
@@ -1350,7 +1401,7 @@ size_t RRTHelper::forwardPropogationFunction(
 
             // Project and check the projection result for failure
             const bool project_to_rotation_bound = true;
-            const bool project_to_translation_bound = false;
+            const bool project_to_translation_bound = true;
             const auto next_robot_config_projection_result =
                     projectToValidConfig(
                         next_robot_config_pre_projection,
@@ -1481,7 +1532,7 @@ size_t RRTHelper::forwardPropogationFunction(
             const RRTNode next_node(next_grippers_poses, next_robot_config, next_band, next_cost_to_come, parent_idx);
             tree_to_extend.push_back(next_node);
             const int64_t new_node_idx = (int64_t)tree_to_extend.size() - 1;
-            tree_to_extend[parent_idx].addChildIndex(new_node_idx);
+            prev_node.addChildIndex(new_node_idx);
 
             parent_idx = new_node_idx;
             ++step_index;
@@ -1714,10 +1765,10 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     int64_t goal_idx_in_forward_tree = -1;
 
     const bool fwd_prop_local_visualization_enabled = true;
-    const size_t fwd_prop_max_steps = 32;
+    const size_t fwd_prop_max_steps = 32; // Only relevant if using constrained projection
 
     // Plan
-    std::cout << "Starting planning..." << std::endl;
+    ROS_INFO_NAMED("rrt", "Starting planning...");
     std::chrono::duration<double> time_ellapsed = std::chrono::steady_clock::now() - start_time;
     while (!path_found && time_ellapsed < time_limit_)
     {
@@ -1785,9 +1836,21 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
                     // This is either the last item in the tree, or the nearest neighbour itself
                     const int64_t last_node_idx_in_forward_tree_branch = num_random_nodes_created > 0 ?
                                 (int64_t)forward_tree_.size() - 1 : forward_tree_nearest_neighbour_idx;
+                    RRTNode& last_node_in_forward_tree = forward_tree_[last_node_idx_in_forward_tree_branch];
 
-                    const int64_t backward_tree_nearest_neighbour_idx =
-                            nearestNeighbour(false, forward_tree_[last_node_idx_in_forward_tree_branch]);
+                    const int64_t backward_tree_nearest_neighbour_idx = nearestNeighbour(false, last_node_in_forward_tree);
+
+                    const auto& other_tree_blacklist = last_node_in_forward_tree.getOtherTreeBlacklistIndices();
+                    if (std::find(other_tree_blacklist.begin(), other_tree_blacklist.end(), backward_tree_nearest_neighbour_idx) != other_tree_blacklist.end())
+                    {
+                        // We've already expanded towards this node, so don't do so again
+                        continue;
+                    }
+                    else
+                    {
+                        last_node_in_forward_tree.addOtherTreeBlacklistIndex(backward_tree_nearest_neighbour_idx);
+                    }
+
                     const RRTNode& target_in_backward_tree = backward_tree_[backward_tree_nearest_neighbour_idx];
 
                     const size_t num_goal_directed_nodes_created =
@@ -1819,9 +1882,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
 
                         if (connection_made)
                         {
-                            assert(CheckTreeLinkage(forward_tree_));
-                            assert(CheckTreeLinkage(backward_tree_));
-
                             // Record some statistics
                             ++forward_connections_made;
 
@@ -1841,14 +1901,14 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
 
                                 RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
                                 Stopwatch stopwatch;
-                                const bool rubber_band_verbose = true;
-                                arc_helpers::DoNotOptimize(rubber_band_verbose);
+                                const bool rubber_band_verbose = false;
+                                arc_helpers::DoNotOptimize(next_band);
                                 // Forward simulate the rubber band to test this transition
                                 next_band->forwardPropagateRubberBandToEndpointTargets(
                                             next_grippers_poses.first.translation(),
                                             next_grippers_poses.second.translation(),
                                             rubber_band_verbose);
-                                arc_helpers::DoNotOptimize(next_band->getVectorRepresentation());
+                                arc_helpers::DoNotOptimize(next_band);
                                 const double band_forward_propogation_time = stopwatch(READ);
                                 total_band_forward_propogation_time_ += band_forward_propogation_time;
 
@@ -1961,13 +2021,15 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
         ROS_INFO_COND(SMMAP_RRT_VERBOSE, "");
 //        std::cout << "Waiting for a char\n"; std::getchar();
     }
+    ROS_INFO_STREAM_NAMED("rrt", "Finished planning, for better or worse. Path found? " << path_found);
 
-    std::cout << "Finished planning, for better or worse. Path found? " << path_found << std::endl;
-
-    std::cout << "Checking forward tree linkage" << std::endl;
-    assert(CheckTreeLinkage(forward_tree_));
-    std::cout << "Checking backward tree linkage" << std::endl;
-    assert(CheckTreeLinkage(backward_tree_));
+    // Error checking
+    {
+        std::cout << "Checking forward tree linkage" << std::endl;
+        assert(CheckTreeLinkage(forward_tree_));
+        std::cout << "Checking backward tree linkage" << std::endl;
+        assert(CheckTreeLinkage(backward_tree_));
+    }
 
     std::vector<RRTNode, RRTAllocator> path;
     if (path_found)
@@ -1984,7 +2046,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::planningMainLoop()
     planning_statistics_["planning_time1_2_nearest_neighbour_index_searching      "] = total_nearest_neighbour_index_searching_time_;
     planning_statistics_["planning_time1_3_nearest_neighbour_linear_searching     "] = total_nearest_neighbour_linear_searching_time_;
     planning_statistics_["planning_time1_4_nearest_neighbour_radius_searching     "] = total_nearest_neighbour_radius_searching_time_;
-    planning_statistics_["planning_time1_4_nearest_neighbour_best_searching       "] = total_nearest_neighbour_best_searching_time_;
+    planning_statistics_["planning_time1_5_nearest_neighbour_best_searching       "] = total_nearest_neighbour_best_searching_time_;
     planning_statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
     planning_statistics_["planning_time2_1_forward_propogation_fk                 "] = total_forward_kinematics_time_;
     planning_statistics_["planning_time2_2_forward_propogation_projection         "] = total_projection_time_;
@@ -2057,7 +2119,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
                             goal_configurations[idx],
                             start.band()));
         }
-
     }
     else
     {
@@ -2105,16 +2166,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         visualizeBlacklist();
     }
 
-
-
-//    starting_band_->visualize("rrt_starting_band", Visualizer::Black(), Visualizer::Cyan(), 1);
-//    vis_->forcePublishNow();
-//    std::cout << "Starting band length: " << starting_band_->totalLength() << " Max band length: " << starting_band_->maxSafeLength() << std::endl;
-//    std::cout << "Starting band length: " << starting_band_->totalLength() << " Max band length: " << starting_band_->maxSafeLength() << std::endl;
-
-
-
-
     ROS_INFO_NAMED("rrt", "Starting SimpleHybridRRTPlanner");
     std::vector<RRTNode, RRTAllocator> path;
     if (useStoredPath())
@@ -2138,6 +2189,9 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
             visualizeBlacklist();
             visualizePath(path);
             vis_->forcePublishNow(0.5);
+
+            std::cout << "Planning finished, waiting for user keystroke" << std::endl;
+            std::getchar();
         }
     }
 
@@ -2341,11 +2395,6 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_b
             const Vector3d& first_node = blacklisted_path[blacklisted_path_ind];
             const Vector3d& second_node = test_band[test_band_ind];
 
-//            if (visualize)
-//            {
-//                vis_->visualizeLineStrip("first_order_vis_check", {first_node, second_node}, Visualizer::White(), 2);
-//            }
-
             const ssize_t num_steps = (ssize_t)std::ceil((second_node - first_node).norm() / environment_sdf_->GetResolution());
 
             // We don't need to check the endpoints as they are already checked as part of the rubber band process
@@ -2355,17 +2404,6 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_b
                 const Vector3d interpolated_point = Interpolate(first_node, second_node, ratio);
                 if (environment_sdf_->Get3d(interpolated_point) < 0.0)
                 {
-//                    if (visualize)
-//                    {
-//                        collision_points.push_back(Vector3d((double)blacklisted_path_ind, (double)test_band_ind, 0.0));
-//                        vis.visualizePoints(
-//                                    "first_order_vis_collision",
-//                                    collision_points,
-//                                    Visualizer::Red(),
-//                                    1,
-//                                    1.0);
-//                        std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
-//                    }
                     return false;
                 }
             }
@@ -2988,6 +3026,8 @@ void RRTHelper::deleteTreeVisualizations() const
     vis_->purgeMarkerList();
     visualization_msgs::Marker marker;
     marker.action = visualization_msgs::Marker::DELETEALL;
+    marker.header.frame_id = "world_origin";
+    marker.header.stamp = ros::Time::now();
     vis_->publish(marker);
     vis_->forcePublishNow(0.01);
     vis_->purgeMarkerList();
