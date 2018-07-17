@@ -1490,14 +1490,14 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 //                continue;
 //            }
 
-//            std::vector<RRTNode, RRTAllocator> rrt_results;
-//            while (rrt_results.size() == 0)
-//            {
-                const auto rrt_results = rrt_helper_->plan(
+            std::vector<RRTNode, RRTAllocator> rrt_results;
+            while (rrt_results.size() == 0)
+            {
+                rrt_results = rrt_helper_->plan(
                             start_config,
                             target_grippers_poses,
                             time_limit);
-//            }
+            }
 
             rrt_helper_->visualizePath(rrt_results);
 

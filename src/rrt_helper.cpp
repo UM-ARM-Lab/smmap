@@ -2367,62 +2367,56 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     if (path.size() == 0)
     {
         robot_->lockEnvironment();
-        while (!path_found_)
+        start_time_ = std::chrono::steady_clock::now();
+        ROS_INFO_NAMED("rrt", "Starting planning...");
+        planningMainLoopBispace();
+//        planningMainLoopBidirectional();
+        const std::chrono::time_point<std::chrono::steady_clock> end_time = std::chrono::steady_clock::now();
+        const std::chrono::duration<double> planning_time(end_time - start_time_);
+        robot_->unlockEnvironment();
+
+        ROS_INFO_STREAM_NAMED("rrt", "Finished planning, for better or worse. Path found? " << path_found_);
+
+        planning_statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
+        planning_statistics_["planning_time1_1_nearest_neighbour_index_building       "] = total_nearest_neighbour_index_building_time_;
+        planning_statistics_["planning_time1_2_nearest_neighbour_index_searching      "] = total_nearest_neighbour_index_searching_time_;
+        planning_statistics_["planning_time1_3_nearest_neighbour_linear_searching     "] = total_nearest_neighbour_linear_searching_time_;
+        planning_statistics_["planning_time1_4_nearest_neighbour_radius_searching     "] = total_nearest_neighbour_radius_searching_time_;
+        planning_statistics_["planning_time1_5_nearest_neighbour_best_searching       "] = total_nearest_neighbour_best_searching_time_;
+        planning_statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
+        planning_statistics_["planning_time2_1_forward_propogation_fk                 "] = total_forward_kinematics_time_;
+        planning_statistics_["planning_time2_2_forward_propogation_projection         "] = total_projection_time_;
+        planning_statistics_["planning_time2_3_forward_propogation_collision_check    "] = total_collision_check_time_;
+        planning_statistics_["planning_time2_4_forward_propogation_band_sim           "] = total_band_forward_propogation_time_;
+        planning_statistics_["planning_time2_5_forward_propogation_first_order_vis    "] = total_first_order_vis_propogation_time_;
+        planning_statistics_["planning_time2_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
+        planning_statistics_["planning_time3_total                                    "] = planning_time.count();
+
+        planning_statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless_;
+        planning_statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful_;
+        planning_statistics_["planning_size02_forward_states                          "] = (double)forward_tree_.size();
+
+        planning_statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless_;
+        planning_statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful_;
+        planning_statistics_["planning_size05_backward_states                         "] = (double)backward_tree_.size();
+
+        planning_statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless_;
+        planning_statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful_;
+        planning_statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made_;
+
+//        planning_statistics_["planning_size09_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless_;
+//        planning_statistics_["planning_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
+//        planning_statistics_["planning_size11_backward_connections_made               "] = (double)backward_connections_made_;
+
+        ROS_INFO_STREAM_NAMED("rrt", "RRT Helper Planning Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl);
+
+        if (visualization_enabled_globally_)
         {
-            start_time_ = std::chrono::steady_clock::now();
-            ROS_INFO_NAMED("rrt", "Starting planning...");
-            planningMainLoopBispace();
-    //        planningMainLoopBidirectional();
-            const std::chrono::time_point<std::chrono::steady_clock> end_time = std::chrono::steady_clock::now();
-            const std::chrono::duration<double> planning_time(end_time - start_time_);
-            robot_->unlockEnvironment();
-
-            ROS_INFO_STREAM_NAMED("rrt", "Finished planning, for better or worse. Path found? " << path_found_);
-
-            planning_statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
-            planning_statistics_["planning_time1_1_nearest_neighbour_index_building       "] = total_nearest_neighbour_index_building_time_;
-            planning_statistics_["planning_time1_2_nearest_neighbour_index_searching      "] = total_nearest_neighbour_index_searching_time_;
-            planning_statistics_["planning_time1_3_nearest_neighbour_linear_searching     "] = total_nearest_neighbour_linear_searching_time_;
-            planning_statistics_["planning_time1_4_nearest_neighbour_radius_searching     "] = total_nearest_neighbour_radius_searching_time_;
-            planning_statistics_["planning_time1_5_nearest_neighbour_best_searching       "] = total_nearest_neighbour_best_searching_time_;
-            planning_statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
-            planning_statistics_["planning_time2_1_forward_propogation_fk                 "] = total_forward_kinematics_time_;
-            planning_statistics_["planning_time2_2_forward_propogation_projection         "] = total_projection_time_;
-            planning_statistics_["planning_time2_3_forward_propogation_collision_check    "] = total_collision_check_time_;
-            planning_statistics_["planning_time2_4_forward_propogation_band_sim           "] = total_band_forward_propogation_time_;
-            planning_statistics_["planning_time2_5_forward_propogation_first_order_vis    "] = total_first_order_vis_propogation_time_;
-            planning_statistics_["planning_time2_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
-            planning_statistics_["planning_time3_total                                    "] = planning_time.count();
-
-            planning_statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless_;
-            planning_statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful_;
-            planning_statistics_["planning_size02_forward_states                          "] = (double)forward_tree_.size();
-
-            planning_statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless_;
-            planning_statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful_;
-            planning_statistics_["planning_size05_backward_states                         "] = (double)backward_tree_.size();
-
-            planning_statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless_;
-            planning_statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful_;
-            planning_statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made_;
-
-//            planning_statistics_["planning_size09_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless_;
-//            planning_statistics_["planning_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
-//            planning_statistics_["planning_size11_backward_connections_made               "] = (double)backward_connections_made_;
-
-            ROS_INFO_STREAM_NAMED("rrt", "RRT Helper Planning Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl);
-
-            if (visualization_enabled_globally_)
-            {
-                std::cout << "Visualizing tree." << std::endl;
-                visualizeBothTrees();
-                visualizeBlacklist();
-                visualizePath(path);
-                vis_->forcePublishNow(0.5);
-
-    //            std::cout << "Planning finished, waiting for user keystroke" << std::endl;
-    //            std::getchar();
-            }
+            ROS_INFO_NAMED("rrt", "Visualizing tree.");
+            visualizeBothTrees();
+            visualizeBlacklist();
+            visualizePath(path);
+            vis_->forcePublishNow(0.5);
         }
 
         if (path_found_)
