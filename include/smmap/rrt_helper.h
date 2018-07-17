@@ -220,7 +220,8 @@ namespace smmap
                     const smmap_utilities::Visualizer::Ptr vis,
                     const bool visualization_enabled);
 
-            std::vector<RRTNode, RRTAllocator> plan(const RRTNode& start,
+            std::vector<RRTNode, RRTAllocator> plan(
+                    const RRTNode& start,
                     const RRTGrippersRepresentation& grippers_goal_poses,
                     const std::chrono::duration<double>& time_limit);
 
@@ -320,7 +321,17 @@ namespace smmap
                     const size_t max_projected_new_states,
                     const bool visualization_enabled_locally);
 
-            std::vector<RRTNode, RRTAllocator> planningMainLoop();
+            size_t connectForwardTree(const RRTNode& target, const bool is_random);
+            size_t connectBackwardTree(const RRTNode& target, const bool is_random);
+            size_t connectForwardTreeToBackwardTreeBispace(const int64_t last_node_idx_in_forward_tree_branch);
+            size_t connectBackwardTreeToForwardTreeBidirectional();
+
+            void followBackwardTree(
+                    const size_t forward_tree_node_idx,
+                    const size_t backward_tree_node_idx);
+
+            void planningMainLoopBispace();
+            void planningMainLoopBidirectional();
 
             ///////////////////////////////////////////////////////////////////////////////////////
             // Helper function for shortcut smoothing
@@ -405,6 +416,10 @@ namespace smmap
             size_t backward_next_idx_to_add_to_nn_dataset_;
 
 
+            // TODO: address this hack - used to help track what node to connect to the backward tree from
+            int64_t forward_tree_nearest_neighbour_idx_;
+
+
             // Planning and Smoothing statistics
             std::map<std::string, double> planning_statistics_;
             std::map<std::string, double> smoothing_statistics_;
@@ -421,6 +436,21 @@ namespace smmap
             double total_band_forward_propogation_time_;
             double total_first_order_vis_propogation_time_;
             double total_everything_included_forward_propogation_time_;
+
+            size_t forward_random_samples_useful_;
+            size_t forward_random_samples_useless_;
+            size_t backward_random_samples_useful_;
+            size_t backward_random_samples_useless_;
+            size_t forward_connection_attempts_useful_;
+            size_t forward_connection_attempts_useless_;
+            size_t forward_connections_made_;
+            size_t backward_connection_attempts_useful_;
+            size_t backward_connection_attempts_useless_;
+            size_t backward_connections_made_;
+
+            bool path_found_;
+            int64_t goal_idx_in_forward_tree_;
+            std::chrono::time_point<std::chrono::steady_clock> start_time_;
 
 
             // Visualization

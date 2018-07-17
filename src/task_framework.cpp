@@ -1359,6 +1359,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 {
     static int num_times_invoked = 0;
     num_times_invoked++;
+    std::cout << "!!!!!!!!!!!!!!!!!! Invoked " << num_times_invoked << " times!!!!!!!!!!!" << std::endl;
 
     // Resample the band for the purposes of first order vis checking
     const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
@@ -1435,11 +1436,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     }
 
     // Planning if we did not load a plan from file
-//    while (global_plan_full_robot_trajectory_.size() == 0)
     {
-        num_times_invoked++;
-        std::cout << "!!!!!!!!!!!!!!!!!! Invoked " << num_times_invoked << " times!!!!!!!!!!!" << std::endl;
-
         const RRTGrippersRepresentation gripper_config(
                     world_state.all_grippers_single_pose_[0],
                     world_state.all_grippers_single_pose_[1]);
@@ -1482,21 +1479,25 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
             std::cout << "Trial idx: " << trial_idx << std::endl;
 
             // Found using MATLAB, so these are MATLAB indices (1 based)
-            const std::vector<size_t> trial_failures = {5, 11, 12, 15, 18, 21, 47, 49, 54, 65, 69, 72, 76, 82};
-            if (std::find(trial_failures.begin(), trial_failures.end(), trial_idx + 1) != trial_failures.end())
-            {
-                std::cout << "Bad trial, waiting for user input before continuing.\n";
-                std::getchar();
-            }
-            else
-            {
+//            const std::vector<size_t> trial_failures = {5, 11, 12, 15, 18, 21, 47, 49, 54, 65, 69, 72, 76, 82};
+//            if (std::find(trial_failures.begin(), trial_failures.end(), trial_idx + 1) != trial_failures.end())
+//            {
+//                std::cout << "Bad trial, waiting for user input before continuing.\n";
+//                std::getchar();
+//            }
+//            else
+//            {
 //                continue;
-            }
+//            }
 
-            const auto rrt_results = rrt_helper_->plan(
-                        start_config,
-                        target_grippers_poses,
-                        time_limit);
+//            std::vector<RRTNode, RRTAllocator> rrt_results;
+//            while (rrt_results.size() == 0)
+//            {
+                const auto rrt_results = rrt_helper_->plan(
+                            start_config,
+                            target_grippers_poses,
+                            time_limit);
+//            }
 
             rrt_helper_->visualizePath(rrt_results);
 
