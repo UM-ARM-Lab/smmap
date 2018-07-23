@@ -461,6 +461,11 @@ WorldState TaskFramework::sendNextCommand(
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "task_framework", "Invoking global planner due to overstretch");
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "task_framework", "Invoking global planner due to collision");
                 ROS_INFO_NAMED("task_framework", "----------------------------------------------------------------------------");
+
+                if (!GetDisableAllVisualizations(ph_))
+                {
+                    vis_->forcePublishNow(2.0);
+                }
             }
         }
 
@@ -751,7 +756,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
         marker.header.stamp = ros::Time::now();
         vis_->publish(marker);
         vis_->forcePublishNow();
-	vis_->purgeMarkerList();
+        vis_->purgeMarkerList();
     }
 
     const std::vector<WorldState> fake_all_models_results(num_models_, world_feedback);
@@ -1029,6 +1034,8 @@ bool TaskFramework::globalPlannerNeededDueToLackOfProgress()
 
 bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization_enabled)
 {
+    static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(ph_);
+
     //#warning "!!!!!!! Global plan overstretch check disabled!!!!!"
     //return false;
 
@@ -1036,10 +1043,12 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
 
     constexpr bool band_verbose = false;
 
-    RubberBand rubber_band_between_grippers_copy = *rubber_band_between_grippers_;
+    RubberBand band = *rubber_band_between_grippers_;
 
     bool overstretch_predicted = false;
     const size_t traj_waypoints_per_large_step = (size_t)std::floor(dijkstras_task_->work_space_grid_.minStepDimension() / robot_->dt_ / robot_->max_gripper_velocity_norm_);
+
+    double filtered_band_length = band.totalLength();
 
     for (size_t t = 0; t < max_lookahead_steps_; ++t)
     {
@@ -1048,14 +1057,24 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
 
         // Forward project the band and check for overstretch
         const auto& grippers_pose = global_plan_gripper_trajectory_[next_idx];
-        rubber_band_between_grippers_copy.forwardPropagateRubberBandToEndpointTargets(
+        band.forwardPropagateRubberBandToEndpointTargets(
                     grippers_pose[0].translation(),
                     grippers_pose[1].translation(),
                     band_verbose);
-        overstretch_predicted |= rubber_band_between_grippers_copy.isOverstretched();
+        const double band_length = band.totalLength();
+        const std::pair<Vector3d, Vector3d> endpoints = band.getEndpoints();
+        const double distance_between_endpoints = (endpoints.first - endpoints.second).norm();
+
+        filtered_band_length = annealing_factor * filtered_band_length + (1.0 - annealing_factor) * band_length;
+
+        if (filtered_band_length > band.maxSafeLength() && !CloseEnough(band_length, distance_between_endpoints, 1e-3))
+        {
+            overstretch_predicted = true;
+        }
+//        overstretch_predicted |= rubber_band_between_grippers_copy.isOverstretched();
 
         // Visualize
-        rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, (int32_t)t + 2, visualization_enabled);
+        band.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, (int32_t)t + 2, visualization_enabled);
         vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, grippers_pose, PREDICTION_GRIPPER_COLOR, (int32_t)(2 * t) + 2);
     }
 
@@ -1465,30 +1484,18 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
         const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
 
-        for (size_t trial_idx = 0; trial_idx < 100; ++trial_idx)
+//        for (size_t trial_idx = 0; trial_idx < 100; ++trial_idx)
         {
-            robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
-            flann::seed_random((unsigned int)seed_);
-            generator_->seed(seed_);
-            generator_->discard(trial_idx * 0xFFFF);
-            for (size_t discard_idx = 0; discard_idx < trial_idx * 0xFFFF; ++discard_idx)
-            {
-                std::rand();
-            }
-
-            std::cout << "Trial idx: " << trial_idx << std::endl;
-
-            // Found using MATLAB, so these are MATLAB indices (1 based)
-//            const std::vector<size_t> trial_failures = {5, 11, 12, 15, 18, 21, 47, 49, 54, 65, 69, 72, 76, 82};
-//            if (std::find(trial_failures.begin(), trial_failures.end(), trial_idx + 1) != trial_failures.end())
+//            robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
+//            flann::seed_random((unsigned int)seed_);
+//            generator_->seed(seed_);
+//            generator_->discard(trial_idx * 0xFFFF);
+//            for (size_t discard_idx = 0; discard_idx < trial_idx * 0xFFFF; ++discard_idx)
 //            {
-//                std::cout << "Bad trial, waiting for user input before continuing.\n";
-//                std::getchar();
+//                std::rand();
 //            }
-//            else
-//            {
-//                continue;
-//            }
+
+//            std::cout << "Trial idx: " << trial_idx << std::endl;
 
             std::vector<RRTNode, RRTAllocator> rrt_results;
             while (rrt_results.size() == 0)
@@ -1499,7 +1506,12 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                             time_limit);
             }
 
-            rrt_helper_->visualizePath(rrt_results);
+            if (!GetDisableAllVisualizations(ph_))
+            {
+                vis_->deleteObjects(RRTHelper::RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
+                rrt_helper_->visualizePath(rrt_results);
+                vis_->forcePublishNow(0.5);
+            }
 
             global_plan_current_timestep_ = 0;
             executing_global_trajectory_ = true;
@@ -1536,8 +1548,9 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         }
     }
 
-    std::cout << "Waiting on keystroke before executing trajectory" << std::endl;
-    std::getchar();
+//    assert(false && "Terminating as this is just a planning test");
+//    std::cout << "Waiting on keystroke before executing trajectory" << std::endl;
+//    std::getchar();
 
 //    assert(!world_state.robot_configuration_valid_ ||
 //           !(robot_->testPathForCollision(global_plan_full_robot_trajectory_)));
