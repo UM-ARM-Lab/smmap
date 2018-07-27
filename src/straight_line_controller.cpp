@@ -30,7 +30,7 @@ DeformableController::OutputData StraightLineController::getGripperMotion_impl(
 {
     const size_t num_grippers = static_grippers_motions_.size();
 
-        AllGrippersSinglePoseDelta cmd(num_grippers, kinematics::Vector6d::Zero());
+    AllGrippersSinglePoseDelta cmd(num_grippers, kinematics::Vector6d::Zero());
     for (size_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
     {
         const auto& current_gripper_motions = static_grippers_motions_[gripper_idx];
@@ -51,5 +51,5 @@ DeformableController::OutputData StraightLineController::getGripperMotion_impl(
     }
 
     const auto prediction = model_->getObjectDelta(input_data.world_current_state_, cmd);
-    return OutputData(cmd, prediction, Eigen::VectorXd(0));
+    return OutputData(cmd, prediction, robot_->mapGripperMotionToRobotMotion(cmd));
 }

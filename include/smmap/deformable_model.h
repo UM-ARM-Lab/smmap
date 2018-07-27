@@ -2,6 +2,7 @@
 #define DEFORMABLE_MODEL_H
 
 #include <atomic>
+#include <arc_utilities/log.hpp>
 
 #include "smmap/task_function_pointer_types.h"
 #include "smmap/grippers.hpp"
@@ -62,6 +63,12 @@ namespace smmap
             virtual ObjectPointSet getObjectDelta_impl(
                     const WorldState& world_state,
                     const AllGrippersSinglePoseDelta& grippers_pose_delta) const = 0;
+
+            ////////////////////////////////////////////////////////////////////
+            // Logging
+            ////////////////////////////////////////////////////////////////////
+
+            std::shared_ptr<Log::Log> computation_time_log_;
     };
 }
 

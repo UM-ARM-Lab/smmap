@@ -1,6 +1,7 @@
 #include "smmap/deformable_model.h"
 
 #include <arc_utilities/arc_exceptions.hpp>
+#include <arc_utilities/timing.hpp>
 
 using namespace smmap;
 
@@ -10,6 +11,9 @@ using namespace smmap;
 
 DeformableModel::DeformableModel()
 {
+    ros::NodeHandle nh;
+    computation_time_log_ = std::make_shared<Log::Log>(GetLogFolder(nh) + "\model_prediction_time.txt");
+
     if (!grippers_data_initialized_.load())
     {
         throw_arc_exception(std::runtime_error,
@@ -68,5 +72,9 @@ ObjectPointSet DeformableModel::getObjectDelta(
         const WorldState& world_state,
         const AllGrippersSinglePoseDelta& grippers_pose_delta)
 {
-    return getObjectDelta_impl(world_state, grippers_pose_delta);
+    arc_utilities::Stopwatch stopwatch;
+    const auto retval = getObjectDelta_impl(world_state, grippers_pose_delta);
+    const double time = stopwatch(arc_utilities::READ);
+    LOG(*computation_time_log_, time);
+    return retval;
 }

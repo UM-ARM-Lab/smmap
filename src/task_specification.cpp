@@ -84,6 +84,9 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::CLOTH_PLACEMAT_LIVE_ROBOT:
             return std::make_shared<ClothPlacemat>(nh, ph, vis);
 
+        case TaskType::CLOTH_PLACEMAT_LINEAR_MOTION:
+            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_PLACEMAT_LINEAR_MOTION);
+
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
             return nullptr;
@@ -515,6 +518,7 @@ void ModelAccuracyTestTask::visualizeDeformableObject_impl(
 
         case CLOTH:
             vis_->visualizeCloth(marker_name, object_configuration, colors);
+            break;
 
         default:
             assert(false && "Imposibru!");

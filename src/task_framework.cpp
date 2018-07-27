@@ -614,8 +614,11 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
 
             configurations_to_test[model_ind] =
                     current_world_state.robot_configuration_ + suggested_robot_commands[model_ind].robot_dof_motion_;
+
+            individual_model_results[model_ind] = current_world_state;
+            ROS_WARN_NAMED("task_framework", "collecting data for regret purposes is completely borked right now");
         }
-        robot_->testRobotMotion(poses_to_test, configurations_to_test, current_world_state.robot_configuration_valid_, test_feedback_fn);
+//        robot_->testRobotMotion(poses_to_test, configurations_to_test, current_world_state.robot_configuration_valid_, test_feedback_fn);
 
         ROS_INFO_STREAM_NAMED("task_framework", "Collected data to calculate regret in " << stopwatch(READ) << " seconds");
     }
@@ -691,7 +694,6 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
 //                Visualizer::Blue());
     }
 
-    #warning "!!!!!!!!!!!!!!! This data collection is only valid if the robot took the actual action requested!!!!!!!!!!!!!!!!!"
     std::vector<double> model_prediction_errors_weighted(model_list_.size(), 0.0);
     std::vector<double> model_prediction_errors_unweighted(model_list_.size(), 0.0);
     if (collect_results_for_all_models_)
@@ -699,10 +701,11 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
         ROS_INFO_NAMED("task_framework", "Calculating model predictions based on real motion taken");
 
         const ObjectPointSet true_object_delta = world_feedback.object_configuration_ - current_world_state.object_configuration_;
+        const AllGrippersSinglePoseDelta true_robot_delta = CalculateGrippersPoseDelta(current_world_state.all_grippers_single_pose_, world_feedback.all_grippers_single_pose_);
 
         for (size_t model_ind = 0; model_ind < (size_t)num_models_; model_ind++)
         {
-            const ObjectPointSet predicted_delta = model_list_[model_ind]->getObjectDelta(current_world_state, selected_command.grippers_motion_);
+            const ObjectPointSet predicted_delta = model_list_[model_ind]->getObjectDelta(current_world_state, true_robot_delta);
             const ObjectPointSet prediction_error_sq = (predicted_delta - true_object_delta).cwiseAbs2();
 
             const Map<const VectorXd> error_sq_as_vector(prediction_error_sq.data(), prediction_error_sq.size());

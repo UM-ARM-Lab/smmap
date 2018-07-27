@@ -147,6 +147,7 @@ namespace smmap
             const TaskType task_type_;
             const DeformableModel::Ptr model_;
 
+            const Eigen::MatrixXd nominal_distance_;
             const Eigen::MatrixXd max_node_distance_;
             const Eigen::MatrixXd max_node_squared_distance_;
             const double distance_to_obstacle_threshold_;
@@ -158,6 +159,7 @@ namespace smmap
             bool fix_step_;
             bool over_stretch_;
             const std::string log_file_path_;
+            Log::Log num_model_calls_;
     };
 }
 

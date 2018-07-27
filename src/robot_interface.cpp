@@ -57,7 +57,7 @@ namespace smmap
         try
         {
             world_to_bullet_tf_ = EigenHelpersConversions::GeometryTransformToEigenIsometry3d(
-                    tf_buffer_.lookupTransform(world_frame_name_, bullet_frame_name_, ros::Time::now(), ros::Duration(timeout)).transform);
+                    tf_buffer_.lookupTransform(world_frame_name_, bullet_frame_name_, ros::Time(0), ros::Duration(timeout)).transform);
         }
         catch (tf2::TransformException& ex)
         {
