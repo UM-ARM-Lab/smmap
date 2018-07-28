@@ -50,6 +50,12 @@ DeformableController::OutputData StraightLineController::getGripperMotion_impl(
         cmd[gripper_idx] = gripper_deltas[motion_idx];
     }
 
+    Eigen::VectorXd robot_motion;
+    if (input_data.world_current_state_.robot_configuration_valid_)
+    {
+        robot_motion = robot_->mapGripperMotionToRobotMotion(cmd);
+    }
+
     const auto prediction = model_->getObjectDelta(input_data.world_current_state_, cmd);
-    return OutputData(cmd, prediction, robot_->mapGripperMotionToRobotMotion(cmd));
+    return OutputData(cmd, prediction, robot_motion);
 }

@@ -661,32 +661,17 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
 
+    const double predicted_delta_scale_factor = 25.0;
     if (visualize_predicted_motion_)
     {
-        ROS_WARN_THROTTLE_NAMED(1.0, "task_framework", "Asked to visualize predicted motion but this is disabled. Manually enable the type of visualization you want.");
+//        ROS_WARN_THROTTLE_NAMED(1.0, "task_framework", "Asked to visualize predicted motion but this is disabled. Manually enable the type of visualization you want.");
 
-//        const ObjectPointSet& object_delta_constrained = suggested_robot_commands[0].object_motion_;
-//        const ObjectPointSet& object_delta_diminishing = suggested_robot_commands[1].object_motion_;
-
-//        vis_->visualizeObjectDelta(
-//                    "constraint_model_prediction",
-//                    world_state.object_configuration_,
-//                    world_state.object_configuration_ + 50.0 * object_delta_constrained,
-//                    Visualizer::Cyan());
-
-//        vis_->visualizeObjectDelta(
-//                    "diminishing_model_prediction",
-//                    world_state.object_configuration_,
-//                    world_state.object_configuration_ + 50.0 * object_delta_diminishing,
-//                    Visualizer::Red(0.3f));
-
-//        const ObjectPointSet true_object_delta = world_feedback.object_configuration_ - world_state.object_configuration_;
-
-//        vis_->visualizeObjectDelta(
-//                    "true_object_delta",
-//                    world_state.object_configuration_,
-//                    world_state.object_configuration_ + 50.0 * true_object_delta,
-//                    Visualizer::Green());
+        const ObjectPointSet true_object_delta = world_feedback.object_configuration_ - current_world_state.object_configuration_;
+        vis_->visualizeObjectDelta(
+                    "true_object_delta",
+                    current_world_state.object_configuration_,
+                    current_world_state.object_configuration_ + predicted_delta_scale_factor * true_object_delta,
+                    Visualizer::Green());
 
 //        task_specification_->visualizeDeformableObject(
 //                PREDICTED_DELTA_NS,
@@ -711,6 +696,31 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
             const Map<const VectorXd> error_sq_as_vector(prediction_error_sq.data(), prediction_error_sq.size());
             model_prediction_errors_weighted[model_ind] = error_sq_as_vector.dot(desired_object_manipulation_direction.error_correction_.weight);
             model_prediction_errors_unweighted[model_ind] = prediction_error_sq.sum();
+
+            if (visualize_predicted_motion_)
+            {
+                if (task_specification_->task_type_ != CLOTH_PLACEMAT_LINEAR_MOTION)
+                {
+                    ROS_WARN_NAMED("task_framework", "this visualization is only desgined for one task");
+                }
+                if (model_ind == 0)
+                {
+                    vis_->visualizeObjectDelta(
+                                "constraint_model_prediction",
+                                current_world_state.object_configuration_,
+                                current_world_state.object_configuration_ + predicted_delta_scale_factor * predicted_delta,
+                                Visualizer::Cyan());
+                }
+
+                else if (model_ind == 1)
+                {
+                    vis_->visualizeObjectDelta(
+                                "diminishing_model_prediction",
+                                current_world_state.object_configuration_,
+                                current_world_state.object_configuration_ + predicted_delta_scale_factor * predicted_delta,
+                                Visualizer::Red(0.3f));
+                }
+            }
         }
     }
 

@@ -1029,8 +1029,8 @@ bool DijkstrasCoverageTask::saveDijkstrasResults()
         arc_utilities::SerializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(dijkstras_results_, buffer, pair_serializer);
 
         // Compress and save to file
-        ROS_INFO_NAMED("coverage_task", "Compressing and saving to file");
         const std::string dijkstras_file_path = GetDijkstrasStorageLocation(nh_);
+        ROS_INFO_STREAM_NAMED("coverage_task", "Compressing and saving to file " << dijkstras_file_path);
         ZlibHelpers::CompressAndWriteToFile(buffer, dijkstras_file_path);
         return true;
     }
