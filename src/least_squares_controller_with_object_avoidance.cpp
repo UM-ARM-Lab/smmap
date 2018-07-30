@@ -97,13 +97,22 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
             quadratic_constraint_quadratic_terms.push_back(arm2_weights);
 
             quadratic_constraint_linear_terms.resize(2, RowVectorXd::Zero(joint_weights.size()));
-            quadratic_constraint_affine_terms.resize(2, max_robot_dof_step_size);
+            quadratic_constraint_affine_terms.resize(2, max_robot_dof_step_size * max_robot_dof_step_size);
         }
         else
         {
-            quadratic_constraint_quadratic_terms.push_back(joint_weights.asDiagonal());
-            quadratic_constraint_linear_terms.push_back(RowVectorXd::Zero(joint_weights.size()));
-            quadratic_constraint_affine_terms.push_back(max_robot_dof_step_size);
+            ROS_WARN_THROTTLE(4.0, "Assuming that we are using Victor, and each arm is to be treated independently");
+
+            MatrixXd arm1_weights = joint_weights.asDiagonal();
+            arm1_weights.block<7, 7>(7, 7).setZero();
+            quadratic_constraint_quadratic_terms.push_back(arm1_weights);
+
+            MatrixXd arm2_weights = joint_weights.asDiagonal();
+            arm2_weights.block<7, 7>(0, 0).setZero();
+            quadratic_constraint_quadratic_terms.push_back(arm2_weights);
+
+            quadratic_constraint_linear_terms.resize(2, RowVectorXd::Zero(joint_weights.size()));
+            quadratic_constraint_affine_terms.resize(2, max_robot_dof_step_size * max_robot_dof_step_size);
         }
 
 

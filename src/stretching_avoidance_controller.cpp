@@ -85,8 +85,11 @@ void StretchingAvoidanceController::visualizeCone(const Vector3d& cone_direction
     assert(tmp.norm() > 1e-6);
     tmp.normalize();
 
-//    std::cout << cone_direction.transpose() << std::endl;
-//    std::cout << tmp.transpose() << std::endl;
+//    std::cerr << "pose_" << marker_id << " = [\n" << pose.matrix() << "];\n";
+//    std::cerr << "cone_direction_" << marker_id << " = [" << cone_direction.transpose() << " 0.0]';\n";
+//    std::cerr << "perp_direction_" << marker_id << " = [" << tmp.transpose() << " 0.0]';\n";
+//    std::cerr << std::endl;
+
     const Vector3d p1 = tmp;
     const Vector3d p2 = cone_direction.cross(p1).normalized();
     const Vector3d p3 = -p1;
@@ -145,7 +148,7 @@ StretchingAvoidanceController::StretchingAvoidanceController(
     , fix_step_(GetUseFixedGripperDeltaSize(ph))
     , over_stretch_(false)
     , log_file_path_(GetLogFolder(nh))
-    , num_model_calls_(log_file_path_ + "num_model_calls.txt")
+    , num_model_calls_(log_file_path_ + "num_model_calls.txt", false)
 {}
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -860,7 +863,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
     const auto& world_state = input_data.world_current_state_;
     const auto& object_config = world_state.object_configuration_;
     const auto& grippers_poses = world_state.all_grippers_single_pose_;
-    const auto& collision_data = world_state.gripper_collision_data_;
     const ssize_t num_grippers = (ssize_t)(grippers_poses.size());
     assert(num_grippers == 2 && "This function is only intended to be used with 2 grippers");
 
@@ -871,11 +873,42 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
     const MatrixXd node_squared_distance = CalculateSquaredDistanceMatrix(object_config);
     over_stretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
 
-
+    // Only needed if overstretch has happened, put here to keep code in one place
+    // Note that the returned vectors and points are in gripper frame
+    // stretching_constraint_data[].first is the direction that we want to move the point
+    // stretching_constraint_data[].second is the point that we are constrainting the motion of
     const auto stretching_constraint_data = stretchingCorrectionVectorsAndPoints(input_data);
-    std::vector<VectorVector3d> pyramid_plane_normals(2);
-    pyramid_plane_normals[0] = convertConeToPyramid(stretching_constraint_data[0].first, stretching_cosine_threshold_);
-    pyramid_plane_normals[1] = convertConeToPyramid(stretching_constraint_data[1].first, stretching_cosine_threshold_);
+    std::vector<VectorVector3d> pyramid_plane_normals(num_grippers);
+    for (ssize_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
+    {
+        pyramid_plane_normals[gripper_idx] =
+                convertConeToPyramid(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_);
+
+        // Visualization
+        if (true)
+        {
+            if (over_stretch_)
+            {
+                Vector3d stretching_start = grippers_poses[gripper_idx] * stretching_constraint_data[gripper_idx].second;
+                Vector3d stretching_end = grippers_poses[gripper_idx] * (stretching_constraint_data[gripper_idx].second + 0.1 * stretching_constraint_data[gripper_idx].first);
+
+//                std::cerr << "stretching_data_first_" << gripper_idx + 1 << " = [" << stretching_constraint_data[gripper_idx].first.transpose() << " 0.0]';\n";
+//                std::cerr << "stretching_data_second_" << gripper_idx + 1 << " = [" << stretching_constraint_data[gripper_idx].second.transpose() << " 1.0]';\n";
+
+//                std::cout << "stretching_start_" << gripper_idx + 1 << " = [" << stretching_start.transpose() << "];\n";
+//                std::cout << "stretching_end_" << gripper_idx + 1 << " = [" << stretching_end.transpose() << "];\n";
+
+                vis_->visualizeLines("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start}, {stretching_end}, Visualizer::Red(), (int32_t)gripper_idx + 1);
+                vis_->visualizePoints("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start, stretching_end}, {Visualizer::Red(), Visualizer::Blue()}, gripper_idx + num_grippers + 1);
+                visualizeCone(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_, grippers_poses[gripper_idx], (int32_t)gripper_idx + 1);
+            }
+            else
+            {
+                vis_->deleteObjects("stretching_correction_vector", 1, 10);
+                vis_->deleteObjects("stretching_cone", 1, 10);
+            }
+        }
+    }
 
     // If the object is overstretched, then the math used is the following.
     // Note that 'r' is stretching_constraint_data[0].second.
@@ -901,6 +934,9 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 
     if (input_data.robot_jacobian_valid_)
     {
+        int num_model_calls = 0;
+        const ssize_t num_dof = input_data.world_current_state_.robot_configuration_.size();
+
         // Build the linear version of the constraints
         std::vector<RowVectorXd> linear_constraint_linear_terms;
         std::vector<double> linear_constraint_affine_terms;
@@ -914,49 +950,185 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 
             for (size_t poi_ind = 0; poi_ind < num_poi; ++poi_ind)
             {
-                const MatrixXd& poi_jacobian = input_data.poi_collision_data_[poi_ind].second;
+                const auto& collision_data = input_data.poi_collision_data_[poi_ind];
+
+                const MatrixXd& poi_jacobian = collision_data.second;
                 linear_constraint_linear_terms.push_back(
-                        -collision_data[poi_ind].obstacle_surface_normal_.transpose() * poi_jacobian);
+                        -collision_data.first.obstacle_surface_normal_.transpose() * poi_jacobian);
 
                 linear_constraint_affine_terms.push_back(
-                        collision_data[poi_ind].distance_to_obstacle_ - robot_->min_controller_distance_to_obstacles_);
+                        collision_data.first.distance_to_obstacle_ - robot_->min_controller_distance_to_obstacles_);
 
-    //            std::cout << "Poi ind: " << poi_ind << " Dist to obstacle: " << collision_data.distance_to_obstacle_ << " Min dist: " << robot_->min_controller_distance_to_obstacles_ << std::endl
-    //                      << "Jacobian:\n" << poi_jacobian << std::endl;
+//                std::cout << "Poi ind: " << poi_ind << " Dist to obstacle: " << collision_data.first.distance_to_obstacle_ << " Min dist: " << robot_->min_controller_distance_to_obstacles_ << std::endl
+//                          << "Jacobian:\n" << poi_jacobian << std::endl;
             }
         }
 
         // Stretching constraints:
         if (over_stretch_)
         {
-            for (size_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
+            for (ssize_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
             {
                 Matrix<double, 3, 6> J_point_to_gripper;
                 J_point_to_gripper.leftCols<3>() = Matrix3d::Identity();
                 J_point_to_gripper.rightCols<3>() = -kinematics::skew(stretching_constraint_data[gripper_idx].second);
-                const auto J_stretching = J_point_to_gripper * input_data.robot_jacobian_;
+                const auto J_stretching = J_point_to_gripper * input_data.robot_jacobian_.middleRows<6>(6 * gripper_idx);
 
                 for (size_t idx = 0; idx < pyramid_plane_normals[gripper_idx].size(); ++idx)
                 {
                     linear_constraint_linear_terms.push_back(pyramid_plane_normals[gripper_idx][idx].transpose() * J_stretching);
                     linear_constraint_affine_terms.push_back(0.0);
                 }
-
-                // Visualization
-                if (true)
-                {
-                    Vector3d stretching_start = grippers_poses[gripper_idx] * stretching_constraint_data[gripper_idx].second;
-                    Vector3d stretching_end = grippers_poses[gripper_idx] * (stretching_constraint_data[gripper_idx].second + 0.05 * stretching_constraint_data[gripper_idx].first);
-                    vis_->visualizeLines("stretching_correction_vector", {stretching_start}, {stretching_end}, Visualizer::Red(), (int32_t)gripper_idx + 1);
-                    visualizeCone(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_, grippers_poses[gripper_idx], (int32_t)gripper_idx + 1);
-                }
             }
         }
 
-        assert(false);
+        // Speed constraints
+        const double max_robot_dof_step_size = input_data.max_robot_dof_step_size_;
+        const double max_grippers_step_size = input_data.max_grippers_step_size_;
+        const VectorXd& joint_weights = input_data.robot_->getJointWeights();
+        const MatrixXd jacobian = input_data.robot_->getGrippersJacobian();
+
+        std::vector<MatrixXd> quadratic_constraint_quadratic_terms;
+        std::vector<RowVectorXd> quadratic_constraint_linear_terms;
+        std::vector<double> quadratic_constraint_affine_terms;
+        if (joint_weights.size() == 16)
+        {
+            ROS_WARN_THROTTLE(4.0, "Assuming that we are using Val, and each arm is to be treated independently, with the last 2 DOF for the torso");
+
+            MatrixXd arm1_weights = joint_weights.asDiagonal();
+            arm1_weights.block<7, 7>(7, 7).setZero();
+            quadratic_constraint_quadratic_terms.push_back(arm1_weights);
+
+            MatrixXd arm2_weights = joint_weights.asDiagonal();
+            arm2_weights.block<7, 7>(0, 0).setZero();
+            quadratic_constraint_quadratic_terms.push_back(arm2_weights);
+
+            quadratic_constraint_linear_terms.resize(2, RowVectorXd::Zero(joint_weights.size()));
+            quadratic_constraint_affine_terms.resize(2, max_robot_dof_step_size * max_robot_dof_step_size);
+        }
+        else
+        {
+            ROS_WARN_THROTTLE(4.0, "Assuming that we are using Victor, and each arm is to be treated independently");
+
+            MatrixXd arm1_weights = joint_weights.asDiagonal();
+            arm1_weights.block<7, 7>(7, 7).setZero();
+            quadratic_constraint_quadratic_terms.push_back(arm1_weights);
+
+            MatrixXd arm2_weights = joint_weights.asDiagonal();
+            arm2_weights.block<7, 7>(0, 0).setZero();
+            quadratic_constraint_quadratic_terms.push_back(arm2_weights);
+
+            quadratic_constraint_linear_terms.resize(2, RowVectorXd::Zero(joint_weights.size()));
+            quadratic_constraint_affine_terms.resize(2, max_robot_dof_step_size * max_robot_dof_step_size);
+        }
+
+        // Joint limits
+        const VectorXd min_joint_delta = input_data.robot_->getJointLowerLimits() - input_data.world_current_state_.robot_configuration_;
+        const VectorXd max_joint_delta = input_data.robot_->getJointUpperLimits() - input_data.world_current_state_.robot_configuration_;
+
+        // Gradient descent params
+        const double differencing_step_size = max_robot_dof_step_size / 10.0 / 4.0;
+        const double initial_gradient_step_size = max_robot_dof_step_size / 2.0 / 4.0;
+
+        bool converged = false;
+        VectorXd robot_motion = VectorXd::Zero(num_dof);
+        ObjectPointSet object_delta = model_->getObjectDelta(world_state, RobotMotionToGripperMotion(jacobian, robot_motion));
+        double error = errorOfControlByPrediction(object_delta, desired_object_p_dot, desired_p_dot_weight);
+
+        while (!converged)
+        {
+            VectorXd error_numerical_gradient(num_dof);
+            VectorXd error_plus_h(num_dof);
+            VectorXd error_minus_h(num_dof);
+
+            for (ssize_t dof_ind = 0; dof_ind < num_dof; ++dof_ind)
+            {
+                VectorXd local_test_motion_plus_h = robot_motion;
+                local_test_motion_plus_h(dof_ind) += differencing_step_size;
+                const auto test_object_delta_plus_h = model_->getObjectDelta(world_state, RobotMotionToGripperMotion(jacobian, local_test_motion_plus_h));
+                const auto test_error_plus_h = errorOfControlByPrediction(test_object_delta_plus_h, desired_object_p_dot, desired_p_dot_weight);
+
+                VectorXd local_test_motion_minus_h = robot_motion;
+                local_test_motion_minus_h(dof_ind) -= differencing_step_size;
+                const auto test_object_delta_minus_h = model_->getObjectDelta(world_state, RobotMotionToGripperMotion(jacobian, local_test_motion_minus_h));
+                const auto test_error_minus_h = errorOfControlByPrediction(test_object_delta_minus_h, desired_object_p_dot, desired_p_dot_weight);
+
+                // Don't bother normalizing here, as we will do so at the end of the loop
+                error_numerical_gradient(dof_ind) = test_error_plus_h - test_error_minus_h;
+                error_plus_h(dof_ind) = test_error_plus_h;
+                error_minus_h(dof_ind) = test_error_minus_h;
+            }
+
+            num_model_calls += (int)num_dof * 2;
+
+
+            // Normalize the gradient as it is just giving us a direction to move, not a distance to move
+            if (error_numerical_gradient.norm() > 1e-6)
+            {
+                error_numerical_gradient.normalize();
+            }
+            else
+            {
+                converged = true;
+                continue;
+            }
+
+            // Take a step downhill, doing a line search to find a reasonable motion
+            auto next_robot_motion = robot_motion;
+            auto next_object_delta = model_->getObjectDelta(world_state, RobotMotionToGripperMotion(jacobian, next_robot_motion));
+            double next_error = error;
+
+            int downhill_attempt_ind = 0;
+            double error_gradient_step_size = -initial_gradient_step_size;
+            do
+            {
+                const auto potential_next_motion = robot_motion + error_gradient_step_size * error_numerical_gradient;
+                next_robot_motion = findClosestValidPoint(
+                            potential_next_motion,
+                            jacobian,
+                            max_grippers_step_size,
+                            linear_constraint_linear_terms,
+                            linear_constraint_affine_terms,
+                            quadratic_constraint_quadratic_terms,
+                            quadratic_constraint_linear_terms,
+                            quadratic_constraint_affine_terms,
+                            min_joint_delta,
+                            max_joint_delta);
+
+                next_object_delta = model_->getObjectDelta(world_state, RobotMotionToGripperMotion(jacobian, next_robot_motion));
+                next_error = errorOfControlByPrediction(next_object_delta, desired_object_p_dot, desired_p_dot_weight);
+
+                num_model_calls++;
+
+                ++downhill_attempt_ind;
+                error_gradient_step_size *= 0.7;
+            }
+            while (next_error > error && downhill_attempt_ind < 12);
+
+            // If we could not make progress, then return whatever the last valid movement we had was
+            if (next_error > error)
+            {
+                converged = true;
+            }
+            // Otherwise, accept the update
+            else
+            {
+                converged = (error - next_error) < std::abs(error) * ERROR_CONVERGENCE_LIMIT;
+
+                robot_motion = next_robot_motion;
+                object_delta = next_object_delta;
+                error = next_error;
+            }
+        }
+
+        LOG(num_model_calls_, num_model_calls);
+
+        return OutputData(RobotMotionToGripperMotion(jacobian, robot_motion), object_delta, robot_motion);
     }
     else
     {
+        const auto& collision_data = world_state.gripper_collision_data_;
+
         int num_model_calls = 0;
 
         // Build the linear version of the constraints
@@ -993,15 +1165,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
                 linear_constraint_affine_terms_g0.push_back(0.0);
             }
 
-            // Visualization
-            if (true)
-            {
-                Vector3d stretching_start = grippers_poses[0] * stretching_constraint_data[0].second;
-                Vector3d stretching_end = grippers_poses[0] * (stretching_constraint_data[0].second + 0.05 * stretching_constraint_data[0].first);
-                vis_->visualizeLines("stretching_correction_vector", {stretching_start}, {stretching_end}, Visualizer::Red(), 1);
-                visualizeCone(stretching_constraint_data[0].first, stretching_cosine_threshold_, grippers_poses[0] * Translation3d(stretching_constraint_data[0].second), 1);
-            }
-
             Matrix<double, 3, 6> J_stretching_g1;
             J_stretching_g1.leftCols<3>() = Matrix3d::Identity();
             J_stretching_g1.rightCols<3>() = -kinematics::skew(stretching_constraint_data[1].second);
@@ -1011,21 +1174,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
                 linear_constraint_linear_terms_g1.push_back(pyramid_plane_normals[1][ind].transpose() * J_stretching_g1);
                 linear_constraint_affine_terms_g1.push_back(0.0);
             }
-
-            // Visualization
-            if (true)
-            {
-                Vector3d stretching_start = grippers_poses[1] * stretching_constraint_data[1].second;
-                Vector3d stretching_end = grippers_poses[1] * (stretching_constraint_data[1].second + 0.05 * stretching_constraint_data[1].first);
-                vis_->visualizeLines("stretching_correction_vector", {stretching_start}, {stretching_end}, Visualizer::Red(), 2);
-                visualizeCone(stretching_constraint_data[1].first, stretching_cosine_threshold_, grippers_poses[1] * Translation3d(stretching_constraint_data[1].second), 2);
-            }
-        }
-        // Visualization
-        else if (true)
-        {
-            vis_->deleteObjects("stretching_correction_vector", 1, 10);
-            vis_->deleteObjects("stretching_cone", 1, 10);
         }
 
         const double max_individual_gripper_step_size = input_data.max_grippers_step_size_;
@@ -1080,7 +1228,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 
 
 
-            num_model_calls += num_grippers * 6;
+            num_model_calls += (int)num_grippers * 6 * 2;
 
 
 
@@ -1107,7 +1255,6 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
             double error_gradient_step_size = -initial_gradient_step_size;
             do
             {
-//                auto delta = error_gradient_step_size * error_numerical_gradient;
                 const auto potential_next_motion = stepInDirection(gripper_motion, error_numerical_gradient, error_gradient_step_size);
 
 //                const auto potential_next_object_delta = model_->getObjectDelta(world_state, potential_next_motion);
@@ -2643,6 +2790,9 @@ double StretchingAvoidanceController::evaluateStretchingConstraint(const std::pa
     }
 }
 
+// Note that the returned vectors and points are in gripper frame
+// result.first is the direction that we want to move the point
+// result.second is the point that we are constrainting the motion of
 std::vector<std::pair<Vector3d, Vector3d>> StretchingAvoidanceController::stretchingCorrectionVectorsAndPoints(const InputData& input_data) const
 {
     switch (deformable_type_)
@@ -2701,7 +2851,6 @@ std::vector<std::pair<Vector3d, Vector3d>> StretchingAvoidanceController::ropeTw
     return result;
 }
 
-// Note that the returned vectors and points are in gripper frame
 std::vector<std::pair<Vector3d, Vector3d>> StretchingAvoidanceController::clothTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const
 {
     // Assume knowing there are two grippers.

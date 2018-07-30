@@ -190,6 +190,13 @@ namespace smmap
         return lhs;
     }
 
+    inline AllGrippersSinglePoseDelta RobotMotionToGripperMotion(
+            const Eigen::MatrixXd& jacobian, const Eigen::VectorXd& robot_motion)
+    {
+        const auto gripper_motion = jacobian * robot_motion;
+        return EigenHelpers::EigenVectorXToVectorEigenVector<double, 6>(gripper_motion);
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // Dot products
     ////////////////////////////////////////////////////////////////////////////

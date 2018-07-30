@@ -538,6 +538,7 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
     const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian();
     // Build the constraints for the gippers and other points of interest on the robot - includes the grippers
     const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data_ = robot_->getPointsOfInterestCollisionData();
+
     const DeformableController::InputData model_input_data(
                 current_world_state,
                 desired_object_manipulation_direction,
