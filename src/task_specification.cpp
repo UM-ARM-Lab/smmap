@@ -1162,7 +1162,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
                 break;
             }
 
-            // Scale the delta to the size of the grid to normalize for number of corespondeces
+            // Scale the delta to the size of the grid to normalize for number of correspondences
             const Eigen::Vector3d combined_delta = summed_dijkstras_deltas.normalized() * work_space_grid_.minStepDimension();
 
             const Eigen::Vector3d micro_delta = combined_delta/ (double)VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS;
