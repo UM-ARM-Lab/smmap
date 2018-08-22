@@ -899,7 +899,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 //                std::cout << "stretching_end_" << gripper_idx + 1 << " = [" << stretching_end.transpose() << "];\n";
 
                 vis_->visualizeLines("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start}, {stretching_end}, Visualizer::Red(), (int32_t)gripper_idx + 1);
-                vis_->visualizePoints("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start, stretching_end}, {Visualizer::Red(), Visualizer::Blue()}, gripper_idx + num_grippers + 1);
+                vis_->visualizePoints("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start, stretching_end}, {Visualizer::Red(), Visualizer::Blue()}, (int32_t)(gripper_idx + num_grippers) + 1);
                 visualizeCone(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_, grippers_poses[gripper_idx], (int32_t)gripper_idx + 1);
             }
             else
@@ -2468,9 +2468,9 @@ double StretchingAvoidanceController::gripperCollisionCheckHelper(
 
     for (size_t gripper_idx = 0; gripper_idx < grippers_test_poses.size(); ++gripper_idx)
     {
-        const auto tmp = grippers_test_poses[gripper_idx].translation();
-        const Vector4d test_point(tmp.x(), tmp.y(), tmp.z(), 1.0);
-        const auto collision_result = environment_sdf_->EstimateDistance4dLegacy(test_point);
+        const auto gripper_pos = grippers_test_poses[gripper_idx].translation();
+        #warning "Changed from legacy to new projection here"
+        const auto collision_result = environment_sdf_->EstimateDistance3d(gripper_pos);
         if (collision_result.first < min_collision_distance)
         {
             min_collision_distance = collision_result.first;

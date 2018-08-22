@@ -3,7 +3,7 @@
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/serialization_eigen.hpp>
-#include <arc_utilities/shortcut_smoothing.hpp>
+#include <arc_utilities/path_utils.hpp>
 
 #include "smmap/quinlan_rubber_band.h"
 
@@ -193,7 +193,7 @@ const EigenHelpers::VectorVector3d QuinlanRubberBand::upsampleBand(const size_t 
         return EigenHelpers::Interpolate(v1, v2, ratio);
     };
 
-    return shortcut_smoothing::UpsamplePath<Eigen::Vector3d>(band_, total_points, distance_fn, interpolate_fn);
+    return path_utils::UpsamplePath<Eigen::Vector3d>(band_, total_points, distance_fn, interpolate_fn);
 }
 
 std::pair<Eigen::Vector3d, Eigen::Vector3d> QuinlanRubberBand::getEndpoints() const

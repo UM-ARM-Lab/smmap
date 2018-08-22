@@ -10,7 +10,7 @@
 #include <arc_utilities/simple_kmeans_clustering.hpp>
 #include <arc_utilities/simple_astar_planner.hpp>
 #include <arc_utilities/get_neighbours.hpp>
-#include <arc_utilities/shortcut_smoothing.hpp>
+#include <arc_utilities/path_utils.hpp>
 #include <arc_utilities/timing.hpp>
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
@@ -1401,7 +1401,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         return EigenHelpers::Interpolate(v1, v2, ratio);
     };
     rrt_helper_->addBandToBlacklist(
-                shortcut_smoothing::ResamplePath(
+                path_utils::ResamplePath(
                     rubber_band_between_grippers_->getVectorRepresentation(),
                     dijkstras_task_->environment_sdf_->GetResolution(),
                     distance_fn,
@@ -1597,7 +1597,7 @@ void TaskFramework::convertRRTResultIntoGripperTrajectory(
         return result;
     };
 
-    global_plan_gripper_trajectory_ = shortcut_smoothing::ResamplePath<AllGrippersSinglePose>(traj, robot_->max_gripper_velocity_norm_ * robot_->dt_, distance_fn, interpolation_fn);
+    global_plan_gripper_trajectory_ = path_utils::ResamplePath<AllGrippersSinglePose>(traj, robot_->max_gripper_velocity_norm_ * robot_->dt_, distance_fn, interpolation_fn);
     global_plan_full_robot_trajectory_ = std::vector<VectorXd>(global_plan_gripper_trajectory_.size(), VectorXd(0));
 }
 

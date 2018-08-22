@@ -1166,7 +1166,8 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             const Eigen::Vector3d combined_delta = summed_dijkstras_deltas.normalized() * work_space_grid_.minStepDimension();
 
             const Eigen::Vector3d micro_delta = combined_delta/ (double)VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS;
-            const Eigen::Vector3d projected_pos = environment_sdf_->ProjectOutOfCollision3dLegacy(updated_pos + micro_delta);
+            #warning "Changed from legacy to new projection here"
+            const Eigen::Vector3d projected_pos = environment_sdf_->ProjectOutOfCollision3d(updated_pos + micro_delta);
 
             inner_progress = (projected_pos - updated_pos).squaredNorm() > VECTOR_FIELD_FOLLOWING_MIN_PROGRESS;
             if (inner_progress)

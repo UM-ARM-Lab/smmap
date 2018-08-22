@@ -8,7 +8,7 @@
 #include <arc_utilities/timing.hpp>
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
-#include <arc_utilities/shortcut_smoothing.hpp>
+#include <arc_utilities/path_utils.hpp>
 
 using namespace smmap;
 using namespace smmap_utilities;
@@ -2607,7 +2607,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_b
         return EigenHelpers::Interpolate(v1, v2, ratio);
     };
 
-    const auto test_band = shortcut_smoothing::ResamplePath(
+    const auto test_band = path_utils::ResamplePath(
         test_band_input,
         environment_sdf_->GetResolution(),
         distance_fn,
@@ -2635,7 +2635,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_b
             {
                 const double ratio = (double)ind / (double)num_steps;
                 const Vector3d interpolated_point = Interpolate(first_node, second_node, ratio);
-                if (environment_sdf_->Get3d(interpolated_point) < 0.0)
+                if (environment_sdf_->GetImmutable3d(interpolated_point).first < 0.0)
                 {
                     return false;
                 }

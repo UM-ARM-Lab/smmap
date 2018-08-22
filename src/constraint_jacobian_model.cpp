@@ -143,7 +143,8 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
     {
         const auto node = current_configuration.col(node_ind);
         // Do nothing if we are not in collision
-        if (environment_sdf_->EstimateDistance4dLegacy(Eigen::Vector4d(node.x(), node.y(), node.z(), 1.0)).first > obstacle_threshold_)
+        #warning "Changed from legacy to new projection here"
+        if (environment_sdf_->EstimateDistance3d(node).first > obstacle_threshold_)
         {
             continue;
         }
