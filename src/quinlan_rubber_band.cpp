@@ -425,6 +425,8 @@ bool QuinlanRubberBand::bandIsValid(const EigenHelpers::VectorVector3d& test_ban
                   << "Bubble size:        " << getBubbleSize(test_band.back()) << std::endl;
         return false;
     }
+#else
+    (void)test_band;
 #endif
     return true;
 }
@@ -443,6 +445,8 @@ bool QuinlanRubberBand::bandIsValidWithVisualization(const EigenHelpers::VectorV
         printBandData(test_band);
         return bandIsValid(test_band);
     }
+#else
+    (void)test_band;
 #endif
     return true;
 }
