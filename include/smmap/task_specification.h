@@ -42,8 +42,6 @@ namespace smmap
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
                     smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type,
                     const bool is_dijkstras_type_task = false);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -220,9 +218,7 @@ namespace smmap
             ModelAccuracyTestTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type);
+                    smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(
@@ -254,8 +250,6 @@ namespace smmap
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
                     smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type,
                     const bool is_dijkstras_type_task);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -286,9 +280,7 @@ namespace smmap
             DirectCoverageTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type);
+                    smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
@@ -325,9 +317,7 @@ namespace smmap
             DijkstrasCoverageTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type);
+                    smmap_utilities::Visualizer::Ptr vis);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Virtual function wrappers
@@ -416,9 +406,7 @@ namespace smmap
             DistanceBasedCorrespondencesTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type);
+                    smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual Correspondences getCoverPointCorrespondences_impl(
@@ -435,9 +423,7 @@ namespace smmap
             FixedCorrespondencesTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type);
+                    smmap_utilities::Visualizer::Ptr vis);
 
         protected:
             std::vector<std::vector<ssize_t>> correspondences_internal_fixed_;

@@ -42,6 +42,15 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
 
     switch (task_type)
     {
+        case TaskType::ROPE_TABLE_LINEAR_MOTION:
+        case TaskType::CLOTH_TABLE_LINEAR_MOTION:
+        case TaskType::ROPE_TABLE_PENTRATION:
+        case TaskType::CLOTH_PLACEMAT_LINEAR_MOTION:
+            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis);
+
+        case TaskType::CLOTH_COLAB_FOLDING:
+            return std::make_shared<ClothColabFolding>(nh, ph, vis);
+
         case TaskType::ROPE_CYLINDER_COVERAGE:
         case TaskType::ROPE_CYLINDER_COVERAGE_TWO_GRIPPERS:
             return std::make_shared<RopeCylinderCoverage>(nh, ph, vis);
@@ -50,42 +59,19 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
             return std::make_shared<ClothTableCoverage>(nh, ph, vis);
 
         case TaskType::CLOTH_CYLINDER_COVERAGE:
-            return std::make_shared<ClothCylinderCoverage>(nh, ph, vis);
-
-        case TaskType::CLOTH_COLAB_FOLDING:
-            return std::make_shared<ClothColabFolding>(nh, ph, vis);
-
         case TaskType::CLOTH_WAFR:
-            return std::make_shared<ClothWAFR>(nh, ph, vis);
-
-        case TaskType::CLOTH_SINGLE_POLE:
-            return std::make_shared<ClothSinglePole>(nh, ph, vis);
-
         case TaskType::CLOTH_WALL:
-            return std::make_shared<ClothWall>(nh, ph, vis);
-
+        case TaskType::CLOTH_SINGLE_POLE:
         case TaskType::CLOTH_DOUBLE_SLIT:
-            return std::make_shared<ClothDoubleSlit>(nh, ph, vis);
+            return std::make_shared<ClothDistanceBasedCorrespondences>(nh, ph, vis);
 
         case TaskType::ROPE_MAZE:
         case TaskType::ROPE_ZIG_MATCH:
-            return std::make_shared<RopeMaze>(nh, ph, vis);
-
-        case TaskType::ROPE_TABLE_LINEAR_MOTION:
-            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::ROPE, TaskType::ROPE_TABLE_LINEAR_MOTION);
-
-        case TaskType::CLOTH_TABLE_LINEAR_MOTION:
-            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_TABLE_LINEAR_MOTION);
-
-        case TaskType::ROPE_TABLE_PENTRATION:
-            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::ROPE, TaskType::ROPE_TABLE_PENTRATION);
-
+        case TaskType::ROPE_HOOKS_BASIC:
+            return std::make_shared<RopeFixedCorrespondences>(nh, ph, vis);
 
         case TaskType::CLOTH_PLACEMAT_LIVE_ROBOT:
-            return std::make_shared<ClothPlacemat>(nh, ph, vis);
-
-        case TaskType::CLOTH_PLACEMAT_LINEAR_MOTION:
-            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_PLACEMAT_LINEAR_MOTION);
+            return std::make_shared<ClothFixedCorrespondences>(nh, ph, vis);
 
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
@@ -101,8 +87,6 @@ TaskSpecification::TaskSpecification(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
         Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type,
         const bool is_dijkstras_type_task)
     : first_step_calculated_(false)
     , first_step_last_simtime_calced_(NAN)
@@ -113,8 +97,8 @@ TaskSpecification::TaskSpecification(
 
     , desired_motion_scaling_factor_(GetDesiredMotionScalingFactor(ph))
 
-    , deformable_type_(deformable_type)
-    , task_type_(task_type)
+    , deformable_type_(GetDeformableType(nh))
+    , task_type_(GetTaskType(nh))
     , is_dijkstras_type_task_(is_dijkstras_type_task)
 
     , nh_(nh)
@@ -480,10 +464,8 @@ const std::vector<long>& TaskSpecification::getGripperAttachedNodesIndices(const
 ModelAccuracyTestTask::ModelAccuracyTestTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        smmap_utilities::Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type)
-    : TaskSpecification(nh, ph, vis, deformable_type, task_type, false)
+        smmap_utilities::Visualizer::Ptr vis)
+    : TaskSpecification(nh, ph, vis, false)
 {}
 
 void ModelAccuracyTestTask::visualizeDeformableObject_impl(
@@ -563,10 +545,8 @@ CoverageTask::CoverageTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
         Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type,
-        const bool is_dijkstras_type_task = false)
-    : TaskSpecification(nh, ph, vis, deformable_type, task_type, is_dijkstras_type_task)
+        const bool is_dijkstras_type_task)
+    : TaskSpecification(nh, ph, vis, is_dijkstras_type_task)
     , environment_sdf_(GetEnvironmentSDF(nh))
     , work_space_grid_(environment_sdf_->GetOriginTransform(),
                        environment_sdf_->GetFrame(),
@@ -604,10 +584,8 @@ bool CoverageTask::pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d
 DirectCoverageTask::DirectCoverageTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type)
-    : CoverageTask(nh, ph, vis, deformable_type, task_type)
+        Visualizer::Ptr vis)
+    : CoverageTask(nh, ph, vis, false)
 {}
 
 double DirectCoverageTask::calculateError_impl(const WorldState& world_state)
@@ -700,10 +678,8 @@ ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_imp
 DijkstrasCoverageTask::DijkstrasCoverageTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type)
-    : CoverageTask(nh, ph, vis, deformable_type, task_type, true)
+        Visualizer::Ptr vis)
+    : CoverageTask(nh, ph, vis, true)
     , current_correspondences_calculated_(false)
     , current_correspondences_last_simtime_calced_(std::numeric_limits<double>::quiet_NaN())
     , current_correspondences_(num_nodes_)
@@ -1196,10 +1172,8 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
 DistanceBasedCorrespondencesTask::DistanceBasedCorrespondencesTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type)
-    : DijkstrasCoverageTask(nh, ph, vis, deformable_type, task_type)
+        Visualizer::Ptr vis)
+    : DijkstrasCoverageTask(nh, ph, vis)
 {}
 
 DijkstrasCoverageTask::Correspondences DistanceBasedCorrespondencesTask::getCoverPointCorrespondences_impl(
@@ -1303,10 +1277,8 @@ std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::fin
 FixedCorrespondencesTask::FixedCorrespondencesTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type)
-    : DijkstrasCoverageTask(nh, ph, vis, deformable_type, task_type)
+        Visualizer::Ptr vis)
+    : DijkstrasCoverageTask(nh, ph, vis)
 {}
 
 DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCorrespondences_impl(

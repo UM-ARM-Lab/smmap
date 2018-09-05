@@ -1371,7 +1371,8 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
         {
             colors.push_back(arc_helpers::GenerateUniqueColor<std_msgs::ColorRGBA>(cluster_labels[idx] + 2, 0.5));
         }
-        vis_->visualizeCubes(CLUSTERING_TARGETS_NS, cluster_targets, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), colors, 10);
+        const std::vector<double> radiuses(cluster_targets.size(), dijkstras_task_->work_space_grid_.minStepDimension());
+        vis_->visualizeSpheres(CLUSTERING_TARGETS_NS, cluster_targets, colors, 10, radiuses);
         vis_->forcePublishNow();
     }
 
