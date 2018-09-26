@@ -16,11 +16,11 @@ namespace smmap
             StretchingAvoidanceController(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    const DeformableModel::Ptr& deformable_model,
                     const RobotInterface::Ptr& robot,
+                    const smmap_utilities::Visualizer::Ptr& vis,
+                    const DeformableModel::Ptr& deformable_model,
                     const sdf_tools::SignedDistanceField::ConstPtr sdf,
                     const std::shared_ptr<std::mt19937_64>& generator,
-                    const smmap_utilities::Visualizer::Ptr& vis,
                     const StretchingAvoidanceControllerSolverType gripper_controller_type,
                     const int max_count);
 
@@ -139,8 +139,6 @@ namespace smmap
             const sdf_tools::SignedDistanceField::ConstPtr environment_sdf_;
             const std::shared_ptr<std::mt19937_64> generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
-
-            smmap_utilities::Visualizer::Ptr vis_;
 
             StretchingAvoidanceControllerSolverType gripper_controller_type_;
             const DeformableType deformable_type_;

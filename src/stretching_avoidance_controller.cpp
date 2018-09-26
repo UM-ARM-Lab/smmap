@@ -36,44 +36,6 @@ inline std::string print(const AllGrippersSinglePoseDelta& delta)
     return strm.str();
 }
 
-// We want to constrain all vectors "r" to lie within a specified angle of the cone direction.
-// I.e. cone_direction.transpose() * r / norm(r) >= cos(angle)
-// or cone_direction.transpose() * r_normalized >= min_normalized_dot_product
-// It is assumed that cone_direction is already normalized
-// Returns the normal vectors that point out of a pyramid approximation of the cone
-VectorVector3d convertConeToPyramid(const Vector3d& cone_direction, const double min_normalized_dot_product)
-{
-    // Build a vector that is garunteed to be perpendicular to cone_direction, and non-zero
-    auto tmp = VectorRejection(cone_direction, Vector3d::UnitX());
-    tmp += VectorRejection(cone_direction, Vector3d::UnitY());
-    tmp += VectorRejection(cone_direction, Vector3d::UnitZ());
-
-    assert(tmp.norm() > 1e-6);
-    tmp.normalize();
-
-//    std::cout << cone_direction.transpose() << std::endl;
-//    std::cout << tmp.transpose() << std::endl;
-    const Vector3d p1 = tmp;
-    const Vector3d p2 = cone_direction.cross(p1).normalized();
-    const Vector3d p3 = -p1;
-    const Vector3d p4 = -p2;
-
-    const double theta_max = std::acos(min_normalized_dot_product);
-    const double dist = std::tan(theta_max);
-
-    const Vector3d ray1 = cone_direction + dist * p1;
-    const Vector3d ray2 = cone_direction + dist * p2;
-    const Vector3d ray3 = cone_direction + dist * p3;
-    const Vector3d ray4 = cone_direction + dist * p4;
-
-    VectorVector3d normals(4);
-    normals[0] = -ray1.cross(ray2).normalized();
-    normals[1] = -ray2.cross(ray3).normalized();
-    normals[2] = -ray3.cross(ray4).normalized();
-    normals[3] = -ray4.cross(ray1).normalized();
-
-    return normals;
-}
 
 void StretchingAvoidanceController::visualizeCone(const Vector3d& cone_direction, const double min_normalized_dot_product, const Isometry3d& pose, const int marker_id)
 {
@@ -120,20 +82,19 @@ void StretchingAvoidanceController::visualizeCone(const Vector3d& cone_direction
 StretchingAvoidanceController::StretchingAvoidanceController(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        const DeformableModel::Ptr& deformable_model,
         const RobotInterface::Ptr& robot,
+        const Visualizer::Ptr& vis,
+        const DeformableModel::Ptr& deformable_model,
         const sdf_tools::SignedDistanceField::ConstPtr sdf,
         const std::shared_ptr<std::mt19937_64>& generator,
-        const smmap_utilities::Visualizer::Ptr& vis,
         const StretchingAvoidanceControllerSolverType gripper_controller_type,
         const int max_count)
-    : DeformableController(robot)
+    : DeformableController(nh, ph, robot, vis)
     , gripper_collision_checker_(nh)
     , grippers_data_(robot->getGrippersData())
     , environment_sdf_(sdf)
     , generator_(generator)
     , uniform_unit_distribution_(0.0, 1.0)
-    , vis_(vis)
     , gripper_controller_type_(gripper_controller_type)
     , deformable_type_(GetDeformableType(nh))
     , task_type_(GetTaskType(nh))
@@ -882,7 +843,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
     for (ssize_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
     {
         pyramid_plane_normals[gripper_idx] =
-                convertConeToPyramid(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_);
+                ConvertConeToPyramid(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_);
 
         // Visualization
         if (true)
@@ -2287,7 +2248,7 @@ kinematics::Vector6d StretchingAvoidanceController::getFeasibleGripperDeltaGurob
     // Add the stretching constraint (if active)
     if (over_stretch_)
     {
-        const auto pyramid_plane_normals = convertConeToPyramid(stretching_correction_data.first, stretching_cosine_threshold_);
+        const auto pyramid_plane_normals = ConvertConeToPyramid(stretching_correction_data.first, stretching_cosine_threshold_);
         Matrix<double, 3, 6> J_stretching;
         J_stretching.leftCols<3>() = Matrix3d::Identity();
         J_stretching.rightCols<3>() = kinematics::skew(stretching_correction_data.second);

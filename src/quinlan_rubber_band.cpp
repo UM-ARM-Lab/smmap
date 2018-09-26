@@ -35,11 +35,11 @@ QuinlanRubberBand::QuinlanRubberBand(
     , sdf_(task_->environment_sdf_)
     , vis_(vis)
     , max_total_band_distance_(max_total_band_distance)
-    , min_overlap_distance_(sdf_->GetResolution() * 0.05)
+    , min_overlap_distance_(sdf_->GetResolution() * 0.1)
     , min_distance_to_obstacle_(sdf_->GetResolution() * 0.1)
     , node_removal_overlap_factor_(1.2)
     , backtrack_threshold_(0.1)
-    , smoothing_iterations_(50)
+    , smoothing_iterations_(100)
 {
     (void)generator;
     setPointsAndSmooth(starting_points);
@@ -89,10 +89,19 @@ void QuinlanRubberBand::setPointsWithoutSmoothing(const EigenHelpers::VectorVect
     {
         point = projectToValidBubble(point);
     }
+#if ENABLE_BAND_DEBUGGING
+    vis_->forcePublishNow();
+#endif
     interpolateBandPoints();
     const bool verbose = true;
+#if ENABLE_BAND_DEBUGGING
+    vis_->forcePublishNow();
+#endif
     removeExtraBandPoints(verbose);
+#if ENABLE_BAND_DEBUGGING
+    vis_->forcePublishNow();
     assert(bandIsValidWithVisualization());
+#endif
 }
 
 void QuinlanRubberBand::setPointsAndSmooth(const EigenHelpers::VectorVector3d& points)
@@ -270,11 +279,12 @@ void QuinlanRubberBand::visualizeWithBubbles(
     {
         visualize(test_band, marker_name, safe_color, overstretched_color, id, visualization_enabled);
 
-        // Delete all sphere, markers, probably from just this publisher, and then republish
 #if ENABLE_BAND_DEBUGGING
+        vis_->forcePublishNow();
+        // Delete all sphere, markers, probably from just this publisher, and then republish
         {
-            vis_->deleteObjects(marker_name + "_bubbles", 1, 305);
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+            vis_->deleteObjects(marker_name + "_bubbles", 1, 505);
+            vis_->forcePublishNow();
 
             std::vector<double> bubble_sizes(test_band.size());
             std::vector<std_msgs::ColorRGBA> colors(test_band.size());
@@ -288,7 +298,7 @@ void QuinlanRubberBand::visualizeWithBubbles(
                             0.3f);
             }
             vis_->visualizeSpheres(marker_name + "_bubbles", test_band, colors, id, bubble_sizes);
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+            vis_->forcePublishNow();
         }
 #endif
     }
@@ -406,12 +416,12 @@ bool QuinlanRubberBand::bandIsValid(const EigenHelpers::VectorVector3d& test_ban
         const double curr_bubble_size = getBubbleSize(curr);
         const double next_bubble_size = getBubbleSize(next);
         const double dist = (curr - next).norm();
-        if (!sdf_->CheckInBounds3d(curr) ||
+        if (!sdf_->LocationInBounds3d(curr) ||
             curr_bubble_size < min_distance_to_obstacle_ ||
             !sufficientOverlap(curr_bubble_size, next_bubble_size, dist))
         {
             std::cerr << "Problem between node " << node_idx << " and " << node_idx + 1 << std::endl
-                      << "In bounds: " << sdf_->CheckInBounds3d(curr) << std::endl
+                      << "In bounds: " << sdf_->LocationInBounds3d(curr) << std::endl
                       << "Curr bubble size: " << curr_bubble_size << std::endl
                       << "Next bubble size: " << next_bubble_size << std::endl
                       << "Curr + next:      " << curr_bubble_size + next_bubble_size << std::endl
@@ -508,10 +518,10 @@ void QuinlanRubberBand::interpolateBetweenPoints(
         double distance_between_curr_and_test_point = (curr - test_point).norm();
 
 #if ENABLE_BAND_DEBUGGING
-        assert(sdf_->CheckInBounds3d(curr));
-        assert(sdf_->CheckInBounds3d(target));
-        assert(sdf_->CheckInBounds3d(interpolated_point));
-        assert(sdf_->CheckInBounds3d(test_point));
+        assert(sdf_->LocationInBounds3d(curr));
+        assert(sdf_->LocationInBounds3d(target));
+        assert(sdf_->LocationInBounds3d(interpolated_point));
+        assert(sdf_->LocationInBounds3d(test_point));
 #endif
         ROS_WARN_STREAM_COND_NAMED(outer_iteration_counter == 20, "rubber_band", "Rubber band interpolation outer loop counter at " << outer_iteration_counter << ", probably stuck in an infinite loop");
 #if ENABLE_BAND_DEBUGGING
@@ -806,13 +816,18 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
 
 void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 {
+#if ENABLE_BAND_DEBUGGING
+    visualizeWithBubbles(band_, "StartOfSmoothingBand", Visualizer::Black(), Visualizer::Cyan(), 1, true);
     assert(bandIsValidWithVisualization());
+    vis_->forcePublishNow();
+#endif
 
     for (size_t smoothing_iter = 0; smoothing_iter < smoothing_iterations_; ++smoothing_iter)
     {
 #if ENABLE_BAND_DEBUGGING
-        visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
-        std::cerr << "Start of loop smoothBandPoints\n";
+        visualizeWithBubbles("StartOfSmoothingOuterLoop", Visualizer::Black(), Visualizer::Cyan(), 1, true);
+        vis_->forcePublishNow();
+        std::cerr << "\n\nStart of outer loop loop smoothBandPoints, smoothing iter: " << smoothing_iter << "\n";
         printBandData(band_);
 #endif
 
@@ -824,6 +839,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
         for (size_t curr_idx = 1; curr_idx + 1 < band_.size(); ++ curr_idx)
         {
 #if ENABLE_BAND_DEBUGGING
+            visualizeWithBubbles("StartOfSmoothingInnerLoop", Visualizer::Black(), Visualizer::Cyan(), 1, true);
             std::cout << "Start of smoothBandPointsInnerLoop: band idx: " << curr_idx << std::endl;
 #endif
 
@@ -836,23 +852,24 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
             const double next_bubble_size = getBubbleSize(next);
 
             // Only allow movement that points directly between next and prev
-            const Eigen::Vector3d allowed_movement_direction = (next - curr).normalized() + (prev - curr).normalized();
-            // If the allowed direction is numerically close to zero, then we are already in
-            // nearly a straight line with our neighbours, so don't move
-            // TODO: address magic number
-            if (allowed_movement_direction.norm() < 1e-4)
-            {
-                next_band.push_back(curr);
-                continue;
-            }
+            const Eigen::Vector3d rejected_movement_direction = (next - curr).normalized() - (prev - curr).normalized();
+//            // If the allowed direction is numerically close to zero, then we are already in
+//            // nearly a straight line with our neighbours, so don't move
+//            // TODO: address magic number
+//            if (allowed_movement_direction.norm() < 1e-4)
+//            {
+//                next_band.push_back(curr);
+//                continue;
+//            }
 
             // The optimal point is directly between prev and next, so move as far that way as our bubble allows
             const Eigen::Vector3d midpoint = prev + (next - prev) / 2.0;
             const Eigen::Vector3d delta_raw = midpoint - curr;
-            const Eigen::Vector3d delta = EigenHelpers::VectorProjection(allowed_movement_direction, delta_raw);
+            const Eigen::Vector3d delta = EigenHelpers::VectorRejection(rejected_movement_direction, delta_raw);
+//            const Eigen::Vector3d delta = EigenHelpers::VectorProjection(allowed_movement_direction, delta_raw);
             // Determine if the projection is within the bubble at the current point, and if not only move part way
-            // Only step at most half way there in order to try and avoid oscillations - to large of a step size is bad
-            const double max_delta_norm = std::max(0.0, (curr_bubble_size - min_distance_to_obstacle_ * 1.00001) * 0.5);
+            // Only step at most part way there in order to try and avoid oscillations - too large of a step size can be bad due to errors in sdf->EstiamteDistance
+            const double max_delta_norm = std::max(0.0, (curr_bubble_size - min_distance_to_obstacle_ * 1.00001) * 0.9);
             const bool curr_plus_delta_inside_bubble = delta.norm() <= max_delta_norm;
             const Eigen::Vector3d prime =  curr_plus_delta_inside_bubble ? Eigen::Vector3d(curr + delta) : Eigen::Vector3d(curr + max_delta_norm * delta.normalized());
             // Ensure that the resulting point is not in collision even with numerical rounding (and weirdness in the SDF)
@@ -871,6 +888,8 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
             }
             const double prime_bubble_size = getBubbleSize(prime);
 
+            vis_->forcePublishNow();
+            vis_->purgeMarkerList();
             vis_->visualizePoints( "smoothing_test_prev",      {prev},      Visualizer::Red(1.0f),     1, 0.002);
             vis_->visualizeSpheres("smoothing_test_prev",      {prev},      Visualizer::Red(0.2f),     2, prev_bubble_size);
             vis_->visualizePoints( "smoothing_test_curr",      {curr},      Visualizer::Green(1.0f),   1, 0.002);
@@ -881,24 +900,36 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
             vis_->visualizeSpheres("smoothing_test_projected", {projected}, Visualizer::Magenta(0.2f), 2, projected_bubble_size);
             vis_->visualizePoints( "smoothing_test_next",      {next},      Visualizer::Blue(1.0f),    1, 0.002);
             vis_->visualizeSpheres("smoothing_test_next",      {next},      Visualizer::Blue(0.2f),    2, next_bubble_size);
-            arc_helpers::Sleep(0.01);
+            vis_->forcePublishNow();
 
             std::cout << std::setprecision(12)
-                      << "Prev:                         " << prev.transpose() << std::endl
-                      << "Curr:                         " << curr.transpose() << std::endl
-                      << "Next:                         " << next.transpose() << std::endl
-                      << "Prev - Curr:                  " << (prev - curr).normalized().transpose() << std::endl
-                      << "Next - Curr:                  " << (next - curr).normalized().transpose() << std::endl
-                      << "Allowed movement dir:         " << allowed_movement_direction.transpose() << std::endl
-                      << "Delta raw:                    " << delta_raw.transpose() << std::endl
-                      << "Delta:                        " << delta.transpose() << std::endl
-                      << "Allowed cross delta norm:     " << delta.cross(allowed_movement_direction).norm() << std::endl
+                      << "prev                      = [" << prev.transpose() << "]';\n"
+                      << "next                      = [" << next.transpose() << "]';\n"
                       << std::endl
-                      << "prev bubble size:  " << prev_bubble_size << std::endl
-                      << "curr bubble size:  " << curr_bubble_size << std::endl
-                      << "prime bubble size: " << prime_bubble_size << std::endl
-                      << "proj bubble size:  " << projected_bubble_size << std::endl
-                      << "next bubble size:  " << next_bubble_size << std::endl
+                      << "curr                      = [" << curr.transpose() << "]';\n"
+                      << "midpoint                  = [" << midpoint.transpose() << "]';\n"
+                      << "prime                     = [" << prime.transpose() << "]';\n"
+                      << "projected                 = [" << projected.transpose() << "]';\n"
+                      << std::endl
+                      << "prev_minus_curr           = [" << (prev - curr).normalized().transpose() << "]';\n"
+                      << "next_minus_curr           = [" << (next - curr).normalized().transpose() << "]';\n"
+                      << "rejected_movement_dir     = [" << rejected_movement_direction.transpose() << "]';\n"
+                      << std::endl
+                      << "delta_raw                 = [" << delta_raw.transpose() << "]';\n"
+                      << "delta_projected_to_plane  = [" << delta.transpose() << "]';\n"
+                      << "delta_clipped_to_sphere   = [" << (prime - curr).transpose() << "]';\n"
+                      << "rejected_dot_delta_norm   = " << delta.dot(rejected_movement_direction) << ";\n"
+                      << std::endl
+                      << "max_delta_norm                = " << max_delta_norm << ";\n"
+                      << "delta_raw_norm                = " << delta_raw.norm() << ";\n"
+                      << "delta_projected_to_plane_norm = " << delta.norm() << ";\n"
+                      << "delta_clipped_to_sphere_norm  = " << (prime - curr).norm() << ";\n"
+                      << std::endl
+                      << "prev_bubble_size  = " << prev_bubble_size << ";\n"
+                      << "curr_bubble_size  = " << curr_bubble_size << ";\n"
+                      << "prime_bubble_size = " << prime_bubble_size << ";\n"
+                      << "proj_bubble_size  = " << projected_bubble_size << ";\n"
+                      << "next_bubble_size  = " << next_bubble_size << ";\n"
                       << std::endl;
 #endif
 
@@ -938,6 +969,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
         visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
         printBandData(band_);
         assert(bandIsValidWithVisualization());
+        vis_->forcePublishNow();
 #endif
 
         removeExtraBandPoints(verbose);

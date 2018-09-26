@@ -3,10 +3,12 @@
 using namespace smmap;
 
 StraightLineController::StraightLineController(
+        ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        const DeformableModel::Ptr& model,
-        const RobotInterface::Ptr& robot)
-    : DeformableController(robot)
+        const RobotInterface::Ptr& robot,
+        const smmap_utilities::Visualizer::Ptr& vis,
+        const DeformableModel::Ptr& model)
+    : DeformableController(nh, ph, robot, vis)
     , model_(model)
 {
     const auto grippers = robot_->getGrippersData();

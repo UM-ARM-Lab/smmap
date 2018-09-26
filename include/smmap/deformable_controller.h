@@ -1,6 +1,7 @@
 #ifndef DEFORMABLE_CONTROLLER_HPP
 #define DEFORMABLE_CONTROLLER_HPP
 
+#include <smmap_utilities/visualization_tools.h>
 #include "smmap/deformable_model.h"
 #include "smmap/robot_interface.hpp"
 
@@ -76,8 +77,14 @@ namespace smmap
             };
 
             DeformableController(
-                    const RobotInterface::Ptr& robot)
-                : robot_(robot)
+                    ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
+                    const RobotInterface::Ptr& robot,
+                    const smmap_utilities::Visualizer::Ptr& vis)
+                : nh_(nh)
+                , ph_(ph)
+                , robot_(robot)
+                , vis_(vis)
             {}
 
             OutputData getGripperMotion(
@@ -88,7 +95,10 @@ namespace smmap
 
         protected:
 
+            ros::NodeHandle nh_;
+            ros::NodeHandle ph_;
             const RobotInterface::Ptr robot_;
+            smmap_utilities::Visualizer::Ptr vis_;
 
             ////////////////////////////////////////////////////////////////////
             // Destructor that prevents "delete pointer to base object"

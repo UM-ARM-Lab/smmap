@@ -1575,31 +1575,36 @@ size_t RRTHelper::forwardPropogationFunction(
 
             // Collision checking
             {
-                stopwatch(RESET);
-                arc_helpers::DoNotOptimize(next_grippers_poses);
-                bool in_collision = (next_grippers_poses.first.translation() - next_grippers_poses.second.translation()).norm() < gripper_min_distance_to_obstacles_;
-                arc_helpers::DoNotOptimize(in_collision);
-                const double collision_check_time_pt1 = stopwatch(READ);
-                total_collision_check_time_ += collision_check_time_pt1;
                 // If the grippers collide with each other, then return however far we are able to get
-                if (in_collision)
                 {
-                    break;
+                    stopwatch(RESET);
+                    arc_helpers::DoNotOptimize(next_grippers_poses);
+                    const bool in_collision = (next_grippers_poses.first.translation() - next_grippers_poses.second.translation()).norm() < gripper_min_distance_to_obstacles_;
+                    arc_helpers::DoNotOptimize(in_collision);
+                    const double collision_check_time_pt1 = stopwatch(READ);
+                    total_collision_check_time_ += collision_check_time_pt1;
+                    if (in_collision)
+                    {
+                        break;
+                    }
                 }
 
-                stopwatch(RESET);
-                arc_helpers::DoNotOptimize(next_grippers_poses);
                 // If the grippers enter collision with the environment, then return however far we were able to get
-                in_collision = (environment_sdf_->EstimateDistance3d(next_grippers_poses.first.translation()).first < gripper_min_distance_to_obstacles_) ||
-                               (environment_sdf_->EstimateDistance3d(next_grippers_poses.second.translation()).first < gripper_min_distance_to_obstacles_) ||
-                               (environment_sdf_->DistanceToBoundary3d(next_grippers_poses.first.translation()).first < gripper_min_distance_to_obstacles_) ||
-                               (environment_sdf_->DistanceToBoundary3d(next_grippers_poses.second.translation()).first < gripper_min_distance_to_obstacles_);
-                arc_helpers::DoNotOptimize(in_collision);
-                const double collision_check_time_pt2 = stopwatch(READ);
-                total_collision_check_time_ += collision_check_time_pt2;
-                if (in_collision)
                 {
-                    break;
+                    stopwatch(RESET);
+                    arc_helpers::DoNotOptimize(next_grippers_poses);
+                    const bool in_collision =
+                            (environment_sdf_->EstimateDistance3d(next_grippers_poses.first.translation()).first < gripper_min_distance_to_obstacles_) ||
+                            (environment_sdf_->EstimateDistance3d(next_grippers_poses.second.translation()).first < gripper_min_distance_to_obstacles_) ||
+                            (environment_sdf_->DistanceToBoundary3d(next_grippers_poses.first.translation()).first < gripper_min_distance_to_obstacles_) ||
+                            (environment_sdf_->DistanceToBoundary3d(next_grippers_poses.second.translation()).first < gripper_min_distance_to_obstacles_);
+                    arc_helpers::DoNotOptimize(in_collision);
+                    const double collision_check_time_pt2 = stopwatch(READ);
+                    total_collision_check_time_ += collision_check_time_pt2;
+                    if (in_collision)
+                    {
+                        break;
+                    }
                 }
             }
 

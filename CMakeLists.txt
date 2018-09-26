@@ -39,7 +39,7 @@ find_package(Flann REQUIRED)
 
 catkin_package(
     INCLUDE_DIRS    include
-    LIBRARIES       ${PROJECT_NAME}_UCB #${PROJECT_NAME}_KFMANDB ${PROJECT_NAME}_KFMANB
+    LIBRARIES       ${PROJECT_NAME}_UCB ${PROJECT_NAME}_KFMANDB ${PROJECT_NAME}_KFMANB
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
     DEPENDS         Eigen3 FLANN
 )
@@ -58,10 +58,10 @@ include_directories(include
     ${FLANN_INCLUDE_DIRS}
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O2 -flto -g -Wall -Wextra -Wpedantic -Wconversion")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O3 -flto -g -Wall -Wextra -Wpedantic -Wconversion")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O0 -g -Wall -Wextra -Wpedantic -Wconversion")# -fsanitize=address -fno-omit-frame-pointer")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_PARALLEL_K_NEAREST_NEIGHBORS -DENABLE_PARALLEL_ROADMAP -DENABLE_PARALLEL_DISTANCE_MATRIX")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_PARALLEL_ROADMAP -DENABLE_PARALLEL_DISTANCE_MATRIX -DEIGEN_DONT_PARALLELIZE")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_PARALLEL_DISTANCE_MATRIX -DENABLE_PARALLEL_ROADMAP -DEIGEN_DONT_PARALLELIZE")
 
 unset(USE_OPEN_MP CACHE)
 option(USE_OPEN_MP "Set to ON if we want to use OpenMP" ON)
@@ -79,15 +79,15 @@ FILE(GLOB hpp_SRC "include/${PROJECT_NAME}/*.hpp")
 FILE(GLOB h_SRC "include/${PROJECT_NAME}/*.h")
 FILE(GLOB cpp_SRC "src/*.cpp")
 
-#add_library(${PROJECT_NAME}_KFMANDB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
-#add_dependencies(${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(${PROJECT_NAME}_KFMANDB ${catkin_LIBRARIES} ${FLANN_LIBRARIES})
-#set_target_properties(${PROJECT_NAME}_KFMANDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${FLANN_DEFINITIONS} -DKFMANDB_BANDIT")
+add_library(${PROJECT_NAME}_KFMANDB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
+add_dependencies(${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_KFMANDB ${catkin_LIBRARIES} ${FLANN_LIBRARIES})
+set_target_properties(${PROJECT_NAME}_KFMANDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${FLANN_DEFINITIONS} -DKFMANDB_BANDIT")
 
-#add_library(${PROJECT_NAME}_KFMANB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
-#add_dependencies(${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES})
-#set_target_properties(${PROJECT_NAME}_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
+add_library(${PROJECT_NAME}_KFMANB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
+add_dependencies(${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES})
+set_target_properties(${PROJECT_NAME}_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
 
 add_library(${PROJECT_NAME}_UCB ${hpp_SRC} ${h_SRC} ${cpp_SRC})
 add_dependencies(${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})
@@ -95,15 +95,15 @@ target_link_libraries(${PROJECT_NAME}_UCB ${catkin_LIBRARIES} ${FLANN_LIBRARIES}
 set_target_properties(${PROJECT_NAME}_UCB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${FLANN_DEFINITIONS} -DUCB_BANDIT")
 
 ## Simulator tests
-#add_executable(planner_test_node_KFMANDB nodes/planner_test_node.cpp)
-#add_dependencies(planner_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(planner_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_LIBRARIES})
-#set_target_properties(planner_test_node_KFMANDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANDB_BANDIT")
+add_executable(planner_test_node_KFMANDB nodes/planner_test_node.cpp)
+add_dependencies(planner_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_EXPORTED_TARGETS})
+target_link_libraries(planner_test_node_KFMANDB ${PROJECT_NAME}_KFMANDB ${catkin_LIBRARIES})
+set_target_properties(planner_test_node_KFMANDB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANDB_BANDIT")
 
-#add_executable(planner_test_node_KFMANB nodes/planner_test_node.cpp)
-#add_dependencies(planner_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(planner_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES})
-#set_target_properties(planner_test_node_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
+add_executable(planner_test_node_KFMANB nodes/planner_test_node.cpp)
+add_dependencies(planner_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_EXPORTED_TARGETS})
+target_link_libraries(planner_test_node_KFMANB ${PROJECT_NAME}_KFMANB ${catkin_LIBRARIES})
+set_target_properties(planner_test_node_KFMANB PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} -DKFMANB_BANDIT")
 
 add_executable(planner_test_node_UCB nodes/planner_test_node.cpp)
 add_dependencies(planner_test_node_UCB ${PROJECT_NAME}_UCB ${catkin_EXPORTED_TARGETS})

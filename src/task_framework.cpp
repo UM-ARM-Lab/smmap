@@ -21,6 +21,7 @@
 #include "smmap/constraint_jacobian_model.h"
 
 #include "smmap/least_squares_controller_with_object_avoidance.h"
+#include "smmap/least_squares_stretching_constraint_controller.h"
 #include "smmap/stretching_avoidance_controller.h"
 #include "smmap/straight_line_controller.h"
 
@@ -424,6 +425,17 @@ WorldState TaskFramework::sendNextCommand(
 
     if (enable_stuck_detection_)
     {
+
+        // Update the band with the new position of the deformable object - added here to help with debugging and visualization
+        {
+            vis_->purgeMarkerList();
+            vis_->visualizeCloth("controller_input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
+//            const auto band_points = getPathBetweenGrippersThroughObject(world_state, path_between_grippers_through_object_);
+//            rubber_band_between_grippers_->setPointsAndSmooth(band_points);
+        }
+
+
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // First, check if we need to (re)plan
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -472,6 +484,9 @@ WorldState TaskFramework::sendNextCommand(
         // If we need to (re)plan due to the local controller getting stuck, or the gobal plan failing, then do so
         if (planning_needed)
         {
+//            std::cout << "Waiting for keystroke before planning" << std::endl;
+//            std::getchar();
+
             vis_->purgeMarkerList();
             visualization_msgs::Marker marker;
             marker.action = visualization_msgs::Marker::DELETEALL;
@@ -484,7 +499,7 @@ WorldState TaskFramework::sendNextCommand(
             planGlobalGripperTrajectory(world_state);
         }
 
-//        std::cout << "Waiting for keystroke" << std::endl;
+//        std::cout << "Waiting for keystroke after planning" << std::endl;
 //        std::getchar();
 
         // Execute a single step in the global plan, or use the local controller if we have no plan to follow
@@ -1634,11 +1649,11 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
     ConstraintJacobianModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
 
     const bool optimization_enabled = GetJacobianControllerOptimizationEnabled(ph_);
-    const PlannerTrialType planner_trial_type = GetPlannerTrialType(ph_);
+    const TrialType trial_type = GetTrialType(ph_);
 
-    switch (planner_trial_type)
+    switch (trial_type)
     {
-        case DIMINISHING_RIGIDITY_SINGLE_MODEL_LEAST_SQUARES_CONTROLLER:
+        case DIMINISHING_RIGIDITY_SINGLE_MODEL_LEAST_SQUARES_STRETCHING_AVOIDANCE_CONTROLLER:
         {
             double translational_deformability, rotational_deformability;
             if (ph_.getParam("translational_deformability", translational_deformability) &&
@@ -1661,23 +1676,59 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                       rotational_deformability));
 
             controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                           model_list_.back(),
+                                           nh_,
+                                           ph_,
                                            robot_,
+                                           vis_,
+                                           model_list_.back(),
                                            task_specification_->collisionScalingFactor(),
                                            optimization_enabled));
             break;
         }
-        case ADAPTIVE_JACOBIAN_SINGLE_MODEL_LEAST_SQUARES_CONTROLLER:
+        case ADAPTIVE_JACOBIAN_SINGLE_MODEL_LEAST_SQUARES_STRETCHING_AVOIDANCE_CONTROLLER:
         {
             model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
                                       DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(initial_world_state),
                                       GetAdaptiveModelLearningRate(ph_)));
 
             controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                           model_list_.back(),
+                                           nh_,
+                                           ph_,
                                            robot_,
+                                           vis_,
+                                           model_list_.back(),
                                            task_specification_->collisionScalingFactor(),
                                            optimization_enabled));
+            break;
+        }
+        case DIMINISHING_RIGIDITY_SINGLE_MODEL_LEAST_SQUARES_STRETCHING_CONSTRAINT_CONTROLLER:
+        {
+            double translational_deformability, rotational_deformability;
+            if (ph_.getParam("translational_deformability", translational_deformability) &&
+                     ph_.getParam("rotational_deformability", rotational_deformability))
+            {
+                ROS_INFO_STREAM_NAMED("task_framework", "Overriding deformability values to "
+                                       << translational_deformability << " "
+                                       << rotational_deformability);
+            }
+            else
+            {
+                translational_deformability = task_specification_->defaultDeformability();
+                rotational_deformability = task_specification_->defaultDeformability();
+                ROS_INFO_STREAM_NAMED("task_framework", "Using default deformability value of "
+                                       << task_specification_->defaultDeformability());
+            }
+
+            model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
+                                      translational_deformability,
+                                      rotational_deformability));
+
+            controller_list_.push_back(std::make_shared<LeastSquaresControllerWithStretchingConstraint>(
+                                           nh_,
+                                           ph_,
+                                           robot_,
+                                           vis_,
+                                           model_list_.back()));
             break;
         }
         case CONSTRAINT_SINGLE_MODEL_CONSTRAINT_CONTROLLER:
@@ -1701,11 +1752,11 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
             controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                            nh_,
                                            ph_,
-                                           model_list_.back(),
                                            robot_,
+                                           vis_,
+                                           model_list_.back(),
                                            environment_sdf,
                                            generator_,
-                                           vis_,
                                            GetStretchingAvoidanceControllerSolverType(ph_),
                                            GetMaxSamplingCounts(ph_)));
             break;
@@ -1739,11 +1790,11 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
             controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                            nh_,
                                            ph_,
-                                           model_list_.back(),
                                            robot_,
+                                           vis_,
+                                           model_list_.back(),
                                            environment_sdf,
                                            generator_,
-                                           vis_,
                                            GetStretchingAvoidanceControllerSolverType(ph_),
                                            GetMaxSamplingCounts(ph_)));
             break;
@@ -1767,11 +1818,12 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                               trans_deform,
                                               rot_deform));
 
-                    controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                                   model_list_.back(),
+                    controller_list_.push_back(std::make_shared<LeastSquaresControllerWithStretchingConstraint>(
+                                                   nh_,
+                                                   ph_,
                                                    robot_,
-                                                   task_specification_->collisionScalingFactor(),
-                                                   optimization_enabled));
+                                                   vis_,
+                                                   model_list_.back()));
                 }
             }
             ROS_INFO_STREAM_NAMED("task_framework", "Num diminishing rigidity models: "
@@ -1792,11 +1844,12 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                               DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(initial_world_state),
                                               learning_rate));
 
-                    controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                                   model_list_.back(),
+                    controller_list_.push_back(std::make_shared<LeastSquaresControllerWithStretchingConstraint>(
+                                                   nh_,
+                                                   ph_,
                                                    robot_,
-                                                   task_specification_->collisionScalingFactor(),
-                                                   optimization_enabled));
+                                                   vis_,
+                                                   model_list_.back()));
             }
             ROS_INFO_STREAM_NAMED("task_framework", "Num adaptive Jacobian models: "
                                    << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
@@ -1825,11 +1878,11 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                 controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                                nh_,
                                                ph_,
-                                               model_list_.back(),
                                                robot_,
+                                               vis_,
+                                               model_list_.back(),
                                                environment_sdf,
                                                generator_,
-                                               vis_,
                                                GetStretchingAvoidanceControllerSolverType(ph_),
                                                GetMaxSamplingCounts(ph_)));
             }
@@ -1862,11 +1915,11 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                 controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
                                                nh_,
                                                ph_,
-                                               model_list_.back(),
                                                robot_,
+                                               vis_,
+                                               model_list_.back(),
                                                environment_sdf,
                                                generator_,
-                                               vis_,
                                                GetStretchingAvoidanceControllerSolverType(ph_),
                                                GetMaxSamplingCounts(ph_)));
             }
@@ -1895,8 +1948,11 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                           rotational_deformability));
 
                 controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                               model_list_.back(),
+                                               nh_,
+                                               ph_,
                                                robot_,
+                                               vis_,
+                                               model_list_.back(),
                                                task_specification_->collisionScalingFactor(),
                                                optimization_enabled));
             }
@@ -1921,9 +1977,11 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                       environment_sdf));
 
                 controller_list_.push_back(std::make_shared<StraightLineController>(
+                                               nh_,
                                                ph_,
-                                               model_list_.back(),
-                                               robot_));
+                                               robot_,
+                                               vis_,
+                                               model_list_.back()));
             }
             // Dminishing Rigidity Model
             {
@@ -1948,9 +2006,11 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                           rotational_deformability));
 
                 controller_list_.push_back(std::make_shared<StraightLineController>(
+                                               nh_,
                                                ph_,
-                                               model_list_.back(),
-                                               robot_));
+                                               robot_,
+                                               vis_,
+                                               model_list_.back()));
             }
             break;
         }
@@ -2253,7 +2313,7 @@ void TaskFramework::initializeControllerLogging()
 }
 
 // Note that resulting_world_state may not be exactly indentical to individual_model_rewards[model_used]
-// because of the way forking words (and doesn't) in Bullet. They should be very close however.
+// because of the way forking works (and doesn't) in Bullet. They should be very close however.
 void TaskFramework::logPlannerData(
         const WorldState& initial_world_state,
         const WorldState& resulting_world_state,
@@ -2301,7 +2361,7 @@ void TaskFramework::logPlannerData(
 }
 
 // Note that resulting_world_state may not be exactly indentical to individual_model_rewards[model_used]
-// because of the way forking words (and doesn't) in Bullet. They should be very close however.
+// because of the way forking works (and doesn't) in Bullet. They should be very close however.
 void TaskFramework::controllerLogData(
         const WorldState& initial_world_state,
         const WorldState& resulting_world_state,
