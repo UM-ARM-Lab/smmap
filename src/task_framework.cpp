@@ -32,7 +32,7 @@ using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
-const static std_msgs::ColorRGBA PREDICTION_GRIPPER_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
+const static std_msgs::ColorRGBA PREDICTION_GRIPPER_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 0.4f);
 const static std_msgs::ColorRGBA PREDICTION_RUBBER_BAND_SAFE_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.0f, 1.0f);
 const static std_msgs::ColorRGBA PREDICTION_RUBBER_BAND_VIOLATION_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
 
@@ -372,6 +372,9 @@ void TaskFramework::execute()
             ROS_INFO_STREAM_NAMED("task_framework", "   Planner/Task sim time " << world_feedback.sim_time_ << "\t Error: " << current_error);
 
 
+            std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
+
+
             vis_->purgeMarkerList();
             visualization_msgs::Marker marker;
             marker.action = visualization_msgs::Marker::DELETEALL;
@@ -472,6 +475,9 @@ WorldState TaskFramework::sendNextCommand(
         // If we need to (re)plan due to the local controller getting stuck, or the gobal plan failing, then do so
         if (planning_needed)
         {
+            std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
+
+
             vis_->purgeMarkerList();
             visualization_msgs::Marker marker;
             marker.action = visualization_msgs::Marker::DELETEALL;
@@ -744,6 +750,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
     if (global_plan_current_timestep_ == global_plan_gripper_trajectory_.size())
     {
         ROS_INFO_NAMED("task_framework", "Global plan finished, resetting grippers pose history and error history");
+        std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
         executing_global_trajectory_ = false;
         grippers_pose_history_.clear();

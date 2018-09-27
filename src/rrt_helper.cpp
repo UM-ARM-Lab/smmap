@@ -594,9 +594,9 @@ RRTHelper::RRTHelper(
     , vis_(vis)
     , visualization_enabled_globally_(visualization_enabled)
     , gripper_a_forward_tree_color_(Visualizer::Magenta())
-    , gripper_b_forward_tree_color_(Visualizer::Red())
+    , gripper_b_forward_tree_color_(Visualizer::Cyan())
     , gripper_a_backward_tree_color_(Visualizer::Yellow())
-    , gripper_b_backward_tree_color_(Visualizer::Cyan())
+    , gripper_b_backward_tree_color_(Visualizer::Red())
     , band_tree_color_(Visualizer::Blue())
 {
     assert(task_aligned_lower_limits_.x() <= task_aligned_upper_limits_.x());
