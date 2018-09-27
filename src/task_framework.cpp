@@ -32,7 +32,7 @@ using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
-const static std_msgs::ColorRGBA PREDICTION_GRIPPER_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 0.4f);
+const static std_msgs::ColorRGBA PREDICTION_GRIPPER_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 0.2f);
 const static std_msgs::ColorRGBA PREDICTION_RUBBER_BAND_SAFE_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.0f, 1.0f);
 const static std_msgs::ColorRGBA PREDICTION_RUBBER_BAND_VIOLATION_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
 
@@ -1112,8 +1112,6 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
         cluster_targets.push_back(dijkstras_task_->cover_points_.col(cover_idx));
     }
 
-//    vis_->visualizePoints(CLUSTERING_TARGETS_NS, cluster_targets, Visualizer::Blue(), 1);
-
     const Matrix3Xd cluster_targets_as_matrix = VectorEigenVector3dToEigenMatrix3Xd(cluster_targets);
     const MatrixXd distance_matrix = CalculateSquaredDistanceMatrix(cluster_targets_as_matrix);
 
@@ -1362,12 +1360,13 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
         vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
         vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Red(), 5);
 
-        std::vector<std_msgs::ColorRGBA> colors;
-        for (size_t idx = 0; idx < cluster_targets.size(); ++idx)
-        {
-            colors.push_back(arc_helpers::GenerateUniqueColor<std_msgs::ColorRGBA>(cluster_labels[idx] + 2, 0.5));
-        }
-        vis_->visualizeCubes(CLUSTERING_TARGETS_NS, cluster_targets, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), colors, 10);
+//        std::vector<std_msgs::ColorRGBA> colors;
+//        for (size_t idx = 0; idx < cluster_targets.size(); ++idx)
+//        {
+//            colors.push_back(arc_helpers::GenerateUniqueColor<std_msgs::ColorRGBA>(cluster_labels[idx] + 2, 0.5));
+//        }
+//        vis_->visualizeCubes(CLUSTERING_TARGETS_NS, cluster_targets, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), colors, 10);
+        vis_->visualizePoints(CLUSTERING_TARGETS_NS, cluster_targets, Visualizer::Blue(), 1);
         vis_->forcePublishNow();
     }
 
