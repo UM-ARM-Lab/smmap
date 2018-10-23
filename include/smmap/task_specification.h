@@ -258,7 +258,7 @@ namespace smmap
 
             // Note that work_space_grid_ and the environment_sdf_ are using different
             // resolutions due to the way the SDF is created in CustomScene
-            const sdf_tools::SignedDistanceField::ConstPtr environment_sdf_;
+            const sdf_tools::SignedDistanceField::ConstPtr sdf_;
             const XYZGrid work_space_grid_;
 
             bool pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d& test_point) const;
@@ -345,6 +345,10 @@ namespace smmap
                     const uint32_t num_clusters) const;
 
             void visualizeFreeSpaceGraph() const;
+
+            void visualizeIndividualDijkstrasResult(
+                    const size_t cover_idx,
+                    const Eigen::Vector3d& querry_loc) const;
 
         protected:
             /// Free space graph that creates a vector field for the deformable object to follow

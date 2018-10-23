@@ -191,6 +191,7 @@ namespace smmap
                     const RobotInterface::Ptr robot,
                     const bool planning_for_whole_robot,
                     const sdf_tools::SignedDistanceField::ConstPtr environment_sdf,
+                    const XYZGrid& work_space_grid,
                     const std::shared_ptr<std::mt19937_64>& generator,
                     // Planning algorithm parameters
                     const bool using_cbirrt_style_projection,
@@ -353,6 +354,7 @@ namespace smmap
             const RobotInterface::Ptr robot_;
             const bool planning_for_whole_robot_;
             const sdf_tools::SignedDistanceField::ConstPtr environment_sdf_;
+            const XYZGrid work_space_grid_;
             const std::shared_ptr<std::mt19937_64> generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
 

@@ -486,6 +486,7 @@ RRTHelper::RRTHelper(
         const RobotInterface::Ptr robot,
         const bool planning_for_whole_robot,
         const sdf_tools::SignedDistanceField::ConstPtr environment_sdf,
+        const XYZGrid& work_space_grid,
         const std::shared_ptr<std::mt19937_64>& generator,
         // Planning algorithm parameters
         const bool using_cbirrt_style_projection,
@@ -519,6 +520,7 @@ RRTHelper::RRTHelper(
     , robot_(robot)
     , planning_for_whole_robot_(planning_for_whole_robot)
     , environment_sdf_(environment_sdf)
+    , work_space_grid_(work_space_grid)
 
     , generator_(generator)
     , uniform_unit_distribution_(0.0, 1.0)
@@ -2614,7 +2616,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_b
 
     const auto test_band = path_utils::ResamplePath(
         test_band_input,
-        environment_sdf_->GetResolution(),
+        work_space_grid_.minStepDimension() * 0.5,
         distance_fn,
         interpolation_fn);
 
@@ -2633,7 +2635,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_b
             const Vector3d& first_node = blacklisted_path[blacklisted_path_ind];
             const Vector3d& second_node = test_band[test_band_ind];
 
-            const ssize_t num_steps = (ssize_t)std::ceil((second_node - first_node).norm() / environment_sdf_->GetResolution());
+            const ssize_t num_steps = (ssize_t)std::ceil((second_node - first_node).norm() / (work_space_grid_.minStepDimension() * 0.5));
 
             // We don't need to check the endpoints as they are already checked as part of the rubber band process
             for (ssize_t ind = 1; ind < num_steps; ++ind)
@@ -3270,8 +3272,8 @@ void RRTHelper::deleteTreeVisualizations() const
     vis_->forcePublishNow(0.01);
     vis_->purgeMarkerList();
 
-    vis_->visualizeCubes(TaskFramework::CLUSTERING_RESULTS_POST_PROJECT_NS, {grippers_goal_poses_.first.translation()}, Vector3d::Ones() * environment_sdf_->GetResolution() * 2.0, gripper_a_forward_tree_color_, 1);
-    vis_->visualizeCubes(TaskFramework::CLUSTERING_RESULTS_POST_PROJECT_NS, {grippers_goal_poses_.second.translation()}, Vector3d::Ones() * environment_sdf_->GetResolution() * 2.0, gripper_b_forward_tree_color_, 5);
+    vis_->visualizeCubes(TaskFramework::CLUSTERING_RESULTS_POST_PROJECT_NS, {grippers_goal_poses_.first.translation()}, Vector3d::Ones() * work_space_grid_.minStepDimension(), gripper_a_forward_tree_color_, 1);
+    vis_->visualizeCubes(TaskFramework::CLUSTERING_RESULTS_POST_PROJECT_NS, {grippers_goal_poses_.second.translation()}, Vector3d::Ones() * work_space_grid_.minStepDimension(), gripper_b_forward_tree_color_, 5);
 }
 
 void RRTHelper::visualizePath(const std::vector<RRTNode, RRTAllocator>& path) const

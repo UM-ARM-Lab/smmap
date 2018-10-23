@@ -190,7 +190,7 @@ namespace smmap
 
             void initializeControllerLogging();
 
-            void logPlannerData(
+            void logBanditsData(
                     const WorldState& initial_world_state,
                     const WorldState& resulting_world_state,
                     const std::vector<WorldState>& individual_model_results,
@@ -211,7 +211,7 @@ namespace smmap
             std::pair<WorldState, RubberBand::Ptr> loadStoredWorldState();
             bool useStoredWorldState() const;
 
-            const bool planner_logging_enabled_;
+            const bool bandits_logging_enabled_;
             const bool controller_logging_enabled_;
             std::unordered_map<std::string, Log::Log> loggers_;
             std::unordered_map<std::string, Log::Log> controller_loggers_;
@@ -220,7 +220,6 @@ namespace smmap
             const bool visualize_desired_motion_;
             const bool visualize_gripper_motion_;
             const bool visualize_predicted_motion_;
-            const bool visualize_free_space_graph_;
 
         public:
             // Topic names used for publishing visualization data

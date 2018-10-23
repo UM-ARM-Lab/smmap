@@ -7,6 +7,18 @@
 
 #include "smmap/quinlan_rubber_band.h"
 
+#define ENABLE_BAND_LOAD_SAVE 0
+//#define ENABLE_BAND_LOAD_SAVE 1
+
+#define ENABLE_BAND_DEBUGGING 0
+//#define ENABLE_BAND_DEBUGGING 1
+#define ENABLE_INTERPOLATE_DEBUGGING 0
+//#define ENABLE_INTERPOLATE_DEBUGGING) 1
+#define ENABLE_REMOVE_DEBUGGING 0
+//#define && ENABLE_REMOVE_DEBUGGING 1
+//#define ENABALE_SMOOTHING_DEBUGGING 1
+#define ENABALE_SMOOTHING_DEBUGGING 1
+
 using namespace smmap;
 using namespace smmap_utilities;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
@@ -32,11 +44,12 @@ QuinlanRubberBand::QuinlanRubberBand(
         const std::shared_ptr<std::mt19937_64>& generator)
     : ph_("/smmap_planner_node/band")
     , task_(task)
-    , sdf_(task_->environment_sdf_)
+    , sdf_(task_->sdf_)
     , vis_(vis)
     , max_total_band_distance_(max_total_band_distance)
-    , min_overlap_distance_(sdf_->GetResolution() * 0.1)
-    , min_distance_to_obstacle_(sdf_->GetResolution() * 0.1)
+    #warning "Magic numbers in band smoothing code"
+    , min_overlap_distance_(task_->work_space_grid_.minStepDimension() * 0.05)
+    , min_distance_to_obstacle_(task_->work_space_grid_.minStepDimension() * 0.1)
     , node_removal_overlap_factor_(1.2)
     , backtrack_threshold_(0.1)
     , smoothing_iterations_(100)
@@ -321,7 +334,7 @@ Eigen::Vector3d QuinlanRubberBand::projectToValidBubble(const Eigen::Vector3d& l
     vis_->visualizePoints("___point_to_project", {location}, Visualizer::Yellow(0.3f), 1, 0.05);
     vis_->visualizePoints("___point_to_project", {location}, Visualizer::Yellow(0.3f), 1, 0.05);
     vis_->visualizePoints("___point_to_project", {location}, Visualizer::Yellow(0.3f), 1, 0.05);
-    arc_helpers::Sleep(0.01);
+    vis_->forcePublishNow();
 #endif
     const auto post_collision_project = sdf_->ProjectOutOfCollisionToMinimumDistance3d(location, min_distance_to_obstacle_);
 #if ENABLE_BAND_DEBUGGING
@@ -373,7 +386,7 @@ double QuinlanRubberBand::getBubbleSize(const Eigen::Vector3d& location) const
 {
 #if ENABLE_BAND_DEBUGGING
     vis_->visualizePoints("get_bubble_size_test_location", {location}, Visualizer::Orange(), 1, 0.005);
-//    std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+    vis_->forcePublishNow();
 #endif
 
     return sdf_->EstimateDistance3d(location).first;
@@ -469,24 +482,18 @@ void QuinlanRubberBand::interpolateBetweenPoints(
         EigenHelpers::VectorVector3d& point_buffer,
         const Eigen::Vector3d& target) const
 {
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_INTERPOLATE_DEBUGGING)
+    std::cout << PrettyPrint::PrettyPrint(point_buffer, true, "\n") << std::endl << "Start of interpolateBetweenPoints: " << std::flush;
     if (point_buffer.size() >= 2)
     {
         assert(bandIsValidWithVisualization(point_buffer));
     }
-    visualizeWithBubbles(point_buffer, "start_of_interpolateBetweenPoints", Visualizer::Blue(), Visualizer::Cyan(), 1, true);
+    if (point_buffer.size() > 1)
+    {
+        visualizeWithBubbles(point_buffer, "start_of_interpolateBetweenPoints", Visualizer::Blue(), Visualizer::Cyan(), 1, true);
+    }
     vis_->visualizePoints("start_of_interpolateBetweenPoints_target_point", {target}, Visualizer::Orange(), 1, 0.01);
-    vis_->visualizePoints("start_of_interpolateBetweenPoints_target_point", {target}, Visualizer::Orange(), 1, 0.01);
-    vis_->visualizePoints("start_of_interpolateBetweenPoints_target_point", {target}, Visualizer::Orange(), 1, 0.01);
-
-    std::cout << PrettyPrint::PrettyPrint(point_buffer, true, "\n") << std::endl << "Start of interpolateBetweenPoints: " << std::flush;
-    int tmp;
-    std::cin >> tmp;
-    visualizeWithBubbles(point_buffer, "start_of_interpolateBetweenPoints", Visualizer::Blue(), Visualizer::Cyan(), 1, true);
-    vis_->visualizePoints("start_of_interpolateBetweenPoints_target_point", {target}, Visualizer::Orange(), 1, 0.01);
-    vis_->visualizePoints("start_of_interpolateBetweenPoints_target_point", {target}, Visualizer::Orange(), 1, 0.01);
-    vis_->visualizePoints("start_of_interpolateBetweenPoints_target_point", {target}, Visualizer::Orange(), 1, 0.01);
-    arc_helpers::Sleep(0.1);
+    vis_->forcePublishNow();
 #endif
 
 
@@ -501,7 +508,7 @@ void QuinlanRubberBand::interpolateBetweenPoints(
     double distance_to_end = (target - point_buffer.back()).norm();
     while (!sufficientOverlap(curr_bubble_size, target_bubble_size, distance_to_end))
     {
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_INTERPOLATE_DEBUGGING)
         std::cout << "Start of interpolateBetweenPoints outer loop" << std::endl;
 #endif
 
@@ -517,17 +524,17 @@ void QuinlanRubberBand::interpolateBetweenPoints(
         double test_point_bubble_size = getBubbleSize(test_point);
         double distance_between_curr_and_test_point = (curr - test_point).norm();
 
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_INTERPOLATE_DEBUGGING)
         assert(sdf_->LocationInBounds3d(curr));
         assert(sdf_->LocationInBounds3d(target));
         assert(sdf_->LocationInBounds3d(interpolated_point));
         assert(sdf_->LocationInBounds3d(test_point));
 #endif
         ROS_WARN_STREAM_COND_NAMED(outer_iteration_counter == 20, "rubber_band", "Rubber band interpolation outer loop counter at " << outer_iteration_counter << ", probably stuck in an infinite loop");
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_INTERPOLATE_DEBUGGING)
         if (outer_iteration_counter >= 20)
         {
-            int tmp;
+            std::string tmp;
             std::cout << "\n\n\n\n\n\n\nCurr: ";
             getBubbleSize(curr);
             std::cin >> tmp;
@@ -604,7 +611,6 @@ void QuinlanRubberBand::interpolateBetweenPoints(
 
                 // delay some, doesn't actually do anything as nothing is on the "null" namespace
                 vis_->deleteObjects("null", 1, 10);
-                std::cin >> tmp;
             }
 #endif
 
@@ -616,7 +622,7 @@ void QuinlanRubberBand::interpolateBetweenPoints(
 
             ++inner_iteration_counter;
 
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_INTERPOLATE_DEBUGGING)
             std::cout << "End of interpolateBetweenPoints outer loop" << std::endl;
 #endif
         }
@@ -625,7 +631,7 @@ void QuinlanRubberBand::interpolateBetweenPoints(
         curr_bubble_size = test_point_bubble_size;
         distance_to_end = (target - test_point).norm();
 
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_INTERPOLATE_DEBUGGING)
         assert(bandIsValidWithVisualization(point_buffer));
         std::cout << "End of interpolateBetweenPoints outer loop" << std::endl;
 #endif
@@ -633,7 +639,7 @@ void QuinlanRubberBand::interpolateBetweenPoints(
         ++outer_iteration_counter;
     }
 
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_INTERPOLATE_DEBUGGING)
     point_buffer.push_back(target);
     visualizeWithBubbles(point_buffer, "end_of_interpolate_between_points", Visualizer::Black(), Visualizer::Cyan(), 1, true);
     assert(bandIsValidWithVisualization(point_buffer));
@@ -648,7 +654,7 @@ void QuinlanRubberBand::interpolateBetweenPoints(
  */
 void QuinlanRubberBand::interpolateBandPoints()
 {
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_INTERPOLATE_DEBUGGING)
     assert(band_.size() >= 2);
     for (size_t idx = 0; idx < band_.size(); ++idx)
     {
@@ -671,14 +677,14 @@ void QuinlanRubberBand::interpolateBandPoints()
     EigenHelpers::VectorVector3d new_band(1, band_.front());
     for (size_t idx = 0; idx + 1 < band_.size(); ++idx)
     {
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_INTERPOLATE_DEBUGGING)
         std::cout << "Start of interpolateBandPointsLoop idx " << idx << std::endl;
 #endif
 
         const auto& next_node = band_[idx + 1];
         interpolateBetweenPoints(new_band, next_node);
         new_band.push_back(next_node);
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_INTERPOLATE_DEBUGGING)
         assert(bandIsValidWithVisualization(new_band));
         std::cout << "End of interpolateBandPointsLoop idx " << idx << std::endl;
 #endif
@@ -693,7 +699,7 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
 {
     assert(bandIsValidWithVisualization());
 
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_REMOVE_DEBUGGING)
     std::cout << "Start of removeExtraBandPoints\n";
     visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
     printBandData(band_);
@@ -703,14 +709,14 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
     EigenHelpers::VectorVector3d forward_pass;
     forward_pass.reserve(band_.size());
     forward_pass.push_back(band_.front());
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_REMOVE_DEBUGGING)
     vis_->visualizePoints( "remove_extra_test_points_kept_points",  {forward_pass.back()}, Visualizer::Cyan(1.0f), (int32_t)forward_pass.size(), 0.002);
     vis_->visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, Visualizer::Cyan(0.2f), (int32_t)forward_pass.size(), getBubbleSize(forward_pass.back()));
 #endif
 
     for (size_t curr_idx = 1; curr_idx + 1 < band_.size(); ++curr_idx)
     {
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_REMOVE_DEBUGGING)
         std::cout << "Start of removeExtraBandPoints loop, idx: " << curr_idx << std::endl;
 #endif
 
@@ -735,7 +741,7 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
         // Discard this point if it is containted in either neighbouring bubble
         if (curr_bubble_is_wholey_contained_in_prev || curr_bubble_is_wholey_contained_in_next)
         {
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_REMOVE_DEBUGGING)
             std::cout << "Removing point as it is wholey contained, idx: " << curr_idx << std::endl;
 #endif
             continue;
@@ -744,7 +750,7 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
         // Discard this point if prev overlaps next by enough
         if (sufficientOverlap(prev_bubble_size, next_bubble_size, prev_next_dist * node_removal_overlap_factor_))
         {
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_REMOVE_DEBUGGING)
             std::cout << "Removing point as it has enough overlap, idx: " << curr_idx << std::endl;
 #endif
             continue;
@@ -753,7 +759,7 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
         // Discard this point if it is too close to the previous, or too close to the next
         if (prev.isApprox(curr) || next.isApprox(curr))
         {
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_REMOVE_DEBUGGING)
             std::cout << "Removing point as it is really really really close to and adjacent one, idx: " << curr_idx << std::endl;
 #endif
             continue;
@@ -766,20 +772,20 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
 
         if (band_backtracks)
         {
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_REMOVE_DEBUGGING)
             std::cout << "Removing point as it is a backtrack, idx: " << curr_idx << std::endl;
 #endif
             continue;
         }
 
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_REMOVE_DEBUGGING)
         vis_->visualizePoints( "remove_extra_test_prev", {prev}, Visualizer::Red(1.0f),   1, 0.002);
         vis_->visualizeSpheres("remove_extra_test_prev", {prev}, Visualizer::Red(0.2f),   2, prev_bubble_size);
         vis_->visualizePoints( "remove_extra_test_curr", {curr}, Visualizer::Green(1.0f), 1, 0.002);
         vis_->visualizeSpheres("remove_extra_test_curr", {curr}, Visualizer::Green(0.2f), 2, curr_bubble_size);
         vis_->visualizePoints( "remove_extra_test_next", {next}, Visualizer::Blue(1.0f),  1, 0.002);
         vis_->visualizeSpheres("remove_extra_test_next", {next}, Visualizer::Blue(0.2f),  2, next_bubble_size);
-        std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+        vis_->forcePublishNow();
 
         std::cout << "prev bubble size: " << prev_bubble_size << std::endl;
         std::cout << "curr bubble size: " << curr_bubble_size << std::endl;
@@ -790,7 +796,7 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
 #endif
         // If no item said we should delete this item, then keep it
         forward_pass.push_back(curr);
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_REMOVE_DEBUGGING)
         vis_->visualizePoints( "remove_extra_test_points_kept_points",  {forward_pass.back()}, Visualizer::Cyan(1.0f), (int32_t)forward_pass.size(), 0.002);
         vis_->visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, Visualizer::Cyan(0.2f), (int32_t)forward_pass.size(), getBubbleSize(forward_pass.back()));
 
@@ -798,7 +804,7 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
 #endif
     }
     forward_pass.push_back(band_.back());
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_REMOVE_DEBUGGING)
     vis_->visualizePoints( "remove_extra_test_points_kept_points",  {forward_pass.back()}, Visualizer::Cyan(1.0f), (int32_t)forward_pass.size(), 0.002);
     vis_->visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, Visualizer::Cyan(0.2f), (int32_t)forward_pass.size(), getBubbleSize(forward_pass.back()));
 #endif
@@ -806,7 +812,7 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
     band_ = forward_pass;
     visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, verbose);
 
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABLE_REMOVE_DEBUGGING)
     std::cout << "End of removeExtraBandPoints\n";
     visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
     printBandData(band_);
@@ -816,7 +822,7 @@ void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
 
 void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 {
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABALE_SMOOTHING_DEBUGGING)
     visualizeWithBubbles(band_, "StartOfSmoothingBand", Visualizer::Black(), Visualizer::Cyan(), 1, true);
     assert(bandIsValidWithVisualization());
     vis_->forcePublishNow();
@@ -824,7 +830,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 
     for (size_t smoothing_iter = 0; smoothing_iter < smoothing_iterations_; ++smoothing_iter)
     {
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABALE_SMOOTHING_DEBUGGING)
         visualizeWithBubbles("StartOfSmoothingOuterLoop", Visualizer::Black(), Visualizer::Cyan(), 1, true);
         vis_->forcePublishNow();
         std::cerr << "\n\nStart of outer loop loop smoothBandPoints, smoothing iter: " << smoothing_iter << "\n";
@@ -838,7 +844,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 
         for (size_t curr_idx = 1; curr_idx + 1 < band_.size(); ++ curr_idx)
         {
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABALE_SMOOTHING_DEBUGGING)
             visualizeWithBubbles("StartOfSmoothingInnerLoop", Visualizer::Black(), Visualizer::Cyan(), 1, true);
             std::cout << "Start of smoothBandPointsInnerLoop: band idx: " << curr_idx << std::endl;
 #endif
@@ -869,15 +875,16 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 //            const Eigen::Vector3d delta = EigenHelpers::VectorProjection(allowed_movement_direction, delta_raw);
             // Determine if the projection is within the bubble at the current point, and if not only move part way
             // Only step at most part way there in order to try and avoid oscillations - too large of a step size can be bad due to errors in sdf->EstiamteDistance
-            const double max_delta_norm = std::max(0.0, (curr_bubble_size - min_distance_to_obstacle_ * 1.00001) * 0.9);
+#warning "Magic numbers in band smoothing code"
+//            const double max_delta_norm = std::max(0.0, (curr_bubble_size - min_distance_to_obstacle_ * 1.00001) * 0.9);
+            const double max_delta_norm = curr_bubble_size  * 0.9;
             const bool curr_plus_delta_inside_bubble = delta.norm() <= max_delta_norm;
             const Eigen::Vector3d prime =  curr_plus_delta_inside_bubble ? Eigen::Vector3d(curr + delta) : Eigen::Vector3d(curr + max_delta_norm * delta.normalized());
             // Ensure that the resulting point is not in collision even with numerical rounding (and weirdness in the SDF)
-
             const Eigen::Vector3d projected = projectToValidBubble(prime);
             const double projected_bubble_size = getBubbleSize(projected);
 
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABALE_SMOOTHING_DEBUGGING)
             if (projected_bubble_size < min_distance_to_obstacle_)
             {
                 const Eigen::Vector3d projected_testing = projectToValidBubble(prime);
@@ -886,6 +893,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
                           << "Projected: " << projected_testing.transpose() << std::endl
                           << "Proj bubble size: " << projected_bubble_size << std::endl;
             }
+
             const double prime_bubble_size = getBubbleSize(prime);
 
             vis_->forcePublishNow();
@@ -915,6 +923,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
                       << "next_minus_curr           = [" << (next - curr).normalized().transpose() << "]';\n"
                       << "rejected_movement_dir     = [" << rejected_movement_direction.transpose() << "]';\n"
                       << std::endl
+                      << "sdf_gradient =            = [" << EigenHelpers::StdVectorDoubleToEigenVector3d(sdf_->GetGradient3d(curr)).transpose() << "]';\n"
                       << "delta_raw                 = [" << delta_raw.transpose() << "]';\n"
                       << "delta_projected_to_plane  = [" << delta.transpose() << "]';\n"
                       << "delta_clipped_to_sphere   = [" << (prime - curr).transpose() << "]';\n"
@@ -931,6 +940,21 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
                       << "proj_bubble_size  = " << projected_bubble_size << ";\n"
                       << "next_bubble_size  = " << next_bubble_size << ";\n"
                       << std::endl;
+
+
+            if (!curr_plus_delta_inside_bubble)
+            {
+                std::cout << "!!!!!!!!!!!!!!!! bubble size is meaningfully impacting movement" << std::endl;
+                std::cout << "SDF Est at (curr):              " << sdf_->EstimateDistance3d(curr).first << std::endl;
+                std::cout << "(SDF Est at curr) + delta_norm: " << sdf_->EstimateDistance3d(curr).first + delta.norm() << std::endl;
+                std::cout << "(SDF Est at curr) - delta_norm: " << sdf_->EstimateDistance3d(curr).first - delta.norm() << std::endl;
+                std::cout << "SDF Est at (curr + delta):      " << sdf_->EstimateDistance3d(curr + delta).first << std::endl;
+
+                if (sdf_->EstimateDistance3d(curr + delta).first > sdf_->EstimateDistance3d(curr).first)
+                {
+                    std::getchar();
+                }
+            }
 #endif
 
             // Check if the bubbles still overlap on each side
@@ -948,7 +972,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
                 interpolateBetweenPoints(next_band, next);
             }
 
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABALE_SMOOTHING_DEBUGGING)
             std::cout << "End of smoothBandPointsInnerLoop: band idx: " << curr_idx << std::endl;
 #endif
         }
@@ -958,13 +982,14 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 
         // Shortcut the process if there has been no meaningful change in the band
         // TODO: remove magic number
+#warning "Magic number in band smoothing code"
         if (EigenHelpers::CloseEnough(band_, next_band, 1e-4))
         {
             return;
         }
 
         band_ = next_band;
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABALE_SMOOTHING_DEBUGGING)
         std::cout << "\n\n\nEnd of smoothing loop, iteration: " << smoothing_iter << std::endl;
         visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
         printBandData(band_);
@@ -975,7 +1000,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
         removeExtraBandPoints(verbose);
     }
 
-#if ENABLE_BAND_DEBUGGING
+#if (ENABLE_BAND_DEBUGGING && ENABALE_SMOOTHING_DEBUGGING)
     printBandData(band_);
     assert(bandIsValidWithVisualization());
 #endif
@@ -987,7 +1012,7 @@ void QuinlanRubberBand::printBandData(const EigenHelpers::VectorVector3d& test_b
 {
 #if !ENABLE_BAND_DEBUGGING
     return;
-#endif
+#else
     const Eigen::Vector3d min = sdf_->GetOriginTransform().translation();
     const Eigen::Vector3d max = min + Eigen::Vector3d(sdf_->GetXSize(), sdf_->GetYSize(), sdf_->GetZSize());
     std::cout << "SDF limits: x, y, z\n"
@@ -1016,7 +1041,8 @@ void QuinlanRubberBand::printBandData(const EigenHelpers::VectorVector3d& test_b
         }
     }
     std::cout << std::setprecision(12) << data << std::endl;
-    std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+    arc_helpers::Sleep(0.001);
+#endif
 }
 
 
