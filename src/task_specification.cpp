@@ -42,6 +42,15 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
 
     switch (task_type)
     {
+        case TaskType::ROPE_TABLE_LINEAR_MOTION:
+        case TaskType::CLOTH_TABLE_LINEAR_MOTION:
+        case TaskType::ROPE_TABLE_PENTRATION:
+        case TaskType::CLOTH_PLACEMAT_LINEAR_MOTION:
+            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis);
+
+        case TaskType::CLOTH_COLAB_FOLDING:
+            return std::make_shared<ClothColabFolding>(nh, ph, vis);
+
         case TaskType::ROPE_CYLINDER_COVERAGE:
         case TaskType::ROPE_CYLINDER_COVERAGE_TWO_GRIPPERS:
             return std::make_shared<RopeCylinderCoverage>(nh, ph, vis);
@@ -50,42 +59,19 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
             return std::make_shared<ClothTableCoverage>(nh, ph, vis);
 
         case TaskType::CLOTH_CYLINDER_COVERAGE:
-            return std::make_shared<ClothCylinderCoverage>(nh, ph, vis);
-
-        case TaskType::CLOTH_COLAB_FOLDING:
-            return std::make_shared<ClothColabFolding>(nh, ph, vis);
-
         case TaskType::CLOTH_WAFR:
-            return std::make_shared<ClothWAFR>(nh, ph, vis);
-
-        case TaskType::CLOTH_SINGLE_POLE:
-            return std::make_shared<ClothSinglePole>(nh, ph, vis);
-
         case TaskType::CLOTH_WALL:
-            return std::make_shared<ClothWall>(nh, ph, vis);
-
+        case TaskType::CLOTH_SINGLE_POLE:
         case TaskType::CLOTH_DOUBLE_SLIT:
-            return std::make_shared<ClothDoubleSlit>(nh, ph, vis);
+            return std::make_shared<ClothDistanceBasedCorrespondences>(nh, ph, vis);
 
         case TaskType::ROPE_MAZE:
         case TaskType::ROPE_ZIG_MATCH:
-            return std::make_shared<RopeMaze>(nh, ph, vis);
-
-        case TaskType::ROPE_TABLE_LINEAR_MOTION:
-            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::ROPE, TaskType::ROPE_TABLE_LINEAR_MOTION);
-
-        case TaskType::CLOTH_TABLE_LINEAR_MOTION:
-            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_TABLE_LINEAR_MOTION);
-
-        case TaskType::ROPE_TABLE_PENTRATION:
-            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::ROPE, TaskType::ROPE_TABLE_PENTRATION);
-
+        case TaskType::ROPE_HOOKS_BASIC:
+            return std::make_shared<RopeFixedCorrespondences>(nh, ph, vis);
 
         case TaskType::CLOTH_PLACEMAT_LIVE_ROBOT:
-            return std::make_shared<ClothPlacemat>(nh, ph, vis);
-
-        case TaskType::CLOTH_PLACEMAT_LINEAR_MOTION:
-            return std::make_shared<ModelAccuracyTestTask>(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_PLACEMAT_LINEAR_MOTION);
+            return std::make_shared<ClothFixedCorrespondences>(nh, ph, vis);
 
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
@@ -101,8 +87,6 @@ TaskSpecification::TaskSpecification(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
         Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type,
         const bool is_dijkstras_type_task)
     : first_step_calculated_(false)
     , first_step_last_simtime_calced_(NAN)
@@ -113,8 +97,8 @@ TaskSpecification::TaskSpecification(
 
     , desired_motion_scaling_factor_(GetDesiredMotionScalingFactor(ph))
 
-    , deformable_type_(deformable_type)
-    , task_type_(task_type)
+    , deformable_type_(GetDeformableType(nh))
+    , task_type_(GetTaskType(nh))
     , is_dijkstras_type_task_(is_dijkstras_type_task)
 
     , nh_(nh)
@@ -480,10 +464,8 @@ const std::vector<long>& TaskSpecification::getGripperAttachedNodesIndices(const
 ModelAccuracyTestTask::ModelAccuracyTestTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        smmap_utilities::Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type)
-    : TaskSpecification(nh, ph, vis, deformable_type, task_type, false)
+        smmap_utilities::Visualizer::Ptr vis)
+    : TaskSpecification(nh, ph, vis, false)
 {}
 
 void ModelAccuracyTestTask::visualizeDeformableObject_impl(
@@ -563,13 +545,11 @@ CoverageTask::CoverageTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
         Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type,
-        const bool is_dijkstras_type_task = false)
-    : TaskSpecification(nh, ph, vis, deformable_type, task_type, is_dijkstras_type_task)
-    , environment_sdf_(GetEnvironmentSDF(nh))
-    , work_space_grid_(environment_sdf_->GetOriginTransform(),
-                       environment_sdf_->GetFrame(),
+        const bool is_dijkstras_type_task)
+    : TaskSpecification(nh, ph, vis, is_dijkstras_type_task)
+    , sdf_(GetEnvironmentSDF(nh))
+    , work_space_grid_(sdf_->GetOriginTransform(),
+                       sdf_->GetFrame(),
                        GetWorldXStep(nh),
                        GetWorldYStep(nh),
                        GetWorldZStep(nh),
@@ -583,7 +563,7 @@ CoverageTask::CoverageTask(
     , error_threshold_distance_to_normal_(GetErrorThresholdDistanceToNormal(ph))
     , error_threshold_task_done_(GetErrorThresholdTaskDone(ph))
 {
-    assert(environment_sdf_->GetFrame() == GetWorldFrameName());
+    assert(sdf_->GetFrame() == GetWorldFrameName());
     assert(work_space_grid_.getFrame() == GetWorldFrameName());
 }
 
@@ -604,10 +584,8 @@ bool CoverageTask::pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d
 DirectCoverageTask::DirectCoverageTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type)
-    : CoverageTask(nh, ph, vis, deformable_type, task_type)
+        Visualizer::Ptr vis)
+    : CoverageTask(nh, ph, vis, false)
 {}
 
 double DirectCoverageTask::calculateError_impl(const WorldState& world_state)
@@ -700,10 +678,8 @@ ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_imp
 DijkstrasCoverageTask::DijkstrasCoverageTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type)
-    : CoverageTask(nh, ph, vis, deformable_type, task_type, true)
+        Visualizer::Ptr vis)
+    : CoverageTask(nh, ph, vis, true)
     , current_correspondences_calculated_(false)
     , current_correspondences_last_simtime_calced_(std::numeric_limits<double>::quiet_NaN())
     , current_correspondences_(num_nodes_)
@@ -711,6 +687,10 @@ DijkstrasCoverageTask::DijkstrasCoverageTask(
 {
     GetFreeSpaceGraph(nh, free_space_graph_, cover_ind_to_free_space_graph_ind_);
     assert(cover_ind_to_free_space_graph_ind_.size() == (size_t)num_cover_points_);
+    if (!GetDisableAllVisualizations(ph_) && GetVisualizeFreeSpaceGraph(ph_))
+    {
+        visualizeFreeSpaceGraph();
+    }
 
     const bool need_to_run_dijkstras = !loadDijkstrasResults();
     if (need_to_run_dijkstras)
@@ -724,6 +704,9 @@ DijkstrasCoverageTask::DijkstrasCoverageTask(
             const int64_t free_space_graph_ind = cover_ind_to_free_space_graph_ind_[cover_ind];
             const auto result = arc_dijkstras::SimpleDijkstrasAlgorithm<Eigen::Vector3d>::PerformDijkstrasAlgorithm(free_space_graph_, free_space_graph_ind);
             dijkstras_results_[cover_ind] = result.second;
+
+//            std::cout << "Cover idx: " << cover_ind << " Dijktsras size: " << dijkstras_results_[cover_ind].first.size() << std::endl;
+//            visualizeIndividualDijkstrasResult(cover_ind, Eigen::Vector3d(-50.0, -50.0, -50.0));
         }
         ROS_INFO_NAMED("coverage_task", "Writing solutions to file");
 
@@ -948,8 +931,43 @@ void DijkstrasCoverageTask::visualizeFreeSpaceGraph() const
         }
     }
 
-    vis_->visualizeSpheres("free_space_graph_nodes", node_centers, Visualizer::Orange(), 1, 0.002);
-    vis_->visualizeLines("free_space_graph_edges", start_points, end_points, Visualizer::Orange(), 1, 0.0002);
+    vis_->visualizeSpheres("free_space_graph_nodes", node_centers, Visualizer::Cyan(), 1, 0.002);
+    vis_->visualizeLines("free_space_graph_edges", start_points, end_points, Visualizer::Cyan(), 1, 0.0002);
+    vis_->forcePublishNow(0.2);
+}
+
+void DijkstrasCoverageTask::visualizeIndividualDijkstrasResult(
+        const size_t cover_idx,
+        const Eigen::Vector3d& querry_loc) const
+{
+    const std::vector<int64_t>& dijkstras_next_target = dijkstras_results_[(size_t)cover_idx].first;
+
+    EigenHelpers::VectorVector3d start_points;
+    EigenHelpers::VectorVector3d end_points;
+
+    for (ssize_t x_idx = 0; x_idx < work_space_grid_.getXNumSteps(); ++x_idx)
+    {
+        for (ssize_t y_idx = 0; y_idx < work_space_grid_.getYNumSteps(); ++y_idx)
+        {
+            for (ssize_t z_idx = 0; z_idx < work_space_grid_.getZNumSteps(); ++z_idx)
+            {
+                const ssize_t point_idx_in_free_space_graph = work_space_grid_.xyzIndexToGridIndex(x_idx, y_idx, z_idx);
+                assert(point_idx_in_free_space_graph >= 0 && point_idx_in_free_space_graph < (ssize_t)(dijkstras_next_target.size() - num_cover_points_));
+                const Eigen::Vector3d point_in_world = work_space_grid_.xyzIndexToWorldPosition(x_idx, y_idx, z_idx);
+                const ssize_t next_idx_in_free_space_graph = dijkstras_next_target[(size_t)point_idx_in_free_space_graph];
+                if (next_idx_in_free_space_graph >= 0)
+                {
+                    const Eigen::Vector3d next_in_world = free_space_graph_.GetNodeImmutable(next_idx_in_free_space_graph).GetValueImmutable();
+                    start_points.push_back(point_in_world);
+                    end_points.push_back(next_in_world);
+                }
+            }
+        }
+    }
+
+    vis_->visualizeSpheres("dijkstras_navigation_field_querry", {querry_loc}, Visualizer::Orange(), 1, 0.0002);
+    vis_->visualizeArrows("dijkstras_navigation_field", start_points, end_points, Visualizer::Orange(), work_space_grid_.minStepDimension() * 0.05, work_space_grid_.minStepDimension() * 0.1);
+    vis_->forcePublishNow(0.2);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1166,7 +1184,8 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             const Eigen::Vector3d combined_delta = summed_dijkstras_deltas.normalized() * work_space_grid_.minStepDimension();
 
             const Eigen::Vector3d micro_delta = combined_delta/ (double)VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS;
-            const Eigen::Vector3d projected_pos = environment_sdf_->ProjectOutOfCollision3dLegacy(updated_pos + micro_delta);
+            #warning "Changed from legacy to new projection here"
+            const Eigen::Vector3d projected_pos = sdf_->ProjectOutOfCollision3d(updated_pos + micro_delta);
 
             inner_progress = (projected_pos - updated_pos).squaredNorm() > VECTOR_FIELD_FOLLOWING_MIN_PROGRESS;
             if (inner_progress)
@@ -1195,10 +1214,8 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
 DistanceBasedCorrespondencesTask::DistanceBasedCorrespondencesTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type)
-    : DijkstrasCoverageTask(nh, ph, vis, deformable_type, task_type)
+        Visualizer::Ptr vis)
+    : DijkstrasCoverageTask(nh, ph, vis)
 {}
 
 DijkstrasCoverageTask::Correspondences DistanceBasedCorrespondencesTask::getCoverPointCorrespondences_impl(
@@ -1216,6 +1233,11 @@ DijkstrasCoverageTask::Correspondences DistanceBasedCorrespondencesTask::getCove
         bool covered;
         std::tie(closest_deformable_idx, min_dist_to_deformable_object, best_target_idx_in_free_space_graph, covered) =
                 findNearestObjectPoint(world_state, cover_idx);
+
+        if (closest_deformable_idx == -1)
+        {
+            visualizeIndividualDijkstrasResult(cover_idx, cover_points_.col(cover_idx));
+        }
 
         // Record the results in the data structure
         correspondences.correspondences_[closest_deformable_idx].push_back(cover_idx);
@@ -1302,10 +1324,8 @@ std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::fin
 FixedCorrespondencesTask::FixedCorrespondencesTask(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        Visualizer::Ptr vis,
-        const DeformableType deformable_type,
-        const TaskType task_type)
-    : DijkstrasCoverageTask(nh, ph, vis, deformable_type, task_type)
+        Visualizer::Ptr vis)
+    : DijkstrasCoverageTask(nh, ph, vis)
 {}
 
 DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCorrespondences_impl(

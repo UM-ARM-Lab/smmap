@@ -103,12 +103,15 @@ namespace smmap
 
 
     /**
-     * @brief The ClothCylinderCoverage class
+     * @brief The ClothDistanceBasedCorrespondences class. Uses the Dijkstra's
+     * field to determine distances and directions to manipulate objects.
+     * Correspondences are determined based on a dynamic "what's nearest right
+     * now basis.
      */
-    class ClothCylinderCoverage : public DistanceBasedCorrespondencesTask
+    class ClothDistanceBasedCorrespondences : public DistanceBasedCorrespondencesTask
     {
         public:
-            ClothCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
+            ClothDistanceBasedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(
@@ -130,121 +133,14 @@ namespace smmap
     };
 
     /**
-     * @brief The ClothWAFR class
+     * @brief The RopeFixedCorrespondences class. Uses the Dijkstra's
+     * field to determine distances and directions to manipulate objects.
+     * Correspondences are determined based on a fixed apriori assignment.
      */
-    class ClothWAFR : public DistanceBasedCorrespondencesTask
+    class RopeFixedCorrespondences : public FixedCorrespondencesTask
     {
         public:
-            ClothWAFR(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
-
-        private:
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color) const final;
-
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
-            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
-
-            virtual bool taskDone_impl(
-                    const WorldState& world_state) final;
-
-            const Grid4Neighbours neighbours_;
-    };
-
-    /**
-     * @brief The ClothWall class
-     */
-    class ClothWall : public DistanceBasedCorrespondencesTask
-    {
-        public:
-            ClothWall(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
-
-        private:
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color) const final;
-
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
-            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
-
-            virtual bool taskDone_impl(
-                    const WorldState& world_state) final;
-
-            const Grid4Neighbours neighbours_;
-    };
-
-    /**
-     * @brief The ClothSinglePole class
-     */
-    class ClothSinglePole : public DistanceBasedCorrespondencesTask
-    {
-        public:
-            ClothSinglePole(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
-
-        private:
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color) const final;
-
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
-            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
-
-            virtual bool taskDone_impl(
-                    const WorldState& world_state) final;
-
-            const Grid4Neighbours neighbours_;
-    };
-
-    /**
-     * @brief The ClothDoubleSlit class
-     */
-    class ClothDoubleSlit : public DistanceBasedCorrespondencesTask
-    {
-        public:
-            ClothDoubleSlit(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
-
-        private:
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color) const final;
-
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
-            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
-
-            virtual bool taskDone_impl(
-                    const WorldState& world_state) final;
-
-            const Grid4Neighbours neighbours_;
-    };
-
-
-    /**
-     * @brief The RopeMaze class
-     */
-    class RopeMaze : public FixedCorrespondencesTask
-    {
-        public:
-            RopeMaze(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
+            RopeFixedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(
@@ -266,12 +162,14 @@ namespace smmap
     };
 
     /**
-     * @brief The ClothPlacemat class
+     * @brief The ClothFixedCorrespondences class. Uses the Dijkstra's
+     * field to determine distances and directions to manipulate objects.
+     * Correspondences are determined based on a fixed apriori assignment.
      */
-    class ClothPlacemat : public FixedCorrespondencesTask
+    class ClothFixedCorrespondences : public FixedCorrespondencesTask
     {
         public:
-            ClothPlacemat(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
+            ClothFixedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(

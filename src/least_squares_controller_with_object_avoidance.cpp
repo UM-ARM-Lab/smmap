@@ -12,11 +12,14 @@ using namespace EigenHelpers;
 #define LEAST_SQUARES_DAMPING_VALUE     (1e-3)
 
 LeastSquaresControllerWithObjectAvoidance::LeastSquaresControllerWithObjectAvoidance(
-        const DeformableModel::Ptr& model,
+        ros::NodeHandle& nh,
+        ros::NodeHandle& ph,
         const RobotInterface::Ptr& robot,
+        const smmap_utilities::Visualizer::Ptr& vis,
+        const DeformableModel::Ptr& model,
         const double obstacle_avoidance_scale,
         const bool optimize)
-    : DeformableController(robot)
+    : DeformableController(nh, ph, robot, vis)
     , model_(model)
     , obstacle_avoidance_scale_(obstacle_avoidance_scale)
     , optimize_(optimize)

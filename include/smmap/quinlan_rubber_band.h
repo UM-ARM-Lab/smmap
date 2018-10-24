@@ -6,11 +6,6 @@
 
 #include "smmap/task_specification.h"
 
-//#define ENABLE_BAND_DEBUGGING 1
-#define ENABLE_BAND_DEBUGGING 0
-//#define ENABLE_BAND_LOAD_SAVE 1
-#define ENABLE_BAND_LOAD_SAVE 0
-
 namespace smmap
 {
     class QuinlanRubberBand

@@ -3,7 +3,7 @@
 #include <functional>
 #include <ros/ros.h>
 #include <arc_utilities/eigen_helpers.hpp>
-#include <arc_utilities/shortcut_smoothing.hpp>
+#include <arc_utilities/path_utils.hpp>
 
 using namespace smmap;
 using namespace smmap_utilities;
@@ -152,7 +152,8 @@ double PRMHelper::distance(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2)
 
 bool PRMHelper::validState(const Eigen::Vector3d& p) const
 {
-    return environment_sdf_.Get3d(p) > 0.0;
+    const auto sdf_querry = environment_sdf_.GetImmutable3d(p);
+    return sdf_querry.second && (sdf_querry.first > 0.0);
 }
 
 bool PRMHelper::validEdge(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2) const
@@ -165,7 +166,7 @@ bool PRMHelper::validEdge(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2) 
         return EigenHelpers::Interpolate(p1, p2, ratio);
     };
     const auto resampled_path =
-            shortcut_smoothing::ResamplePath(path, edge_validity_stepsize_, &PRMHelper::distance, interpolation_fn);
+            path_utils::ResamplePath(path, edge_validity_stepsize_, &PRMHelper::distance, interpolation_fn);
 
     for (const auto& point : resampled_path)
     {

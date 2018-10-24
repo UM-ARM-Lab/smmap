@@ -8,7 +8,7 @@ using namespace smmap_utilities;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ClothColabFolding::ClothColabFolding(ros::NodeHandle& nh, ros::NodeHandle& ph, Visualizer::Ptr vis)
-    : TaskSpecification(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_COLAB_FOLDING)
+    : TaskSpecification(nh, ph, vis)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
     , point_reflector_(createPointReflector(nh))
     , mirror_map_(createMirrorMap(nh, point_reflector_))
@@ -124,13 +124,12 @@ bool ClothColabFolding::taskDone_impl(
     return false;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Rope cylinder coverage
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 RopeCylinderCoverage::RopeCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
-    : DirectCoverageTask(nh, ph, vis, DeformableType::ROPE, TaskType::ROPE_CYLINDER_COVERAGE)
+    : DirectCoverageTask(nh, ph, vis)
     , neighbours_(num_nodes_)
 {}
 
@@ -162,49 +161,11 @@ bool RopeCylinderCoverage::taskDone_impl(
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Cloth cylinder coverage - unused
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-ClothCylinderCoverage::ClothCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
-    : DistanceBasedCorrespondencesTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_CYLINDER_COVERAGE)
-    , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
-{
-    assert(false && "This task has not been looked at in over a year");
-}
-
-void ClothCylinderCoverage::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std_msgs::ColorRGBA& color) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, color);
-}
-
-void ClothCylinderCoverage::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, colors);
-}
-
-std::vector<ssize_t> ClothCylinderCoverage::getNodeNeighbours_impl(const ssize_t node) const
-{
-    return neighbours_.getNodeNeighbours(node);
-}
-
-bool ClothCylinderCoverage::taskDone_impl(
-        const WorldState& world_state)
-{
-    return calculateError(world_state) < error_threshold_task_done_;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cloth table coverage
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ClothTableCoverage::ClothTableCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, Visualizer::Ptr vis)
-    : DirectCoverageTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_TABLE_COVERAGE)
+    : DirectCoverageTask(nh, ph, vis)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {}
 
@@ -236,15 +197,28 @@ bool ClothTableCoverage::taskDone_impl(
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Cloth WAFR coverage
+// Cloth - Distance Based Correspondences - Using Dijkstras
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothWAFR::ClothWAFR(ros::NodeHandle& nh, ros::NodeHandle& ph, Visualizer::Ptr vis)
-    : DistanceBasedCorrespondencesTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_WAFR)
+ClothDistanceBasedCorrespondences::ClothDistanceBasedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
+    : DistanceBasedCorrespondencesTask(nh, ph, vis)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
-{}
+{
+    if (task_type_ == CLOTH_WALL)
+    {
+        throw_arc_exception(std::invalid_argument, "Cloth Wall experiment needs revisions before it is used");
+    }
+    else if (task_type_ == CLOTH_WAFR)
+    {
+        ROS_WARN_NAMED("task_specification_implementation", "Cloth WAFR task needs to be revised");
+    }
+    else if (task_type_ == CLOTH_CYLINDER_COVERAGE)
+    {
+        throw_arc_exception(std::invalid_argument, "Cloth Cylinder experiment has not been updated in over 2 years");
+    }
+}
 
-void ClothWAFR::visualizeDeformableObject_impl(
+void ClothDistanceBasedCorrespondences::visualizeDeformableObject_impl(
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
@@ -252,7 +226,7 @@ void ClothWAFR::visualizeDeformableObject_impl(
     vis_->visualizeCloth(marker_name, object_configuration, color);
 }
 
-void ClothWAFR::visualizeDeformableObject_impl(
+void ClothDistanceBasedCorrespondences::visualizeDeformableObject_impl(
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const
@@ -260,139 +234,23 @@ void ClothWAFR::visualizeDeformableObject_impl(
     vis_->visualizeCloth(marker_name, object_configuration, colors);
 }
 
-std::vector<ssize_t> ClothWAFR::getNodeNeighbours_impl(const ssize_t node) const
+std::vector<ssize_t> ClothDistanceBasedCorrespondences::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
 }
 
-bool ClothWAFR::taskDone_impl(
-        const WorldState& world_state)
-{
-    // Just make it run, should revise WAFR later --- Added by Mengyao
-    ROS_WARN_NAMED("task_specification_implementation", "wafr task needs to be revised");
-    return calculateError(world_state) < error_threshold_task_done_;
-
-    assert(false && "This task needs to some revisions before it is used.");
-    (void)world_state;
-    return false;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Cloth wall
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-ClothWall::ClothWall(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
-    : DistanceBasedCorrespondencesTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_WALL)
-    , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
-{}
-
-void ClothWall::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std_msgs::ColorRGBA& color) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, color);
-}
-
-void ClothWall::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, colors);
-}
-
-std::vector<ssize_t> ClothWall::getNodeNeighbours_impl(const ssize_t node) const
-{
-    return neighbours_.getNodeNeighbours(node);
-}
-
-bool ClothWall::taskDone_impl(
-        const WorldState& world_state)
-{
-    assert(false && "This task needs to some revisions before it is used.");
-    (void)world_state;
-    return false;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Cloth Single Pole
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-ClothSinglePole::ClothSinglePole(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
-    : DistanceBasedCorrespondencesTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_SINGLE_POLE)
-    , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
-{}
-
-void ClothSinglePole::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std_msgs::ColorRGBA& color) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, color);
-}
-
-void ClothSinglePole::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, colors);
-}
-
-std::vector<ssize_t> ClothSinglePole::getNodeNeighbours_impl(const ssize_t node) const
-{
-    return neighbours_.getNodeNeighbours(node);
-}
-
-bool ClothSinglePole::taskDone_impl(
+bool ClothDistanceBasedCorrespondences::taskDone_impl(
         const WorldState& world_state)
 {
     return calculateError(world_state) < error_threshold_task_done_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Cloth double slit
+// Rope - Fixed Correspondences - Using Dijkstras
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothDoubleSlit::ClothDoubleSlit(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
-    : DistanceBasedCorrespondencesTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_DOUBLE_SLIT)
-    , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
-{}
-
-void ClothDoubleSlit::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std_msgs::ColorRGBA& color) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, color);
-}
-
-void ClothDoubleSlit::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, colors);
-}
-
-std::vector<ssize_t> ClothDoubleSlit::getNodeNeighbours_impl(const ssize_t node) const
-{
-    return neighbours_.getNodeNeighbours(node);
-}
-
-bool ClothDoubleSlit::taskDone_impl(
-        const WorldState& world_state)
-{
-    return calculateError(world_state) < error_threshold_task_done_;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Rope maze
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-RopeMaze::RopeMaze(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
-    : FixedCorrespondencesTask(nh, ph, vis, DeformableType::ROPE, TaskType::ROPE_MAZE)
+RopeFixedCorrespondences::RopeFixedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
+    : FixedCorrespondencesTask(nh, ph, vis)
     , neighbours_(num_nodes_)
 {
     assert(num_nodes_ == num_cover_points_);
@@ -406,7 +264,7 @@ RopeMaze::RopeMaze(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Vi
     }
 }
 
-void RopeMaze::visualizeDeformableObject_impl(
+void RopeFixedCorrespondences::visualizeDeformableObject_impl(
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
@@ -414,7 +272,7 @@ void RopeMaze::visualizeDeformableObject_impl(
     vis_->visualizeRope(marker_name, object_configuration, color);
 }
 
-void RopeMaze::visualizeDeformableObject_impl(
+void RopeFixedCorrespondences::visualizeDeformableObject_impl(
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const
@@ -422,24 +280,23 @@ void RopeMaze::visualizeDeformableObject_impl(
     vis_->visualizeRope(marker_name, object_configuration, colors);
 }
 
-std::vector<ssize_t> RopeMaze::getNodeNeighbours_impl(const ssize_t node) const
+std::vector<ssize_t> RopeFixedCorrespondences::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
 }
 
-bool RopeMaze::taskDone_impl(
+bool RopeFixedCorrespondences::taskDone_impl(
         const WorldState& world_state)
 {
     return calculateError(world_state) < error_threshold_task_done_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Cloth Placemat
+// Cloth - Fixed Correspondences - Using Dijkstras
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothPlacemat::ClothPlacemat(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
-    : FixedCorrespondencesTask(nh, ph, vis, DeformableType::CLOTH, TaskType::CLOTH_PLACEMAT_LIVE_ROBOT)
-    // TODO: is this the correct stride?
+ClothFixedCorrespondences::ClothFixedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
+    : FixedCorrespondencesTask(nh, ph, vis)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {
     assert(num_nodes_ == num_cover_points_);
@@ -453,7 +310,7 @@ ClothPlacemat::ClothPlacemat(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_uti
     }
 }
 
-void ClothPlacemat::visualizeDeformableObject_impl(
+void ClothFixedCorrespondences::visualizeDeformableObject_impl(
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color) const
@@ -461,7 +318,7 @@ void ClothPlacemat::visualizeDeformableObject_impl(
     vis_->visualizeCloth(marker_name, object_configuration, color);
 }
 
-void ClothPlacemat::visualizeDeformableObject_impl(
+void ClothFixedCorrespondences::visualizeDeformableObject_impl(
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors) const
@@ -469,12 +326,12 @@ void ClothPlacemat::visualizeDeformableObject_impl(
     vis_->visualizeCloth(marker_name, object_configuration, colors);
 }
 
-std::vector<ssize_t> ClothPlacemat::getNodeNeighbours_impl(const ssize_t node) const
+std::vector<ssize_t> ClothFixedCorrespondences::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
 }
 
-bool ClothPlacemat::taskDone_impl(
+bool ClothFixedCorrespondences::taskDone_impl(
         const WorldState& world_state)
 {
     return calculateError(world_state) < error_threshold_task_done_;

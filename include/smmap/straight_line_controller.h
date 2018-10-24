@@ -9,9 +9,11 @@ namespace smmap
     {
         public:
             StraightLineController(
+                    ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    const DeformableModel::Ptr& model,
-                    const RobotInterface::Ptr& robot);
+                    const RobotInterface::Ptr& robot,
+                    const smmap_utilities::Visualizer::Ptr& vis,
+                    const DeformableModel::Ptr& model);
 
         private:
             virtual OutputData getGripperMotion_impl(const InputData& input_data) override final;

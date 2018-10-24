@@ -232,8 +232,9 @@ namespace smmap
             sdf_client.call(srv_data);
 
             // Then parse the message and return the result
-            sdf = std::make_shared<sdf_tools::SignedDistanceField>();
-            sdf->LoadFromMessageRepresentation(srv_data.response.sdf);
+            const sdf_tools::SignedDistanceField sdf_raw =
+                sdf_tools::SignedDistanceField::LoadFromMessageRepresentation(srv_data.response.sdf);
+            sdf = std::make_shared<sdf_tools::SignedDistanceField>(sdf_raw);
             CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), sdf->GetFrame());
         }
 

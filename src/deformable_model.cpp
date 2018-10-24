@@ -12,7 +12,7 @@ using namespace smmap;
 DeformableModel::DeformableModel()
 {
     ros::NodeHandle nh;
-    computation_time_log_ = std::make_shared<Log::Log>(GetLogFolder(nh) + "\model_prediction_time.txt");
+    computation_time_log_ = std::make_shared<Log::Log>(GetLogFolder(nh) + "/model_prediction_time.txt");
 
     if (!grippers_data_initialized_.load())
     {

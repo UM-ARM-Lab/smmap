@@ -42,8 +42,6 @@ namespace smmap
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
                     smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type,
                     const bool is_dijkstras_type_task = false);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -220,9 +218,7 @@ namespace smmap
             ModelAccuracyTestTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type);
+                    smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual void visualizeDeformableObject_impl(
@@ -254,8 +250,6 @@ namespace smmap
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
                     smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type,
                     const bool is_dijkstras_type_task);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -264,7 +258,7 @@ namespace smmap
 
             // Note that work_space_grid_ and the environment_sdf_ are using different
             // resolutions due to the way the SDF is created in CustomScene
-            const sdf_tools::SignedDistanceField::ConstPtr environment_sdf_;
+            const sdf_tools::SignedDistanceField::ConstPtr sdf_;
             const XYZGrid work_space_grid_;
 
             bool pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d& test_point) const;
@@ -286,9 +280,7 @@ namespace smmap
             DirectCoverageTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type);
+                    smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
@@ -325,9 +317,7 @@ namespace smmap
             DijkstrasCoverageTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type);
+                    smmap_utilities::Visualizer::Ptr vis);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Virtual function wrappers
@@ -355,6 +345,10 @@ namespace smmap
                     const uint32_t num_clusters) const;
 
             void visualizeFreeSpaceGraph() const;
+
+            void visualizeIndividualDijkstrasResult(
+                    const size_t cover_idx,
+                    const Eigen::Vector3d& querry_loc) const;
 
         protected:
             /// Free space graph that creates a vector field for the deformable object to follow
@@ -416,9 +410,7 @@ namespace smmap
             DistanceBasedCorrespondencesTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type);
+                    smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual Correspondences getCoverPointCorrespondences_impl(
@@ -435,9 +427,7 @@ namespace smmap
             FixedCorrespondencesTask(
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    smmap_utilities::Visualizer::Ptr vis,
-                    const DeformableType deformable_type,
-                    const TaskType task_type);
+                    smmap_utilities::Visualizer::Ptr vis);
 
         protected:
             std::vector<std::vector<ssize_t>> correspondences_internal_fixed_;

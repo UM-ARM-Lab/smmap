@@ -9,9 +9,12 @@ namespace smmap
     {
         public:
             LeastSquaresControllerWithObjectAvoidance(
-                    const DeformableModel::Ptr& model,
+                    ros::NodeHandle& nh,
+                    ros::NodeHandle& ph,
                     const RobotInterface::Ptr& robot,
-                    const double obstacle_avoidance_scale_,
+                    const smmap_utilities::Visualizer::Ptr& vis,
+                    const DeformableModel::Ptr& model,
+                    const double obstacle_avoidance_scale,
                     const bool optimize);
 
         private:
