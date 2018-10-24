@@ -1527,18 +1527,18 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
         const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
 
-        for (size_t trial_idx = 0; trial_idx < 100; ++trial_idx)
+//        for (size_t trial_idx = 0; trial_idx < 100; ++trial_idx)
         {
-            robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
-            flann::seed_random((unsigned int)seed_);
-            generator_->seed(seed_);
-            generator_->discard(trial_idx * 0xFFFF);
-            for (size_t discard_idx = 0; discard_idx < trial_idx * 0xFFFF; ++discard_idx)
-            {
-                std::rand();
-            }
+//            robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
+//            flann::seed_random((unsigned int)seed_);
+//            generator_->seed(seed_);
+//            generator_->discard(trial_idx * 0xFFFF);
+//            for (size_t discard_idx = 0; discard_idx < trial_idx * 0xFFFF; ++discard_idx)
+//            {
+//                std::rand();
+//            }
 
-            std::cout << "Trial idx: " << trial_idx << std::endl;
+//            std::cout << "Trial idx: " << trial_idx << std::endl;
 
             std::vector<RRTNode, RRTAllocator> rrt_results;
             while (rrt_results.size() == 0)
@@ -1591,7 +1591,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         }
     }
 
-    assert(false && "Terminating as this is just a planning test");
+//    assert(false && "Terminating as this is just a planning test");
 //    std::cout << "Waiting on keystroke before executing trajectory" << std::endl;
 //    std::getchar();
 
