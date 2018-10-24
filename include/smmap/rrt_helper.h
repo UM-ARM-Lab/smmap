@@ -270,9 +270,9 @@ namespace smmap
 
             void visualizeBlacklist() const;
 
-            void storePath(const std::vector<RRTNode, RRTAllocator>& path) const;
+            void storePath(const std::vector<RRTNode, RRTAllocator>& path, std::string file_path = "") const;
 
-            std::vector<RRTNode, RRTAllocator> loadStoredPath() const;
+            std::vector<RRTNode, RRTAllocator> loadStoredPath(std::string file_path = "") const;
 
             bool useStoredPath() const;
 

@@ -3326,30 +3326,33 @@ void RRTHelper::visualizeBlacklist() const
     vis_->visualizeLines(RRT_BLACKLISTED_GOAL_BANDS_NS, line_start_points, line_end_points, Visualizer::Red(), 1, 0.01);
 }
 
-void RRTHelper::storePath(const std::vector<RRTNode, RRTAllocator>& path) const
+void RRTHelper::storePath(const std::vector<RRTNode, RRTAllocator>& path, std::string file_path) const
 {
     try
     {
-        const auto log_folder = ROSHelpers::GetParamRequiredDebugLog<std::string>(nh_, "log_folder", __func__);
-        if (!log_folder.Valid())
+        if (file_path.empty())
         {
-            throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
-        }
-        arc_utilities::CreateDirectory(log_folder.GetImmutable());
-        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "path_file_name_prefix", __func__);
-        if (!file_name_prefix.Valid())
-        {
-            throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_prefix from parameter server");
-        }
+            const auto log_folder = ROSHelpers::GetParamRequiredDebugLog<std::string>(nh_, "log_folder", __func__);
+            if (!log_folder.Valid())
+            {
+                throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
+            }
+            arc_utilities::CreateDirectory(log_folder.GetImmutable());
+            const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "path_file_name_prefix", __func__);
+            if (!file_name_prefix.Valid())
+            {
+                throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_prefix from parameter server");
+            }
 
-        const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsString();
-        const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
-        const std::string full_path = log_folder.GetImmutable() + file_name;
-        ROS_DEBUG_STREAM("Saving path to " << full_path);
+            const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsString();
+            const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
+            file_path = log_folder.GetImmutable() + file_name;
+        }
+        ROS_DEBUG_STREAM("Saving path to " << file_path);
 
         std::vector<uint8_t> buffer;
         arc_utilities::SerializeVector<RRTNode, RRTAllocator>(path, buffer, &RRTNode::Serialize);
-        ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
+        ZlibHelpers::CompressAndWriteToFile(buffer, file_path);
 
         // Verify no mistakes were made
         {
@@ -3370,36 +3373,39 @@ void RRTHelper::storePath(const std::vector<RRTNode, RRTAllocator>& path) const
     }
 }
 
-std::vector<RRTNode, RRTAllocator> RRTHelper::loadStoredPath() const
+std::vector<RRTNode, RRTAllocator> RRTHelper::loadStoredPath(std::string file_path) const
 {
     try
     {
-        const auto log_folder = ROSHelpers::GetParamRequired<std::string>(nh_, "log_folder", __func__);
-        if (!log_folder.Valid())
+        if (file_path.empty())
         {
-            throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
-        }
-        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "path_file_name_prefix", __func__);
-        if (!file_name_prefix.Valid())
-        {
-            throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_prefix from parameter server");
-        }
-        const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "path_file_name_suffix_to_load", __func__);
-        if (!file_name_suffix.Valid())
-        {
-            throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_suffix_to_load from parameter server");
-        }
+            const auto log_folder = ROSHelpers::GetParamRequired<std::string>(nh_, "log_folder", __func__);
+            if (!log_folder.Valid())
+            {
+                throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
+            }
+            const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "path_file_name_prefix", __func__);
+            if (!file_name_prefix.Valid())
+            {
+                throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_prefix from parameter server");
+            }
+            const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "path_file_name_suffix_to_load", __func__);
+            if (!file_name_suffix.Valid())
+            {
+                throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_suffix_to_load from parameter server");
+            }
 
-        const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix.GetImmutable() + ".compressed";
-        const std::string full_path = log_folder.GetImmutable() + file_name;
-        ROS_INFO_STREAM("Loading path from " << full_path);
+            const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix.GetImmutable() + ".compressed";
+            file_path = log_folder.GetImmutable() + file_name;
+        }
+        ROS_INFO_STREAM("Loading path from " << file_path);
 
         const auto deserializer = [&] (const std::vector<uint8_t>& buffer, const uint64_t current)
         {
             return RRTNode::Deserialize(buffer, current, *starting_band_);
         };
 
-        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(full_path);
+        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(file_path);
         const auto path_deserialized = arc_utilities::DeserializeVector<RRTNode, RRTAllocator>(buffer, 0, deserializer);
         return path_deserialized.first;
     }

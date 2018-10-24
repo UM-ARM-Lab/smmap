@@ -93,17 +93,19 @@ namespace smmap
             // Global gripper planner functions
             ////////////////////////////////////////////////////////////////////
 
-            void convertRRTResultIntoGripperTrajectory(
-                    const std::vector<RRTNode, RRTAllocator>& rrt_result);
-
-            void convertRRTResultIntoFullRobotTrajectory(
-                    const std::vector<RRTNode, RRTAllocator>& rrt_result);
-
             AllGrippersSinglePose getGripperTargets(
                     const WorldState& world_state);
 
             void planGlobalGripperTrajectory(
                     const WorldState& world_state);
+
+            /*
+            void convertRRTResultIntoGripperTrajectory(
+                    const std::vector<RRTNode, RRTAllocator>& rrt_result);
+
+            void convertRRTResultIntoFullRobotTrajectory(
+                    const std::vector<RRTNode, RRTAllocator>& rrt_result);
+            */
 
             ////////////////////////////////////////////////////////////////////
             // Model list management
@@ -159,9 +161,10 @@ namespace smmap
             std::vector<double> error_history_;
 
             bool executing_global_trajectory_;
-            size_t global_plan_current_timestep_;
-            AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
-            std::vector<Eigen::VectorXd> global_plan_full_robot_trajectory_;
+            size_t global_plan_next_timestep_;
+//            AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
+//            std::vector<Eigen::VectorXd> global_plan_full_robot_trajectory_;
+            std::vector<RRTNode, RRTAllocator> rrt_planned_path_;
             std::shared_ptr<RRTHelper> rrt_helper_;
             std::shared_ptr<PRMHelper> prm_helper_;
 
