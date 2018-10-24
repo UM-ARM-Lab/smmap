@@ -26,6 +26,7 @@ LeastSquaresControllerWithStretchingConstraint::LeastSquaresControllerWithStretc
     , max_node_squared_distance_(max_node_distance_.cwiseProduct(max_node_distance_))
     , distance_to_obstacle_threshold_(GetRobotGripperRadius())
     , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
+    , visualize_overstretch_cones_(GetVisualizeOverstretchCones(ph))
 {
     // TODO: Why can't I just put this cast inside the constructor and define model_ to be a JacobianModel::Ptr?
     assert(std::dynamic_pointer_cast<JacobianModel>(model_) != nullptr && "Invalid model type passed to constructor");
@@ -62,12 +63,14 @@ DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint:
                 ConvertConeToPyramid(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_);
 
         // Visualization
-        if (true)
+        if (visualize_overstretch_cones_)
         {
             if (overstretch)
             {
-                const Vector3d stretching_start = grippers_poses[gripper_idx] * stretching_constraint_data[gripper_idx].second;
-                const Vector3d stretching_end = grippers_poses[gripper_idx] * (stretching_constraint_data[gripper_idx].second + 0.1 * stretching_constraint_data[gripper_idx].first);
+                const Vector3d stretching_start =
+                        grippers_poses[gripper_idx] * stretching_constraint_data[gripper_idx].second;
+                const Vector3d stretching_end =
+                        grippers_poses[gripper_idx] * (stretching_constraint_data[gripper_idx].second + 0.1 * stretching_constraint_data[gripper_idx].first);
 
                 vis_->visualizeLines("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start}, {stretching_end}, Visualizer::Red(), (int32_t)gripper_idx + 1);
                 vis_->visualizePoints("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start, stretching_end}, {Visualizer::Red(), Visualizer::Blue()}, (int32_t)(gripper_idx + num_grippers) + 1);
@@ -175,7 +178,7 @@ DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint:
             for (size_t ind = 0; ind < pyramid_plane_normals[1].size(); ++ind)
             {
                 RowVectorXd full_constraint_vec(num_grippers * 6);
-                full_constraint_vec << (pyramid_plane_normals[1][ind].transpose() * J_stretching_g1), RowVectorXd::Zero(6);
+                full_constraint_vec << RowVectorXd::Zero(6), (pyramid_plane_normals[1][ind].transpose() * J_stretching_g1);
                 linear_constraint_linear_terms.push_back(full_constraint_vec);
                 linear_constraint_affine_terms.push_back(0.0);
             }
@@ -201,8 +204,8 @@ DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint:
 
 
 // Note that the returned vectors and points are in gripper frame
-// result.first is the direction that we want to move the point
 // result.second is the point that we are constrainting the motion of
+// result.first is the direction that we want to move the point
 std::vector<std::pair<Vector3d, Vector3d>> LeastSquaresControllerWithStretchingConstraint::stretchingCorrectionVectorsAndPoints(const InputData& input_data) const
 {
     switch (deformable_type_)

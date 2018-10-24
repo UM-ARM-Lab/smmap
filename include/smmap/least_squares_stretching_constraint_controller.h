@@ -44,6 +44,9 @@ namespace smmap
             // Controller parameters
             const double distance_to_obstacle_threshold_;
             const double stretching_cosine_threshold_;
+
+            // Visualization
+            const bool visualize_overstretch_cones_;
     };
 }
 
