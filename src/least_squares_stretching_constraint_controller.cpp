@@ -48,8 +48,12 @@ DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint:
     const VectorXd& desired_p_dot_weight = input_data.desired_object_motion_.error_correction_.weight;
 
     // Check object current stretching status
-    const MatrixXd node_squared_distance = CalculateSquaredDistanceMatrix(object_config);
-    const bool overstretch = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
+    bool overstretch = false;
+    if (input_data.handle_overstretch_)
+    {
+        const MatrixXd node_squared_distance = CalculateSquaredDistanceMatrix(object_config);
+        overstretch = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
+    }
 
     // Only needed if overstretch has happened, put here to keep code in one place
     // Note that the returned vectors and points are in gripper frame
@@ -57,29 +61,32 @@ DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint:
     // stretching_constraint_data[].second is the point that we are constrainting the motion of
     const auto stretching_constraint_data = stretchingCorrectionVectorsAndPoints(input_data);
     std::vector<VectorVector3d> pyramid_plane_normals(num_grippers);
-    for (ssize_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
+    if (input_data.handle_overstretch_)
     {
-        pyramid_plane_normals[gripper_idx] =
-                ConvertConeToPyramid(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_);
-
-        // Visualization
-        if (visualize_overstretch_cones_)
+        for (ssize_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
         {
-            if (overstretch)
-            {
-                const Vector3d stretching_start =
-                        grippers_poses[gripper_idx] * stretching_constraint_data[gripper_idx].second;
-                const Vector3d stretching_end =
-                        grippers_poses[gripper_idx] * (stretching_constraint_data[gripper_idx].second + 0.1 * stretching_constraint_data[gripper_idx].first);
+            pyramid_plane_normals[gripper_idx] =
+                    ConvertConeToPyramid(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_);
 
-                vis_->visualizeLines("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start}, {stretching_end}, Visualizer::Red(), (int32_t)gripper_idx + 1);
-                vis_->visualizePoints("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start, stretching_end}, {Visualizer::Red(), Visualizer::Blue()}, (int32_t)(gripper_idx + num_grippers) + 1);
-                visualizeCone(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_, grippers_poses[gripper_idx], (int32_t)gripper_idx + 1);
-            }
-            else
+            // Visualization
+            if (visualize_overstretch_cones_)
             {
-                vis_->deleteObjects("stretching_correction_vector", 1, 10);
-                vis_->deleteObjects("stretching_cone", 1, 10);
+                if (overstretch)
+                {
+                    const Vector3d stretching_start =
+                            grippers_poses[gripper_idx] * stretching_constraint_data[gripper_idx].second;
+                    const Vector3d stretching_end =
+                            grippers_poses[gripper_idx] * (stretching_constraint_data[gripper_idx].second + 0.1 * stretching_constraint_data[gripper_idx].first);
+
+                    vis_->visualizeLines("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start}, {stretching_end}, Visualizer::Red(), (int32_t)gripper_idx + 1);
+                    vis_->visualizePoints("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start, stretching_end}, {Visualizer::Red(), Visualizer::Blue()}, (int32_t)(gripper_idx + num_grippers) + 1);
+                    visualizeCone(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_, grippers_poses[gripper_idx], (int32_t)gripper_idx + 1);
+                }
+                else
+                {
+                    vis_->deleteObjects("stretching_correction_vector", 1, 10);
+                    vis_->deleteObjects("stretching_cone", 1, 10);
+                }
             }
         }
     }
@@ -159,6 +166,8 @@ DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint:
         // Stretching constraints
         if (overstretch)
         {
+            assert(input_data.handle_overstretch_);
+
             Matrix<double, 3, 6> J_stretching_g0;
             J_stretching_g0.leftCols<3>() = Matrix3d::Identity();
             J_stretching_g0.rightCols<3>() = -kinematics::skew(stretching_constraint_data[0].second);

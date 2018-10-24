@@ -1063,24 +1063,10 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
 {
     try
     {
+        Stopwatch stopwatch;
         ROS_INFO_NAMED("coverage_task", "Checking if Dijkstra's solution already exists");
         const std::string dijkstras_file_path = GetDijkstrasStorageLocation(nh_);
-        GlobalStopwatch(RESET);
-        std::ifstream prev_dijkstras_result(dijkstras_file_path, std::ios::binary | std::ios::in | std::ios::ate);
-        if (!prev_dijkstras_result.is_open())
-        {
-            throw_arc_exception(std::runtime_error, "Couldn't open file");
-        }
-
-        ROS_INFO_NAMED("coverage_task", "Reading contents of file");
-        std::streamsize size = prev_dijkstras_result.tellg();
-        prev_dijkstras_result.seekg(0, std::ios::beg);
-        std::vector<uint8_t> file_buffer((size_t)size);
-        if (!(prev_dijkstras_result.read(reinterpret_cast<char*>(file_buffer.data()), size)))
-        {
-            throw_arc_exception(std::runtime_error, "Unable to read entire contents of file");
-        }
-        const std::vector<uint8_t> decompressed_dijkstras_results = ZlibHelpers::DecompressBytes(file_buffer);
+        const auto decompressed_dijkstras_results = ZlibHelpers::LoadFromFileAndDecompress(dijkstras_file_path);
 
         // First check that the graph we have matches the graph that is stored
         std::vector<uint8_t> temp_buffer;
@@ -1114,7 +1100,7 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
             throw_arc_exception(std::runtime_error, "Invalid data size found");
         }
 
-        ROS_INFO_STREAM_NAMED("coverage_task", "Read solutions in " << GlobalStopwatch(READ) << " seconds");
+        ROS_INFO_STREAM_NAMED("coverage_task", "Read solutions in " << stopwatch(READ) << " seconds");
         return true;
     }
     catch (...)

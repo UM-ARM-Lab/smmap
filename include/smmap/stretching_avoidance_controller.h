@@ -155,7 +155,7 @@ namespace smmap
             int sample_count_;
 
             bool fix_step_;
-            bool over_stretch_;
+            bool overstretch_;
             const std::string log_file_path_;
             Log::Log num_model_calls_;
     };

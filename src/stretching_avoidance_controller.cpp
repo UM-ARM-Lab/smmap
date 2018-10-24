@@ -107,7 +107,7 @@ StretchingAvoidanceController::StretchingAvoidanceController(
     , max_count_(max_count)
     , sample_count_(-1)
     , fix_step_(GetUseFixedGripperDeltaSize(ph))
-    , over_stretch_(false)
+    , overstretch_(false)
     , log_file_path_(GetLogFolder(nh))
     , num_model_calls_(log_file_path_ + "num_model_calls.txt", false)
 {}
@@ -123,21 +123,18 @@ DeformableController::OutputData StretchingAvoidanceController::getGripperMotion
     switch (gripper_controller_type_)
     {
         case StretchingAvoidanceControllerSolverType::RANDOM_SAMPLING:
+            assert(false && "Not used or tested anymore");
             return solvedByRandomSampling(input_data);
-            break;
 
         case StretchingAvoidanceControllerSolverType::NOMAD_OPTIMIZATION:
+            assert(false && "Not used or tested anymore");
             return solvedByNomad(input_data);
-            break;
 
         case StretchingAvoidanceControllerSolverType::GRADIENT_DESCENT:
             return solvedByGradientDescentProjectionViaGurobiMethod(input_data);
-//            return solvedByGradientDescentOld(input_data);
-            break;
 
         default:
             assert(false && "This code should be un-reachable");
-            break;
     };
 }
 
@@ -164,7 +161,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByRandomSa
 
     // Check object current stretching status
     // Checking the stretching status for current object configuration for once
-    over_stretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
+    overstretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
 
     if (input_data.robot_jacobian_valid_)
     {
@@ -184,7 +181,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByRandomSa
 
         // Check object current stretching status
         // Checking the stretching status for current object configuration for once
-        over_stretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
+        overstretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
 
         #ifdef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
             #pragma omp parallel for
@@ -290,7 +287,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(co
 
     // Check object current stretching status
     // Checking the stretching status for current object configuration for once
-    over_stretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
+    overstretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
 
     if (input_data.robot_jacobian_valid_)
     {
@@ -831,8 +828,12 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
     const VectorXd& desired_p_dot_weight = input_data.desired_object_motion_.error_correction_.weight;
 
     // Check object current stretching status
-    const MatrixXd node_squared_distance = CalculateSquaredDistanceMatrix(object_config);
-    over_stretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
+    overstretch_ = false;
+    if (input_data.handle_overstretch_)
+    {
+        const MatrixXd node_squared_distance = CalculateSquaredDistanceMatrix(object_config);
+        overstretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
+    }
 
     // Only needed if overstretch has happened, put here to keep code in one place
     // Note that the returned vectors and points are in gripper frame
@@ -840,33 +841,37 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
     // stretching_constraint_data[].second is the point that we are constrainting the motion of
     const auto stretching_constraint_data = stretchingCorrectionVectorsAndPoints(input_data);
     std::vector<VectorVector3d> pyramid_plane_normals(num_grippers);
-    for (ssize_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
+
+    if (input_data.handle_overstretch_)
     {
-        pyramid_plane_normals[gripper_idx] =
-                ConvertConeToPyramid(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_);
-
-        // Visualization
-        if (true)
+        for (ssize_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
         {
-            if (over_stretch_)
+            pyramid_plane_normals[gripper_idx] =
+                    ConvertConeToPyramid(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_);
+
+            // Visualization
+            if (true)
             {
-                Vector3d stretching_start = grippers_poses[gripper_idx] * stretching_constraint_data[gripper_idx].second;
-                Vector3d stretching_end = grippers_poses[gripper_idx] * (stretching_constraint_data[gripper_idx].second + 0.1 * stretching_constraint_data[gripper_idx].first);
+                if (overstretch_)
+                {
+                    Vector3d stretching_start = grippers_poses[gripper_idx] * stretching_constraint_data[gripper_idx].second;
+                    Vector3d stretching_end = grippers_poses[gripper_idx] * (stretching_constraint_data[gripper_idx].second + 0.1 * stretching_constraint_data[gripper_idx].first);
 
-//                std::cerr << "stretching_data_first_" << gripper_idx + 1 << " = [" << stretching_constraint_data[gripper_idx].first.transpose() << " 0.0]';\n";
-//                std::cerr << "stretching_data_second_" << gripper_idx + 1 << " = [" << stretching_constraint_data[gripper_idx].second.transpose() << " 1.0]';\n";
+    //                std::cerr << "stretching_data_first_" << gripper_idx + 1 << " = [" << stretching_constraint_data[gripper_idx].first.transpose() << " 0.0]';\n";
+    //                std::cerr << "stretching_data_second_" << gripper_idx + 1 << " = [" << stretching_constraint_data[gripper_idx].second.transpose() << " 1.0]';\n";
 
-//                std::cout << "stretching_start_" << gripper_idx + 1 << " = [" << stretching_start.transpose() << "];\n";
-//                std::cout << "stretching_end_" << gripper_idx + 1 << " = [" << stretching_end.transpose() << "];\n";
+    //                std::cout << "stretching_start_" << gripper_idx + 1 << " = [" << stretching_start.transpose() << "];\n";
+    //                std::cout << "stretching_end_" << gripper_idx + 1 << " = [" << stretching_end.transpose() << "];\n";
 
-                vis_->visualizeLines("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start}, {stretching_end}, Visualizer::Red(), (int32_t)gripper_idx + 1);
-                vis_->visualizePoints("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start, stretching_end}, {Visualizer::Red(), Visualizer::Blue()}, (int32_t)(gripper_idx + num_grippers) + 1);
-                visualizeCone(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_, grippers_poses[gripper_idx], (int32_t)gripper_idx + 1);
-            }
-            else
-            {
-                vis_->deleteObjects("stretching_correction_vector", 1, 10);
-                vis_->deleteObjects("stretching_cone", 1, 10);
+                    vis_->visualizeLines("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start}, {stretching_end}, Visualizer::Red(), (int32_t)gripper_idx + 1);
+                    vis_->visualizePoints("stretching_correction_vector_" + std::to_string(gripper_idx), {stretching_start, stretching_end}, {Visualizer::Red(), Visualizer::Blue()}, (int32_t)(gripper_idx + num_grippers) + 1);
+                    visualizeCone(stretching_constraint_data[gripper_idx].first, stretching_cosine_threshold_, grippers_poses[gripper_idx], (int32_t)gripper_idx + 1);
+                }
+                else
+                {
+                    vis_->deleteObjects("stretching_correction_vector", 1, 10);
+                    vis_->deleteObjects("stretching_cone", 1, 10);
+                }
             }
         }
     }
@@ -926,8 +931,10 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
         }
 
         // Stretching constraints:
-        if (over_stretch_)
+        if (overstretch_)
         {
+            assert(input_data.handle_overstretch_);
+
             for (ssize_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
             {
                 Matrix<double, 3, 6> J_point_to_gripper;
@@ -1114,7 +1121,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
         }
 
         // Stretching constraints
-        if (over_stretch_)
+        if (overstretch_)
         {
             Matrix<double, 3, 6> J_stretching_g0;
             J_stretching_g0.leftCols<3>() = Matrix3d::Identity();
@@ -1450,7 +1457,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 
     // Check object current stretching status
     const MatrixXd node_squared_distance = CalculateSquaredDistanceMatrix(object_config);
-    over_stretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
+    overstretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
     const auto stretching_constraint_data = stretchingCorrectionVectorsAndPoints(input_data);
 
     if (input_data.robot_jacobian_valid_)
@@ -1716,7 +1723,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 
     // Check object current stretching status
     // Checking the stretching status for current object configuration for once
-    over_stretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
+    overstretch_ = ((max_node_squared_distance_ - node_squared_distance).array() < 0.0).any();
 
     if (input_data.robot_jacobian_valid_)
     {
@@ -2246,7 +2253,7 @@ kinematics::Vector6d StretchingAvoidanceController::getFeasibleGripperDeltaGurob
     vis_->visualizeLines("collision_avoidance_vector", {collision_start}, {collision_end}, Visualizer::Green(), 1);
 
     // Add the stretching constraint (if active)
-    if (over_stretch_)
+    if (overstretch_)
     {
         const auto pyramid_plane_normals = ConvertConeToPyramid(stretching_correction_data.first, stretching_cosine_threshold_);
         Matrix<double, 3, 6> J_stretching;
@@ -2499,7 +2506,7 @@ double StretchingAvoidanceController::ropeTwoGripperStretchingHelper(
     double stretching_sum = 0.0;
     double stretching_cos = 1.0; // return a value > stretching_cos_threshold
 
-    if (over_stretch_)
+    if (overstretch_)
     {
         const ObjectPointSet& object_configuration = input_data.world_current_state_.object_configuration_;
         const AllGrippersSinglePose& current_gripper_pose = input_data.world_current_state_.all_grippers_single_pose_;
@@ -2602,7 +2609,7 @@ double StretchingAvoidanceController::clothTwoGripperStretchingHelper(
 
     // If the object is not overstretched already, then the constraint is not active, indicited by a value of 1.0
     // 1.0 indicates the least stretching possible, with both grippers moving in the direction needed to reduce stretching
-    if (!over_stretch_)
+    if (!overstretch_)
     {
         return 1.0;
     }
@@ -2731,7 +2738,7 @@ double StretchingAvoidanceController::evaluateStretchingConstraint(const std::pa
     const auto& stretching_reduction_vector              = stretching_constraint_data.first;
     const auto& vector_from_gripper_to_translation_point = stretching_constraint_data.second;
 
-    if (!over_stretch_)
+    if (!overstretch_)
     {
         return -1000.0;
     }

@@ -552,6 +552,7 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
     // Build the constraints for the gippers and other points of interest on the robot - includes the grippers
     const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data_ = robot_->getPointsOfInterestCollisionData();
 
+    const bool handle_overstretch = true;
     const DeformableController::InputData model_input_data(
                 current_world_state,
                 desired_object_manipulation_direction,
@@ -560,7 +561,8 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
                 current_world_state.robot_configuration_valid_,
                 poi_collision_data_,
                 robot_->max_gripper_velocity_norm_ * robot_->dt_,
-                robot_->max_dof_velocity_norm_ * robot_->dt_);
+                robot_->max_dof_velocity_norm_ * robot_->dt_,
+                handle_overstretch);
 
     if (visualize_desired_motion_)
     {
@@ -945,6 +947,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
         const double normal_motion_robot_dof_max_step = robot_->max_dof_velocity_norm_ * robot_->dt_;
         const double forward_prediction_robot_dof_max_step = velocity_scale_factor * normal_motion_robot_dof_max_step * 2.0;
 
+        const bool handle_overstretch = false;
         const DeformableController::InputData input_data(
                     world_state_copy,
                     desired_object_manipulation_direction,
@@ -953,7 +956,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
                     world_state_copy.robot_configuration_valid_,
                     poi_collision_data_,
                     forward_prediction_grippers_max_step,
-                    forward_prediction_robot_dof_max_step);
+                    forward_prediction_robot_dof_max_step,
+                    handle_overstretch);
 
         const DeformableController::OutputData robot_command = controller_list_[0]->getGripperMotion(input_data);
 
