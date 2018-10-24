@@ -1421,7 +1421,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 {
     static int num_times_invoked = 0;
     num_times_invoked++;
-    std::cout << "!!!!!!!!!!!!!!!!!! Invoked " << num_times_invoked << " times!!!!!!!!!!!" << std::endl;
+    ROS_INFO_STREAM("!!!!!!!!!!!!!!!!!! Planner Invoked " << num_times_invoked << " times!!!!!!!!!!!");
 
     // Resample the band for the purposes of first order vis checking
     const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
