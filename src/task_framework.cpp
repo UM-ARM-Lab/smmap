@@ -192,7 +192,6 @@ TaskFramework::TaskFramework(
     , executing_global_trajectory_(false)
     , global_plan_next_timestep_(-1)
     , rrt_helper_(nullptr)
-    , prm_helper_(nullptr)
     // Used to generate some log data by some controllers
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
     , initial_grippers_distance_(robot_->getGrippersInitialDistance())
@@ -205,7 +204,7 @@ TaskFramework::TaskFramework(
     , visualize_predicted_motion_(!GetDisableAllVisualizations(ph_) && GetVisualizeObjectPredictedMotion(ph_))
 {
     ROS_INFO_STREAM_NAMED("task_framework", "Using seed " << std::hex << seed_ );
-    initializePlannerLogging();
+    initializeBanditsLogging();
     initializeControllerLogging();
 }
 
@@ -312,24 +311,6 @@ void TaskFramework::execute()
 
         // Visualization
         const auto enable_rrt_visualizations = GetVisualizeRRT(ph_);
-
-        #ifdef PRM_SAMPLING
-        prm_helper_ = std::make_shared<PRMHelper>(
-                    dijkstras_task_->environment_sdf_,
-                    vis_,
-                    generator_,
-                    robot_->getWorldToTaskFrameTf(),
-                    task_frame_lower_limits,
-                    task_frame_upper_limits,
-                    !GetDisableAllVisualizations(ph_),
-                    GetPRMNumNearest(ph_),
-                    GetPRMNumSamples(ph_),
-                    dijkstras_task_->work_space_grid_.minStepDimension());
-        prm_helper_->initializeRoadmap();
-        prm_helper_->visualize(GetVisualizePRM(ph_));
-        #else
-        prm_helper_ = nullptr;
-        #endif
 
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         rrt_helper_ = std::make_shared<RRTHelper>(
@@ -521,16 +502,18 @@ WorldState TaskFramework::sendNextCommand(
         WorldState world_feedback;
         if (executing_global_trajectory_)
         {
-            world_feedback = sendNextCommandUsingGlobalGripperPlannerResults(world_state);
+            world_feedback = sendNextCommandUsingGlobalPlannerResults(world_state);
+
+            // Band is updated internally in sendNextCommandUsingGlobalPlannerResults
         }
         else
         {
             world_feedback = sendNextCommandUsingLocalController(world_state);
-        }
 
-        // Update the band with the new position of the deformable object
-        const auto band_points = getPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
-        rubber_band_between_grippers_->setPointsAndSmooth(band_points);
+            // Update the band with the new position of the deformable object
+            const auto band_points = getPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
+            rubber_band_between_grippers_->setPointsAndSmooth(band_points);
+        }
 
         // Keep the last N grippers positions recorded to detect if the grippers are stuck
         grippers_pose_history_.push_back(world_feedback.all_grippers_single_pose_);
@@ -770,7 +753,7 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
  * @param current_world_state
  * @return
  */
-WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
+WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
         const WorldState& current_world_state)
 {
     assert(executing_global_trajectory_);
@@ -778,7 +761,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
 
     // Check if we need to interpolate the command - we only advance the traj waypoint
     // pointer if we started within one step of the current target
-
+    bool next_waypoint_targetted = true;
     Eigen::VectorXd next_dof_target(0);
     AllGrippersSinglePose next_grippers_target(0);
     if (current_world_state.robot_configuration_valid_)
@@ -799,10 +782,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
             robot_->setActiveDOFValues(next_dof_target);
             next_grippers_target = robot_->getGrippersPosesFunctionPointer();
             robot_->unlockEnvironment();
-        }
-        else
-        {
-            ++global_plan_next_timestep_;
+            next_waypoint_targetted = false;
         }
     }
     else
@@ -824,10 +804,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
             next_grippers_target[1] = Interpolate(
                         current_world_state.all_grippers_single_pose_[1],
                         next_grippers_target[1], ratio);
-        }
-        else
-        {
-            ++global_plan_next_timestep_;
+            next_waypoint_targetted = false;
         }
     }
 
@@ -835,6 +812,22 @@ WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
             robot_->commandRobotMotion(next_grippers_target,
                                        next_dof_target,
                                        current_world_state.robot_configuration_valid_);
+    // Update the band with the new position of the deformable object
+    const auto band_points = getPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
+    rubber_band_between_grippers_->setPointsAndSmooth(band_points);
+
+    // If we are directly targetting the waypoint itself (i.e., no interpolation)
+    // then update the waypoint index, and record the resulting configuration in
+    // the "path actually taken" index
+    if (next_waypoint_targetted)
+    {
+        ++global_plan_next_timestep_;
+        rrt_executed_path_.push_back(
+                    RRTNode(
+                        {world_feedback.all_grippers_single_pose_[0], world_feedback.all_grippers_single_pose_[1]},
+                        world_feedback.robot_configuration_,
+                        std::make_shared<RubberBand>(*rubber_band_between_grippers_)));
+    }
 
     if (global_plan_next_timestep_ == rrt_planned_path_.size())
     {
@@ -2258,7 +2251,7 @@ void TaskFramework::visualizeGripperMotion(
     }
 }
 
-void TaskFramework::initializePlannerLogging()
+void TaskFramework::initializeBanditsLogging()
 {
     if (bandits_logging_enabled_)
     {

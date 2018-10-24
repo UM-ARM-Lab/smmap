@@ -13,7 +13,6 @@
 #include "smmap/deformable_controller.h"
 #include "smmap/rubber_band.hpp"
 #include "smmap/rrt_helper.h"
-#include "smmap/prm_helper.h"
 
 namespace smmap
 {
@@ -68,7 +67,7 @@ namespace smmap
             WorldState sendNextCommandUsingLocalController(
                     const WorldState& current_world_state);
 
-            WorldState sendNextCommandUsingGlobalGripperPlannerResults(
+            WorldState sendNextCommandUsingGlobalPlannerResults(
                     const WorldState& current_world_state);
 
             ////////////////////////////////////////////////////////////////////
@@ -162,11 +161,9 @@ namespace smmap
 
             bool executing_global_trajectory_;
             size_t global_plan_next_timestep_;
-//            AllGrippersPoseTrajectory global_plan_gripper_trajectory_;
-//            std::vector<Eigen::VectorXd> global_plan_full_robot_trajectory_;
-            std::vector<RRTNode, RRTAllocator> rrt_planned_path_;
             std::shared_ptr<RRTHelper> rrt_helper_;
-            std::shared_ptr<PRMHelper> prm_helper_;
+            std::vector<RRTNode, RRTAllocator> rrt_planned_path_;
+            std::vector<RRTNode, RRTAllocator> rrt_executed_path_;
 
             // These are both intended only for logging purposes, the individual
             // controllers may (or may not) have their own copies for their own purposes
@@ -189,7 +186,7 @@ namespace smmap
                     const AllGrippersSinglePoseDelta& gripper_motion,
                     const ssize_t model_ind) const;
 
-            void initializePlannerLogging();
+            void initializeBanditsLogging();
 
             void initializeControllerLogging();
 
