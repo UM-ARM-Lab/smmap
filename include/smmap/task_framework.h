@@ -13,6 +13,7 @@
 #include "smmap/deformable_controller.h"
 #include "smmap/rubber_band.hpp"
 #include "smmap/rrt_helper.h"
+#include "smmap/learned_transitions.h"
 
 namespace smmap
 {
@@ -34,11 +35,12 @@ namespace smmap
             // Constructor and the one function that gets called externally
             ////////////////////////////////////////////////////////////////////
 
-            TaskFramework(ros::NodeHandle& nh,
+            TaskFramework(
+                    ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
                     const RobotInterface::Ptr& robot,
                     smmap_utilities::Visualizer::Ptr vis,
-                    const std::shared_ptr<TaskSpecification>& task_specification);
+                    const TaskSpecification::Ptr& task_specification);
 
             void execute();
 
@@ -53,8 +55,8 @@ namespace smmap
             std::shared_ptr<std::mt19937_64> generator_;
 
             RobotInterface::Ptr robot_;
-            std::shared_ptr<TaskSpecification> task_specification_;
-            std::shared_ptr<DijkstrasCoverageTask> dijkstras_task_;
+            TaskSpecification::Ptr task_specification_;
+            DijkstrasCoverageTask::Ptr dijkstras_task_;
 
             ////////////////////////////////////////////////////////////////////
             // Sending gripper commands
@@ -97,14 +99,6 @@ namespace smmap
 
             void planGlobalGripperTrajectory(
                     const WorldState& world_state);
-
-            /*
-            void convertRRTResultIntoGripperTrajectory(
-                    const std::vector<RRTNode, RRTAllocator>& rrt_result);
-
-            void convertRRTResultIntoFullRobotTrajectory(
-                    const std::vector<RRTNode, RRTAllocator>& rrt_result);
-            */
 
             ////////////////////////////////////////////////////////////////////
             // Model list management
@@ -163,7 +157,8 @@ namespace smmap
             size_t global_plan_next_timestep_;
             std::shared_ptr<RRTHelper> rrt_helper_;
             std::vector<RRTNode, RRTAllocator> rrt_planned_path_;
-            std::vector<RRTNode, RRTAllocator> rrt_executed_path_;
+            std::vector<MDP::State, MDP::StateAllocator> rrt_executed_path_;
+            std::vector<MDP::StateTransition, MDP::StateTransitionAllocator> band_learned_transitions_;
 
             // These are both intended only for logging purposes, the individual
             // controllers may (or may not) have their own copies for their own purposes

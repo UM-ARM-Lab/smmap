@@ -46,6 +46,12 @@ QuinlanRubberBand::QuinlanRubberBand(
     , task_(task)
     , sdf_(task_->sdf_)
     , vis_(vis)
+
+    , band_(0)
+    , resampled_band_(0)
+    , resampled_band_max_dist_(-1.0)
+    , upsampled_band_(0)
+
     , max_total_band_distance_(max_total_band_distance)
     #warning "Magic numbers in band smoothing code"
     , min_overlap_distance_(task_->work_space_grid_.minStepDimension() * 0.05)
@@ -68,6 +74,9 @@ QuinlanRubberBand& QuinlanRubberBand::operator=(const QuinlanRubberBand& other)
     assert(max_total_band_distance_ == other.max_total_band_distance_);
 
     band_ = other.band_;
+    resampled_band_ = other.resampled_band_;
+    resampled_band_max_dist_ = other.resampled_band_max_dist_;
+    upsampled_band_ = other.upsampled_band_;
 #if ENABLE_BAND_LOAD_SAVE
     if (useStoredBand())
     {
@@ -86,6 +95,9 @@ QuinlanRubberBand& QuinlanRubberBand::operator=(const QuinlanRubberBand& other)
 void QuinlanRubberBand::setPointsWithoutSmoothing(const EigenHelpers::VectorVector3d& points)
 {
     band_ = points;
+    resampled_band_.clear();
+    resampled_band_max_dist_ = -1.0;
+    upsampled_band_.clear();
 
 #if ENABLE_BAND_LOAD_SAVE
     if (useStoredBand())
@@ -128,6 +140,9 @@ void QuinlanRubberBand::setPointsAndSmooth(const EigenHelpers::VectorVector3d& p
 void QuinlanRubberBand::overridePoints(const EigenHelpers::VectorVector3d& points)
 {
     band_ = points;
+    resampled_band_.clear();
+    resampled_band_max_dist_ = -1.0;
+    upsampled_band_.clear();
 }
 
 /**
@@ -150,6 +165,9 @@ const EigenHelpers::VectorVector3d& QuinlanRubberBand::forwardPropagateRubberBan
     // Add the new endpoints, then let the interpolate and smooth process handle the propogation
     band_.insert(band_.begin(), projectToValidBubble(first_endpoint_target));
     band_.push_back(projectToValidBubble(second_endpoint_target));
+    resampled_band_.clear();
+    resampled_band_max_dist_ = -1.0;
+    upsampled_band_.clear();
 
 #if ENABLE_BAND_LOAD_SAVE
     if (useStoredBand())
@@ -179,43 +197,39 @@ const EigenHelpers::VectorVector3d& QuinlanRubberBand::getVectorRepresentation()
     return band_;
 }
 
-const EigenHelpers::VectorVector3d QuinlanRubberBand::upsampleBand(const size_t total_points) const
+const EigenHelpers::VectorVector3d& QuinlanRubberBand::resampleBand(const double max_dist) const
+{
+    // If our current resampled_band_ cache is invalid, recalculate it
+    if (resampled_band_.size() == 0 || max_dist != resampled_band_max_dist_)
+    {
+        const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
+        {
+            return (v1 - v2).norm();
+        };
+        resampled_band_ = path_utils::ResamplePath(
+                    band_, max_dist, distance_fn, EigenHelpers::Interpolate<double, 3>);
+        resampled_band_max_dist_ = max_dist;
+    }
+
+    return resampled_band_;
+}
+
+const EigenHelpers::VectorVector3d& QuinlanRubberBand::upsampleBand(const size_t total_points) const
 {
     assert(total_points >= band_.size());
-//    const int num_even_splits = (int)std::floor((float)total_points/(float)band_.size());
-//    const int num_leftover_points = (int)total_points - (int)(band_.size() * num_even_splits);
-//    assert(num_leftover_points >= 0);
 
-//    EigenHelpers::VectorVector3d upsampled_band;
-//    upsampled_band.reserve(total_points);
-
-//    for (size_t idx = 0; idx < band_.size(); ++idx)
-//    {
-//        // Insert num_even_splits copies of each point, plus 1 more if the current index
-//        // gets an extra copy due to an uneven split
-//        if ((int)idx < num_leftover_points)
-//        {
-//            upsampled_band.insert(upsampled_band.end(), num_even_splits + 1, band_[idx]);
-//        }
-//        else
-//        {
-//            upsampled_band.insert(upsampled_band.end(), num_even_splits, band_[idx]);
-//        }
-//    }
-
-//    return upsampled_band;
-
-    const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
+    // If our current upsampled_band_ cache is invalid, recalculate it
+    if (upsampled_band_.size() == 0 || total_points != upsampled_band_.size())
     {
-        return (v1 - v2).norm();
-    };
+        const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
+        {
+            return (v1 - v2).norm();
+        };
+        upsampled_band_  = path_utils::UpsamplePath<Eigen::Vector3d>(
+                    band_, total_points, distance_fn, EigenHelpers::Interpolate<double, 3>);
+    }
 
-    const auto interpolate_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2, const double ratio)
-    {
-        return EigenHelpers::Interpolate(v1, v2, ratio);
-    };
-
-    return path_utils::UpsamplePath<Eigen::Vector3d>(band_, total_points, distance_fn, interpolate_fn);
+    return upsampled_band_;
 }
 
 std::pair<Eigen::Vector3d, Eigen::Vector3d> QuinlanRubberBand::getEndpoints() const
@@ -1048,16 +1062,47 @@ void QuinlanRubberBand::printBandData(const EigenHelpers::VectorVector3d& test_b
 
 uint64_t QuinlanRubberBand::serialize(std::vector<uint8_t>& buffer) const
 {
-    return arc_utilities::SerializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+    uint64_t bytes_written = 0;
+    bytes_written += arc_utilities::SerializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
                 band_, buffer, &arc_utilities::SerializeEigen<double, 3, 1>);
+    bytes_written += arc_utilities::SerializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+                resampled_band_, buffer, &arc_utilities::SerializeEigen<double, 3, 1>);
+    bytes_written += arc_utilities::SerializeFixedSizePOD<double>(resampled_band_max_dist_, buffer);
+    bytes_written += arc_utilities::SerializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+                upsampled_band_, buffer, &arc_utilities::SerializeEigen<double, 3, 1>);
+    return bytes_written;
 }
 
 uint64_t QuinlanRubberBand::deserializeIntoSelf(const std::vector<uint8_t>& buffer, const uint64_t current)
 {
-    const auto deserialized_results = arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
-                buffer, current, &arc_utilities::DeserializeEigen<Eigen::Vector3d>);
-    band_ = deserialized_results.first;
-    return deserialized_results.second;
+    uint64_t bytes_read = 0;
+
+    {
+        const auto deserialized_results = arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+                    buffer, current, &arc_utilities::DeserializeEigen<Eigen::Vector3d>);
+        band_ = deserialized_results.first;
+        bytes_read += deserialized_results.second;
+    }
+    {
+        const auto deserialized_results = arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+                    buffer, current, &arc_utilities::DeserializeEigen<Eigen::Vector3d>);
+        resampled_band_ = deserialized_results.first;
+        bytes_read += deserialized_results.second;
+    }
+    {
+        const auto deserialized_results = arc_utilities::DeserializeFixedSizePOD<double>(
+                    buffer, current);
+        resampled_band_max_dist_ = deserialized_results.first;
+        bytes_read += deserialized_results.second;
+    }
+    {
+        const auto deserialized_results = arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+                    buffer, current, &arc_utilities::DeserializeEigen<Eigen::Vector3d>);
+        upsampled_band_ = deserialized_results.first;
+        bytes_read += deserialized_results.second;
+    }
+
+    return bytes_read;
 }
 
 void QuinlanRubberBand::storeBand() const

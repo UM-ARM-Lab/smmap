@@ -170,7 +170,7 @@ TaskFramework::TaskFramework(
         ros::NodeHandle& ph,
         const RobotInterface::Ptr& robot,
         Visualizer::Ptr vis,
-        const std::shared_ptr<TaskSpecification>& task_specification)
+        const TaskSpecification::Ptr& task_specification)
     // Robot and task parameters
     : nh_(nh)
     , ph_(ph)
@@ -350,6 +350,8 @@ void TaskFramework::execute()
                     // Visualization
                     vis_,
                     enable_rrt_visualizations);
+
+        MDP::Initialize(dijkstras_task_);
     }
 
     while (robot_->ok())
@@ -820,15 +822,15 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
 
     // If we are directly targetting the waypoint itself (i.e., no interpolation)
     // then update the waypoint index, and record the resulting configuration in
-    // the "path actually taken" index
+    // the "path actually taken" list
     if (next_waypoint_targetted)
     {
+        rrt_executed_path_.push_back({
+                    world_feedback.object_configuration_,
+                    std::make_shared<RubberBand>(*rubber_band_between_grippers_),
+                    std::make_shared<RubberBand>(*(rrt_planned_path_[global_plan_next_timestep_].band()))});
+
         ++global_plan_next_timestep_;
-        rrt_executed_path_.push_back(
-                    RRTNode(
-                        {world_feedback.all_grippers_single_pose_[0], world_feedback.all_grippers_single_pose_[1]},
-                        world_feedback.robot_configuration_,
-                        std::make_shared<RubberBand>(*rubber_band_between_grippers_)));
     }
 
     if (global_plan_next_timestep_ == rrt_planned_path_.size())
@@ -1470,20 +1472,9 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     ROS_INFO_STREAM("!!!!!!!!!!!!!!!!!! Planner Invoked " << num_times_invoked << " times!!!!!!!!!!!");
 
     // Resample the band for the purposes of first order vis checking
-    const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
-    {
-        return (v1 - v2).norm();
-    };
-    const auto interpolation_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2, const double ratio)
-    {
-        return EigenHelpers::Interpolate(v1, v2, ratio);
-    };
     rrt_helper_->addBandToBlacklist(
-                path_utils::ResamplePath(
-                    rubber_band_between_grippers_->getVectorRepresentation(),
-                    dijkstras_task_->work_space_grid_.minStepDimension() / 2.0,
-                    distance_fn,
-                    interpolation_fn));
+                rubber_band_between_grippers_->resampleBand(
+                    dijkstras_task_->work_space_grid_.minStepDimension() / 2.0));
 
     vis_->purgeMarkerList();
     visualization_msgs::Marker marker;
@@ -1599,65 +1590,16 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     global_plan_next_timestep_ = 0;
     executing_global_trajectory_ = true;
 
+    rrt_executed_path_.clear();
+    rrt_executed_path_.push_back({
+                world_state.object_configuration_,
+                std::make_shared<RubberBand>(*rubber_band_between_grippers_),
+                std::make_shared<RubberBand>(*rubber_band_between_grippers_)});
+
 //    assert(false && "Terminating as this is just a planning test");
 //    std::cout << "Waiting on keystroke before executing trajectory" << std::endl;
 //    std::getchar();
 }
-
-/*
-void TaskFramework::convertRRTResultIntoGripperTrajectory(
-        const std::vector<RRTNode, RRTAllocator>& rrt_result)
-{
-    AllGrippersPoseTrajectory traj;
-    traj.reserve(rrt_result.size());
-
-    for (size_t ind = 0; ind < rrt_result.size(); ++ind)
-    {
-        const AllGrippersSinglePose grippers_poses = {
-            rrt_result[ind].grippers().first,
-            rrt_result[ind].grippers().second};
-        traj.push_back(grippers_poses);
-    }
-
-    const auto distance_fn = [] (const AllGrippersSinglePose& a, const AllGrippersSinglePose& b)
-    {
-        const double gripper0_dist_sq = (a[0].translation() - b[0].translation()).squaredNorm();
-        const double gripper1_dist_sq = (a[1].translation() - b[1].translation()).squaredNorm();
-
-        return std::sqrt(gripper0_dist_sq + gripper1_dist_sq);
-    };
-
-    const auto interpolation_fn = [] (const AllGrippersSinglePose& a, const AllGrippersSinglePose& b, const double ratio)
-    {
-        AllGrippersSinglePose result = a;
-        result[0].translation() = Interpolate(Vector3d(a[0].translation()), Vector3d(b[0].translation()), ratio);
-        result[1].translation() = Interpolate(Vector3d(a[1].translation()), Vector3d(b[1].translation()), ratio);
-        return result;
-    };
-
-    global_plan_gripper_trajectory_ = path_utils::ResamplePath<AllGrippersSinglePose>(traj, robot_->max_gripper_velocity_norm_ * robot_->dt_, distance_fn, interpolation_fn);
-    global_plan_full_robot_trajectory_ = std::vector<VectorXd>(global_plan_gripper_trajectory_.size(), VectorXd(0));
-}
-
-void TaskFramework::convertRRTResultIntoFullRobotTrajectory(
-        const std::vector<RRTNode, RRTAllocator>& rrt_result)
-{
-    global_plan_gripper_trajectory_.clear();
-    global_plan_gripper_trajectory_.reserve(rrt_result.size());
-
-    global_plan_full_robot_trajectory_.clear();
-    global_plan_full_robot_trajectory_.reserve(rrt_result.size());
-
-    for (size_t ind = 0; ind < rrt_result.size(); ++ind)
-    {
-        const AllGrippersSinglePose grippers_poses = {
-            rrt_result[ind].grippers().first,
-            rrt_result[ind].grippers().second};
-        global_plan_gripper_trajectory_.push_back(grippers_poses);
-        global_plan_full_robot_trajectory_.push_back(rrt_result[ind].robotConfiguration());
-    }
-}
-*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Model list management

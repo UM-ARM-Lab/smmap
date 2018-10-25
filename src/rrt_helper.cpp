@@ -3,8 +3,6 @@
 
 #include <thread>
 #include <arc_utilities/arc_helpers.hpp>
-#include <arc_utilities/first_order_deformation.h>
-#include <arc_utilities/simple_dtw.hpp>
 #include <arc_utilities/timing.hpp>
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
@@ -519,7 +517,7 @@ RRTHelper::RRTHelper(
     , ph_(ph.getNamespace() + "/rrt")
     , robot_(robot)
     , planning_for_whole_robot_(planning_for_whole_robot)
-    , environment_sdf_(environment_sdf)
+    , sdf_(environment_sdf)
     , work_space_grid_(work_space_grid)
 
     , generator_(generator)
@@ -1055,7 +1053,7 @@ RRTGrippersRepresentation RRTHelper::posPairSampling_internal()
         const double z1 = Interpolate(task_aligned_lower_limits_.z(), task_aligned_upper_limits_.z(), uniform_unit_distribution_(*generator_));
         gripper_a_pos = Vector3d(x1, y1, z1);
     }
-    while (environment_sdf_->EstimateDistance3d(task_aligned_frame_transform_ * gripper_a_pos).first < gripper_min_distance_to_obstacles_);
+    while (sdf_->EstimateDistance3d(task_aligned_frame_transform_ * gripper_a_pos).first < gripper_min_distance_to_obstacles_);
 
     // We want to only sample within a radius max_grippers_distance_, and within the world extents; to do so
     // uniformly, we sample from an axis aligned box limited by R and the world extents, rejecting samples that lie
@@ -1076,7 +1074,7 @@ RRTGrippersRepresentation RRTHelper::posPairSampling_internal()
         gripper_b_pos = Vector3d(x2, y2, z2);
         valid = !maxGrippersDistanceViolated(gripper_a_pos, gripper_b_pos, max_grippers_distance_);
     }
-    while (!valid || environment_sdf_->EstimateDistance3d(task_aligned_frame_transform_ * gripper_b_pos).first < gripper_min_distance_to_obstacles_);
+    while (!valid || sdf_->EstimateDistance3d(task_aligned_frame_transform_ * gripper_b_pos).first < gripper_min_distance_to_obstacles_);
 
     RRTGrippersRepresentation rand_sample = grippers_goal_poses_;
     rand_sample.first.translation() = task_aligned_frame_transform_ * gripper_a_pos;
@@ -1596,10 +1594,10 @@ size_t RRTHelper::forwardPropogationFunction(
                     stopwatch(RESET);
                     arc_helpers::DoNotOptimize(next_grippers_poses);
                     const bool in_collision =
-                            (environment_sdf_->EstimateDistance3d(next_grippers_poses.first.translation()).first < gripper_min_distance_to_obstacles_) ||
-                            (environment_sdf_->EstimateDistance3d(next_grippers_poses.second.translation()).first < gripper_min_distance_to_obstacles_) ||
-                            (environment_sdf_->DistanceToBoundary3d(next_grippers_poses.first.translation()).first < gripper_min_distance_to_obstacles_) ||
-                            (environment_sdf_->DistanceToBoundary3d(next_grippers_poses.second.translation()).first < gripper_min_distance_to_obstacles_);
+                            (sdf_->EstimateDistance3d(next_grippers_poses.first.translation()).first < gripper_min_distance_to_obstacles_) ||
+                            (sdf_->EstimateDistance3d(next_grippers_poses.second.translation()).first < gripper_min_distance_to_obstacles_) ||
+                            (sdf_->DistanceToBoundary3d(next_grippers_poses.first.translation()).first < gripper_min_distance_to_obstacles_) ||
+                            (sdf_->DistanceToBoundary3d(next_grippers_poses.second.translation()).first < gripper_min_distance_to_obstacles_);
                     arc_helpers::DoNotOptimize(in_collision);
                     const double collision_check_time_pt2 = stopwatch(READ);
                     total_collision_check_time_ += collision_check_time_pt2;
@@ -2297,8 +2295,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     }
 
     // Double check that the input goal location isn't immediately impossible
-    const double first_gripper_dist_to_env = environment_sdf_->EstimateDistance3d(grippers_goal_poses_.first.translation()).first;
-    const double second_gripper_dist_to_env = environment_sdf_->EstimateDistance3d(grippers_goal_poses_.second.translation()).first;
+    const double first_gripper_dist_to_env = sdf_->EstimateDistance3d(grippers_goal_poses_.first.translation()).first;
+    const double second_gripper_dist_to_env = sdf_->EstimateDistance3d(grippers_goal_poses_.second.translation()).first;
     if (first_gripper_dist_to_env < gripper_min_distance_to_obstacles_ ||
         second_gripper_dist_to_env < gripper_min_distance_to_obstacles_ ||
         (maxGrippersDistanceViolated(grippers_goal_poses_, max_grippers_distance_) > max_grippers_distance_))
@@ -2603,59 +2601,12 @@ void RRTHelper::clearBlacklist()
     blacklisted_goal_rubber_bands_.clear();
 }
 
-bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_band_input) const
+bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_band) const
 {
-    const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
-    {
-        return (v1 - v2).norm();
-    };
-    const auto interpolation_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2, const double ratio)
-    {
-        return EigenHelpers::Interpolate(v1, v2, ratio);
-    };
-
-    const auto test_band = path_utils::ResamplePath(
-        test_band_input,
-        work_space_grid_.minStepDimension() * 0.5,
-        distance_fn,
-        interpolation_fn);
-
     for (size_t idx = 0; idx < blacklisted_goal_rubber_bands_.size(); idx++)
     {
         const VectorVector3d& blacklisted_path = blacklisted_goal_rubber_bands_[idx];
-
-        // Checks if the straight line between elements of the two paths is collision free
-        const auto straight_line_collision_check_fn = [&] (
-                const ssize_t blacklisted_path_ind,
-                const ssize_t test_band_ind)
-        {
-            assert(0 <= blacklisted_path_ind && blacklisted_path_ind < (ssize_t)blacklisted_path.size());
-            assert(0 <= test_band_ind && test_band_ind < (ssize_t)test_band.size());
-
-            const Vector3d& first_node = blacklisted_path[blacklisted_path_ind];
-            const Vector3d& second_node = test_band[test_band_ind];
-
-            const ssize_t num_steps = (ssize_t)std::ceil((second_node - first_node).norm() / (work_space_grid_.minStepDimension() * 0.5));
-
-            // We don't need to check the endpoints as they are already checked as part of the rubber band process
-            for (ssize_t ind = 1; ind < num_steps; ++ind)
-            {
-                const double ratio = (double)ind / (double)num_steps;
-                const Vector3d interpolated_point = Interpolate(first_node, second_node, ratio);
-                if (environment_sdf_->GetImmutable3d(interpolated_point).first < 0.0)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        };
-
-        // If we've found a first order deformation, then we are similar to a blacklisted item
-        if (FirstOrderDeformation::CheckFirstOrderDeformation(
-                blacklisted_path.size(),
-                test_band.size(),
-                straight_line_collision_check_fn))
+        if (MDP::CheckFirstOrderHomotopy(test_band, blacklisted_path))
         {
             return true;
         }
@@ -2667,12 +2618,8 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_b
 bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band)
 {
     Stopwatch stopwatch;
-    auto vector_representation = test_band.getVectorRepresentation();
-
-    arc_helpers::DoNotOptimize(vector_representation);
+    const auto vector_representation = test_band.resampleBand(work_space_grid_.minStepDimension() / 2.0);
     const bool is_first_order_visible = isBandFirstOrderVisibileToBlacklist(vector_representation);
-    arc_helpers::DoNotOptimize(is_first_order_visible);
-
     const double first_order_vis_time = stopwatch(READ);
     total_first_order_vis_propogation_time_ += first_order_vis_time;
 
@@ -3348,7 +3295,7 @@ void RRTHelper::storePath(const std::vector<RRTNode, RRTAllocator>& path, std::s
             const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
             file_path = log_folder.GetImmutable() + file_name;
         }
-        ROS_DEBUG_STREAM("Saving path to " << file_path);
+        ROS_DEBUG_STREAM_NAMED("rrt", "Saving path to " << file_path);
 
         std::vector<uint8_t> buffer;
         arc_utilities::SerializeVector<RRTNode, RRTAllocator>(path, buffer, &RRTNode::Serialize);
@@ -3369,7 +3316,7 @@ void RRTHelper::storePath(const std::vector<RRTNode, RRTAllocator>& path, std::s
     }
     catch (const std::exception& e)
     {
-        ROS_ERROR_STREAM("Failed to store path: "  <<  e.what());
+        ROS_ERROR_STREAM_NAMED("rrt", "Failed to store path: "  <<  e.what());
     }
 }
 
@@ -3398,7 +3345,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::loadStoredPath(std::string file_pa
             const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix.GetImmutable() + ".compressed";
             file_path = log_folder.GetImmutable() + file_name;
         }
-        ROS_INFO_STREAM("Loading path from " << file_path);
+        ROS_INFO_STREAM_NAMED("rrt", "Loading path from " << file_path);
 
         const auto deserializer = [&] (const std::vector<uint8_t>& buffer, const uint64_t current)
         {
@@ -3411,7 +3358,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::loadStoredPath(std::string file_pa
     }
     catch (const std::exception& e)
     {
-        ROS_ERROR_STREAM("Failed to load stored path: "  <<  e.what());
+        ROS_ERROR_STREAM_NAMED("rrt", "Failed to load stored path: "  <<  e.what());
     }
 
     return std::vector<RRTNode, RRTAllocator>();

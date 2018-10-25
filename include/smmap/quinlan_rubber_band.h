@@ -41,7 +41,10 @@ namespace smmap
                 bool verbose);
 
         const EigenHelpers::VectorVector3d& getVectorRepresentation() const;
-        const EigenHelpers::VectorVector3d upsampleBand(const size_t total_points) const;
+        // Not threadsafe: https://www.justsoftwaresolutions.co.uk/cplusplus/const-and-thread-safety.htm
+        const EigenHelpers::VectorVector3d& resampleBand(const double max_dist) const;
+        // Not threadsafe: https://www.justsoftwaresolutions.co.uk/cplusplus/const-and-thread-safety.htm
+        const EigenHelpers::VectorVector3d& upsampleBand(const size_t total_points) const;
 
         std::pair<Eigen::Vector3d, Eigen::Vector3d> getEndpoints() const;
 
@@ -84,11 +87,15 @@ namespace smmap
 
     private:
         ros::NodeHandle ph_;
-        const std::shared_ptr<DijkstrasCoverageTask> task_;
+        const DijkstrasCoverageTask::Ptr task_;
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
         const smmap_utilities::Visualizer::Ptr vis_;
 
         EigenHelpers::VectorVector3d band_;
+        // Not threadsafe: https://www.justsoftwaresolutions.co.uk/cplusplus/const-and-thread-safety.htm
+        mutable EigenHelpers::VectorVector3d resampled_band_; // is cleared every time band_ is updated
+        mutable double resampled_band_max_dist_;              // Is the distance that was used to resample the band
+        mutable EigenHelpers::VectorVector3d upsampled_band_; // is cleared every time band_ is updated
 
         const double max_total_band_distance_;
         const double min_overlap_distance_;

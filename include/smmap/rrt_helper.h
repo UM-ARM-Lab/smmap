@@ -7,6 +7,7 @@
 
 #include <flann/flann.hpp>
 
+#include "smmap/learned_transitions.h"
 #include "smmap/rubber_band.hpp"
 #include "smmap/robot_interface.hpp"
 
@@ -241,7 +242,7 @@ namespace smmap
             void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
             void clearBlacklist();
 
-            bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band_input) const;
+            bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const;
             bool isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band);
 
             ///////////////////////////////////////////////////////////////////////////////////////
@@ -353,7 +354,7 @@ namespace smmap
             ros::NodeHandle ph_;
             const RobotInterface::Ptr robot_;
             const bool planning_for_whole_robot_;
-            const sdf_tools::SignedDistanceField::ConstPtr environment_sdf_;
+            const sdf_tools::SignedDistanceField::ConstPtr sdf_;
             const XYZGrid work_space_grid_;
             const std::shared_ptr<std::mt19937_64> generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;

@@ -293,6 +293,8 @@ namespace smmap
     class DijkstrasCoverageTask : public CoverageTask
     {
         public:
+            typedef std::shared_ptr<DijkstrasCoverageTask> Ptr;
+
             struct Correspondences
             {
                 public:

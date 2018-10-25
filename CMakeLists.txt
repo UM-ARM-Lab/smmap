@@ -58,10 +58,9 @@ include_directories(include
     ${FLANN_INCLUDE_DIRS}
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O3 -flto -g -Wall -Wextra -Wpedantic -Wconversion")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O0 -g -Wall -Wextra -Wpedantic -Wconversion")# -fsanitize=address -fno-omit-frame-pointer")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_PARALLEL_K_NEAREST_NEIGHBORS -DENABLE_PARALLEL_ROADMAP -DENABLE_PARALLEL_DISTANCE_MATRIX")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_PARALLEL_DISTANCE_MATRIX -DENABLE_PARALLEL_ROADMAP -DEIGEN_DONT_PARALLELIZE")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O3 -flto")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O0")# -fsanitize=address -fno-omit-frame-pointer")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -Wextra -Wpedantic -Wconversion -DEIGEN_DONT_PARALLELIZE")
 
 unset(USE_OPEN_MP CACHE)
 option(USE_OPEN_MP "Set to ON if we want to use OpenMP" ON)
