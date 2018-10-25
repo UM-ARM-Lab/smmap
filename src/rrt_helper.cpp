@@ -3275,8 +3275,8 @@ void RRTHelper::visualizeBlacklist() const
 
 void RRTHelper::storePath(const std::vector<RRTNode, RRTAllocator>& path, std::string file_path) const
 {
-    try
-    {
+//    try
+//    {
         if (file_path.empty())
         {
             const auto log_folder = ROSHelpers::GetParamRequiredDebugLog<std::string>(nh_, "log_folder", __func__);
@@ -3313,11 +3313,11 @@ void RRTHelper::storePath(const std::vector<RRTNode, RRTAllocator>& path, std::s
 
             assert(retrieved_path == path);
         }
-    }
-    catch (const std::exception& e)
-    {
-        ROS_ERROR_STREAM_NAMED("rrt", "Failed to store path: "  <<  e.what());
-    }
+//    }
+//    catch (const std::exception& e)
+//    {
+//        ROS_ERROR_STREAM_NAMED("rrt", "Failed to store path: "  <<  e.what());
+//    }
 }
 
 std::vector<RRTNode, RRTAllocator> RRTHelper::loadStoredPath(std::string file_path) const
