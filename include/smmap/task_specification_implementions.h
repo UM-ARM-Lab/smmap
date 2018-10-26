@@ -15,26 +15,16 @@ namespace smmap
             ClothColabFolding(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color) const final;
-
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
             virtual double calculateError_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
 
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
 
-            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
 
             virtual bool taskDone_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
 
             const Grid4Neighbours neighbours_;
 
@@ -56,20 +46,10 @@ namespace smmap
             RopeCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color) const final;
-
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
-            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
 
             virtual bool taskDone_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
 
             const LineNeighbours neighbours_;
     };
@@ -83,20 +63,10 @@ namespace smmap
             ClothTableCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color) const final;
-
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
-            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
 
             virtual bool taskDone_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
 
             const Grid4Neighbours neighbours_;
     };
@@ -114,20 +84,10 @@ namespace smmap
             ClothDistanceBasedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color) const final;
-
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
-            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
 
             virtual bool taskDone_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
 
             const Grid4Neighbours neighbours_;
     };
@@ -143,20 +103,10 @@ namespace smmap
             RopeFixedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color) const final;
-
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
-            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
 
             virtual bool taskDone_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
 
             const LineNeighbours neighbours_;
     };
@@ -172,20 +122,10 @@ namespace smmap
             ClothFixedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
 
         private:
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color) const final;
-
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
-            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
 
             virtual bool taskDone_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
 
             // TODO: Not clear that this will be the case moving forward - are all nodes in a grid?
             const Grid4Neighbours neighbours_;

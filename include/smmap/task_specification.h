@@ -51,12 +51,14 @@ namespace smmap
             void visualizeDeformableObject(
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color) const;
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id = 1) const;
 
             void visualizeDeformableObject(
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const;
+                    const std::vector<std_msgs::ColorRGBA>& colors,
+                    const int32_t id = 1) const;
 
             double calculateError(
                     const WorldState& world_state);
@@ -184,18 +186,24 @@ namespace smmap
 
         private:
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            // Virtual functions that each task specification must provide
+            // Virtual functions that have a default implementation
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             virtual void visualizeDeformableObject_impl(
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color) const = 0;
+                    const std_msgs::ColorRGBA& color,
+                    const int32_t id) const;
 
             virtual void visualizeDeformableObject_impl(
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const = 0;
+                    const std::vector<std_msgs::ColorRGBA>& colors,
+                    const int32_t id) const;
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Virtual functions that each task specification must provide
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             virtual double calculateError_impl(
                     const WorldState& world_state) = 0;
@@ -221,26 +229,16 @@ namespace smmap
                     smmap_utilities::Visualizer::Ptr vis);
 
         private:
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std_msgs::ColorRGBA& color) const final;
-
-            virtual void visualizeDeformableObject_impl(
-                    const std::string& marker_name,
-                    const ObjectPointSet& object_configuration,
-                    const std::vector<std_msgs::ColorRGBA>& colors) const final;
-
             virtual double calculateError_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
 
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
 
-            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const final;
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
 
             virtual bool taskDone_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
     };
 
     class CoverageTask : public TaskSpecification
@@ -284,10 +282,10 @@ namespace smmap
 
         private:
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
 
             virtual double calculateError_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
     };
 
     class DijkstrasCoverageTask : public CoverageTask
@@ -362,10 +360,10 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             virtual double calculateError_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
 
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
-                    const WorldState& world_state) final;
+                    const WorldState& world_state) override final;
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Virtual functions that others need to write
@@ -416,7 +414,7 @@ namespace smmap
 
         private:
             virtual Correspondences getCoverPointCorrespondences_impl(
-                    const WorldState& world_state) const final;
+                    const WorldState& world_state) const override final;
 
             std::tuple<ssize_t, double, ssize_t, bool> findNearestObjectPoint(
                     const WorldState& world_state,
@@ -436,7 +434,7 @@ namespace smmap
 
         private:
             virtual Correspondences getCoverPointCorrespondences_impl(
-                    const WorldState& world_state) const final;
+                    const WorldState& world_state) const override final;
     };
 
 

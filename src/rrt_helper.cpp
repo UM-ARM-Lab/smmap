@@ -486,6 +486,7 @@ RRTHelper::RRTHelper(
         const sdf_tools::SignedDistanceField::ConstPtr environment_sdf,
         const XYZGrid& work_space_grid,
         const std::shared_ptr<std::mt19937_64>& generator,
+        const MDP::Ptr& mdp,
         // Planning algorithm parameters
         const bool using_cbirrt_style_projection,
         const size_t forward_tree_extend_iterations,
@@ -519,6 +520,7 @@ RRTHelper::RRTHelper(
     , planning_for_whole_robot_(planning_for_whole_robot)
     , sdf_(environment_sdf)
     , work_space_grid_(work_space_grid)
+    , mdp_(mdp)
 
     , generator_(generator)
     , uniform_unit_distribution_(0.0, 1.0)
@@ -2606,7 +2608,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_b
     for (size_t idx = 0; idx < blacklisted_goal_rubber_bands_.size(); idx++)
     {
         const VectorVector3d& blacklisted_path = blacklisted_goal_rubber_bands_[idx];
-        if (MDP::CheckFirstOrderHomotopy(test_band, blacklisted_path))
+        if (mdp_->checkFirstOrderHomotopy(test_band, blacklisted_path))
         {
             return true;
         }

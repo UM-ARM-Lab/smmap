@@ -39,7 +39,7 @@ namespace smmap
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
                     const RobotInterface::Ptr& robot,
-                    smmap_utilities::Visualizer::Ptr vis,
+                    const smmap_utilities::Visualizer::Ptr vis,
                     const TaskSpecification::Ptr& task_specification);
 
             void execute();
@@ -158,7 +158,7 @@ namespace smmap
             std::shared_ptr<RRTHelper> rrt_helper_;
             std::vector<RRTNode, RRTAllocator> rrt_planned_path_;
             std::vector<MDP::State, MDP::StateAllocator> rrt_executed_path_;
-            std::vector<MDP::StateTransition, MDP::StateTransitionAllocator> band_learned_transitions_;
+            MDP::Ptr mdp_;
 
             // These are both intended only for logging purposes, the individual
             // controllers may (or may not) have their own copies for their own purposes

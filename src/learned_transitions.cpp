@@ -5,21 +5,20 @@
 #include <arc_utilities/path_utils.hpp>
 
 using namespace smmap;
+using namespace smmap_utilities;
 
-DijkstrasCoverageTask::Ptr MDP::task_ = nullptr;
-bool MDP::initialized_ = false;
+constexpr char MDP::MDP_PRE_STATE_NS[];
+constexpr char MDP::MDP_ACTION_NS[];
+constexpr char MDP::MDP_POST_STATE_NS[];
 
+MDP::MDP(const DijkstrasCoverageTask::Ptr &task,
+         const smmap_utilities::Visualizer::Ptr& vis)
+    : task_(task)
+    , vis_(vis)
+{}
 
-void MDP::Initialize(const DijkstrasCoverageTask::Ptr& task)
+bool MDP::checkFirstOrderHomotopy(const EigenHelpers::VectorVector3d& b1, const EigenHelpers::VectorVector3d& b2) const
 {
-    task_ = task;
-    initialized_ = true;
-}
-
-bool MDP::CheckFirstOrderHomotopy(const EigenHelpers::VectorVector3d& b1, const EigenHelpers::VectorVector3d& b2)
-{
-    assert(initialized_);
-
     // Checks if the straight line between elements of the two paths is collision free
     const auto straight_line_collision_check_fn = [&] (
             const ssize_t b1_ind,
@@ -50,18 +49,16 @@ bool MDP::CheckFirstOrderHomotopy(const EigenHelpers::VectorVector3d& b1, const 
                     straight_line_collision_check_fn);
 }
 
-bool MDP::CheckFirstOrderHomotopy(const RubberBand& b1, const RubberBand& b2)
+bool MDP::checkFirstOrderHomotopy(const RubberBand& b1, const RubberBand& b2) const
 {
-    assert(initialized_);
-
     const auto b1_points = b1.resampleBand(task_->work_space_grid_.minStepDimension() * 0.5);
     const auto b2_points = b2.resampleBand(task_->work_space_grid_.minStepDimension() * 0.5);
 
-    return CheckFirstOrderHomotopy(b1_points, b2_points);
+    return checkFirstOrderHomotopy(b1_points, b2_points);
 }
 
-Maybe::Maybe<MDP::StateTransition> MDP::FindMostRecentBadTransition(
-        const std::vector<State, StateAllocator>& trajectory)
+Maybe::Maybe<MDP::StateTransition> MDP::findMostRecentBadTransition(
+        const std::vector<State, StateAllocator>& trajectory) const
 {
     // We can only learn a transition if there are at least states
     if (trajectory.size() < 2)
@@ -75,7 +72,7 @@ Maybe::Maybe<MDP::StateTransition> MDP::FindMostRecentBadTransition(
 
     // First, check to make sure that the last state is in a different
     // first order homotopy class for the planned vs actual band
-    if (CheckFirstOrderHomotopy(
+    if (checkFirstOrderHomotopy(
             *trajectory.back().rubber_band_,
             *trajectory.back().planned_rubber_band_))
     {
@@ -93,7 +90,7 @@ Maybe::Maybe<MDP::StateTransition> MDP::FindMostRecentBadTransition(
     {
         // If the first order homotopy check passes, then the actual rubber band
         // and the planned rubber band are in the same first order homotopy class
-        if (CheckFirstOrderHomotopy(
+        if (checkFirstOrderHomotopy(
                 *trajectory[idx - 1].rubber_band_,
                 *trajectory[idx - 1].planned_rubber_band_))
         {
@@ -116,4 +113,28 @@ Maybe::Maybe<MDP::StateTransition> MDP::FindMostRecentBadTransition(
                           << "No transition from homotopy match to non-match, "
                           << "returning no transition");
     return Maybe::Maybe<StateTransition>();
+}
+
+void MDP::learnTransition(const MDP::StateTransition& transition)
+{
+    learned_transitions_.push_back(transition);
+}
+
+void MDP::visualizeTransition(const MDP::StateTransition& transition, const int32_t id) const
+{
+    task_->visualizeDeformableObject(MDP_PRE_STATE_NS, transition.starting_state.deform_config_, Visualizer::Yellow(), id);
+    transition.starting_state.rubber_band_->visualize(MDP_PRE_STATE_NS, Visualizer::Yellow(), Visualizer::Yellow(), id + 1);
+    transition.starting_state.planned_rubber_band_->visualize(MDP_PRE_STATE_NS, Visualizer::Yellow(0.5), Visualizer::Yellow(0.5), id + 2);
+
+    task_->visualizeDeformableObject(MDP_POST_STATE_NS, transition.ending_state.deform_config_, Visualizer::Red(), id);
+    transition.ending_state.rubber_band_->visualize(MDP_POST_STATE_NS, Visualizer::Red(), Visualizer::Red(), id + 1);
+    transition.ending_state.planned_rubber_band_->visualize(MDP_POST_STATE_NS, Visualizer::Red(0.5), Visualizer::Red(0.5), id + 2);
+}
+
+void MDP::visualizeLearnedTransitions() const
+{
+    for (size_t idx = 0; idx < learned_transitions_.size(); ++idx)
+    {
+        visualizeTransition(learned_transitions_[idx], (int32_t)(3 * idx + 1));
+    }
 }

@@ -122,17 +122,19 @@ TaskSpecification::TaskSpecification(
 void TaskSpecification::visualizeDeformableObject(
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
-        const std_msgs::ColorRGBA& color) const
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
 {
-    visualizeDeformableObject_impl(marker_name, object_configuration, color);
+    visualizeDeformableObject_impl(marker_name, object_configuration, color, id);
 }
 
 void TaskSpecification::visualizeDeformableObject(
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
+        const std::vector<std_msgs::ColorRGBA>& colors,
+        const int32_t id) const
 {
-    visualizeDeformableObject_impl(marker_name, object_configuration, colors);
+    visualizeDeformableObject_impl(marker_name, object_configuration, colors, id);
 }
 
 double TaskSpecification::calculateError(const WorldState& world_state)
@@ -455,6 +457,47 @@ const std::vector<long>& TaskSpecification::getGripperAttachedNodesIndices(const
     return grippers_data_[gripper_idx].node_indices_;
 }
 
+void TaskSpecification::visualizeDeformableObject_impl(
+        const std::string& marker_name,
+        const ObjectPointSet& object_configuration,
+        const std_msgs::ColorRGBA& color,
+        const int32_t id) const
+{
+    switch (deformable_type_)
+    {
+        case ROPE:
+            vis_->visualizeRope(marker_name, object_configuration, color, id);
+            break;
+
+        case CLOTH:
+            vis_->visualizeCloth(marker_name, object_configuration, color, id);
+
+        default:
+            assert(false && "Imposibru!");
+    }
+}
+
+void TaskSpecification::visualizeDeformableObject_impl(
+        const std::string& marker_name,
+        const ObjectPointSet& object_configuration,
+        const std::vector<std_msgs::ColorRGBA>& colors,
+        const int32_t id) const
+{
+    switch (deformable_type_)
+    {
+        case ROPE:
+            vis_->visualizeRope(marker_name, object_configuration, colors, id);
+            break;
+
+        case CLOTH:
+            vis_->visualizeCloth(marker_name, object_configuration, colors, id);
+            break;
+
+        default:
+            assert(false && "Imposibru!");
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////// Model Accuracy Test Task ////////////////////////////////////////////////////////
@@ -467,45 +510,6 @@ ModelAccuracyTestTask::ModelAccuracyTestTask(
         smmap_utilities::Visualizer::Ptr vis)
     : TaskSpecification(nh, ph, vis, false)
 {}
-
-void ModelAccuracyTestTask::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std_msgs::ColorRGBA& color) const
-{
-    switch (deformable_type_)
-    {
-        case ROPE:
-            vis_->visualizeRope(marker_name, object_configuration, color);
-            break;
-
-        case CLOTH:
-            vis_->visualizeCloth(marker_name, object_configuration, color);
-
-        default:
-            assert(false && "Imposibru!");
-    }
-}
-
-void ModelAccuracyTestTask::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
-{
-    switch (deformable_type_)
-    {
-        case ROPE:
-            vis_->visualizeRope(marker_name, object_configuration, colors);
-            break;
-
-        case CLOTH:
-            vis_->visualizeCloth(marker_name, object_configuration, colors);
-            break;
-
-        default:
-            assert(false && "Imposibru!");
-    }
-}
 
 double ModelAccuracyTestTask::calculateError_impl(
         const WorldState& world_state)

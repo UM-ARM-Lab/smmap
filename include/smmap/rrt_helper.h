@@ -170,7 +170,7 @@ namespace smmap
 
             // Topic names used for publishing visualization data
             static constexpr char RRT_BLACKLISTED_GOAL_BANDS_NS[]   = "rrt_blacklisted_goal_bands";
-            static constexpr char RRT_GOAL_TESTING_NS[]               = "rrt_goal_testing";
+            static constexpr char RRT_GOAL_TESTING_NS[]             = "rrt_goal_testing";
 
             static constexpr char RRT_FORWARD_TREE_GRIPPER_A_NS[]   = "rrt_forward_tree_gripper_a";
             static constexpr char RRT_FORWARD_TREE_GRIPPER_B_NS[]   = "rrt_forward_tree_gripper_b";
@@ -194,6 +194,8 @@ namespace smmap
                     const sdf_tools::SignedDistanceField::ConstPtr environment_sdf,
                     const XYZGrid& work_space_grid,
                     const std::shared_ptr<std::mt19937_64>& generator,
+                    // Learned state transitions
+                    const MDP::Ptr& mdp,
                     // Planning algorithm parameters
                     const bool using_cbirrt_style_projection,
                     const size_t forward_tree_extend_iterations,
@@ -356,6 +358,7 @@ namespace smmap
             const bool planning_for_whole_robot_;
             const sdf_tools::SignedDistanceField::ConstPtr sdf_;
             const XYZGrid work_space_grid_;
+            const MDP::Ptr mdp_;
             const std::shared_ptr<std::mt19937_64> generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
 

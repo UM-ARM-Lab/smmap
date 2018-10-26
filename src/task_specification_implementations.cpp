@@ -14,22 +14,6 @@ ClothColabFolding::ClothColabFolding(ros::NodeHandle& nh, ros::NodeHandle& ph, V
     , mirror_map_(createMirrorMap(nh, point_reflector_))
 {}
 
-void ClothColabFolding::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std_msgs::ColorRGBA& color) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, color);
-}
-
-void ClothColabFolding::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, colors);
-}
-
 double ClothColabFolding::calculateError_impl(
         const WorldState& world_state)
 {
@@ -133,22 +117,6 @@ RopeCylinderCoverage::RopeCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle&
     , neighbours_(num_nodes_)
 {}
 
-void RopeCylinderCoverage::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std_msgs::ColorRGBA& color) const
-{
-    vis_->visualizeRope(marker_name, object_configuration, color);
-}
-
-void RopeCylinderCoverage::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
-{
-    vis_->visualizeRope(marker_name, object_configuration, colors);
-}
-
 std::vector<ssize_t> RopeCylinderCoverage::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
@@ -168,22 +136,6 @@ ClothTableCoverage::ClothTableCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph,
     : DirectCoverageTask(nh, ph, vis)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
 {}
-
-void ClothTableCoverage::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std_msgs::ColorRGBA& color) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, color);
-}
-
-void ClothTableCoverage::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, colors);
-}
 
 std::vector<ssize_t> ClothTableCoverage::getNodeNeighbours_impl(const ssize_t node) const
 {
@@ -218,22 +170,6 @@ ClothDistanceBasedCorrespondences::ClothDistanceBasedCorrespondences(ros::NodeHa
     }
 }
 
-void ClothDistanceBasedCorrespondences::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std_msgs::ColorRGBA& color) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, color);
-}
-
-void ClothDistanceBasedCorrespondences::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, colors);
-}
-
 std::vector<ssize_t> ClothDistanceBasedCorrespondences::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
@@ -264,22 +200,6 @@ RopeFixedCorrespondences::RopeFixedCorrespondences(ros::NodeHandle& nh, ros::Nod
     }
 }
 
-void RopeFixedCorrespondences::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std_msgs::ColorRGBA& color) const
-{
-    vis_->visualizeRope(marker_name, object_configuration, color);
-}
-
-void RopeFixedCorrespondences::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
-{
-    vis_->visualizeRope(marker_name, object_configuration, colors);
-}
-
 std::vector<ssize_t> RopeFixedCorrespondences::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
@@ -308,22 +228,6 @@ ClothFixedCorrespondences::ClothFixedCorrespondences(ros::NodeHandle& nh, ros::N
     {
         correspondences_internal_fixed_.push_back({idx});
     }
-}
-
-void ClothFixedCorrespondences::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std_msgs::ColorRGBA& color) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, color);
-}
-
-void ClothFixedCorrespondences::visualizeDeformableObject_impl(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std::vector<std_msgs::ColorRGBA>& colors) const
-{
-    vis_->visualizeCloth(marker_name, object_configuration, colors);
 }
 
 std::vector<ssize_t> ClothFixedCorrespondences::getNodeNeighbours_impl(const ssize_t node) const

@@ -169,7 +169,7 @@ TaskFramework::TaskFramework(
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
         const RobotInterface::Ptr& robot,
-        Visualizer::Ptr vis,
+        const Visualizer::Ptr vis,
         const TaskSpecification::Ptr& task_specification)
     // Robot and task parameters
     : nh_(nh)
@@ -192,6 +192,7 @@ TaskFramework::TaskFramework(
     , executing_global_trajectory_(false)
     , global_plan_next_timestep_(-1)
     , rrt_helper_(nullptr)
+    , mdp_(nullptr)
     // Used to generate some log data by some controllers
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
     , initial_grippers_distance_(robot_->getGrippersInitialDistance())
@@ -275,6 +276,9 @@ void TaskFramework::execute()
         }
 #endif
 
+        // Initialize the MDP transition learner
+        mdp_ = std::make_shared<MDP>(dijkstras_task_, vis_);
+
         // Algorithm parameters
         const auto use_cbirrt_style_projection = GetUseCBiRRTStyleProjection(ph_);
         const auto forward_tree_extend_iterations = GetRRTForwardTreeExtendIterations(ph_);
@@ -322,6 +326,8 @@ void TaskFramework::execute()
                     dijkstras_task_->sdf_,
                     dijkstras_task_->work_space_grid_,
                     generator_,
+                    // Learned transitions
+                    mdp_,
                     // Planning algorithm parameters
                     use_cbirrt_style_projection,
                     forward_tree_extend_iterations,
@@ -350,8 +356,6 @@ void TaskFramework::execute()
                     // Visualization
                     vis_,
                     enable_rrt_visualizations);
-
-        MDP::Initialize(dijkstras_task_);
     }
 
     while (robot_->ok())
@@ -449,6 +453,19 @@ WorldState TaskFramework::sendNextCommand(
             if (global_plan_will_overstretch)
             {
                 planning_needed = true;
+
+                ROS_WARN_NAMED("task_framework", "Determining most recent bad transition");
+                const auto last_bad_transition = mdp_->findMostRecentBadTransition(rrt_executed_path_);
+                if (last_bad_transition.Valid())
+                {
+                    mdp_->learnTransition(last_bad_transition.GetImmutable());
+                    mdp_->visualizeTransition(last_bad_transition.GetImmutable());
+                }
+                else
+                {
+                    ROS_WARN_NAMED("task_framework", "Global plan failed but unable to learn new transition");
+                }
+
 
                 ROS_WARN_NAMED("task_framework", "Invoking global planner as the current plan will overstretch the deformable object");
                 ROS_INFO_NAMED("task_framework", "----------------------------------------------------------------------------");
