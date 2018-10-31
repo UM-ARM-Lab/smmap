@@ -12,12 +12,14 @@
 
 #define ENABLE_BAND_DEBUGGING 0
 //#define ENABLE_BAND_DEBUGGING 1
+
+// For any of the below to be meaningful, ENABLE_BAND_DEBUGGING must evaluate to true
 #define ENABLE_INTERPOLATE_DEBUGGING 0
 //#define ENABLE_INTERPOLATE_DEBUGGING) 1
 #define ENABLE_REMOVE_DEBUGGING 0
-//#define && ENABLE_REMOVE_DEBUGGING 1
+//#define ENABLE_REMOVE_DEBUGGING 1
+#define ENABALE_SMOOTHING_DEBUGGING 0
 //#define ENABALE_SMOOTHING_DEBUGGING 1
-#define ENABALE_SMOOTHING_DEBUGGING 1
 
 using namespace smmap;
 using namespace smmap_utilities;
@@ -1193,6 +1195,7 @@ bool QuinlanRubberBand::useStoredBand() const
 {
     return ROSHelpers::GetParamRequired<bool>(ph_, "use_stored_band", __func__).GetImmutable();
 }
+
 
 double QuinlanRubberBand::distanceSq(const QuinlanRubberBand& other) const
 {
