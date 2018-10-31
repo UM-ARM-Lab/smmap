@@ -761,7 +761,6 @@ std::pair<int64_t, double> getNearestFullConfig(
     {
         const auto& test_band = tree[item.first].band();
         const double band_distance2 = config.band()->distanceSq(*test_band);
-
         const double total_distance2 = item.second + band_distance2_scaling_factor_ * band_distance2;
         if (total_distance2 < nearest.second)
         {
