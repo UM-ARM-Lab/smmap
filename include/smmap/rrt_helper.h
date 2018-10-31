@@ -189,13 +189,13 @@ namespace smmap
                     // Robot/environment related parameters
                     ros::NodeHandle& nh,
                     ros::NodeHandle& ph,
-                    const RobotInterface::Ptr robot,
+                    const RobotInterface::ConstPtr robot,
                     const bool planning_for_whole_robot,
                     const sdf_tools::SignedDistanceField::ConstPtr environment_sdf,
                     const XYZGrid& work_space_grid,
                     const std::shared_ptr<std::mt19937_64>& generator,
                     // Learned state transitions
-                    const MDP::Ptr& mdp,
+                    const TransitionEstimation::ConstPtr& transition_estimator,
                     // Planning algorithm parameters
                     const bool using_cbirrt_style_projection,
                     const size_t forward_tree_extend_iterations,
@@ -218,8 +218,8 @@ namespace smmap
                     const double max_gripper_rotation,
                     const double goal_reach_radius,
                     const double gripper_min_distance_to_obstacles,
-                    const double band_distance2_scaling_factor,
                     const size_t band_max_points,
+                    const double band_distance2_scaling_factor,
                     // Visualization
                     const smmap_utilities::Visualizer::Ptr vis,
                     const bool visualization_enabled);
@@ -354,11 +354,11 @@ namespace smmap
         private:
             ros::NodeHandle nh_;
             ros::NodeHandle ph_;
-            const RobotInterface::Ptr robot_;
+            const RobotInterface::ConstPtr robot_;
             const bool planning_for_whole_robot_;
             const sdf_tools::SignedDistanceField::ConstPtr sdf_;
             const XYZGrid work_space_grid_;
-            const MDP::Ptr mdp_;
+            const TransitionEstimation::ConstPtr transition_estimator_;
             const std::shared_ptr<std::mt19937_64> generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
 

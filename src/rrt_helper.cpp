@@ -134,7 +134,7 @@ RRTNode::RRTNode(
 RRTNode::RRTNode(
         const RRTGrippersRepresentation& grippers_poses,
         const RRTRobotRepresentation& robot_configuration,
-        const RubberBand::Ptr& band,
+        const QuinlanRubberBand::Ptr& band,
         const double cost_to_come,
         const int64_t parent_index,
         const std::vector<int64_t>& child_indices,
@@ -481,12 +481,12 @@ RRTHelper::RRTHelper(
         // Robot/environment related parameters
         ros::NodeHandle& nh,
         ros::NodeHandle& ph,
-        const RobotInterface::Ptr robot,
+        const RobotInterface::ConstPtr robot,
         const bool planning_for_whole_robot,
         const sdf_tools::SignedDistanceField::ConstPtr environment_sdf,
         const XYZGrid& work_space_grid,
         const std::shared_ptr<std::mt19937_64>& generator,
-        const MDP::Ptr& mdp,
+        const TransitionEstimation::ConstPtr& transition_estimator,
         // Planning algorithm parameters
         const bool using_cbirrt_style_projection,
         const size_t forward_tree_extend_iterations,
@@ -509,8 +509,8 @@ RRTHelper::RRTHelper(
         const double max_gripper_rotation,
         const double goal_reach_radius,
         const double gripper_min_distance_to_obstacles,
-        const double band_distance2_scaling_factor,
         const size_t band_max_points,
+        const double band_distance2_scaling_factor,
         // Visualization
         const smmap_utilities::Visualizer::Ptr vis,
         const bool visualization_enabled)
@@ -520,7 +520,7 @@ RRTHelper::RRTHelper(
     , planning_for_whole_robot_(planning_for_whole_robot)
     , sdf_(environment_sdf)
     , work_space_grid_(work_space_grid)
-    , mdp_(mdp)
+    , transition_estimator_(transition_estimator)
 
     , generator_(generator)
     , uniform_unit_distribution_(0.0, 1.0)
@@ -756,17 +756,12 @@ std::pair<int64_t, double> getNearestFullConfig(
 
     std::pair<int64_t, double> nearest(-1, std::numeric_limits<double>::infinity());
 
-    const VectorVector3d& config_band_path = config.band()->getVectorRepresentation();
-    const VectorXd config_band_path_vec = VectorEigenVectorToEigenVectorX(config_band_path);
-
     // Search through the first set of potential nearest nodes
     for (const auto& item : radius_search_set_1)
     {
         const auto& test_band = tree[item.first].band();
-        const auto test_band_path = test_band->upsampleBand(config_band_path.size());
-        const auto test_band_path_vec = VectorEigenVectorToEigenVectorX(test_band_path);
+        const double band_distance2 = config.band()->distanceSq(*test_band);
 
-        const double band_distance2 = (config_band_path_vec - test_band_path_vec).squaredNorm();
         const double total_distance2 = item.second + band_distance2_scaling_factor_ * band_distance2;
         if (total_distance2 < nearest.second)
         {
@@ -779,10 +774,7 @@ std::pair<int64_t, double> getNearestFullConfig(
     for (const auto& item : radius_search_set_2)
     {
         const auto& test_band = tree[item.first].band();
-        const auto test_band_path = test_band->upsampleBand(config_band_path.size());
-        const auto test_band_path_vec = VectorEigenVectorToEigenVectorX(test_band_path);
-
-        const double band_distance2 = (config_band_path_vec - test_band_path_vec).squaredNorm();
+        const double band_distance2 = config.band()->distanceSq(*test_band);
         const double total_distance2 = item.second + band_distance2_scaling_factor_ * band_distance2;
         if (total_distance2 < nearest.second)
         {
@@ -2608,7 +2600,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_b
     for (size_t idx = 0; idx < blacklisted_goal_rubber_bands_.size(); idx++)
     {
         const VectorVector3d& blacklisted_path = blacklisted_goal_rubber_bands_[idx];
-        if (mdp_->checkFirstOrderHomotopy(test_band, blacklisted_path))
+        if (transition_estimator_->checkFirstOrderHomotopy(test_band, blacklisted_path))
         {
             return true;
         }
@@ -2620,7 +2612,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_b
 bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band)
 {
     Stopwatch stopwatch;
-    const auto vector_representation = test_band.resampleBand(work_space_grid_.minStepDimension() / 2.0);
+    const auto vector_representation = test_band.resampleBand();
     const bool is_first_order_visible = isBandFirstOrderVisibileToBlacklist(vector_representation);
     const double first_order_vis_time = stopwatch(READ);
     total_first_order_vis_propogation_time_ += first_order_vis_time;

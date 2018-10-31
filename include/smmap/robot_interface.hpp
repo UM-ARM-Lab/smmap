@@ -20,6 +20,7 @@ namespace smmap
     {
         public:
             typedef std::shared_ptr<RobotInterface> Ptr;
+            typedef std::shared_ptr<const RobotInterface> ConstPtr;
 
             RobotInterface(ros::NodeHandle& nh, ros::NodeHandle& ph);
             ~RobotInterface();
@@ -50,8 +51,8 @@ namespace smmap
             std::vector<CollisionData> checkGripperCollision(const AllGrippersSinglePose& grippers_pose);
 
             void resetRandomSeeds(const unsigned long seed, const unsigned long num_discards);
-            void lockEnvironment();
-            void unlockEnvironment();
+            void lockEnvironment() const;
+            void unlockEnvironment() const;
 
             const Eigen::VectorXd& getJointLowerLimits() const;
             const Eigen::VectorXd& getJointUpperLimits() const;

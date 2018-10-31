@@ -173,7 +173,7 @@ namespace smmap
         reset_random_seeds_fn_(seed, num_discards);
     }
 
-    void RobotInterface::lockEnvironment()
+    void RobotInterface::lockEnvironment() const
     {
         if (lock_env_fn_ == nullptr)
         {
@@ -183,7 +183,7 @@ namespace smmap
         return lock_env_fn_();
     }
 
-    void RobotInterface::unlockEnvironment()
+    void RobotInterface::unlockEnvironment() const
     {
         if (unlock_env_fn_ == nullptr)
         {

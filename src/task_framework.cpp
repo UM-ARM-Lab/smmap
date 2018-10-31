@@ -192,7 +192,7 @@ TaskFramework::TaskFramework(
     , executing_global_trajectory_(false)
     , global_plan_next_timestep_(-1)
     , rrt_helper_(nullptr)
-    , mdp_(nullptr)
+    , transition_estimator_(nullptr)
     // Used to generate some log data by some controllers
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
     , initial_grippers_distance_(robot_->getGrippersInitialDistance())
@@ -230,12 +230,12 @@ void TaskFramework::execute()
         // Extract the maximum distance between the grippers
         // This assumes that the starting position of the grippers is at the maximum "unstretched" distance
         const auto& grippers_starting_poses = world_feedback.all_grippers_single_pose_;
-        const double max_calced_band_distance =
+        const double max_calced_band_length =
                 (grippers_starting_poses[0].translation() - grippers_starting_poses[1].translation()).norm()
                 * dijkstras_task_->maxStretchFactor();
-        ROS_ERROR_STREAM_COND_NAMED(!CloseEnough(max_calced_band_distance, dijkstras_task_->maxBandLength(), 1e-3),
+        ROS_ERROR_STREAM_COND_NAMED(!CloseEnough(max_calced_band_length, dijkstras_task_->maxBandLength(), 1e-3),
                                     "task_framework",
-                                    "Calc'd max band distance is: " << max_calced_band_distance <<
+                                    "Calc'd max band distance is: " << max_calced_band_length <<
                                     " but the ros param saved distance is " << dijkstras_task_->maxBandLength() <<
                                     ". Double check the stored value in the roslaunch file.");
 
@@ -249,10 +249,15 @@ void TaskFramework::execute()
                     robot_->getGrippersData(), GetObjectInitialConfiguration(nh_), neighbour_fn);
 
         // Create the initial rubber band
+        const double resampled_band_max_pointwise_dist = dijkstras_task_->work_space_grid_.minStepDimension() / 2.0;
+        const size_t upsampled_band_num_points = GetRRTBandMaxPoints(ph_);
+
         const auto starting_band_points = getPathBetweenGrippersThroughObject(
                     world_feedback, path_between_grippers_through_object_);
         rubber_band_between_grippers_ = std::make_shared<RubberBand>(
                     starting_band_points,
+                    resampled_band_max_pointwise_dist,
+                    upsampled_band_num_points,
                     dijkstras_task_->maxBandLength(),
                     dijkstras_task_,
                     vis_,
@@ -277,7 +282,7 @@ void TaskFramework::execute()
 #endif
 
         // Initialize the MDP transition learner
-        mdp_ = std::make_shared<MDP>(dijkstras_task_, vis_);
+        transition_estimator_ = std::make_shared<TransitionEstimation>(nh_, ph_, dijkstras_task_, vis_);
 
         // Algorithm parameters
         const auto use_cbirrt_style_projection = GetUseCBiRRTStyleProjection(ph_);
@@ -311,7 +316,6 @@ void TaskFramework::execute()
 //        const auto homotopy_distance_penalty = GetRRTHomotopyDistancePenalty();
         const auto min_gripper_distance_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_); // only matters for simulation
         const auto band_distance2_scaling_factor = GetRRTBandDistance2ScalingFactor(ph_);
-        const auto band_max_points = GetRRTBandMaxPoints(ph_);
 
         // Visualization
         const auto enable_rrt_visualizations = GetVisualizeRRT(ph_);
@@ -327,7 +331,7 @@ void TaskFramework::execute()
                     dijkstras_task_->work_space_grid_,
                     generator_,
                     // Learned transitions
-                    mdp_,
+                    transition_estimator_,
                     // Planning algorithm parameters
                     use_cbirrt_style_projection,
                     forward_tree_extend_iterations,
@@ -351,8 +355,8 @@ void TaskFramework::execute()
                     goal_reached_radius,
                     min_gripper_distance_to_obstacles,
                     // Dual stage NN checking variables
+                    upsampled_band_num_points,
                     band_distance2_scaling_factor,
-                    band_max_points,
                     // Visualization
                     vis_,
                     enable_rrt_visualizations);
@@ -455,11 +459,12 @@ WorldState TaskFramework::sendNextCommand(
                 planning_needed = true;
 
                 ROS_WARN_NAMED("task_framework", "Determining most recent bad transition");
-                const auto last_bad_transition = mdp_->findMostRecentBadTransition(rrt_executed_path_);
+                const auto last_bad_transition = transition_estimator_->findMostRecentBadTransition(rrt_executed_path_);
                 if (last_bad_transition.Valid())
                 {
-                    mdp_->learnTransition(last_bad_transition.GetImmutable());
-                    mdp_->visualizeTransition(last_bad_transition.GetImmutable());
+                    transition_estimator_->learnTransition(last_bad_transition.GetImmutable());
+                    transition_estimator_->visualizeTransition(last_bad_transition.GetImmutable());
+                    vis_->forcePublishNow(0.5);
                 }
                 else
                 {
@@ -845,9 +850,13 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
         rrt_executed_path_.push_back({
                     world_feedback.object_configuration_,
                     std::make_shared<RubberBand>(*rubber_band_between_grippers_),
-                    std::make_shared<RubberBand>(*(rrt_planned_path_[global_plan_next_timestep_].band()))});
+                    std::make_shared<RubberBand>(*rrt_planned_path_[global_plan_next_timestep_].band())});
 
         ++global_plan_next_timestep_;
+
+//        rrt_executed_path_.back().rubber_band_->visualize("actual_band", Visualizer::Cyan(), Visualizer::Cyan(), 1);
+//        rrt_executed_path_.back().planned_rubber_band_->visualize("planned_band", Visualizer::Blue(), Visualizer::Blue(), 1);
+//        vis_->forcePublishNow(0.5);
     }
 
     if (global_plan_next_timestep_ == rrt_planned_path_.size())
@@ -1489,9 +1498,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     ROS_INFO_STREAM("!!!!!!!!!!!!!!!!!! Planner Invoked " << num_times_invoked << " times!!!!!!!!!!!");
 
     // Resample the band for the purposes of first order vis checking
-    rrt_helper_->addBandToBlacklist(
-                rubber_band_between_grippers_->resampleBand(
-                    dijkstras_task_->work_space_grid_.minStepDimension() / 2.0));
+    rrt_helper_->addBandToBlacklist(rubber_band_between_grippers_->resampleBand());
 
     vis_->purgeMarkerList();
     visualization_msgs::Marker marker;

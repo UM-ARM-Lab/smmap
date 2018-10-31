@@ -292,6 +292,7 @@ namespace smmap
     {
         public:
             typedef std::shared_ptr<DijkstrasCoverageTask> Ptr;
+            typedef std::shared_ptr<DijkstrasCoverageTask> ConstPtr;
 
             struct Correspondences
             {

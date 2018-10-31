@@ -12,16 +12,21 @@ namespace smmap
     {
     public:
         typedef std::shared_ptr<QuinlanRubberBand> Ptr;
+        typedef std::shared_ptr<const QuinlanRubberBand> ConstPtr;
 
         QuinlanRubberBand(
                 const Eigen::Vector3d& start_point,
                 const Eigen::Vector3d& end_point,
+                const double resample_max_pointwise_dist,
+                const size_t upsample_num_points,
                 const std::shared_ptr<DijkstrasCoverageTask>& task,
                 const smmap_utilities::Visualizer::Ptr vis,
                 const std::shared_ptr<std::mt19937_64>& generator);
 
         QuinlanRubberBand(
                 EigenHelpers::VectorVector3d starting_points,
+                const double resample_max_pointwise_dist,
+                const size_t upsample_num_points,
                 const double max_total_band_distance,
                 const std::shared_ptr<DijkstrasCoverageTask>& task,
                 const smmap_utilities::Visualizer::Ptr vis,
@@ -42,9 +47,10 @@ namespace smmap
 
         const EigenHelpers::VectorVector3d& getVectorRepresentation() const;
         // Not threadsafe: https://www.justsoftwaresolutions.co.uk/cplusplus/const-and-thread-safety.htm
-        const EigenHelpers::VectorVector3d& resampleBand(const double max_dist) const;
+        const EigenHelpers::VectorVector3d& resampleBand() const;
         // Not threadsafe: https://www.justsoftwaresolutions.co.uk/cplusplus/const-and-thread-safety.htm
-        const EigenHelpers::VectorVector3d& upsampleBand(const size_t total_points) const;
+        const EigenHelpers::VectorVector3d& upsampleBand() const;
+        const Eigen::VectorXd& upsampleBandSingleVector() const;
 
         std::pair<Eigen::Vector3d, Eigen::Vector3d> getEndpoints() const;
 
@@ -85,6 +91,11 @@ namespace smmap
         uint64_t serialize(std::vector<uint8_t>& buffer) const;
         uint64_t deserializeIntoSelf(const std::vector<uint8_t>& buffer, const uint64_t current);
 
+        double distanceSq(const QuinlanRubberBand& other) const;
+        double distance(const QuinlanRubberBand& other) const;
+        static double DistanceSq(const QuinlanRubberBand& b1, const QuinlanRubberBand& b2);
+        static double Distance(const QuinlanRubberBand& b1, const QuinlanRubberBand& b2);
+
     private:
         ros::NodeHandle ph_;
         const DijkstrasCoverageTask::Ptr task_;
@@ -94,10 +105,13 @@ namespace smmap
         EigenHelpers::VectorVector3d band_;
         // Not threadsafe: https://www.justsoftwaresolutions.co.uk/cplusplus/const-and-thread-safety.htm
         mutable EigenHelpers::VectorVector3d resampled_band_; // is cleared every time band_ is updated
-        mutable double resampled_band_max_dist_;              // Is the distance that was used to resample the band
+        const double resample_max_pointwise_dist_;
         mutable EigenHelpers::VectorVector3d upsampled_band_; // is cleared every time band_ is updated
+        const size_t upsample_num_points_;
+        mutable Eigen::VectorXd upsampled_band_single_vector_; // is cleared every time band_ is updated
 
-        const double max_total_band_distance_;
+
+        const double max_safe_band_length_;
         const double min_overlap_distance_;
         const double min_distance_to_obstacle_;
         const double node_removal_overlap_factor_;

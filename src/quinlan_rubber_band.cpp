@@ -26,10 +26,14 @@ using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 QuinlanRubberBand::QuinlanRubberBand(
         const Eigen::Vector3d& start_point,
         const Eigen::Vector3d& end_point,
+        const double resample_max_pointwise_dist,
+        const size_t upsample_num_points,
         const std::shared_ptr<DijkstrasCoverageTask>& task,
         const Visualizer::Ptr vis,
         const std::shared_ptr<std::mt19937_64>& generator)
     : QuinlanRubberBand({start_point, end_point},
+                        resample_max_pointwise_dist,
+                        upsample_num_points,
                         (end_point - start_point).norm() * task_->maxStretchFactor(),
                         task,
                         vis,
@@ -38,7 +42,9 @@ QuinlanRubberBand::QuinlanRubberBand(
 
 QuinlanRubberBand::QuinlanRubberBand(
         const EigenHelpers::VectorVector3d starting_points,
-        const double max_total_band_distance,
+        const double resample_max_pointwise_dist,
+        const size_t upsample_num_points,
+        const double max_safe_band_length,
         const std::shared_ptr<DijkstrasCoverageTask>& task,
         const Visualizer::Ptr vis,
         const std::shared_ptr<std::mt19937_64>& generator)
@@ -47,12 +53,14 @@ QuinlanRubberBand::QuinlanRubberBand(
     , sdf_(task_->sdf_)
     , vis_(vis)
 
-    , band_(0)
-    , resampled_band_(0)
-    , resampled_band_max_dist_(-1.0)
-    , upsampled_band_(0)
+    , band_()
+    , resampled_band_()
+    , resample_max_pointwise_dist_(resample_max_pointwise_dist)
+    , upsampled_band_()
+    , upsample_num_points_(upsample_num_points)
+    , upsampled_band_single_vector_()
 
-    , max_total_band_distance_(max_total_band_distance)
+    , max_safe_band_length_(max_safe_band_length)
     #warning "Magic numbers in band smoothing code"
     , min_overlap_distance_(task_->work_space_grid_.minStepDimension() * 0.05)
     , min_distance_to_obstacle_(task_->work_space_grid_.minStepDimension() * 0.1)
@@ -71,12 +79,14 @@ QuinlanRubberBand& QuinlanRubberBand::operator=(const QuinlanRubberBand& other)
     assert(&sdf_ == &(other.sdf_));
     assert(vis_.get() == (other.vis_.get()));
 
-    assert(max_total_band_distance_ == other.max_total_band_distance_);
+    assert(max_safe_band_length_ == other.max_safe_band_length_);
 
     band_ = other.band_;
     resampled_band_ = other.resampled_band_;
-    resampled_band_max_dist_ = other.resampled_band_max_dist_;
+    assert(resample_max_pointwise_dist_ == other.resample_max_pointwise_dist_);
     upsampled_band_ = other.upsampled_band_;
+    assert(upsample_num_points_ == other.upsample_num_points_);
+    upsampled_band_single_vector_ = other.upsampled_band_single_vector_;
 #if ENABLE_BAND_LOAD_SAVE
     if (useStoredBand())
     {
@@ -96,7 +106,6 @@ void QuinlanRubberBand::setPointsWithoutSmoothing(const EigenHelpers::VectorVect
 {
     band_ = points;
     resampled_band_.clear();
-    resampled_band_max_dist_ = -1.0;
     upsampled_band_.clear();
 
 #if ENABLE_BAND_LOAD_SAVE
@@ -141,7 +150,6 @@ void QuinlanRubberBand::overridePoints(const EigenHelpers::VectorVector3d& point
 {
     band_ = points;
     resampled_band_.clear();
-    resampled_band_max_dist_ = -1.0;
     upsampled_band_.clear();
 }
 
@@ -166,7 +174,6 @@ const EigenHelpers::VectorVector3d& QuinlanRubberBand::forwardPropagateRubberBan
     band_.insert(band_.begin(), projectToValidBubble(first_endpoint_target));
     band_.push_back(projectToValidBubble(second_endpoint_target));
     resampled_band_.clear();
-    resampled_band_max_dist_ = -1.0;
     upsampled_band_.clear();
 
 #if ENABLE_BAND_LOAD_SAVE
@@ -197,39 +204,52 @@ const EigenHelpers::VectorVector3d& QuinlanRubberBand::getVectorRepresentation()
     return band_;
 }
 
-const EigenHelpers::VectorVector3d& QuinlanRubberBand::resampleBand(const double max_dist) const
+const EigenHelpers::VectorVector3d& QuinlanRubberBand::resampleBand() const
 {
     // If our current resampled_band_ cache is invalid, recalculate it
-    if (resampled_band_.size() == 0 || max_dist != resampled_band_max_dist_)
+    if (resampled_band_.size() == 0)
     {
         const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
         {
             return (v1 - v2).norm();
         };
         resampled_band_ = path_utils::ResamplePath(
-                    band_, max_dist, distance_fn, EigenHelpers::Interpolate<double, 3>);
-        resampled_band_max_dist_ = max_dist;
+                    band_, resample_max_pointwise_dist_, distance_fn, EigenHelpers::Interpolate<double, 3>);
     }
 
     return resampled_band_;
 }
 
-const EigenHelpers::VectorVector3d& QuinlanRubberBand::upsampleBand(const size_t total_points) const
+const EigenHelpers::VectorVector3d& QuinlanRubberBand::upsampleBand() const
 {
-    assert(total_points >= band_.size());
+    assert(upsample_num_points_ >= band_.size());
 
     // If our current upsampled_band_ cache is invalid, recalculate it
-    if (upsampled_band_.size() == 0 || total_points != upsampled_band_.size())
+    if (upsampled_band_.size() == 0)
     {
         const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
         {
             return (v1 - v2).norm();
         };
         upsampled_band_  = path_utils::UpsamplePath<Eigen::Vector3d>(
-                    band_, total_points, distance_fn, EigenHelpers::Interpolate<double, 3>);
+                    band_, upsample_num_points_, distance_fn, EigenHelpers::Interpolate<double, 3>);
     }
 
     return upsampled_band_;
+}
+
+const Eigen::VectorXd& QuinlanRubberBand::upsampleBandSingleVector() const
+{
+    // If the upsampled version is out of date, regenerate it
+    // and the corresponding 'single_vector' version
+    if (upsampled_band_.size() == 0)
+    {
+        upsampleBand();
+        upsampled_band_single_vector_ =
+                EigenHelpers::VectorEigenVectorToEigenVectorX(upsampled_band_);
+    }
+
+    return upsampled_band_single_vector_;
 }
 
 std::pair<Eigen::Vector3d, Eigen::Vector3d> QuinlanRubberBand::getEndpoints() const
@@ -239,7 +259,7 @@ std::pair<Eigen::Vector3d, Eigen::Vector3d> QuinlanRubberBand::getEndpoints() co
 
 double QuinlanRubberBand::maxSafeLength() const
 {
-    return max_total_band_distance_;
+    return max_safe_band_length_;
 }
 
 double QuinlanRubberBand::totalLength() const
@@ -249,7 +269,7 @@ double QuinlanRubberBand::totalLength() const
 
 bool QuinlanRubberBand::isOverstretched() const
 {
-    return totalLength() > max_total_band_distance_;
+    return totalLength() > max_safe_band_length_;
 }
 
 void QuinlanRubberBand::visualize(
@@ -1025,6 +1045,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
 void QuinlanRubberBand::printBandData(const EigenHelpers::VectorVector3d& test_band) const
 {
 #if !ENABLE_BAND_DEBUGGING
+    (void)test_band;
     return;
 #else
     const Eigen::Vector3d min = sdf_->GetOriginTransform().translation();
@@ -1065,8 +1086,9 @@ uint64_t QuinlanRubberBand::serialize(std::vector<uint8_t>& buffer) const
     uint64_t bytes_written = 0;
     bytes_written += arc_utilities::SerializeVector(band_, buffer, arc_utilities::SerializeEigen<double, 3, 1>);
     bytes_written += arc_utilities::SerializeVector(resampled_band_, buffer, arc_utilities::SerializeEigen<double, 3, 1>);
-    bytes_written += arc_utilities::SerializeFixedSizePOD(resampled_band_max_dist_, buffer);
+//    bytes_written += arc_utilities::SerializeFixedSizePOD(resample_max_pointwise_dist_, buffer);
     bytes_written += arc_utilities::SerializeVector(upsampled_band_, buffer, arc_utilities::SerializeEigen<double, 3, 1>);
+//    bytes_written += arc_utilities::SerializeFixedSizePOD(upsample_num_points_, buffer);
 
     return bytes_written;
 }
@@ -1085,14 +1107,18 @@ uint64_t QuinlanRubberBand::deserializeIntoSelf(const std::vector<uint8_t>& buff
     resampled_band_ = deserialized_resampled_results.first;
     bytes_read += deserialized_resampled_results.second;
 
-    const auto deserialized_max_dist_results = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current + bytes_read);
-    resampled_band_max_dist_ = deserialized_max_dist_results.first;
-    bytes_read += deserialized_max_dist_results.second;
+//    const auto deserialized_max_dist_results = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current + bytes_read);
+//    resample_max_pointwise_dist_ = deserialized_max_dist_results.first;
+//    bytes_read += deserialized_max_dist_results.second;
 
     const auto deserialized_upsampled_results = arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
                 buffer, current + bytes_read, arc_utilities::DeserializeEigen<Eigen::Vector3d>);
     upsampled_band_ = deserialized_upsampled_results.first;
     bytes_read += deserialized_upsampled_results.second;
+
+//    const auto deserialized_upsample_count_results = arc_utilities::DeserializeFixedSizePOD<size_t>(buffer, current + bytes_read);
+//    upsample_num_points_ = deserialized_upsample_count_results.first;
+//    bytes_read += deserialized_upsample_count_results.second;
 
     return bytes_read;
 }
@@ -1166,4 +1192,28 @@ void QuinlanRubberBand::loadStoredBand()
 bool QuinlanRubberBand::useStoredBand() const
 {
     return ROSHelpers::GetParamRequired<bool>(ph_, "use_stored_band", __func__).GetImmutable();
+}
+
+double QuinlanRubberBand::distanceSq(const QuinlanRubberBand& other) const
+{
+    const auto b1_path_vec = upsampleBandSingleVector();
+    const auto b2_path_vec = other.upsampleBandSingleVector();
+    return (b1_path_vec - b2_path_vec).squaredNorm();
+}
+
+double QuinlanRubberBand::distance(const QuinlanRubberBand& other) const
+{
+    const auto b1_path_vec = upsampleBandSingleVector();
+    const auto b2_path_vec = other.upsampleBandSingleVector();
+    return (b1_path_vec - b2_path_vec).norm();
+}
+
+double QuinlanRubberBand::DistanceSq(const QuinlanRubberBand& b1, const QuinlanRubberBand& b2)
+{
+    return b1.distanceSq(b2);
+}
+
+double QuinlanRubberBand::Distance(const QuinlanRubberBand& b1, const QuinlanRubberBand& b2)
+{
+    return b1.distance(b2);
 }
