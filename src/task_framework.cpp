@@ -284,19 +284,48 @@ void TaskFramework::execute()
         // Initialize the MDP transition learner
         transition_estimator_ = std::make_shared<TransitionEstimation>(nh_, ph_, dijkstras_task_, vis_);
 
+        // "World" params used by planning
+        RRTHelper::WorldParams world_params =
+        {
+            robot_,
+            world_feedback.robot_configuration_valid_,
+            dijkstras_task_->sdf_,
+            dijkstras_task_->work_space_grid_,
+            transition_estimator_,
+            generator_
+        };
+
         // Algorithm parameters
-        const auto use_cbirrt_style_projection = GetUseCBiRRTStyleProjection(ph_);
-        const auto forward_tree_extend_iterations = GetRRTForwardTreeExtendIterations(ph_);
-        const auto backward_tree_extend_iterations = GetRRTBackwardTreeExtendIterations(ph_);
-        const auto kd_tree_grow_threshold = GetKdTreeGrowThreshold(ph_);
-        const auto use_brute_force_nn = GetUseBruteForceNN(ph_);
-        const auto goal_bias = GetRRTGoalBias(ph_);
-        const auto best_near_radius = GetRRTBestNearRadius(ph_);
+        const auto use_cbirrt_style_projection      = GetUseCBiRRTStyleProjection(ph_);
+        const auto forward_tree_extend_iterations   = GetRRTForwardTreeExtendIterations(ph_);
+        const auto backward_tree_extend_iterations  = GetRRTBackwardTreeExtendIterations(ph_);
+        const auto kd_tree_grow_threshold           = GetKdTreeGrowThreshold(ph_);
+        const auto use_brute_force_nn               = GetUseBruteForceNN(ph_);
+        const auto goal_bias                        = GetRRTGoalBias(ph_);
+        const auto best_near_radius                 = GetRRTBestNearRadius(ph_);
+        const auto feasibility_dist_scale_factor    = GetRRTFeasibilityDistanceScaleFactor(ph_);
+        assert(!use_cbirrt_style_projection && "CBiRRT style projection is no longer supported");
+        RRTHelper::PlanningParams planning_params =
+        {
+            forward_tree_extend_iterations,
+            backward_tree_extend_iterations,
+            use_brute_force_nn,
+            kd_tree_grow_threshold,
+            best_near_radius * best_near_radius,
+            goal_bias,
+            feasibility_dist_scale_factor
+        };
 
         // Smoothing parameters
         const auto max_shortcut_index_distance = GetRRTMaxShortcutIndexDistance(ph_);
         const auto max_smoothing_iterations = GetRRTMaxSmoothingIterations(ph_);
         const auto max_failed_smoothing_iterations = GetRRTMaxFailedSmoothingIterations(ph_);
+        RRTHelper::SmoothingParams smoothing_params =
+        {
+            max_shortcut_index_distance,
+            max_smoothing_iterations,
+            max_failed_smoothing_iterations
+        };
 
         // Task defined parameters
         const auto task_aligned_frame = robot_->getWorldToTaskFrameTf();
@@ -313,51 +342,33 @@ void TaskFramework::execute()
         const auto min_robot_step_size = GetRRTMinRobotDOFStepSize(ph_);
         const auto max_gripper_rotation = GetRRTMaxGripperRotation(ph_); // only matters for real robot
         const auto goal_reached_radius = dijkstras_task_->work_space_grid_.minStepDimension();
-//        const auto homotopy_distance_penalty = GetRRTHomotopyDistancePenalty();
         const auto min_gripper_distance_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_); // only matters for simulation
         const auto band_distance2_scaling_factor = GetRRTBandDistance2ScalingFactor(ph_);
+        RRTHelper::TaskParams task_params = {
+            task_aligned_frame,
+            task_frame_lower_limits,
+            task_frame_upper_limits,
+            max_gripper_step_size,
+            max_robot_step_size,
+            min_robot_step_size,
+            max_gripper_rotation,
+            goal_reached_radius,
+            min_gripper_distance_to_obstacles,
+            band_distance2_scaling_factor,
+            upsampled_band_num_points
+        };
 
         // Visualization
         const auto enable_rrt_visualizations = GetVisualizeRRT(ph_);
 
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         rrt_helper_ = std::make_shared<RRTHelper>(
-                    // Robot/environment related parameters
                     nh_,
                     ph_,
-                    robot_,
-                    world_feedback.robot_configuration_valid_,
-                    dijkstras_task_->sdf_,
-                    dijkstras_task_->work_space_grid_,
-                    generator_,
-                    // Learned transitions
-                    transition_estimator_,
-                    // Planning algorithm parameters
-                    use_cbirrt_style_projection,
-                    forward_tree_extend_iterations,
-                    backward_tree_extend_iterations,
-                    kd_tree_grow_threshold,
-                    use_brute_force_nn,
-                    goal_bias,
-                    best_near_radius,
-                    // Smoothing parameters
-                    max_shortcut_index_distance,
-                    max_smoothing_iterations,
-                    max_failed_smoothing_iterations,
-                    // Task defined parameters
-                    task_aligned_frame,
-                    task_frame_lower_limits,
-                    task_frame_upper_limits,
-                    max_gripper_step_size,
-                    max_robot_step_size,
-                    min_robot_step_size,
-                    max_gripper_rotation,
-                    goal_reached_radius,
-                    min_gripper_distance_to_obstacles,
-                    // Dual stage NN checking variables
-                    upsampled_band_num_points,
-                    band_distance2_scaling_factor,
-                    // Visualization
+                    world_params,
+                    planning_params,
+                    smoothing_params,
+                    task_params,
                     vis_,
                     enable_rrt_visualizations);
     }

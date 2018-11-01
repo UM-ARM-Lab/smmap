@@ -165,312 +165,334 @@ namespace smmap
 
     class RRTHelper
     {
+    public:
+        static constexpr double NN_BLACKLIST_DISTANCE = std::numeric_limits<double>::max() - 1e10;
+
+        // Topic names used for publishing visualization data
+        static constexpr char RRT_BLACKLISTED_GOAL_BANDS_NS[]   = "rrt_blacklisted_goal_bands";
+        static constexpr char RRT_GOAL_TESTING_NS[]             = "rrt_goal_testing";
+
+        static constexpr char RRT_FORWARD_TREE_GRIPPER_A_NS[]   = "rrt_forward_tree_gripper_a";
+        static constexpr char RRT_FORWARD_TREE_GRIPPER_B_NS[]   = "rrt_forward_tree_gripper_b";
+        static constexpr char RRT_BACKWARD_TREE_GRIPPER_A_NS[]  = "rrt_backward_tree_gripper_a";
+        static constexpr char RRT_BACKWARD_TREE_GRIPPER_B_NS[]  = "rrt_backward_tree_gripper_b";
+        static constexpr char RRT_TREE_BAND_NS[]                = "rrt_tree_band";
+
+        static constexpr char RRT_SAMPLE_NS[]                   = "rrt_sample";
+        static constexpr char RRT_FORWARD_PROP_START_NS[]       = "rrt_forward_prop_start";
+
+        static constexpr char RRT_SOLUTION_GRIPPER_A_NS[]       = "rrt_solution_gripper_a";
+        static constexpr char RRT_SOLUTION_GRIPPER_B_NS[]       = "rrt_solution_gripper_b";
+        static constexpr char RRT_SOLUTION_RUBBER_BAND_NS[]     = "rrt_solution_rubber_band";
+
+        struct WorldParams
+        {
         public:
-            static constexpr double NN_BLACKLIST_DISTANCE = std::numeric_limits<double>::max() - 1e10;
+            RobotInterface::ConstPtr robot_;
+            bool planning_for_whole_robot_;
+            sdf_tools::SignedDistanceField::ConstPtr sdf_;
+            XYZGrid work_space_grid_;
+            TransitionEstimation::ConstPtr transition_estimator_;
+            std::shared_ptr<std::mt19937_64> generator_;
+        };
 
-            // Topic names used for publishing visualization data
-            static constexpr char RRT_BLACKLISTED_GOAL_BANDS_NS[]   = "rrt_blacklisted_goal_bands";
-            static constexpr char RRT_GOAL_TESTING_NS[]             = "rrt_goal_testing";
+        struct PlanningParams
+        {
+        public:
+            size_t forward_tree_extend_iterations_;
+            size_t backward_tree_extend_iterations_;
+            bool use_brute_force_nn_;
+            size_t kd_tree_grow_threshold_;
+            double best_near_radius2_;
+            double goal_bias_;
+            double feasibility_distancescale_factor_;
+        };
 
-            static constexpr char RRT_FORWARD_TREE_GRIPPER_A_NS[]   = "rrt_forward_tree_gripper_a";
-            static constexpr char RRT_FORWARD_TREE_GRIPPER_B_NS[]   = "rrt_forward_tree_gripper_b";
-            static constexpr char RRT_BACKWARD_TREE_GRIPPER_A_NS[]  = "rrt_backward_tree_gripper_a";
-            static constexpr char RRT_BACKWARD_TREE_GRIPPER_B_NS[]  = "rrt_backward_tree_gripper_b";
-            static constexpr char RRT_TREE_BAND_NS[]                = "rrt_tree_band";
+        struct SmoothingParams
+        {
+        public:
+            int64_t max_shortcut_index_distance_;
+            uint32_t max_smoothing_iterations_;
+            uint32_t max_failed_smoothing_iterations_;
+        };
 
-            static constexpr char RRT_SAMPLE_NS[]                   = "rrt_sample";
-            static constexpr char RRT_FORWARD_PROP_START_NS[]       = "rrt_forward_prop_start";
+        struct TaskParams
+        {
+        public:
+            Eigen::Isometry3d task_aligned_frame_transform_;
+            Eigen::Vector3d task_aligned_lower_limits_;
+            Eigen::Vector3d task_aligned_upper_limits_;
 
-            static constexpr char RRT_SOLUTION_GRIPPER_A_NS[]       = "rrt_solution_gripper_a";
-            static constexpr char RRT_SOLUTION_GRIPPER_B_NS[]       = "rrt_solution_gripper_b";
-            static constexpr char RRT_SOLUTION_RUBBER_BAND_NS[]     = "rrt_solution_rubber_band";
+            double max_gripper_step_size_;
+            double max_robot_dof_step_size_;
+            double min_robot_dof_step_size_;
+            double max_gripper_rotation_;
+            double goal_reach_radius_;
+            double gripper_min_distance_to_obstacles_;
 
-            RRTHelper(
-                    // Robot/environment related parameters
-                    ros::NodeHandle& nh,
-                    ros::NodeHandle& ph,
-                    const RobotInterface::ConstPtr robot,
-                    const bool planning_for_whole_robot,
-                    const sdf_tools::SignedDistanceField::ConstPtr environment_sdf,
-                    const XYZGrid& work_space_grid,
-                    const std::shared_ptr<std::mt19937_64>& generator,
-                    // Learned state transitions
-                    const TransitionEstimation::ConstPtr& transition_estimator,
-                    // Planning algorithm parameters
-                    const bool using_cbirrt_style_projection,
-                    const size_t forward_tree_extend_iterations,
-                    const size_t backward_tree_extend_iterations,
-                    const size_t kd_tree_grow_threshold,
-                    const bool use_brute_force_nn,
-                    const double goal_bias,
-                    const double best_near_radius,
-                    // Smoothing parameters
-                    const int64_t max_shortcut_index_distance,
-                    const uint32_t max_smoothing_iterations,
-                    const uint32_t max_failed_smoothing_iterations,
-                    // Task defined parameters
-                    const Eigen::Isometry3d& task_aligned_frame,
-                    const Eigen::Vector3d& task_aligned_lower_limits,
-                    const Eigen::Vector3d& task_aligned_upper_limits,
-                    const double max_gripper_step_size,
-                    const double max_robot_dof_step_size,
-                    const double min_robot_dof_step_size,
-                    const double max_gripper_rotation,
-                    const double goal_reach_radius,
-                    const double gripper_min_distance_to_obstacles,
-                    const size_t band_max_points,
-                    const double band_distance2_scaling_factor,
-                    // Visualization
-                    const smmap_utilities::Visualizer::Ptr vis,
-                    const bool visualization_enabled);
+            double band_distance2_scaling_factor_;
+            size_t band_max_points_;
+        };
 
-            std::vector<RRTNode, RRTAllocator> plan(
-                    const RRTNode& start,
-                    const RRTGrippersRepresentation& grippers_goal_poses,
-                    const std::chrono::duration<double>& time_limit);
+        RRTHelper(
+                ros::NodeHandle& nh,
+                ros::NodeHandle& ph,
+                const WorldParams& world_params,
+                const PlanningParams& planning_params,
+                const SmoothingParams& smoothing_params,
+                const TaskParams& task_params,
+                const smmap_utilities::Visualizer::Ptr vis,
+                const bool visualization_enabled);
+
+        std::vector<RRTNode, RRTAllocator> plan(
+                const RRTNode& start,
+                const RRTGrippersRepresentation& grippers_goal_poses,
+                const std::chrono::duration<double>& time_limit);
 
 
-            static std::vector<Eigen::VectorXd> ConvertRRTPathToRobotPath(
-                    const std::vector<RRTNode, RRTAllocator>& path);
+        static std::vector<Eigen::VectorXd> ConvertRRTPathToRobotPath(
+                const std::vector<RRTNode, RRTAllocator>& path);
 
-            static bool CheckTreeLinkage(
-                    const std::vector<RRTNode, RRTAllocator>& tree);
+        static bool CheckTreeLinkage(
+                const std::vector<RRTNode, RRTAllocator>& tree);
 
-            static std::vector<RRTNode, RRTAllocator> ExtractSolutionPath(
-                    const std::vector<RRTNode, RRTAllocator>& tree,
-                    const int64_t goal_node_idx);
-
-
-            void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
-            void clearBlacklist();
-
-            bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const;
-            bool isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band);
-
-            ///////////////////////////////////////////////////////////////////////////////////////
-            // Visualization and other debugging tools
-            ///////////////////////////////////////////////////////////////////////////////////////
-
-            void visualizeTree(
-                    const std::vector<RRTNode, RRTAllocator>& tree,
-                    const size_t start_idx,
-                    const std::string ns_a,
-                    const std::string ns_b,
-                    const std::string ns_band,
-                    const int id_a,
-                    const int id_b,
-                    const int id_band,
-                    const std_msgs::ColorRGBA& color_a,
-                    const std_msgs::ColorRGBA& color_b,
-                    const std_msgs::ColorRGBA& color_band,
-                    const bool draw_band) const;
-
-            void visualizeBothTrees() const;
-
-            void deleteTreeVisualizations() const;
-
-            void visualizePath(const std::vector<RRTNode, RRTAllocator>& path) const;
-
-            void visualizeBlacklist() const;
-
-            void storePath(const std::vector<RRTNode, RRTAllocator>& path, std::string file_path = "") const;
-
-            std::vector<RRTNode, RRTAllocator> loadStoredPath(std::string file_path = "") const;
-
-            bool useStoredPath() const;
-
-        private:
-            ///////////////////////////////////////////////////////////////////////////////////////
-            // Helper functions and data for internal rrt planning algorithm
-            ///////////////////////////////////////////////////////////////////////////////////////
-
-            size_t rebuildNNIndex(
-                    NNIndexType& index,
-                    std::vector<float>& nn_raw_data,
-                    const std::vector<RRTNode, RRTAllocator>& tree,
-                    const size_t new_data_start_idx);
-
-            // Used for timing purposes
-            // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
-            int64_t nearestNeighbour(
-                    const bool use_forward_tree,
-                    const RRTNode& config);
-
-            std::pair<int64_t, double> nearestNeighbourRobotSpace(
-                    const bool use_forward_tree,
-                    const RRTNode& config);
-
-            int64_t nearestBestNeighbourFullSpace(
-                    const RRTNode& config);
-
-            RRTNode configSampling(const bool sample_band);
-            // Used for timing purposes
-            // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
-            RRTGrippersRepresentation posPairSampling_internal();
-            RRTRobotRepresentation robotConfigPairSampling_internal();
-            EigenHelpers::VectorVector3d bandSampling_internal();
-
-            bool goalReached(const RRTNode& node);
-
-            const std::pair<bool, RRTRobotRepresentation> projectToValidConfig(
-                    const RRTRobotRepresentation& configuration,
-                    const AllGrippersSinglePose& poses,
-                    const bool project_to_rotation_bound,
-                    const bool project_to_translation_bound) const;
-
-            size_t forwardPropogationFunction(std::vector<RRTNode, RRTAllocator>& tree_to_extend,
-                    const int64_t& nearest_neighbor_idx,
-                    const RRTNode& target,
-                    const bool extend_band,
-                    const size_t max_projected_new_states,
-                    const bool visualization_enabled_locally);
-
-            size_t connectForwardTree(const RRTNode& target, const bool is_random);
-            size_t connectBackwardTree(const RRTNode& target, const bool is_random);
-            size_t connectForwardTreeToBackwardTreeBispace(const int64_t last_node_idx_in_forward_tree_branch);
-            size_t connectBackwardTreeToForwardTreeBidirectional();
-
-            void followBackwardTree(
-                    const size_t forward_tree_node_idx,
-                    const size_t backward_tree_node_idx);
-
-            void planningMainLoopBispace();
-            void planningMainLoopBidirectional();
-
-            ///////////////////////////////////////////////////////////////////////////////////////
-            // Helper function for shortcut smoothing
-            ///////////////////////////////////////////////////////////////////////////////////////
-
-            std::pair<bool, std::vector<RRTNode, RRTAllocator>> forwardSimulateGrippersPath(
-                    const std::vector<RRTNode, RRTAllocator>& path,
-                    const size_t start_index,
-                    RubberBand rubber_band);
-
-            std::vector<RRTNode, RRTAllocator> rrtShortcutSmooth(
-                    std::vector<RRTNode, RRTAllocator> path,
-                    const bool visualization_enabled_locally);
+        static std::vector<RRTNode, RRTAllocator> ExtractSolutionPath(
+                const std::vector<RRTNode, RRTAllocator>& tree,
+                const int64_t goal_node_idx);
 
 
-        private:
-            ros::NodeHandle nh_;
-            ros::NodeHandle ph_;
-            const RobotInterface::ConstPtr robot_;
-            const bool planning_for_whole_robot_;
-            const sdf_tools::SignedDistanceField::ConstPtr sdf_;
-            const XYZGrid work_space_grid_;
-            const TransitionEstimation::ConstPtr transition_estimator_;
-            const std::shared_ptr<std::mt19937_64> generator_;
-            std::uniform_real_distribution<double> uniform_unit_distribution_;
+        void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
+        void clearBlacklist();
+
+        bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const;
+        bool isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band);
+
+        ///////////////////////////////////////////////////////////////////////////////////////
+        // Visualization and other debugging tools
+        ///////////////////////////////////////////////////////////////////////////////////////
+
+        void visualizeTree(
+                const std::vector<RRTNode, RRTAllocator>& tree,
+                const size_t start_idx,
+                const std::string ns_a,
+                const std::string ns_b,
+                const std::string ns_band,
+                const int id_a,
+                const int id_b,
+                const int id_band,
+                const std_msgs::ColorRGBA& color_a,
+                const std_msgs::ColorRGBA& color_b,
+                const std_msgs::ColorRGBA& color_band,
+                const bool draw_band) const;
+
+        void visualizeBothTrees() const;
+
+        void deleteTreeVisualizations() const;
+
+        void visualizePath(const std::vector<RRTNode, RRTAllocator>& path) const;
+
+        void visualizeBlacklist() const;
+
+        void storePath(const std::vector<RRTNode, RRTAllocator>& path, std::string file_path = "") const;
+
+        std::vector<RRTNode, RRTAllocator> loadStoredPath(std::string file_path = "") const;
+
+        bool useStoredPath() const;
+
+    private:
+        ///////////////////////////////////////////////////////////////////////////////////////
+        // Helper functions and data for internal rrt planning algorithm
+        ///////////////////////////////////////////////////////////////////////////////////////
+
+        size_t rebuildNNIndex(
+                NNIndexType& index,
+                std::vector<float>& nn_raw_data,
+                const std::vector<RRTNode, RRTAllocator>& tree,
+                const size_t new_data_start_idx);
+
+        // Used for timing purposes
+        // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
+        int64_t nearestNeighbour(
+                const bool use_forward_tree,
+                const RRTNode& config);
+
+        std::pair<int64_t, double> nearestNeighbourRobotSpace(
+                const bool use_forward_tree,
+                const RRTNode& config);
+
+        int64_t nearestBestNeighbourFullSpace(
+                const RRTNode& config);
+
+        RRTNode configSampling(const bool sample_band);
+        // Used for timing purposes
+        // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
+        RRTGrippersRepresentation posPairSampling_internal();
+        RRTRobotRepresentation robotConfigPairSampling_internal();
+        EigenHelpers::VectorVector3d bandSampling_internal();
+
+        bool goalReached(const RRTNode& node);
+
+        const std::pair<bool, RRTRobotRepresentation> projectToValidConfig(
+                const RRTRobotRepresentation& configuration,
+                const AllGrippersSinglePose& poses,
+                const bool project_to_rotation_bound,
+                const bool project_to_translation_bound) const;
+
+        size_t forwardPropogationFunction(
+                std::vector<RRTNode, RRTAllocator>& tree_to_extend,
+                const int64_t& nearest_neighbor_idx,
+                const RRTNode& target,
+                const bool extend_band,
+                const bool visualization_enabled_locally);
+
+        size_t connectForwardTree(const RRTNode& target, const bool is_random);
+        size_t connectBackwardTree(const RRTNode& target, const bool is_random);
+        size_t connectForwardTreeToBackwardTreeBispace(const int64_t last_node_idx_in_forward_tree_branch);
+        size_t connectBackwardTreeToForwardTreeBidirectional();
+
+        void followBackwardTree(
+                const size_t forward_tree_node_idx,
+                const size_t backward_tree_node_idx);
+
+        void planningMainLoopBispace();
+
+        ///////////////////////////////////////////////////////////////////////////////////////
+        // Helper function for shortcut smoothing
+        ///////////////////////////////////////////////////////////////////////////////////////
+
+        std::pair<bool, std::vector<RRTNode, RRTAllocator>> forwardSimulateGrippersPath(
+                const std::vector<RRTNode, RRTAllocator>& path,
+                const size_t start_index,
+                RubberBand rubber_band);
+
+        std::vector<RRTNode, RRTAllocator> rrtShortcutSmooth(
+                std::vector<RRTNode, RRTAllocator> path,
+                const bool visualization_enabled_locally);
 
 
-        private:
-            const Eigen::Isometry3d task_aligned_frame_transform_;
-            const Eigen::Isometry3d task_aligned_frame_inverse_transform_;
-            const Eigen::Vector3d task_aligned_lower_limits_;
-            const Eigen::Vector3d task_aligned_upper_limits_;
-
-            const RRTRobotRepresentation robot_joint_lower_limits_;
-            const RRTRobotRepresentation robot_joint_upper_limits_;
-            const RRTRobotRepresentation robot_joint_weights_;
-            const ssize_t total_dof_;
-
-            const double max_gripper_step_size_;
-            const double max_robot_dof_step_size_;
-            const double min_robot_dof_step_size_;
-            const double max_gripper_rotation_;
-            const double goal_bias_;
-            const double goal_reach_radius_;
-            const double gripper_min_distance_to_obstacles_;
-
-            // Used for double layer NN check
-            const double band_distance2_scaling_factor_;
-            const size_t band_max_points_;
-            const double band_max_dist2_;
-
-            const bool using_cbirrt_style_projection_;
-            const size_t forward_tree_extend_iterations_;
-            const size_t backward_tree_extend_iterations_;
-            const bool use_brute_force_nn_;
-            const size_t kd_tree_grow_threshold_;
-            const double best_near_radius2_;
-
-            const int64_t max_shortcut_index_distance_;
-            const uint32_t max_smoothing_iterations_;
-            const uint32_t max_failed_smoothing_iterations_;
-            std::uniform_int_distribution<int> uniform_shortcut_smoothing_int_distribution_;
+    private:
+        ros::NodeHandle nh_;
+        ros::NodeHandle ph_;
+        const RobotInterface::ConstPtr robot_;
+        const bool planning_for_whole_robot_;
+        const sdf_tools::SignedDistanceField::ConstPtr sdf_;
+        const XYZGrid work_space_grid_;
+        const TransitionEstimation::ConstPtr transition_estimator_;
+        const std::shared_ptr<std::mt19937_64> generator_;
+        std::uniform_real_distribution<double> uniform_unit_distribution_;
 
 
-            // Set/updated on each call of "rrtPlan"
-            RubberBand::Ptr starting_band_;
-            RRTGrippersRepresentation starting_grippers_poses_;
-            RRTRobotRepresentation starting_robot_configuration_;
+    private:
+        const Eigen::Isometry3d task_aligned_frame_transform_;
+        const Eigen::Isometry3d task_aligned_frame_inverse_transform_;
+        const Eigen::Vector3d task_aligned_lower_limits_;
+        const Eigen::Vector3d task_aligned_upper_limits_;
 
-            std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
-            double max_grippers_distance_;
-            std::chrono::duration<double> time_limit_;
-            RRTGrippersRepresentation grippers_goal_poses_;
+        const RRTRobotRepresentation robot_joint_lower_limits_;
+        const RRTRobotRepresentation robot_joint_upper_limits_;
+        const RRTRobotRepresentation robot_joint_weights_;
+        const ssize_t total_dof_;
 
-            std::vector<RRTNode, RRTAllocator> forward_tree_;
-            // Note that the band portion of the backward tree is invalid
-            std::vector<RRTNode, RRTAllocator> backward_tree_;
+        const double max_gripper_step_size_;
+        const double max_robot_dof_step_size_;
+        const double min_robot_dof_step_size_;
+        const double max_gripper_rotation_;
+        const double goal_reach_radius_;
+        const double gripper_min_distance_to_obstacles_;
 
-            std::vector<float> forward_nn_raw_data_;
-            std::vector<float> backward_nn_raw_data_;
-            std::shared_ptr<NNIndexType> forward_nn_index_;
-            std::shared_ptr<NNIndexType> backward_nn_index_;
-            size_t forward_next_idx_to_add_to_nn_dataset_;
-            size_t backward_next_idx_to_add_to_nn_dataset_;
+        // Used for double layer NN check
+        const double band_distance2_scaling_factor_;
+        const size_t band_max_points_;
+        const double band_max_dist2_;
 
+        const size_t forward_tree_extend_iterations_;
+        const size_t backward_tree_extend_iterations_;
+        const bool use_brute_force_nn_;
+        const size_t kd_tree_grow_threshold_;
+        const double best_near_radius2_;
+        const double goal_bias_;
 
-            // TODO: address this hack - used to help track what node to connect to the backward tree from
-            int64_t forward_tree_nearest_neighbour_idx_;
-
-
-            // Planning and Smoothing statistics
-            std::map<std::string, double> planning_statistics_;
-            std::map<std::string, double> smoothing_statistics_;
-            double total_sampling_time_;
-            double total_nearest_neighbour_index_building_time_;
-            double total_nearest_neighbour_index_searching_time_;
-            double total_nearest_neighbour_linear_searching_time_;
-            double total_nearest_neighbour_radius_searching_time_;
-            double total_nearest_neighbour_best_searching_time_;
-            double total_nearest_neighbour_time_;
-            double total_forward_kinematics_time_;
-            double total_projection_time_;
-            double total_collision_check_time_;
-            double total_band_forward_propogation_time_;
-            double total_first_order_vis_propogation_time_;
-            double total_everything_included_forward_propogation_time_;
-
-            size_t forward_random_samples_useful_;
-            size_t forward_random_samples_useless_;
-            size_t backward_random_samples_useful_;
-            size_t backward_random_samples_useless_;
-            size_t forward_connection_attempts_useful_;
-            size_t forward_connection_attempts_useless_;
-            size_t forward_connections_made_;
-            size_t backward_connection_attempts_useful_;
-            size_t backward_connection_attempts_useless_;
-            size_t backward_connections_made_;
-
-            bool path_found_;
-            int64_t goal_idx_in_forward_tree_;
-            std::chrono::time_point<std::chrono::steady_clock> start_time_;
+        const int64_t max_shortcut_index_distance_;
+        const uint32_t max_smoothing_iterations_;
+        const uint32_t max_failed_smoothing_iterations_;
+        std::uniform_int_distribution<int> uniform_shortcut_smoothing_int_distribution_;
 
 
-            // Visualization
-            const smmap_utilities::Visualizer::Ptr vis_;
-            const bool visualization_enabled_globally_;
-            const std_msgs::ColorRGBA gripper_a_forward_tree_color_;
-            const std_msgs::ColorRGBA gripper_b_forward_tree_color_;
-            const std_msgs::ColorRGBA gripper_a_backward_tree_color_;
-            const std_msgs::ColorRGBA gripper_b_backward_tree_color_;
-            const std_msgs::ColorRGBA band_tree_color_;
-            // Used in the forward propagation function
-            int32_t tree_marker_id_;
-            size_t forward_tree_next_visualized_node_;
-            size_t backward_tree_next_visualized_node_;
+        // Set/updated on each call of "rrtPlan"
+        RubberBand::Ptr starting_band_;
+        RRTGrippersRepresentation starting_grippers_poses_;
+        RRTRobotRepresentation starting_robot_configuration_;
+
+        std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
+        double max_grippers_distance_;
+        std::chrono::duration<double> time_limit_;
+        RRTGrippersRepresentation grippers_goal_poses_;
+
+        std::vector<RRTNode, RRTAllocator> forward_tree_;
+        // Note that the band portion of the backward tree is invalid
+        std::vector<RRTNode, RRTAllocator> backward_tree_;
+
+        std::vector<float> forward_nn_raw_data_;
+        std::vector<float> backward_nn_raw_data_;
+        std::shared_ptr<NNIndexType> forward_nn_index_;
+        std::shared_ptr<NNIndexType> backward_nn_index_;
+        size_t forward_next_idx_to_add_to_nn_dataset_;
+        size_t backward_next_idx_to_add_to_nn_dataset_;
+
+
+        // TODO: address this hack - used to help track what node to connect to the backward tree from
+        int64_t forward_tree_nearest_neighbour_idx_;
+
+
+        // Planning, Uncertainty, and Smoothing statistics
+        std::map<std::string, double> planning_statistics_;
+        std::map<std::string, double> smoothing_statistics_;
+        double total_sampling_time_;
+        double total_nearest_neighbour_index_building_time_;
+        double total_nearest_neighbour_index_searching_time_;
+        double total_nearest_neighbour_linear_searching_time_;
+        double total_nearest_neighbour_radius_searching_time_;
+        double total_nearest_neighbour_best_searching_time_;
+        double total_nearest_neighbour_time_;
+        double total_forward_kinematics_time_;
+        double total_projection_time_;
+        double total_collision_check_time_;
+        double total_band_forward_propogation_time_;
+        double total_first_order_vis_propogation_time_;
+        double total_everything_included_forward_propogation_time_;
+
+        size_t forward_random_samples_useful_;
+        size_t forward_random_samples_useless_;
+        size_t backward_random_samples_useful_;
+        size_t backward_random_samples_useless_;
+        size_t forward_connection_attempts_useful_;
+        size_t forward_connection_attempts_useless_;
+        size_t forward_connections_made_;
+        size_t backward_connection_attempts_useful_;
+        size_t backward_connection_attempts_useless_;
+        size_t backward_connections_made_;
+
+        // The backwards tree has no splits, if we're even using it
+        size_t forward_transition_id_;
+        size_t forward_split_id_;
+
+        // Success and timeout tracking
+        bool path_found_;
+        int64_t goal_idx_in_forward_tree_;
+        std::chrono::time_point<std::chrono::steady_clock> start_time_;
+
+        // Visualization
+        const smmap_utilities::Visualizer::Ptr vis_;
+        const bool visualization_enabled_globally_;
+        const std_msgs::ColorRGBA gripper_a_forward_tree_color_;
+        const std_msgs::ColorRGBA gripper_b_forward_tree_color_;
+        const std_msgs::ColorRGBA gripper_a_backward_tree_color_;
+        const std_msgs::ColorRGBA gripper_b_backward_tree_color_;
+        const std_msgs::ColorRGBA band_tree_color_;
+        // Used in the forward propagation function
+        int32_t tree_marker_id_;
+        size_t forward_tree_next_visualized_node_;
+        size_t backward_tree_next_visualized_node_;
     };
 }
 
