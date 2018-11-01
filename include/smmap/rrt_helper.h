@@ -93,13 +93,24 @@ namespace smmap
                     const RRTRobotRepresentation& robot_configuration,
                     const RubberBand::Ptr& band,
                     const double cost_to_come,
-                    const int64_t parent_index);
+                    const double p_reachability,
+                    const double p_transition,
+                    const int64_t parent_index,
+                    const int64_t state_index,
+                    const int64_t transition_index,
+                    const int64_t split_index);
 
             RRTNode(const RRTGrippersRepresentation& grippers_poses,
                     const RRTRobotRepresentation& robot_configuration,
                     const RubberBand::Ptr& band,
                     const double cost_to_come,
+                    const double p_reachability,
+                    const double p_transition,
+                    const double p_goal_reachable,
                     const int64_t parent_index,
+                    const int64_t state_index,
+                    const int64_t transition_index,
+                    const int64_t split_index,
                     const std::vector<int64_t>& child_indices,
                     const std::vector<int64_t>& other_tree_target_indices_blacklist);
 
@@ -110,8 +121,16 @@ namespace smmap
             const RubberBand::Ptr& band() const;
             double costToCome() const;
 
-            int64_t getParentIndex() const;
-            void setParentIndex(const int64_t parent_index);
+            double pReachability() const;
+            double pTransition() const;
+
+            double getpGoalReachable() const;
+            void setpGoalReachable(const double p_goal_reachable);
+
+            int64_t parentIndex() const;
+            int64_t stateIndex() const;
+            int64_t transitionIndex() const;
+            int64_t splitIndex() const;
 
             const std::vector<int64_t>& getChildIndices() const;
             void clearChildIndicies();
@@ -138,8 +157,17 @@ namespace smmap
             RubberBand::Ptr band_;
             double cost_to_come_;
 
+            // Probabilities of various types
+            double p_reachability_;     // Probability of reaching this node from the root of the tree
+            double p_transition_;       // Probability of reaching this node from the parent
+            double p_goal_reachable_;   // Probability of reaching the goal, assuming we are at this node
+
             // Book keeping
             int64_t parent_index_;
+            int64_t state_index_;           // Monotonically strictly increasing
+            int64_t transition_index_;      // Monotonically increasing, and <= state_index_
+            int64_t split_index_;           // Is negative if this node is not the immediate result of a split
+
             std::vector<int64_t> child_indices_;
             std::vector<int64_t> other_tree_target_indices_blacklist_;
             bool initialized_;
@@ -417,7 +445,6 @@ namespace smmap
         const uint32_t max_failed_smoothing_iterations_;
         std::uniform_int_distribution<int> uniform_shortcut_smoothing_int_distribution_;
 
-
         // Set/updated on each call of "rrtPlan"
         RubberBand::Ptr starting_band_;
         RRTGrippersRepresentation starting_grippers_poses_;
@@ -431,6 +458,11 @@ namespace smmap
         std::vector<RRTNode, RRTAllocator> forward_tree_;
         // Note that the band portion of the backward tree is invalid
         std::vector<RRTNode, RRTAllocator> backward_tree_;
+
+        // Counters to track which node/transition/split we are on
+        int64_t next_state_index_;
+        int64_t next_transition_index_;
+        int64_t next_split_index_;
 
         std::vector<float> forward_nn_raw_data_;
         std::vector<float> backward_nn_raw_data_;

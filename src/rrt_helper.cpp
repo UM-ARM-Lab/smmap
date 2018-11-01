@@ -96,10 +96,7 @@ static inline bool maxGrippersDistanceViolated(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 RRTNode::RRTNode()
-    : cost_to_come_(std::numeric_limits<double>::infinity())
-    , parent_index_(-1)
-    , child_indices_(0)
-    , initialized_(false)
+    : initialized_(false)
 {}
 
 RRTNode::RRTNode(
@@ -110,9 +107,15 @@ RRTNode::RRTNode(
     , robot_configuration_(robot_configuration)
     , band_(band)
     , cost_to_come_(0.0)
+    , p_reachability_(-0.0)
+    , p_transition_(-0.0)
+    , p_goal_reachable_(-0.0)
     , parent_index_(-1)
+    , state_index_(0)
+    , transition_index_(-1)
+    , split_index_(-1)
     , child_indices_(0)
-    , initialized_(true)
+    , initialized_(false)
 {}
 
 RRTNode::RRTNode(
@@ -120,12 +123,23 @@ RRTNode::RRTNode(
         const RRTRobotRepresentation& robot_configuration,
         const RubberBand::Ptr& band,
         const double cost_to_come,
-        const int64_t parent_index)
+        const double p_reachability,
+        const double p_transition,
+        const int64_t parent_index,
+        const int64_t state_index,
+        const int64_t transition_index,
+        const int64_t split_index)
     : grippers_poses_(grippers_poses)
     , robot_configuration_(robot_configuration)
     , band_(band)
     , cost_to_come_(cost_to_come)
+    , p_reachability_(p_reachability)
+    , p_transition_(p_transition)
+    , p_goal_reachable_(0.0)
     , parent_index_(parent_index)
+    , state_index_(state_index)
+    , transition_index_(transition_index)
+    , split_index_(split_index)
     , child_indices_(0)
     , other_tree_target_indices_blacklist_(0)
     , initialized_(true)
@@ -136,14 +150,26 @@ RRTNode::RRTNode(
         const RRTRobotRepresentation& robot_configuration,
         const QuinlanRubberBand::Ptr& band,
         const double cost_to_come,
+        const double p_reachability,
+        const double p_transition,
+        const double p_goal_reachable,
         const int64_t parent_index,
+        const int64_t state_index,
+        const int64_t transition_index,
+        const int64_t split_index,
         const std::vector<int64_t>& child_indices,
         const std::vector<int64_t>& other_tree_target_indices_blacklist)
     : grippers_poses_(grippers_poses)
     , robot_configuration_(robot_configuration)
     , band_(band)
     , cost_to_come_(cost_to_come)
+    , p_reachability_(p_reachability)
+    , p_transition_(p_transition)
+    , p_goal_reachable_(p_goal_reachable)
     , parent_index_(parent_index)
+    , state_index_(state_index)
+    , transition_index_(transition_index)
+    , split_index_(split_index)
     , child_indices_(child_indices)
     , other_tree_target_indices_blacklist_(other_tree_target_indices_blacklist)
     , initialized_(true)
@@ -175,14 +201,45 @@ double RRTNode::costToCome() const
 }
 
 
-int64_t RRTNode::getParentIndex() const
+double RRTNode::pTransition() const
+{
+    return p_transition_;
+}
+
+double RRTNode::pReachability() const
+{
+    return p_reachability_;
+}
+
+double RRTNode::getpGoalReachable() const
+{
+    return p_goal_reachable_;
+}
+
+void RRTNode::setpGoalReachable(const double p_goal_reachable)
+{
+    p_goal_reachable_ = p_goal_reachable;
+}
+
+
+int64_t RRTNode::parentIndex() const
 {
     return parent_index_;
 }
 
-void RRTNode::setParentIndex(const int64_t parent_index)
+int64_t RRTNode::stateIndex() const
 {
-    parent_index_ = parent_index;
+    return state_index_;
+}
+
+int64_t RRTNode::transitionIndex() const
+{
+    return transition_index_;
+}
+
+int64_t RRTNode::splitIndex() const
+{
+    return split_index_;
 }
 
 
@@ -330,7 +387,13 @@ uint64_t RRTNode::serialize(std::vector<uint8_t>& buffer) const
     arc_utilities::SerializeEigen<double, Dynamic, 1>(robot_configuration_, buffer);
     band_->serialize(buffer);
     arc_utilities::SerializeFixedSizePOD<double>(cost_to_come_, buffer);
+    arc_utilities::SerializeFixedSizePOD<double>(p_reachability_, buffer);
+    arc_utilities::SerializeFixedSizePOD<double>(p_transition_, buffer);
+    arc_utilities::SerializeFixedSizePOD<double>(p_goal_reachable_, buffer);
     arc_utilities::SerializeFixedSizePOD<int64_t>(parent_index_, buffer);
+    arc_utilities::SerializeFixedSizePOD<int64_t>(state_index_, buffer);
+    arc_utilities::SerializeFixedSizePOD<int64_t>(transition_index_, buffer);
+    arc_utilities::SerializeFixedSizePOD<int64_t>(split_index_, buffer);
     arc_utilities::SerializeVector<int64_t>(child_indices_, buffer, arc_utilities::SerializeFixedSizePOD<int64_t>);
     arc_utilities::SerializeVector<int64_t>(other_tree_target_indices_blacklist_, buffer, arc_utilities::SerializeFixedSizePOD<int64_t>);
     arc_utilities::SerializeFixedSizePOD<uint8_t>((uint8_t)initialized_, buffer);
@@ -372,9 +435,33 @@ std::pair<RRTNode, uint64_t> RRTNode::Deserialize(const std::vector<uint8_t>& bu
     const auto cost_to_come_deserialized = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
     current_position += cost_to_come_deserialized.second;
 
+    // Deserialize the probability of being reachble from the root
+    const auto p_reachablity_deserialized = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
+    current_position += p_reachablity_deserialized.second;
+
+    // Deserialize the transition probability
+    const auto p_transition_deserialized = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
+    current_position += p_transition_deserialized.second;
+
+    // Deserialize the probability that the goal is reachable from this node
+    const auto p_goal_reachable_deserialized = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
+    current_position += p_goal_reachable_deserialized.second;
+
     // Deserialize the parent index
     const auto parent_index_deserialized = arc_utilities::DeserializeFixedSizePOD<int64_t>(buffer, current_position);
     current_position += parent_index_deserialized.second;
+
+    // Deserialize the state index
+    const auto state_index_deserialized = arc_utilities::DeserializeFixedSizePOD<int64_t>(buffer, current_position);
+    current_position += state_index_deserialized.second;
+
+    // Deserialize the transition index
+    const auto transition_index_deserialized = arc_utilities::DeserializeFixedSizePOD<int64_t>(buffer, current_position);
+    current_position += transition_index_deserialized.second;
+
+    // Deserialize the split index
+    const auto split_index_deserialized = arc_utilities::DeserializeFixedSizePOD<int64_t>(buffer, current_position);
+    current_position += split_index_deserialized.second;
 
     // Deserialize the child indices
     const auto child_indices_deserialized = arc_utilities::DeserializeVector<int64_t>(buffer, current_position, &arc_utilities::DeserializeFixedSizePOD<int64_t>);
@@ -394,7 +481,13 @@ std::pair<RRTNode, uint64_t> RRTNode::Deserialize(const std::vector<uint8_t>& bu
                 robot_configuration_deserialized.first,
                 band,
                 cost_to_come_deserialized.first,
+                p_reachablity_deserialized.first,
+                p_transition_deserialized.first,
+                p_goal_reachable_deserialized.first,
                 parent_index_deserialized.first,
+                state_index_deserialized.first,
+                transition_index_deserialized.first,
+                split_index_deserialized.first,
                 child_indices_deserialized.first,
                 blacklisted_indices_deserialized.first);
     deserialized.initialized_ = (bool)initialized_deserialized.first;
@@ -511,7 +604,6 @@ RRTHelper::RRTHelper(
     , max_robot_dof_step_size_(task_params.max_robot_dof_step_size_)
     , min_robot_dof_step_size_(task_params.min_robot_dof_step_size_)
     , max_gripper_rotation_(task_params.max_gripper_rotation_)
-    , goal_bias_(planning_params.goal_bias_)
     , goal_reach_radius_(task_params.goal_reach_radius_)
     , gripper_min_distance_to_obstacles_(task_params.gripper_min_distance_to_obstacles_)
 
@@ -524,6 +616,7 @@ RRTHelper::RRTHelper(
     , use_brute_force_nn_(planning_params.use_brute_force_nn_)
     , kd_tree_grow_threshold_(planning_params.kd_tree_grow_threshold_)
     , best_near_radius2_(planning_params.best_near_radius2_)
+    , goal_bias_(planning_params.goal_bias_)
 
     , max_shortcut_index_distance_(smoothing_params.max_shortcut_index_distance_)
     , max_smoothing_iterations_(smoothing_params.max_smoothing_iterations_)
@@ -998,7 +1091,6 @@ RRTNode RRTHelper::configSampling(const bool sample_band)
         sample.band()->overridePoints(bandSampling_internal());
     }
 
-
     arc_helpers::DoNotOptimize(sample);
     const double sampling_time = stopwatch(READ);
     total_sampling_time_ += sampling_time;
@@ -1166,7 +1258,7 @@ size_t RRTHelper::forwardPropogationFunction(
         const bool extend_band,
         const bool visualization_enabled_locally)
 {
-    arc_helpers::DoNotOptimize(target.getParentIndex());
+    arc_helpers::DoNotOptimize(target.parentIndex());
     Stopwatch function_wide_stopwatch;
     Stopwatch stopwatch;
 
@@ -1337,13 +1429,27 @@ size_t RRTHelper::forwardPropogationFunction(
             const double additional_cost = RRTDistance::Distance(prev_robot_config, next_robot_config);
             const double next_cost_to_come = prev_node.costToCome() + additional_cost;
 
-            const RRTNode next_node(next_grippers_poses, next_robot_config, next_band, next_cost_to_come, parent_idx);
+            const double p_transition = 1.0;
+            const RRTNode next_node(
+                        next_grippers_poses,
+                        next_robot_config,
+                        next_band,
+                        next_cost_to_come,
+                        prev_node.pReachability() * p_transition,
+                        p_transition,
+                        parent_idx,
+                        next_state_index_,
+                        next_transition_index_,
+                        false ? next_split_index_ : -1);
             tree_to_extend.push_back(next_node);
             const int64_t new_node_idx = (int64_t)tree_to_extend.size() - 1;
             prev_node.addChildIndex(new_node_idx);
 
             parent_idx = new_node_idx;
             ++step_index;
+
+            ++next_state_index_;
+            ++next_transition_index_;
         }
     }
     else
@@ -1443,13 +1549,27 @@ size_t RRTHelper::forwardPropogationFunction(
             const double additional_cost = RRTDistance::Distance(prev_robot_config, next_robot_config);
             const double next_cost_to_come = prev_node.costToCome() + additional_cost;
 
-            const RRTNode next_node(next_grippers_poses, next_robot_config, next_band, next_cost_to_come, parent_idx);
+            const double p_transition = 1.0;
+            const RRTNode next_node(
+                        next_grippers_poses,
+                        next_robot_config,
+                        next_band,
+                        next_cost_to_come,
+                        prev_node.pReachability() * p_transition,
+                        p_transition,
+                        parent_idx,
+                        next_state_index_,
+                        next_transition_index_,
+                        false ? next_split_index_ : -1);
             tree_to_extend.push_back(next_node);
             const int64_t new_node_idx = (int64_t)tree_to_extend.size() - 1;
             prev_node.addChildIndex(new_node_idx);
 
             parent_idx = new_node_idx;
             ++step_index;
+
+            ++next_state_index_;
+            ++next_transition_index_;
         }
     }
 
@@ -1564,7 +1684,7 @@ size_t RRTHelper::connectForwardTree(const RRTNode& target, const bool is_random
         for (size_t idx = forward_tree_.size() - num_random_nodes_created; idx < forward_tree_.size(); ++idx)
         {
             const RRTNode& node = forward_tree_[idx];
-            ROS_INFO_STREAM_NAMED("rrt", "Node idx: " << idx << " Parent: " << node.getParentIndex() << " Config: " << node.robotConfiguration().transpose());
+            ROS_INFO_STREAM_NAMED("rrt", "Node idx: " << idx << " Parent: " << node.parentIndex() << " Config: " << node.robotConfiguration().transpose());
         }
     }
 
@@ -1631,7 +1751,7 @@ size_t RRTHelper::connectBackwardTree(const RRTNode& target, const bool is_rando
     for (size_t idx = backward_tree_.size() - num_nodes_created; idx < backward_tree_.size(); ++idx)
     {
         const RRTNode& node = backward_tree_[idx];
-        ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Node idx: " << idx << " Parent: " << node.getParentIndex() << " Config: " << node.robotConfiguration().transpose());
+        ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Node idx: " << idx << " Parent: " << node.parentIndex() << " Config: " << node.robotConfiguration().transpose());
     }
 
     // Record statistics for the randomly sampled extension
