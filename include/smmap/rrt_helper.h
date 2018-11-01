@@ -370,19 +370,12 @@ namespace smmap
                 std::vector<RRTNode, RRTAllocator>& tree_to_extend,
                 const int64_t& nearest_neighbor_idx,
                 const RRTNode& target,
-                const bool extend_band,
                 const bool visualization_enabled_locally);
 
         size_t connectForwardTree(const RRTNode& target, const bool is_random);
-        size_t connectBackwardTree(const RRTNode& target, const bool is_random);
         size_t connectForwardTreeToBackwardTreeBispace(const int64_t last_node_idx_in_forward_tree_branch);
-        size_t connectBackwardTreeToForwardTreeBidirectional();
 
-        void followBackwardTree(
-                const size_t forward_tree_node_idx,
-                const size_t backward_tree_node_idx);
-
-        void planningMainLoopBispace();
+        void planningMainLoop();
 
         ///////////////////////////////////////////////////////////////////////////////////////
         // Helper function for shortcut smoothing

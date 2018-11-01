@@ -1255,7 +1255,6 @@ size_t RRTHelper::forwardPropogationFunction(
         std::vector<RRTNode, RRTAllocator>& tree_to_extend,
         const int64_t& nearest_neighbor_idx,
         const RRTNode& target,
-        const bool extend_band,
         const bool visualization_enabled_locally)
 {
     arc_helpers::DoNotOptimize(target.parentIndex());
@@ -1385,44 +1384,35 @@ size_t RRTHelper::forwardPropogationFunction(
             }
 
             RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
-            if (extend_band)
+
+            //// Duplicated from pure gripper vesion below version below ////
+
+            stopwatch(RESET);
+            arc_helpers::DoNotOptimize(next_band);
+            // Forward simulate the rubber band to test this transition
+            next_band->forwardPropagateRubberBandToEndpointTargets(
+                        next_grippers_poses.first.translation(),
+                        next_grippers_poses.second.translation(),
+                        rubber_band_verbose);
+            arc_helpers::DoNotOptimize(next_band);
+            const double band_forward_propogation_time = stopwatch(READ);
+            total_band_forward_propogation_time_ += band_forward_propogation_time;
+
+            // If we are still able to get to the next target position after retrying,
+            // then return however far we were able to get
+            if (!bandEndpointsMatchGripperPositions(*next_band, next_grippers_poses))
             {
-                //// Duplicated from pure gripper vesion below version below ////
-
-                stopwatch(RESET);
-                arc_helpers::DoNotOptimize(next_band);
-                // Forward simulate the rubber band to test this transition
-                next_band->forwardPropagateRubberBandToEndpointTargets(
-                            next_grippers_poses.first.translation(),
-                            next_grippers_poses.second.translation(),
-                            rubber_band_verbose);
-                arc_helpers::DoNotOptimize(next_band);
-                const double band_forward_propogation_time = stopwatch(READ);
-                total_band_forward_propogation_time_ += band_forward_propogation_time;
-
-                // If we are still able to get to the next target position after retrying,
-                // then return however far we were able to get
-                if (!bandEndpointsMatchGripperPositions(*next_band, next_grippers_poses))
-                {
-                    ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", "Stopped due to band endpoints not matching");
-                    break;
-                }
-
-                // If the rubber band becomes overstretched, then return however far we were able to get
-                if (next_band->isOverstretched())
-                {
-                    ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", "Stopped due to band overstretch");
-                    break;
-                }
+                ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", "Stopped due to band endpoints not matching");
+                break;
             }
-            else
+
+            // If the rubber band becomes overstretched, then return however far we were able to get
+            if (next_band->isOverstretched())
             {
-                if (maxGrippersDistanceViolated(next_grippers_poses, max_grippers_distance_))
-                {
-                    ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", "Stopped due to grippers moving too far apart");
-                    break;
-                }
+                ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", "Stopped due to band overstretch");
+                break;
             }
+
 
             // The new configuation is valid, add it to the tree
             const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
@@ -1510,39 +1500,31 @@ size_t RRTHelper::forwardPropogationFunction(
             }
 
             RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
-            if (extend_band)
-            {
-                stopwatch(RESET);
-                arc_helpers::DoNotOptimize(rubber_band_verbose);
-                // Forward simulate the rubber band to test this transition
-                next_band->forwardPropagateRubberBandToEndpointTargets(
-                            next_grippers_poses.first.translation(),
-                            next_grippers_poses.second.translation(),
-                            rubber_band_verbose);
-                arc_helpers::DoNotOptimize(next_band->getVectorRepresentation());
-                const double band_forward_propogation_time = stopwatch(READ);
-                total_band_forward_propogation_time_ += band_forward_propogation_time;
 
-                // If we are still able to get to the next target position after retrying,
-                // then return however far we were able to get
-                if (!bandEndpointsMatchGripperPositions(*next_band, next_grippers_poses))
-                {
-                    break;
-                }
+            stopwatch(RESET);
+            arc_helpers::DoNotOptimize(rubber_band_verbose);
+            // Forward simulate the rubber band to test this transition
+            next_band->forwardPropagateRubberBandToEndpointTargets(
+                        next_grippers_poses.first.translation(),
+                        next_grippers_poses.second.translation(),
+                        rubber_band_verbose);
+            arc_helpers::DoNotOptimize(next_band->getVectorRepresentation());
+            const double band_forward_propogation_time = stopwatch(READ);
+            total_band_forward_propogation_time_ += band_forward_propogation_time;
 
-                // If the rubber band becomes overstretched, then return however far we were able to get
-                if (next_band->isOverstretched())
-                {
-                    break;
-                }
-            }
-            else
+            // If we are still able to get to the next target position after retrying,
+            // then return however far we were able to get
+            if (!bandEndpointsMatchGripperPositions(*next_band, next_grippers_poses))
             {
-                if (maxGrippersDistanceViolated(next_grippers_poses, max_grippers_distance_))
-                {
-                    break;
-                }
+                break;
             }
+
+            // If the rubber band becomes overstretched, then return however far we were able to get
+            if (next_band->isOverstretched())
+            {
+                break;
+            }
+
 
             // The new configuation is valid, add it to the tree
             const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
@@ -1619,7 +1601,7 @@ size_t RRTHelper::forwardPropogationFunction(
                 ? RRT_FORWARD_TREE_GRIPPER_B_NS
                 : RRT_BACKWARD_TREE_GRIPPER_B_NS;
 
-        const bool draw_band = extend_band;
+        const bool draw_band = true;
         visualizeTree(
                     tree_to_extend,
                     starting_idx,
@@ -1662,7 +1644,6 @@ size_t RRTHelper::forwardPropogationFunction(
 
 size_t RRTHelper::connectForwardTree(const RRTNode& target, const bool is_random)
 {
-    const bool extend_band = true;
     const bool nn_forward_tree = true;
     const bool fwd_prop_local_visualization_enabled = true;
 
@@ -1674,7 +1655,6 @@ size_t RRTHelper::connectForwardTree(const RRTNode& target, const bool is_random
                 forward_tree_,
                 forward_tree_nearest_neighbour_idx_,
                 target,
-                extend_band,
                 fwd_prop_local_visualization_enabled);
 
     ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Nodes created: " << num_random_nodes_created << " Tree size: " << forward_tree_.size());
@@ -1727,63 +1707,8 @@ size_t RRTHelper::connectForwardTree(const RRTNode& target, const bool is_random
     return num_random_nodes_created;
 }
 
-size_t RRTHelper::connectBackwardTree(const RRTNode& target, const bool is_random)
-{
-    //////////////// Extend (connect) the backward tree towards a random target ////////////////
-    const bool extend_band = false;
-    const bool nn_forward_tree = false;
-    const bool fwd_prop_local_visualization_enabled = true;
-
-    // Get the nearest neighbor
-    const int64_t backward_tree_nearest_neighbour_idx = nearestNeighbour(nn_forward_tree, target);
-    // Forward propagate towards the sampled target
-    const size_t num_nodes_created =
-            forwardPropogationFunction(
-                backward_tree_,
-                backward_tree_nearest_neighbour_idx,
-                target,
-                extend_band,
-                fwd_prop_local_visualization_enabled);
-
-    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Nodes created: " << num_nodes_created
-                                                      << " Tree size: " << backward_tree_.size());
-
-    for (size_t idx = backward_tree_.size() - num_nodes_created; idx < backward_tree_.size(); ++idx)
-    {
-        const RRTNode& node = backward_tree_[idx];
-        ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Node idx: " << idx << " Parent: " << node.parentIndex() << " Config: " << node.robotConfiguration().transpose());
-    }
-
-    // Record statistics for the randomly sampled extension
-    if (num_nodes_created != 0)
-    {
-        if (is_random)
-        {
-            ++backward_random_samples_useful_;
-        }
-        else
-        {
-            ++backward_connection_attempts_useful_;
-        }
-    }
-    else
-    {
-        if (is_random)
-        {
-            ++backward_random_samples_useless_;
-        }
-        else
-        {
-            ++backward_connection_attempts_useless_;
-        }
-    }
-
-    return num_nodes_created;
-}
-
 size_t RRTHelper::connectForwardTreeToBackwardTreeBispace(const int64_t last_node_idx_in_forward_tree_branch)
 {
-    const bool extend_band = true;
     const bool nn_forward_tree = false;
     const bool fwd_prop_local_visualization_enabled = true;
 
@@ -1811,7 +1736,6 @@ size_t RRTHelper::connectForwardTreeToBackwardTreeBispace(const int64_t last_nod
                 forward_tree_,
                 last_node_idx_in_forward_tree_branch,
                 target_in_backward_tree,
-                extend_band,
                 fwd_prop_local_visualization_enabled);
 
     // Record statistics for the goal biased extension
@@ -1839,102 +1763,24 @@ size_t RRTHelper::connectForwardTreeToBackwardTreeBispace(const int64_t last_nod
     return num_goal_directed_nodes_created;
 }
 
-void RRTHelper::followBackwardTree(
-        const size_t forward_tree_node_idx,
-        const size_t backward_tree_node_idx)
-{
-    // March down the backward tree, propagating the band in the forward tree
-    int64_t forward_parent_idx = forward_tree_node_idx;
-    int64_t backward_next_idx = backward_tree_node_idx;
-    while (!path_found_ && backward_next_idx >= 0)
-    {
-        const RRTNode& prev_node = forward_tree_[forward_parent_idx];
-        const RubberBand::Ptr prev_band = prev_node.band();
-
-        assert(backward_next_idx < (int64_t)backward_tree_.size());
-        RRTNode& backward_next_node = backward_tree_[backward_next_idx];
-        const RRTGrippersRepresentation& next_grippers_poses = backward_next_node.grippers();
-        const RRTRobotRepresentation& next_robot_config = backward_next_node.robotConfiguration();
-
-        RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
-        Stopwatch stopwatch;
-        const bool rubber_band_verbose = false;
-        arc_helpers::DoNotOptimize(next_band);
-        // Forward simulate the rubber band to test this transition
-        next_band->forwardPropagateRubberBandToEndpointTargets(
-                    next_grippers_poses.first.translation(),
-                    next_grippers_poses.second.translation(),
-                    rubber_band_verbose);
-        arc_helpers::DoNotOptimize(next_band);
-        const double band_forward_propogation_time = stopwatch(READ);
-        total_band_forward_propogation_time_ += band_forward_propogation_time;
-
-        // If we are still able to get to the next target position after retrying,
-        // then return however far we were able to get
-        if (!bandEndpointsMatchGripperPositions(*next_band, next_grippers_poses))
-        {
-            ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.bispace_follow", "Stopped due to band endpoints not matching");
-            break;
-        }
-
-        // If the rubber band becomes overstretched, then return however far we were able to get
-        if (next_band->isOverstretched())
-        {
-            ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.bispace_follow", "Stopped due to band overstretch");
-            break;
-        }
-
-        if (visualization_enabled_globally_)
-        {
-            next_band->visualize("rrt_following_backward_tree_bands", Visualizer::Blue(), Visualizer::Blue(), (int32_t)backward_next_idx + 1, true);
-        }
-
-        // The new configuation is valid, add it to the forward tree
-        const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
-        const double additional_cost = RRTDistance::Distance(prev_robot_config, next_robot_config);
-        const double next_cost_to_come = prev_node.costToCome() + additional_cost;
-
-        const RRTNode next_node(
-                    next_grippers_poses,
-                    next_robot_config,
-                    next_band,
-                    next_cost_to_come,
-                    forward_parent_idx);
-        forward_tree_.push_back(next_node);
-        const int64_t new_node_idx = (int64_t)forward_tree_.size() - 1;
-        // Note that we do not use prev_node here as the push_back may have caused a reallocation
-        forward_tree_[forward_parent_idx].addChildIndex(new_node_idx);
-
-        forward_parent_idx = new_node_idx;
-        backward_next_idx = backward_next_node.getParentIndex();
-
-        if (goalReached(next_node))
-        {
-            path_found_ = true;
-            goal_idx_in_forward_tree_ = new_node_idx;
-            ROS_INFO_NAMED("rrt", "Goal found via following backward tree");
-        }
-    }
-}
-
-
-
-void RRTHelper::planningMainLoopBispace()
+void RRTHelper::planningMainLoop()
 {
     // Make sure we've been given a start and goal state
     assert(forward_tree_.size() > 0);
     assert(backward_tree_.size() > 0);
     // Make sure the tree is properly linked
     assert(CheckTreeLinkage(forward_tree_));
-    assert(CheckTreeLinkage(backward_tree_));
+
+    #warning "Backwards tree linkage check disabled as backwards tree is not really used"
+//    assert(CheckTreeLinkage(backward_tree_));
 
     // Plan
     ROS_INFO_NAMED("rrt", "Using bispace tree");
     std::chrono::duration<double> time_ellapsed = std::chrono::steady_clock::now() - start_time_;
-    bool forward_iteration = true;
+//    bool forward_iteration = true;
     while (!path_found_ && time_ellapsed < time_limit_)
     {
-        if (forward_iteration)
+//        if (forward_iteration)
         {
             ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Starting forward iteration. Tree size: " << forward_tree_.size());
             for (size_t itr = 0; !path_found_ && itr < forward_tree_extend_iterations_ && time_ellapsed < time_limit_; ++itr)
@@ -1953,38 +1799,15 @@ void RRTHelper::planningMainLoopBispace()
 
                 //////////////// Attempt to connect to the backward tree ////////////////////////////////
                 const bool sample_goal = uniform_unit_distribution_(*generator_) < goal_bias_;
-                if (sample_goal)// && num_random_nodes_created > 0)
+                if (sample_goal)
                 {
                     const int64_t last_node_idx_in_forward_tree_branch = num_random_nodes_created > 0 ?
                                 (int64_t)forward_tree_.size() - 1 : forward_tree_nearest_neighbour_idx_;
                     const size_t num_goal_directed_nodes_created = connectForwardTreeToBackwardTreeBispace(last_node_idx_in_forward_tree_branch);
+                    (void)num_goal_directed_nodes_created;
                     if (path_found_)
                     {
                         break;
-                    }
-
-                    //////////////// Check for a connection between the trees, extending the forward tree if possible ////////////////
-                    if (num_goal_directed_nodes_created > 0)
-                    {
-                        const bool connection_made =
-                                    robotConfigurationsAreApproximatelyEqual(
-                                    forward_tree_.back().robotConfiguration(),
-                                    backward_tree_.back().robotConfiguration());
-
-                        if (connection_made)
-                        {
-                            // Record some statistics
-                            ++forward_connections_made_;
-
-                            // March down the backward tree, propagating the band in the forward tree
-                            int64_t forward_parent_idx = (int64_t)forward_tree_.size() - 1;
-                            int64_t backward_next_idx = (int64_t)backward_tree_.size() - 1;
-                            followBackwardTree(forward_parent_idx, backward_next_idx);
-                            if (path_found_)
-                            {
-                                break;
-                            }
-                        }
                     }
                 }
 
@@ -1993,31 +1816,11 @@ void RRTHelper::planningMainLoopBispace()
 
             ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Ending forward iteration. Tree size: " << forward_tree_.size());
         }
-        else
-        {
-            ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Starting backward iteration. Tree size: " << backward_tree_.size());
 
-            for (size_t itr = 0; itr < backward_tree_extend_iterations_ && time_ellapsed < time_limit_; ++itr)
-            {
-                ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Inner iteration # " << itr);
-                const bool sample_band = false;
-                const RRTNode random_target = configSampling(sample_band);
-                connectBackwardTree(random_target, true);
-                time_ellapsed = std::chrono::steady_clock::now() - start_time_;
-            }
-
-            ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Ending backward iteration. Tree size: " << backward_tree_.size());
-        }
         ROS_WARN_THROTTLE_NAMED(0.1, "rrt", "Note: BiSpace backwards tree disabled");
 //        forward_iteration = !forward_iteration;
     }
 }
-
-
-
-
-
-
 
 /*
  * Builds the helper functions needed by simple_rrt_planner and invokes the planner (and shortcut smoother)
@@ -2035,9 +1838,33 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     starting_grippers_poses_ = start.grippers();
 
     // Setup the forward tree
+    const double cost_to_come = 0.0;
+    const double p_reachability = 1.0;
+    const double p_transition = 1.0;
+    const int64_t parent_index = -1;
+    const int64_t state_index = 0;
+    const int64_t transition_index = -1;
+    const int64_t split_index = -1;
+
     forward_tree_.clear();
     forward_tree_.reserve(estimated_tree_size);
-    forward_tree_.push_back(start);
+    forward_tree_.push_back(
+                RRTNode(
+                    starting_grippers_poses_,
+                    starting_robot_configuration_,
+                    starting_band_,
+                    cost_to_come,
+                    p_reachability,
+                    p_transition,
+                    parent_index,
+                    state_index,
+                    transition_index,
+                    split_index));
+
+    // Reset the bookkeeping counters
+    next_state_index_ = 1;
+    next_transition_index_ = 0;
+    next_split_index_ = 0;
 
     // Extract goal/termination information
     max_grippers_distance_ = starting_band_->maxSafeLength();
@@ -2156,7 +1983,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         robot_->lockEnvironment();
         start_time_ = std::chrono::steady_clock::now();
         ROS_INFO_NAMED("rrt", "Starting planning...");
-        planningMainLoopBispace();
+        planningMainLoop();
 //        planningMainLoopBidirectional();
         const std::chrono::time_point<std::chrono::steady_clock> end_time = std::chrono::steady_clock::now();
         const std::chrono::duration<double> planning_time(end_time - start_time_);
@@ -2270,7 +2097,7 @@ bool RRTHelper::CheckTreeLinkage(const std::vector<RRTNode, RRTAllocator>& tree)
             return false;
         }
         // Check the linkage to the parent state
-        const int64_t parent_index = current_node.getParentIndex();
+        const int64_t parent_index = current_node.parentIndex();
         if ((parent_index >= 0) && (parent_index < (int64_t)tree.size()))
         {
             if (parent_index != (int64_t)current_index)
@@ -2318,7 +2145,7 @@ bool RRTHelper::CheckTreeLinkage(const std::vector<RRTNode, RRTAllocator>& tree)
                         return false;
                     }
                     // Make sure the child node points to us as the parent index
-                    const int64_t child_parent_index = child_state.getParentIndex();
+                    const int64_t child_parent_index = child_state.parentIndex();
                     if (child_parent_index != (int64_t)current_index)
                     {
                         std::cerr << "Parent index " << child_parent_index << " for current child state " << current_child_index << " does not match index " << current_index << " for current node " << std::endl;
@@ -2352,7 +2179,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::ExtractSolutionPath(
         assert(next_index < (int64_t)tree.size());
         const auto& parent_node = tree[next_index];
         solution_path.push_back(parent_node);
-        next_index = parent_node.getParentIndex();
+        next_index = parent_node.parentIndex();
     }
     // Put it in the right order
     std::reverse(solution_path.begin(), solution_path.end());
@@ -2659,7 +2486,6 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         std::pair<bool, std::vector<RRTNode, RRTAllocator>> end_of_smoothing_to_goal_results;
 
         const bool fwd_prop_local_visualization_enabled = false;
-        const bool fwd_prop_extend_band = true;
 
         if (planning_for_whole_robot_)
         {
@@ -2677,7 +2503,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
             // Forward simulate the rubber band along the straight line between gripper/robot positions
             const int64_t start_idx = 0;
             smoothed_segment.push_back(smoothing_start_config);
-            forwardPropogationFunction(smoothed_segment, start_idx, smoothing_end_config, fwd_prop_extend_band, fwd_prop_local_visualization_enabled);
+            forwardPropogationFunction(smoothed_segment, start_idx, smoothing_end_config, fwd_prop_local_visualization_enabled);
 
             // Check if the rubber band gets overstretched while propogating the grippers/robot on the new path
             const auto& target_robot_configuration = smoothing_end_config.robotConfiguration();
@@ -2718,7 +2544,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                 // Forward simulate the rubber band along the straight line between gripper positions
                 const int64_t start_idx = 0;
                 smoothed_segment.push_back(smoothing_start_config);
-                forwardPropogationFunction(smoothed_segment, start_idx, smoothing_end_config, fwd_prop_extend_band, fwd_prop_local_visualization_enabled);
+                forwardPropogationFunction(smoothed_segment, start_idx, smoothing_end_config, fwd_prop_local_visualization_enabled);
             }
             else if (smoothing_type == 3 || smoothing_type == 4)
             {
@@ -2796,7 +2622,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
                                 path.front().band());
 
                     const int64_t start_idx = (int64_t)smoothed_segment.size() - 1;
-                    forwardPropogationFunction(smoothed_segment, start_idx, forward_prop_target_config, fwd_prop_extend_band, fwd_prop_local_visualization_enabled);
+                    forwardPropogationFunction(smoothed_segment, start_idx, forward_prop_target_config, fwd_prop_local_visualization_enabled);
                 }
             }
             else
@@ -2930,9 +2756,9 @@ void RRTHelper::visualizeTree(
                 }
             }
 
-            if (curr.getParentIndex() >= 0)
+            if (curr.parentIndex() >= 0)
             {
-                const RRTNode& parent = tree[curr.getParentIndex()];
+                const RRTNode& parent = tree[curr.parentIndex()];
 
                 // Add edges from the parent to the current node
                 gripper_a_tree_start_points.push_back(parent.grippers().first.translation());
