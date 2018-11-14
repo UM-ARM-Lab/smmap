@@ -229,12 +229,19 @@ const EigenHelpers::VectorVector3d& QuinlanRubberBand::upsampleBand() const
     // If our current upsampled_band_ cache is invalid, recalculate it
     if (upsampled_band_.size() == 0)
     {
-        const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
+        if (band_.size() == upsample_num_points_)
         {
-            return (v1 - v2).norm();
-        };
-        upsampled_band_  = path_utils::UpsamplePath<Eigen::Vector3d>(
-                    band_, upsample_num_points_, distance_fn, EigenHelpers::Interpolate<double, 3>);
+            upsampled_band_ = band_;
+        }
+        else
+        {
+            const auto distance_fn = [] (const Eigen::Vector3d& v1, const Eigen::Vector3d& v2)
+            {
+                return (v1 - v2).norm();
+            };
+            upsampled_band_  = path_utils::UpsamplePath<Eigen::Vector3d>(
+                        band_, upsample_num_points_, distance_fn, EigenHelpers::Interpolate<double, 3>);
+        }
     }
 
     return upsampled_band_;

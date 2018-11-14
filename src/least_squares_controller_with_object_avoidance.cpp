@@ -124,7 +124,7 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
         const VectorXd min_joint_delta = input_data.robot_->getJointLowerLimits() - input_data.world_current_state_.robot_configuration_;
         const VectorXd max_joint_delta = input_data.robot_->getJointUpperLimits() - input_data.world_current_state_.robot_configuration_;
 
-        suggested_robot_motion.robot_dof_motion_ = minSquaredNormLinearConstraintsQuadraticConstraints_SE3VelocityConstraints(
+        suggested_robot_motion.robot_dof_motion_ = minSquaredNorm_SE3VelocityConstraints_QuadraticConstraints(
                     robot_dof_to_deformable_object_jacobian,
                     desired_object_motion.delta,
                     desired_object_motion.weight,
@@ -252,23 +252,23 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
         if (optimize_)
         {
             grippers_delta_achieve_goal =
-                    minSquaredNormSE3VelocityConstraints(
+                    minSquaredNorm_SE3VelocityConstraints(
                         grippers_poses_to_object_jacobian,
                         desired_object_motion.delta,
-                        max_grippers_step_size,
-                        desired_object_motion.weight);
+                        desired_object_motion.weight,
+                        max_grippers_step_size);
         }
         else
         {
             grippers_delta_achieve_goal =
-                ClampGripperPoseDeltas(
-                    WeightedLeastSquaresSolver(
+                    ClampGripperPoseDeltas(
+                        WeightedLeastSquaresSolver(
                             grippers_poses_to_object_jacobian,
                             desired_object_motion.delta,
                             desired_object_motion.weight,
                             LEAST_SQUARES_DAMPING_THRESHOLD,
                             LEAST_SQUARES_DAMPING_VALUE),
-                    max_grippers_step_size);
+                        max_grippers_step_size);
         }
 
         // Find the collision avoidance data that we'll need

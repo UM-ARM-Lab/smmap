@@ -142,7 +142,7 @@ DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint:
         std::vector<RowVectorXd> linear_constraint_linear_terms;
         std::vector<double> linear_constraint_affine_terms;
 
-        // Collision constraints
+        // Collision constraints, in the form Cx <= d
         {
             const auto J_collision_g0 = ComputeGripperMotionToPointMotionJacobian(collision_data[0].nearest_point_to_obstacle_, grippers_poses[0]);
             const auto J_distance_g0 = collision_data[0].obstacle_surface_normal_.transpose() * J_collision_g0;
@@ -151,7 +151,7 @@ DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint:
             full_constraint_vec_g0 << (-1.0 * J_distance_g0), RowVectorXd::Zero(6);
 
             linear_constraint_linear_terms.push_back(full_constraint_vec_g0);
-            linear_constraint_affine_terms.push_back(robot_->min_controller_distance_to_obstacles_ - collision_data[0].distance_to_obstacle_);
+            linear_constraint_affine_terms.push_back(collision_data[0].distance_to_obstacle_ - robot_->min_controller_distance_to_obstacles_);
 
             const auto J_collision_g1 = ComputeGripperMotionToPointMotionJacobian(collision_data[1].nearest_point_to_obstacle_, grippers_poses[1]);
             const auto J_distance_g1 = collision_data[0].obstacle_surface_normal_.transpose() * J_collision_g1;
@@ -160,7 +160,7 @@ DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint:
             full_constraint_vec_g1 << RowVectorXd::Zero(6), (-1.0 * J_distance_g1);
 
             linear_constraint_linear_terms.push_back(full_constraint_vec_g1);
-            linear_constraint_affine_terms.push_back(robot_->min_controller_distance_to_obstacles_ - collision_data[1].distance_to_obstacle_);
+            linear_constraint_affine_terms.push_back(collision_data[1].distance_to_obstacle_ - robot_->min_controller_distance_to_obstacles_);
         }
 
         // Stretching constraints
@@ -194,7 +194,7 @@ DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint:
         }
 
         const VectorXd grippers_motion =
-                minSquaredNormSE3VelocityConstraints(
+                minSquaredNorm_SE3VelocityConstraints_LinearConstraints(
                     grippers_poses_to_object_jacobian,
                     desired_object_p_dot,
                     desired_p_dot_weight,
