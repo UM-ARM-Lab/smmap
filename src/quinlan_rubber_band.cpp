@@ -242,6 +242,9 @@ const EigenHelpers::VectorVector3d& QuinlanRubberBand::upsampleBand() const
             upsampled_band_  = path_utils::UpsamplePath<Eigen::Vector3d>(
                         band_, upsample_num_points_, distance_fn, EigenHelpers::Interpolate<double, 3>);
         }
+        // Also create the upsampled version here as a way to keep the code simple
+        upsampled_band_single_vector_ =
+                EigenHelpers::VectorEigenVectorToEigenVectorX(upsampled_band_);
     }
 
     return upsampled_band_;
@@ -251,13 +254,7 @@ const Eigen::VectorXd& QuinlanRubberBand::upsampleBandSingleVector() const
 {
     // If the upsampled version is out of date, regenerate it
     // and the corresponding 'single_vector' version
-    if (upsampled_band_.size() == 0)
-    {
-        upsampleBand();
-        upsampled_band_single_vector_ =
-                EigenHelpers::VectorEigenVectorToEigenVectorX(upsampled_band_);
-    }
-
+    upsampleBand();
     return upsampled_band_single_vector_;
 }
 

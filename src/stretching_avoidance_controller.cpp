@@ -2233,11 +2233,11 @@ kinematics::Vector6d StretchingAvoidanceController::getFeasibleGripperDeltaGurob
     std::vector<RowVectorXd> linear_constraint_linear_terms;
     std::vector<double> linear_constraint_affine_terms;
 
-    // Add the collision constraint
+    // Add the collision constraint: Ax <= b
     const auto J_collision = ComputeGripperMotionToPointMotionJacobian(collision_data.nearest_point_to_obstacle_, gripper_pose);
     const auto J_distance = collision_data.obstacle_surface_normal_.transpose() * J_collision;
     linear_constraint_linear_terms.push_back(-1.0 * J_distance);
-    linear_constraint_affine_terms.push_back(robot_->min_controller_distance_to_obstacles_ + GRIPPER_COLLISION_REPULSION_MARGIN - collision_data.distance_to_obstacle_);
+    linear_constraint_affine_terms.push_back(collision_data.distance_to_obstacle_ - robot_->min_controller_distance_to_obstacles_ - GRIPPER_COLLISION_REPULSION_MARGIN);
 
     vis_->visualizeGripper("sampling_gripper", gripper_pose, Visualizer::Blue(), 1);
 
