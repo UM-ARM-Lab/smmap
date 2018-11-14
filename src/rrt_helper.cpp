@@ -115,6 +115,7 @@ RRTNode::RRTNode(
     , parent_index_(-1)
     , child_indices_(0)
     , initialized_(true)
+    , already_extended_towards_backwards_tree_(false)
 {}
 
 RRTNode::RRTNode(
@@ -131,6 +132,7 @@ RRTNode::RRTNode(
     , child_indices_(0)
     , other_tree_target_indices_blacklist_(0)
     , initialized_(true)
+    , already_extended_towards_backwards_tree_(false)
 {}
 
 RRTNode::RRTNode(
@@ -149,6 +151,7 @@ RRTNode::RRTNode(
     , child_indices_(child_indices)
     , other_tree_target_indices_blacklist_(other_tree_target_indices_blacklist)
     , initialized_(true)
+    , already_extended_towards_backwards_tree_(false)
 {}
 
 bool RRTNode::isInitialized() const
@@ -2038,11 +2041,15 @@ void RRTHelper::planningMainLoopBispace()
                 }
 
                 //////////////// Attempt to connect to the backward tree ////////////////////////////////
+
+                const int64_t last_node_idx_in_forward_tree_branch = num_random_nodes_created > 0 ?
+                            (int64_t)forward_tree_.size() - 1 : forward_tree_nearest_neighbour_idx_;
                 const bool sample_goal = uniform_unit_distribution_(*generator_) < goal_bias_;
-                if (sample_goal)// && num_random_nodes_created > 0)
+                if (!forward_tree_[last_node_idx_in_forward_tree_branch].already_extended_towards_backwards_tree_
+                    && sample_goal)// && num_random_nodes_created > 0)
                 {
-                    const int64_t last_node_idx_in_forward_tree_branch = num_random_nodes_created > 0 ?
-                                (int64_t)forward_tree_.size() - 1 : forward_tree_nearest_neighbour_idx_;
+                    forward_tree_[last_node_idx_in_forward_tree_branch].already_extended_towards_backwards_tree_ = true;
+
                     const size_t num_goal_directed_nodes_created = connectForwardTreeToBackwardTreeBispace(last_node_idx_in_forward_tree_branch);
                     if (path_found_)
                     {

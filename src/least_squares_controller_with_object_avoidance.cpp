@@ -124,6 +124,32 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
                     min_joint_delta,
                     max_joint_delta);
 
+
+
+
+
+
+        // If there is no feasible motion, return the smallest robot motion that satisfies the collision constraints
+        if (suggested_robot_motion.robot_dof_motion_.norm() == 0.0)
+        {
+            ROS_WARN("No robot motion from first try; failing over to minimum motion that satisfies linear constraints");
+            suggested_robot_motion.robot_dof_motion_ = minXNorm_LinearConstraints(
+                        linear_constraint_linear_terms,
+                        linear_constraint_affine_terms,
+                        joint_weights,
+                        min_joint_delta,
+                        max_joint_delta);
+        }
+
+
+
+
+
+
+
+
+
+
         // Assemble the output
         object_delta_as_vector = robot_dof_to_deformable_object_jacobian * suggested_robot_motion.robot_dof_motion_;
 

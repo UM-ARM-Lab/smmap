@@ -130,6 +130,8 @@ namespace smmap
             static uint64_t Serialize(const RRTNode& config, std::vector<uint8_t>& buffer);
             static std::pair<RRTNode, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current, const RubberBand& starting_band);
 
+            bool already_extended_towards_backwards_tree_;
+
         private:
 
             RRTGrippersRepresentation grippers_poses_;

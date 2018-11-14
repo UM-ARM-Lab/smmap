@@ -372,7 +372,7 @@ void TaskFramework::execute()
             ROS_INFO_STREAM_NAMED("task_framework", "   Planner/Task sim time " << world_feedback.sim_time_ << "\t Error: " << current_error);
 
 
-            std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
+//            std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
 
             vis_->purgeMarkerList();
@@ -488,10 +488,10 @@ WorldState TaskFramework::sendNextCommand(
             vis_->purgeMarkerList();
 
             planGlobalGripperTrajectory(world_state);
-        }
 
-//        std::cout << "Waiting for keystroke" << std::endl;
-//        std::getchar();
+//            std::cout << "Waiting for keystroke" << std::endl;
+//            std::getchar();
+        }
 
         // Execute a single step in the global plan, or use the local controller if we have no plan to follow
         WorldState world_feedback;
@@ -750,7 +750,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalGripperPlannerResults(
     if (global_plan_current_timestep_ == global_plan_gripper_trajectory_.size())
     {
         ROS_INFO_NAMED("task_framework", "Global plan finished, resetting grippers pose history and error history");
-        std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
+//        std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
 
         executing_global_trajectory_ = false;
         grippers_pose_history_.clear();
@@ -1358,7 +1358,7 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
     // Visualization
     {
         vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
-        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Red(), 5);
+        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Cyan(), 5);
 
 //        std::vector<std_msgs::ColorRGBA> colors;
 //        for (size_t idx = 0; idx < cluster_targets.size(); ++idx)
