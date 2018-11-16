@@ -247,5 +247,5 @@ RubberBand::Ptr TransitionEstimation::applyTransition(
 
 double TransitionEstimation::confidence(const double dist) const
 {
-    return std::exp(-std::pow(dist, 4));
+    return std::exp(-std::pow(dist, 2));
 }

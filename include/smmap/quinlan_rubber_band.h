@@ -106,9 +106,9 @@ namespace smmap
         // Not threadsafe: https://www.justsoftwaresolutions.co.uk/cplusplus/const-and-thread-safety.htm
         mutable EigenHelpers::VectorVector3d resampled_band_; // is cleared every time band_ is updated
         const double resample_max_pointwise_dist_;
-        mutable EigenHelpers::VectorVector3d upsampled_band_; // is cleared every time band_ is updated
+        mutable EigenHelpers::VectorVector3d upsampled_band_;  // is cleared every time band_ is updated
+        mutable Eigen::VectorXd upsampled_band_single_vector_; // is updated every time upsampled_band_ is updated
         const size_t upsample_num_points_;
-        mutable Eigen::VectorXd upsampled_band_single_vector_; // is cleared every time band_ is updated
 
 
         const double max_safe_band_length_;

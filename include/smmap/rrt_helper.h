@@ -80,97 +80,100 @@ namespace smmap
 
     class RRTNode
     {
-        public:
-            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    public:
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-            RRTNode();
+        RRTNode();
 
-            RRTNode(const RRTGrippersRepresentation& grippers_poses,
-                    const RRTRobotRepresentation& robot_configuration,
-                    const RubberBand::Ptr& band);
+        RRTNode(const RRTGrippersRepresentation& grippers_poses,
+                const RRTRobotRepresentation& robot_configuration,
+                const RubberBand::Ptr& band);
 
-            RRTNode(const RRTGrippersRepresentation& grippers_poses,
-                    const RRTRobotRepresentation& robot_configuration,
-                    const RubberBand::Ptr& band,
-                    const double cost_to_come,
-                    const double p_reachability,
-                    const double p_transition,
-                    const int64_t parent_index,
-                    const int64_t state_index,
-                    const int64_t transition_index,
-                    const int64_t split_index);
+        RRTNode(const RRTGrippersRepresentation& grippers_poses,
+                const RRTRobotRepresentation& robot_configuration,
+                const RubberBand::Ptr& band,
+                const double cost_to_come,
+                const double p_reachability,
+                const double p_transition,
+                const int64_t parent_index,
+                const int64_t state_index,
+                const int64_t transition_index,
+                const int64_t split_index);
 
-            RRTNode(const RRTGrippersRepresentation& grippers_poses,
-                    const RRTRobotRepresentation& robot_configuration,
-                    const RubberBand::Ptr& band,
-                    const double cost_to_come,
-                    const double p_reachability,
-                    const double p_transition,
-                    const double p_goal_reachable,
-                    const int64_t parent_index,
-                    const int64_t state_index,
-                    const int64_t transition_index,
-                    const int64_t split_index,
-                    const std::vector<int64_t>& child_indices,
-                    const std::vector<int64_t>& other_tree_target_indices_blacklist);
+        RRTNode(const RRTGrippersRepresentation& grippers_poses,
+                const RRTRobotRepresentation& robot_configuration,
+                const RubberBand::Ptr& band,
+                const double cost_to_come,
+                const double p_reachability,
+                const double p_transition,
+                const double p_goal_reachable,
+                const int64_t parent_index,
+                const int64_t state_index,
+                const int64_t transition_index,
+                const int64_t split_index,
+                const std::vector<int64_t>& child_indices,
+                const bool initialized,
+                const bool already_extended_towards_backwards_tree,
+                const bool blacklisted_from_nn_search);
 
-            bool isInitialized() const;
+        bool initialized() const;
 
-            const RRTGrippersRepresentation& grippers() const;
-            const RRTRobotRepresentation& robotConfiguration() const;
-            const RubberBand::Ptr& band() const;
-            double costToCome() const;
+        const RRTGrippersRepresentation& grippers() const;
+        const RRTRobotRepresentation& robotConfiguration() const;
+        const RubberBand::Ptr& band() const;
+        double costToCome() const;
 
-            double pReachability() const;
-            double pTransition() const;
+        double pReachability() const;
+        double pTransition() const;
 
-            double getpGoalReachable() const;
-            void setpGoalReachable(const double p_goal_reachable);
+        double getpGoalReachable() const;
+        void setpGoalReachable(const double p_goal_reachable);
 
-            int64_t parentIndex() const;
-            int64_t stateIndex() const;
-            int64_t transitionIndex() const;
-            int64_t splitIndex() const;
+        int64_t parentIndex() const;
+        int64_t stateIndex() const;
+        int64_t transitionIndex() const;
+        int64_t splitIndex() const;
 
-            const std::vector<int64_t>& getChildIndices() const;
-            void clearChildIndicies();
-            void addChildIndex(const int64_t child_index);
-            void removeChildIndex(const int64_t child_index);
+        const std::vector<int64_t>& getChildIndices() const;
+        void clearChildIndicies();
+        void addChildIndex(const int64_t child_index);
+        void removeChildIndex(const int64_t child_index);
 
-            const std::vector<int64_t>& getOtherTreeBlacklistIndices() const;
-            void clearOtherTreeBlacklistIndices();
-            void addOtherTreeBlacklistIndex(const int64_t blacklist_index);
-            void removeOtherTreeBlacklistIndex(const int64_t blacklist_index);
+        std::string print() const;
 
-            std::string print() const;
+        bool operator==(const RRTNode& other) const;
 
-            bool operator==(const RRTNode& other) const;
+        uint64_t serialize(std::vector<uint8_t>& buffer) const;
+        static uint64_t Serialize(const RRTNode& config, std::vector<uint8_t>& buffer);
+        static std::pair<RRTNode, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current, const RubberBand& starting_band);
 
-            uint64_t serialize(std::vector<uint8_t>& buffer) const;
-            static uint64_t Serialize(const RRTNode& config, std::vector<uint8_t>& buffer);
-            static std::pair<RRTNode, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current, const RubberBand& starting_band);
+    private:
 
-        private:
+        // Note that when planning in gripper pose space, the robot_configuration_ is exactly the position of both grippers
+        RRTGrippersRepresentation grippers_poses_;
+        RRTRobotRepresentation robot_configuration_;
+        RubberBand::Ptr band_;
+        double cost_to_come_;
 
-            RRTGrippersRepresentation grippers_poses_;
-            RRTRobotRepresentation robot_configuration_;
-            RubberBand::Ptr band_;
-            double cost_to_come_;
+        // Probabilities of various types
+        double p_reachability_;     // Probability of reaching this node from the root of the tree
+        double p_transition_;       // Probability of reaching this node from the parent
+        double p_goal_reachable_;   // Probability of reaching the goal, assuming we are at this node
 
-            // Probabilities of various types
-            double p_reachability_;     // Probability of reaching this node from the root of the tree
-            double p_transition_;       // Probability of reaching this node from the parent
-            double p_goal_reachable_;   // Probability of reaching the goal, assuming we are at this node
+        // Book keeping
+        int64_t parent_index_;
+        int64_t state_index_;           // Monotonically strictly increasing
+        int64_t transition_index_;      // Monotonically increasing, and <= state_index_
+        int64_t split_index_;           // Is negative if this node is not the immediate result of a split
 
-            // Book keeping
-            int64_t parent_index_;
-            int64_t state_index_;           // Monotonically strictly increasing
-            int64_t transition_index_;      // Monotonically increasing, and <= state_index_
-            int64_t split_index_;           // Is negative if this node is not the immediate result of a split
+        std::vector<int64_t> child_indices_;
 
-            std::vector<int64_t> child_indices_;
-            std::vector<int64_t> other_tree_target_indices_blacklist_;
-            bool initialized_;
+        bool initialized_;
+
+    public:
+
+        bool already_extended_towards_goal_set_;
+        bool blacklisted_from_nn_search_;
     };
 
     class RRTDistance
@@ -234,6 +237,7 @@ namespace smmap
             double best_near_radius2_;
             double goal_bias_;
             double feasibility_distancescale_factor_;
+            double default_propogation_confidence_;
         };
 
         struct SmoothingParams
@@ -332,11 +336,13 @@ namespace smmap
         // Helper functions and data for internal rrt planning algorithm
         ///////////////////////////////////////////////////////////////////////////////////////
 
-        size_t rebuildNNIndex(
-                NNIndexType& index,
+        void rebuildNNIndex(
+                std::shared_ptr<NNIndexType> index,
                 std::vector<float>& nn_raw_data,
+                std::vector<size_t>& nn_data_idx_to_tree_idx,
                 const std::vector<RRTNode, RRTAllocator>& tree,
-                const size_t new_data_start_idx);
+                size_t& new_data_start_idx,
+                const bool force_rebuild);
 
         // Used for timing purposes
         // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
@@ -366,14 +372,19 @@ namespace smmap
                 const bool project_to_rotation_bound,
                 const bool project_to_translation_bound) const;
 
+        // Returns possible bands, and our confidence in each
+        std::vector<std::pair<QuinlanRubberBand::Ptr, double>> forwardPropogateBand(
+                RubberBand band,
+                const RRTGrippersRepresentation& next_grippers_poses);
+
         size_t forwardPropogationFunction(
                 std::vector<RRTNode, RRTAllocator>& tree_to_extend,
                 const int64_t& nearest_neighbor_idx,
                 const RRTNode& target,
                 const bool visualization_enabled_locally);
 
-        size_t connectForwardTree(const RRTNode& target, const bool is_random);
-        size_t connectForwardTreeToBackwardTreeBispace(const int64_t last_node_idx_in_forward_tree_branch);
+        size_t connectForwardTree(const int64_t forward_tree_start_idx, const RRTNode& target, const bool is_random);
+        size_t connectTreeToGrippersGoalSet(const int64_t last_node_idx_in_forward_tree_branch);
 
         void planningMainLoop();
 
@@ -448,25 +459,24 @@ namespace smmap
         std::chrono::duration<double> time_limit_;
         RRTGrippersRepresentation grippers_goal_poses_;
 
-        std::vector<RRTNode, RRTAllocator> forward_tree_;
-        // Note that the band portion of the backward tree is invalid
-        std::vector<RRTNode, RRTAllocator> backward_tree_;
+        const double default_propogation_confidence_;
 
         // Counters to track which node/transition/split we are on
         int64_t next_state_index_;
         int64_t next_transition_index_;
         int64_t next_split_index_;
 
+        // Trees and nearest neighbour data structures
+        std::vector<RRTNode, RRTAllocator> forward_tree_;
+        std::vector<RRTNode, RRTAllocator> grippers_goal_set_; // Note that the band portion of the backward tree is invalid
+        std::vector<size_t> forward_nn_data_idx_to_tree_idx_;
+        std::vector<size_t> goal_set_nn_data_idx_to_tree_idx_;
         std::vector<float> forward_nn_raw_data_;
-        std::vector<float> backward_nn_raw_data_;
+        std::vector<float> goal_set_nn_raw_data_;
         std::shared_ptr<NNIndexType> forward_nn_index_;
-        std::shared_ptr<NNIndexType> backward_nn_index_;
+        std::shared_ptr<NNIndexType> goal_set_nn_index_;
         size_t forward_next_idx_to_add_to_nn_dataset_;
-        size_t backward_next_idx_to_add_to_nn_dataset_;
-
-
-        // TODO: address this hack - used to help track what node to connect to the backward tree from
-        int64_t forward_tree_nearest_neighbour_idx_;
+        size_t goal_set_next_idx_to_add_to_nn_dataset_;
 
 
         // Planning, Uncertainty, and Smoothing statistics

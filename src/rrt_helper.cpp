@@ -116,6 +116,8 @@ RRTNode::RRTNode(
     , split_index_(-1)
     , child_indices_(0)
     , initialized_(false)
+    , already_extended_towards_goal_set_(false)
+    , blacklisted_from_nn_search_(false)
 {}
 
 RRTNode::RRTNode(
@@ -141,8 +143,9 @@ RRTNode::RRTNode(
     , transition_index_(transition_index)
     , split_index_(split_index)
     , child_indices_(0)
-    , other_tree_target_indices_blacklist_(0)
     , initialized_(true)
+    , already_extended_towards_goal_set_(false)
+    , blacklisted_from_nn_search_(false)
 {}
 
 RRTNode::RRTNode(
@@ -158,7 +161,9 @@ RRTNode::RRTNode(
         const int64_t transition_index,
         const int64_t split_index,
         const std::vector<int64_t>& child_indices,
-        const std::vector<int64_t>& other_tree_target_indices_blacklist)
+        const bool initialized,
+        const bool already_extended_towards_backwards_tree,
+        const bool blacklisted_from_nn_search)
     : grippers_poses_(grippers_poses)
     , robot_configuration_(robot_configuration)
     , band_(band)
@@ -171,11 +176,12 @@ RRTNode::RRTNode(
     , transition_index_(transition_index)
     , split_index_(split_index)
     , child_indices_(child_indices)
-    , other_tree_target_indices_blacklist_(other_tree_target_indices_blacklist)
-    , initialized_(true)
+    , initialized_(initialized)
+    , already_extended_towards_goal_set_(already_extended_towards_backwards_tree)
+    , blacklisted_from_nn_search_(blacklisted_from_nn_search)
 {}
 
-bool RRTNode::isInitialized() const
+bool RRTNode::initialized() const
 {
     return initialized_;
 }
@@ -279,42 +285,6 @@ void RRTNode::removeChildIndex(const int64_t child_index)
 }
 
 
-const std::vector<int64_t>& RRTNode::getOtherTreeBlacklistIndices() const
-{
-    return other_tree_target_indices_blacklist_;
-}
-
-void RRTNode::clearOtherTreeBlacklistIndices()
-{
-    other_tree_target_indices_blacklist_.clear();
-}
-
-void RRTNode::addOtherTreeBlacklistIndex(const int64_t blacklist_index)
-{
-    for (size_t idx = 0; idx < other_tree_target_indices_blacklist_.size(); idx++)
-    {
-        if (other_tree_target_indices_blacklist_[idx] == blacklist_index)
-        {
-            return;
-        }
-    }
-    other_tree_target_indices_blacklist_.push_back(blacklist_index);
-}
-
-void RRTNode::removeOtherTreeBlacklistIndex(const int64_t blacklist_index)
-{
-    std::vector<int64_t> new_blacklist_indices;
-    for (size_t idx = 0; idx < child_indices_.size(); idx++)
-    {
-        if (other_tree_target_indices_blacklist_[idx] != blacklist_index)
-        {
-            new_blacklist_indices.push_back(other_tree_target_indices_blacklist_[idx]);
-        }
-    }
-    other_tree_target_indices_blacklist_ = new_blacklist_indices;
-}
-
-
 std::string RRTNode::print() const
 {
     std::stringstream out;
@@ -324,6 +294,12 @@ std::string RRTNode::print() const
     return out.str();
 }
 
+/**
+ * @brief RRTNode::operator ==
+ * @param other
+ * @return Uses approximate equality tests for the gripper config, robot config, and band config;
+ *         exact equality for all other fields
+ */
 bool RRTNode::operator==(const RRTNode& other) const
 {
     if (!gripperPositionsAreApproximatelyEqual(grippers_poses_, other.grippers_poses_))
@@ -356,7 +332,37 @@ bool RRTNode::operator==(const RRTNode& other) const
         return false;
     }
 
+    if (p_reachability_ != other.p_reachability_)
+    {
+        return false;
+    }
+
+    if (p_transition_ != other.p_transition_)
+    {
+        return false;
+    }
+
+    if (p_goal_reachable_ != other.p_goal_reachable_)
+    {
+        return false;
+    }
+
     if (parent_index_ != other.parent_index_)
+    {
+        return false;
+    }
+
+    if (state_index_ != other.state_index_)
+    {
+        return false;
+    }
+
+    if (transition_index_ != other.transition_index_)
+    {
+        return false;
+    }
+
+    if (split_index_ != other.split_index_)
     {
         return false;
     }
@@ -366,12 +372,17 @@ bool RRTNode::operator==(const RRTNode& other) const
         return false;
     }
 
-    if (other_tree_target_indices_blacklist_ != other.other_tree_target_indices_blacklist_)
+    if (initialized_ != other.initialized_)
     {
         return false;
     }
 
-    if (initialized_ != other.initialized_)
+    if (already_extended_towards_goal_set_ != other.already_extended_towards_goal_set_)
+    {
+        return false;
+    }
+
+    if (blacklisted_from_nn_search_ != other.blacklisted_from_nn_search_)
     {
         return false;
     }
@@ -395,8 +406,9 @@ uint64_t RRTNode::serialize(std::vector<uint8_t>& buffer) const
     arc_utilities::SerializeFixedSizePOD<int64_t>(transition_index_, buffer);
     arc_utilities::SerializeFixedSizePOD<int64_t>(split_index_, buffer);
     arc_utilities::SerializeVector<int64_t>(child_indices_, buffer, arc_utilities::SerializeFixedSizePOD<int64_t>);
-    arc_utilities::SerializeVector<int64_t>(other_tree_target_indices_blacklist_, buffer, arc_utilities::SerializeFixedSizePOD<int64_t>);
     arc_utilities::SerializeFixedSizePOD<uint8_t>((uint8_t)initialized_, buffer);
+    arc_utilities::SerializeFixedSizePOD<uint8_t>((uint8_t)already_extended_towards_goal_set_, buffer);
+    arc_utilities::SerializeFixedSizePOD<uint8_t>((uint8_t)blacklisted_from_nn_search_, buffer);
 
     const uint64_t ending_bytes = buffer.size();
 
@@ -435,7 +447,7 @@ std::pair<RRTNode, uint64_t> RRTNode::Deserialize(const std::vector<uint8_t>& bu
     const auto cost_to_come_deserialized = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
     current_position += cost_to_come_deserialized.second;
 
-    // Deserialize the probability of being reachble from the root
+    // Deserialize the probability of being reachable from the root
     const auto p_reachablity_deserialized = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);
     current_position += p_reachablity_deserialized.second;
 
@@ -467,30 +479,35 @@ std::pair<RRTNode, uint64_t> RRTNode::Deserialize(const std::vector<uint8_t>& bu
     const auto child_indices_deserialized = arc_utilities::DeserializeVector<int64_t>(buffer, current_position, &arc_utilities::DeserializeFixedSizePOD<int64_t>);
     current_position += child_indices_deserialized.second;
 
-    // Deserialize the blacklisted indices
-    const auto blacklisted_indices_deserialized = arc_utilities::DeserializeVector<int64_t>(buffer, current_position, &arc_utilities::DeserializeFixedSizePOD<int64_t>);
-    current_position += blacklisted_indices_deserialized.second;
-
     // Deserialize the initialized
     const auto initialized_deserialized = arc_utilities::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
     current_position += initialized_deserialized.second;
 
+    // Deserialize the already_extended_towards_goal_set
+    const auto already_extended_towards_goal_set_deserialized = arc_utilities::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
+    current_position += already_extended_towards_goal_set_deserialized.second;
+
+    // Deserialize the blacklisted_from_nn_search
+    const auto blacklisted_from_nn_search_deserialized = arc_utilities::DeserializeFixedSizePOD<uint8_t>(buffer, current_position);
+    current_position += blacklisted_from_nn_search_deserialized.second;
+
     // Build the resulting node
     RRTNode deserialized(
-                grippers_poses_deserialized.first,
-                robot_configuration_deserialized.first,
-                band,
-                cost_to_come_deserialized.first,
-                p_reachablity_deserialized.first,
-                p_transition_deserialized.first,
-                p_goal_reachable_deserialized.first,
-                parent_index_deserialized.first,
-                state_index_deserialized.first,
-                transition_index_deserialized.first,
-                split_index_deserialized.first,
-                child_indices_deserialized.first,
-                blacklisted_indices_deserialized.first);
-    deserialized.initialized_ = (bool)initialized_deserialized.first;
+        grippers_poses_deserialized.first,
+        robot_configuration_deserialized.first,
+        band,
+        cost_to_come_deserialized.first,
+        p_reachablity_deserialized.first,
+        p_transition_deserialized.first,
+        p_goal_reachable_deserialized.first,
+        parent_index_deserialized.first,
+        state_index_deserialized.first,
+        transition_index_deserialized.first,
+        split_index_deserialized.first,
+        child_indices_deserialized.first,
+        (bool)initialized_deserialized.first,
+        (bool)already_extended_towards_goal_set_deserialized.first,
+        (bool)blacklisted_from_nn_search_deserialized.first);
 
     const uint64_t bytes_read = current_position - current;
     return std::make_pair(deserialized, bytes_read);
@@ -623,12 +640,16 @@ RRTHelper::RRTHelper(
     , max_failed_smoothing_iterations_(smoothing_params.max_failed_smoothing_iterations_)
     , uniform_shortcut_smoothing_int_distribution_(1, 4)
 
+    , default_propogation_confidence_(planning_params.default_propogation_confidence_)
+
+    , forward_nn_data_idx_to_tree_idx_(0)
+    , goal_set_nn_data_idx_to_tree_idx_(0)
     , forward_nn_raw_data_(0)
-    , backward_nn_raw_data_(0)
+    , goal_set_nn_raw_data_(0)
     , forward_nn_index_(nullptr)
-    , backward_nn_index_(nullptr)
+    , goal_set_nn_index_(nullptr)
     , forward_next_idx_to_add_to_nn_dataset_(0)
-    , backward_next_idx_to_add_to_nn_dataset_(0)
+    , goal_set_next_idx_to_add_to_nn_dataset_(0)
 
     , total_sampling_time_(NAN)
     , total_nearest_neighbour_index_building_time_(NAN)
@@ -679,45 +700,69 @@ RRTHelper::RRTHelper(
 // Helper functions for external RRT planning class
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-size_t RRTHelper::rebuildNNIndex(
-        NNIndexType& index,
+void RRTHelper::rebuildNNIndex(
+        std::shared_ptr<NNIndexType> index,
         std::vector<float>& nn_raw_data,
+        std::vector<size_t>& nn_data_idx_to_tree_idx,
         const std::vector<RRTNode, RRTAllocator>& tree,
-        const size_t new_data_start_idx)
+        size_t& new_data_start_idx,
+        const bool force_rebuild)
 {
+    if (force_rebuild)
+    {
+        // If we are forcing a rebuild (for example, if we've just blacklisted part of the tree)
+        // then new_data_start_idx is meaningless. We'll reset it to zero here, and clear the
+        // vector that tracks the mapping between flann indices and tree indices
+        new_data_start_idx = 0;
+        nn_raw_data.clear();
+        nn_data_idx_to_tree_idx.clear();
+    }
+
     // These pointers are used to check if we need to rebuild the whole tree because the data moved,
     // or if we can just add points
     const float* initial_data_pointer = nn_raw_data.data();
     nn_raw_data.resize(total_dof_ * tree.size());
     const float* final_data_pointer = nn_raw_data.data();
+    nn_data_idx_to_tree_idx.reserve(tree.size());
 
+    size_t num_new_values = 0;
     for (size_t idx = new_data_start_idx; idx < tree.size(); ++idx)
     {
-        const RRTRobotRepresentation& robot_config = tree[idx].robotConfiguration();
-        const VectorXf robot_config_float = robot_config.cast<float>();
-        memcpy(&nn_raw_data[total_dof_ * idx], robot_config_float.data(), total_dof_ * sizeof(float));
+        if (!tree[idx].blacklisted_from_nn_search_)
+        {
+            size_t next_flann_idx = total_dof_ * nn_data_idx_to_tree_idx.size();
+
+            const RRTRobotRepresentation& robot_config = tree[idx].robotConfiguration();
+            const VectorXf robot_config_float = robot_config.cast<float>();
+            memcpy(&nn_raw_data[next_flann_idx], robot_config_float.data(), total_dof_ * sizeof(float));
+            nn_data_idx_to_tree_idx.push_back(idx);
+            ++num_new_values;
+        }
     }
+
+    // Only some of the raw data was used, so resize down as needed
+    nn_raw_data.resize(total_dof_ * nn_data_idx_to_tree_idx.size());
 
     // If the tree has already been initialized, and the raw data did not move in memory,
     // then we can just add the new points
-    if (new_data_start_idx != 0 && (initial_data_pointer == final_data_pointer))
+    if ((new_data_start_idx == 0) || (initial_data_pointer != final_data_pointer))
     {
-        flann::Matrix<float> data(&nn_raw_data[total_dof_ * new_data_start_idx], tree.size() - new_data_start_idx, total_dof_);
-        index.addPoints(data);
+        flann::Matrix<float> data(nn_raw_data.data(), num_new_values, total_dof_);
+        index->buildIndex(data);
     }
-    // Otherwise rebuild the whole tree
     else
     {
-        flann::Matrix<float> data(nn_raw_data.data(), tree.size(), total_dof_);
-        index.buildIndex(data);
+        flann::Matrix<float> data(&nn_raw_data[total_dof_ * new_data_start_idx], num_new_values, total_dof_);
+        index->addPoints(data);
     }
 
-    return tree.size();
+    new_data_start_idx = tree.size();
 }
 
 std::pair<int64_t, double> getNearest(
         const RRTRobotRepresentation& robot_config,
-        const NNIndexType& index)
+        const NNIndexType& index,
+        const std::vector<size_t>& nn_data_idx_to_tree_idx)
 {
     std::pair<int64_t, double> nearest(-1, std::numeric_limits<double>::infinity());
 
@@ -731,7 +776,7 @@ std::pair<int64_t, double> getNearest(
     const float eps = 0.0;
     flann::SearchParams params(flann::flann_checks_t::FLANN_CHECKS_UNLIMITED, eps);
     index.knnSearch(query, indices, dists, knn, params);
-    nearest.first = indices[0][0];
+    nearest.first = nn_data_idx_to_tree_idx.at(indices[0][0]);
     nearest.second = dists[0][0];
 
     return nearest;
@@ -747,12 +792,14 @@ std::pair<int64_t, double> getNearest(
     for (size_t idx = start_idx; idx < tree.size(); idx++)
     {
         const RRTNode& test_node = tree[idx];
-        const double distance2 = RRTDistance::DistanceSquared(test_node.robotConfiguration(), robot_config);
-
-        if (nearest.second > distance2)
+        if (!test_node.blacklisted_from_nn_search_)
         {
-            nearest.first = (int64_t)idx;
-            nearest.second = distance2;
+            const double distance2 = RRTDistance::DistanceSquared(test_node.robotConfiguration(), robot_config);
+            if (nearest.second > distance2)
+            {
+                nearest.first = (int64_t)idx;
+                nearest.second = distance2;
+            }
         }
     }
 
@@ -762,6 +809,7 @@ std::pair<int64_t, double> getNearest(
 std::vector<std::pair<int64_t, double>> radiusSearch(
         const RRTRobotRepresentation& robot_config,
         const NNIndexType& index,
+        const std::vector<size_t>& nn_data_idx_to_tree_idx,
         const double radius2)
 {
     std::vector<std::pair<int64_t, double>> near;
@@ -780,7 +828,7 @@ std::vector<std::pair<int64_t, double>> radiusSearch(
     near.reserve(indices[0].size());
     for (size_t idx = 0; idx < indices[0].size(); ++idx)
     {
-        near.push_back({indices[0][idx], dists[0][idx]});
+        near.push_back({nn_data_idx_to_tree_idx.at(indices[0][idx]), dists[0][idx]});
     }
 
     return near;
@@ -797,11 +845,13 @@ std::vector<std::pair<int64_t, double>> radiusSearch(
     for (size_t idx = start_idx; idx < tree.size(); idx++)
     {
         const RRTNode& test_node = tree[idx];
-        const double distance2 = RRTDistance::DistanceSquared(test_node.robotConfiguration(), robot_config);
-
-        if (distance2 <= radius2)
+        if (!test_node.blacklisted_from_nn_search_)
         {
-            near.push_back({idx, distance2});
+            const double distance2 = RRTDistance::DistanceSquared(test_node.robotConfiguration(), robot_config);
+            if (distance2 <= radius2)
+            {
+                near.push_back({idx, distance2});
+            }
         }
     }
 
@@ -916,6 +966,7 @@ std::pair<int64_t, double> RRTHelper::nearestNeighbourRobotSpace(
 {
     std::vector<RRTNode, RRTAllocator>* tree = nullptr;
     std::shared_ptr<NNIndexType> nn_index = nullptr;
+    std::vector<size_t>* nn_data_idx_to_tree_idx = nullptr;
     std::vector<float>* nn_raw_data = nullptr;
     size_t* manual_search_start_idx = nullptr;
 
@@ -924,16 +975,18 @@ std::pair<int64_t, double> RRTHelper::nearestNeighbourRobotSpace(
 //        ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.nn", "Using forward tree");
         tree = &forward_tree_;
         nn_index = forward_nn_index_;
+        nn_data_idx_to_tree_idx = &forward_nn_data_idx_to_tree_idx_,
         nn_raw_data = &forward_nn_raw_data_;
         manual_search_start_idx = &forward_next_idx_to_add_to_nn_dataset_;
     }
     else
     {
 //        ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.nn", "Using backward tree");
-        tree = &backward_tree_;
-        nn_index = backward_nn_index_;
-        nn_raw_data = &backward_nn_raw_data_;
-        manual_search_start_idx = &backward_next_idx_to_add_to_nn_dataset_;
+        tree = &grippers_goal_set_;
+        nn_index = goal_set_nn_index_;
+        nn_data_idx_to_tree_idx = &goal_set_nn_data_idx_to_tree_idx_,
+        nn_raw_data = &goal_set_nn_raw_data_;
+        manual_search_start_idx = &goal_set_next_idx_to_add_to_nn_dataset_;
     }
 
     ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.nn", "Querry:                    " << config.robotConfiguration().transpose());
@@ -949,7 +1002,8 @@ std::pair<int64_t, double> RRTHelper::nearestNeighbourRobotSpace(
 
         Stopwatch stopwatch;
         arc_helpers::DoNotOptimize(*manual_search_start_idx);
-        *manual_search_start_idx = rebuildNNIndex(*nn_index, *nn_raw_data, *tree, *manual_search_start_idx);
+        const bool force_rebuild = false;
+        rebuildNNIndex(nn_index, *nn_raw_data, *nn_data_idx_to_tree_idx, *tree, *manual_search_start_idx, force_rebuild);
         arc_helpers::DoNotOptimize(*manual_search_start_idx);
         const double index_building_time = stopwatch(READ);
         total_nearest_neighbour_index_building_time_ += index_building_time;
@@ -964,7 +1018,7 @@ std::pair<int64_t, double> RRTHelper::nearestNeighbourRobotSpace(
     {
         Stopwatch stopwatch;
         arc_helpers::DoNotOptimize(config);
-        nearest = getNearest(config.robotConfiguration(), *nn_index);
+        nearest = getNearest(config.robotConfiguration(), *nn_index, *nn_data_idx_to_tree_idx);
         arc_helpers::DoNotOptimize(nearest);
         const double index_searching_time = stopwatch(READ);
         total_nearest_neighbour_index_searching_time_ += index_searching_time;
@@ -1002,7 +1056,11 @@ int64_t RRTHelper::nearestBestNeighbourFullSpace(
     std::vector<std::pair<int64_t, double>> flann_radius_result;
     if (!use_brute_force_nn_ && forward_next_idx_to_add_to_nn_dataset_ > 0)
     {
-        flann_radius_result = radiusSearch(config.robotConfiguration(), *forward_nn_index_, nearest_robot_space.second + band_max_dist2_);
+        flann_radius_result = radiusSearch(
+                    config.robotConfiguration(),
+                    *forward_nn_index_,
+                    forward_nn_data_idx_to_tree_idx_,
+                    nearest_robot_space.second + band_max_dist2_);
     }
 
     // If we have data that isn't in the FLANN index
@@ -1035,7 +1093,11 @@ int64_t RRTHelper::nearestBestNeighbourFullSpace(
         {
             if (!use_brute_force_nn_ && forward_next_idx_to_add_to_nn_dataset_ > 0)
             {
-                flann_best_near_radius_result = radiusSearch(config.robotConfiguration(), *forward_nn_index_, best_near_radius2_);
+                flann_best_near_radius_result = radiusSearch(
+                            config.robotConfiguration(),
+                            *forward_nn_index_,
+                            forward_nn_data_idx_to_tree_idx_,
+                            best_near_radius2_);
             }
             if (forward_next_idx_to_add_to_nn_dataset_ < forward_tree_.size())
             {
@@ -1251,6 +1313,60 @@ const std::pair<bool, RRTRobotRepresentation> RRTHelper::projectToValidConfig(
     return projected_configuration_result;
 }
 
+std::vector<std::pair<RubberBand::Ptr, double>> RRTHelper::forwardPropogateBand(
+        RubberBand band,
+        const RRTGrippersRepresentation& next_grippers_poses)
+{
+    const bool rubber_band_verbose = false && visualization_enabled_globally_;
+
+    Stopwatch stopwatch;
+    arc_helpers::DoNotOptimize(next_grippers_poses);
+
+    const auto band_endpoints = band.getEndpoints();
+    TransitionEstimation::Action action = {
+        next_grippers_poses.first.translation() - band_endpoints.first,
+        next_grippers_poses.second.translation() - band_endpoints.second};
+    auto transitions = transition_estimator_->applyLearnedTransitions(band, action);
+    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", transitions.size() << " learned transitions applied");
+    if (SMMAP_RRT_VERBOSE)
+    {
+        for (size_t idx = 0; idx < transitions.size(); ++idx)
+        {
+            ROS_INFO_STREAM_NAMED("rrt.prop", "    Learned transition " << idx << " confidence: " << transitions[idx].second);
+        }
+    }
+
+    // Forward simulate the rubber band to test this transition
+    band.forwardPropagateRubberBandToEndpointTargets(
+                next_grippers_poses.first.translation(),
+                next_grippers_poses.second.translation(),
+                rubber_band_verbose);
+
+    // Only add this transition if the band endpoints match the target points,
+    // and the band is not overstretched after moving
+    if (bandEndpointsMatchGripperPositions(band, next_grippers_poses))
+    {
+        if (band.isOverstretched())
+        {
+            ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", "Stopped due to band overstretch");
+        }
+        else
+        {
+            transitions.push_back({std::make_shared<RubberBand>(band), default_propogation_confidence_});
+        }
+    }
+    else
+    {
+        ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", "Stopped due to band endpoints not matching desired gripper positions");
+    }
+
+    arc_helpers::DoNotOptimize(transitions);
+    const double band_forward_propogation_time = stopwatch(READ);
+    total_band_forward_propogation_time_ += band_forward_propogation_time;
+
+    return transitions;
+}
+
 size_t RRTHelper::forwardPropogationFunction(
         std::vector<RRTNode, RRTAllocator>& tree_to_extend,
         const int64_t& nearest_neighbor_idx,
@@ -1264,7 +1380,6 @@ size_t RRTHelper::forwardPropogationFunction(
     const size_t nodes_at_start_of_propogation = tree_to_extend.size();
     const RRTNode nearest_neighbour = tree_to_extend[nearest_neighbor_idx];
 
-    const bool rubber_band_verbose = false && visualization_enabled_globally_ && visualization_enabled_locally;
     if (false && visualization_enabled_globally_ && visualization_enabled_locally)
     {
         vis_->visualizeCubes(
@@ -1307,35 +1422,46 @@ size_t RRTHelper::forwardPropogationFunction(
     const RRTGrippersRepresentation& starting_grippers_poses = nearest_neighbour.grippers();
     const RRTRobotRepresentation& starting_robot_config = nearest_neighbour.robotConfiguration();
 
-    // Extract the target gripper pose and corresponding robot configuration
-    // Note that only the gripper position is used in simulatino,
-    //    and is duplicated in the robot configuration, so we only need that
-    const RRTRobotRepresentation target_robot_config = target.robotConfiguration();
-
-    if (planning_for_whole_robot_)
+    // Extract the target robot configuration
+    // Note that if planning only for the grippers, the target gripper positions
+    //       are also stored in the robot configuration
+    const RRTRobotRepresentation target_robot_config = target.robotConfiguration();    
+    if (!planning_for_whole_robot_)
     {
-        // Allocate space for potential children
-        const double total_distance = RRTDistance::Distance(nearest_neighbour.robotConfiguration(), target_robot_config);
-        const uint32_t max_total_steps = (uint32_t)ceil(total_distance / max_robot_dof_step_size_);
-        tree_to_extend.reserve(tree_to_extend.size() + max_total_steps);
+        const RRTGrippersRepresentation target_grippers_config = target.grippers();
+        assert(target_grippers_config.first.translation() == target_robot_config.head<3>());
+        assert(target_grippers_config.second.translation() == target_robot_config.tail<3>());
+    }
 
-        int64_t parent_idx = nearest_neighbor_idx;
-        uint32_t step_index = 0;
-        while (step_index < max_total_steps)
+    // Allocate space for potential children
+    const double total_distance = RRTDistance::Distance(nearest_neighbour.robotConfiguration(), target_robot_config);
+    const double max_step_size = planning_for_whole_robot_ ? max_robot_dof_step_size_ : max_gripper_step_size_;
+    const uint32_t max_total_steps = (uint32_t)ceil(total_distance / max_step_size);
+    tree_to_extend.reserve(tree_to_extend.size() + max_total_steps);
+
+    int64_t parent_idx = nearest_neighbor_idx;
+    uint32_t step_index = 0;
+    bool split_happened = false;
+    while (!split_happened && step_index < max_total_steps)
+    {
+        // We could be updating the child indices of this node later, so take the value by non-const reference
+        RRTNode& prev_node = tree_to_extend[parent_idx];
+        const RubberBand::Ptr& prev_band = prev_node.band();
+
+        // Interpolate in joint space to find the next configuration of the robot
+        const double ratio = std::min(1.0, (double)(step_index + 1) * max_step_size / total_distance);
+        const RRTRobotRepresentation next_robot_config = Interpolate(starting_robot_config, target_robot_config, ratio);
+
+        // Set the next grippers poses depending on needing to do FK or not
+        // Also handle collision checking here as it does it differently for floating grippers vs a physical robot
+        RRTGrippersRepresentation next_grippers_poses;
+        if (planning_for_whole_robot_)
         {
-            // We could be updating the child indices of this node later, so take the value by non-const reference
-            RRTNode& prev_node = tree_to_extend[parent_idx];
-            const RubberBand::Ptr& prev_band = prev_node.band();
-
-            // Interpolate in joint space to find the translation of the grippers
-            const double ratio = std::min(1.0, (double)(step_index + 1) * max_robot_dof_step_size_ / total_distance);
-            const RRTRobotRepresentation next_robot_config = Interpolate(starting_robot_config, target_robot_config, ratio);
-
             stopwatch(RESET);
             arc_helpers::DoNotOptimize(next_robot_config);
             robot_->setActiveDOFValues(next_robot_config);
             const AllGrippersSinglePose next_grippers_poses_vector = robot_->getGrippersPosesFunctionPointer();
-            const RRTGrippersRepresentation next_grippers_poses(next_grippers_poses_vector[0], next_grippers_poses_vector[1]);
+            next_grippers_poses = {next_grippers_poses_vector[0], next_grippers_poses_vector[1]};
             arc_helpers::DoNotOptimize(next_grippers_poses);
             const double forward_kinematics_time = stopwatch(READ);
             total_forward_kinematics_time_ += forward_kinematics_time;
@@ -1382,85 +1508,10 @@ size_t RRTHelper::forwardPropogationFunction(
                     break;
                 }
             }
-
-            RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
-
-            //// Duplicated from pure gripper vesion below version below ////
-
-            stopwatch(RESET);
-            arc_helpers::DoNotOptimize(next_band);
-            // Forward simulate the rubber band to test this transition
-            next_band->forwardPropagateRubberBandToEndpointTargets(
-                        next_grippers_poses.first.translation(),
-                        next_grippers_poses.second.translation(),
-                        rubber_band_verbose);
-            arc_helpers::DoNotOptimize(next_band);
-            const double band_forward_propogation_time = stopwatch(READ);
-            total_band_forward_propogation_time_ += band_forward_propogation_time;
-
-            // If we are still able to get to the next target position after retrying,
-            // then return however far we were able to get
-            if (!bandEndpointsMatchGripperPositions(*next_band, next_grippers_poses))
-            {
-                ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", "Stopped due to band endpoints not matching");
-                break;
-            }
-
-            // If the rubber band becomes overstretched, then return however far we were able to get
-            if (next_band->isOverstretched())
-            {
-                ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", "Stopped due to band overstretch");
-                break;
-            }
-
-
-            // The new configuation is valid, add it to the tree
-            const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
-            const double additional_cost = RRTDistance::Distance(prev_robot_config, next_robot_config);
-            const double next_cost_to_come = prev_node.costToCome() + additional_cost;
-
-            const double p_transition = 1.0;
-            const RRTNode next_node(
-                        next_grippers_poses,
-                        next_robot_config,
-                        next_band,
-                        next_cost_to_come,
-                        prev_node.pReachability() * p_transition,
-                        p_transition,
-                        parent_idx,
-                        next_state_index_,
-                        next_transition_index_,
-                        false ? next_split_index_ : -1);
-            tree_to_extend.push_back(next_node);
-            const int64_t new_node_idx = (int64_t)tree_to_extend.size() - 1;
-            prev_node.addChildIndex(new_node_idx);
-
-            parent_idx = new_node_idx;
-            ++step_index;
-
-            ++next_state_index_;
-            ++next_transition_index_;
         }
-    }
-    else
-    {
-        // Allocate space for potential children
-        const double total_distance = RRTDistance::Distance(nearest_neighbour.grippers(), target.grippers());
-        const uint32_t max_total_steps = (uint32_t)ceil(total_distance / max_gripper_step_size_);
-        tree_to_extend.reserve(tree_to_extend.size() + max_total_steps);
-
-        int64_t parent_idx = nearest_neighbor_idx;
-        uint32_t step_index = 0;
-        while (step_index < max_total_steps)
+        else
         {
-            // We could be updating the child indices of this node later, so take the value by non-const reference
-            RRTNode& prev_node = tree_to_extend[parent_idx];
-            const RubberBand::Ptr& prev_band = prev_node.band();
-
-            const double ratio = std::min(1.0, (double)(step_index + 1) * max_gripper_step_size_ / total_distance);
-            const RRTRobotRepresentation next_robot_config =
-                    Interpolate(starting_robot_config, target_robot_config, ratio);
-            RRTGrippersRepresentation next_grippers_poses = starting_grippers_poses;
+            next_grippers_poses = starting_grippers_poses;
             next_grippers_poses.first.translation() = next_robot_config.head<3>();
             next_grippers_poses.second.translation() = next_robot_config.tail<3>();
 
@@ -1498,61 +1549,42 @@ size_t RRTHelper::forwardPropogationFunction(
                     }
                 }
             }
-
-            RubberBand::Ptr next_band = std::make_shared<RubberBand>(*prev_band);
-
-            stopwatch(RESET);
-            arc_helpers::DoNotOptimize(rubber_band_verbose);
-            // Forward simulate the rubber band to test this transition
-            next_band->forwardPropagateRubberBandToEndpointTargets(
-                        next_grippers_poses.first.translation(),
-                        next_grippers_poses.second.translation(),
-                        rubber_band_verbose);
-            arc_helpers::DoNotOptimize(next_band->getVectorRepresentation());
-            const double band_forward_propogation_time = stopwatch(READ);
-            total_band_forward_propogation_time_ += band_forward_propogation_time;
-
-            // If we are still able to get to the next target position after retrying,
-            // then return however far we were able to get
-            if (!bandEndpointsMatchGripperPositions(*next_band, next_grippers_poses))
-            {
-                break;
-            }
-
-            // If the rubber band becomes overstretched, then return however far we were able to get
-            if (next_band->isOverstretched())
-            {
-                break;
-            }
-
-
-            // The new configuation is valid, add it to the tree
-            const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
-            const double additional_cost = RRTDistance::Distance(prev_robot_config, next_robot_config);
-            const double next_cost_to_come = prev_node.costToCome() + additional_cost;
-
-            const double p_transition = 1.0;
-            const RRTNode next_node(
-                        next_grippers_poses,
-                        next_robot_config,
-                        next_band,
-                        next_cost_to_come,
-                        prev_node.pReachability() * p_transition,
-                        p_transition,
-                        parent_idx,
-                        next_state_index_,
-                        next_transition_index_,
-                        false ? next_split_index_ : -1);
-            tree_to_extend.push_back(next_node);
-            const int64_t new_node_idx = (int64_t)tree_to_extend.size() - 1;
-            prev_node.addChildIndex(new_node_idx);
-
-            parent_idx = new_node_idx;
-            ++step_index;
-
-            ++next_state_index_;
-            ++next_transition_index_;
         }
+
+        // Generate next possible bands, then 'cluster' (if needed) to determine splits
+        const auto next_bands = forwardPropogateBand(*prev_band, next_grippers_poses);
+        if (next_bands.size() == 0)
+        {
+            break;
+        }
+        auto next_band = next_bands.back().first;
+
+        // The new configuation is valid, add it to the tree
+        const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
+        const double additional_cost = RRTDistance::Distance(prev_robot_config, next_robot_config);
+        const double next_cost_to_come = prev_node.costToCome() + additional_cost;
+
+        const double p_transition = 1.0;
+        const RRTNode next_node(
+                    next_grippers_poses,
+                    next_robot_config,
+                    next_band,
+                    next_cost_to_come,
+                    prev_node.pReachability() * p_transition,
+                    p_transition,
+                    parent_idx,
+                    next_state_index_,
+                    next_transition_index_,
+                    false ? next_split_index_ : -1);
+        tree_to_extend.push_back(next_node);
+        const int64_t new_node_idx = (int64_t)tree_to_extend.size() - 1;
+        prev_node.addChildIndex(new_node_idx);
+
+        parent_idx = new_node_idx;
+        ++step_index;
+
+        ++next_state_index_;
+        ++next_transition_index_;
     }
 
     const size_t nodes_at_end_of_propogation = tree_to_extend.size();
@@ -1642,18 +1674,15 @@ size_t RRTHelper::forwardPropogationFunction(
 
 
 
-size_t RRTHelper::connectForwardTree(const RRTNode& target, const bool is_random)
+size_t RRTHelper::connectForwardTree(const int64_t forward_tree_start_idx, const RRTNode& target, const bool is_random)
 {
-    const bool nn_forward_tree = true;
     const bool fwd_prop_local_visualization_enabled = true;
 
-    // Get the nearest neighbor
-    forward_tree_nearest_neighbour_idx_ = nearestNeighbour(nn_forward_tree, target);
     // Forward propagate towards the sampled target
     const size_t num_random_nodes_created =
             forwardPropogationFunction(
                 forward_tree_,
-                forward_tree_nearest_neighbour_idx_,
+                forward_tree_start_idx,
                 target,
                 fwd_prop_local_visualization_enabled);
 
@@ -1707,29 +1736,14 @@ size_t RRTHelper::connectForwardTree(const RRTNode& target, const bool is_random
     return num_random_nodes_created;
 }
 
-size_t RRTHelper::connectForwardTreeToBackwardTreeBispace(const int64_t last_node_idx_in_forward_tree_branch)
+size_t RRTHelper::connectTreeToGrippersGoalSet(const int64_t last_node_idx_in_forward_tree_branch)
 {
     const bool nn_forward_tree = false;
     const bool fwd_prop_local_visualization_enabled = true;
 
-    // Record the index of the last node in the new branch.
-    // This is either the last item in the tree, or the nearest neighbour itself
-    RRTNode& last_node_in_forward_tree = forward_tree_[last_node_idx_in_forward_tree_branch];
-
-    const int64_t backward_tree_nearest_neighbour_idx = nearestNeighbour(nn_forward_tree, last_node_in_forward_tree);
-
-    const auto& other_tree_blacklist = last_node_in_forward_tree.getOtherTreeBlacklistIndices();
-    if (std::find(other_tree_blacklist.begin(), other_tree_blacklist.end(), backward_tree_nearest_neighbour_idx) != other_tree_blacklist.end())
-    {
-        // We've already expanded towards this node, so don't do so again
-        return 0;
-    }
-    else
-    {
-        last_node_in_forward_tree.addOtherTreeBlacklistIndex(backward_tree_nearest_neighbour_idx);
-    }
-
-    const RRTNode& target_in_backward_tree = backward_tree_[backward_tree_nearest_neighbour_idx];
+    const int64_t backward_tree_nearest_neighbour_idx = nearestNeighbour(
+                nn_forward_tree, forward_tree_[last_node_idx_in_forward_tree_branch]);
+    const RRTNode& target_in_backward_tree = grippers_goal_set_[backward_tree_nearest_neighbour_idx];
 
     const size_t num_goal_directed_nodes_created =
             forwardPropogationFunction(
@@ -1767,7 +1781,7 @@ void RRTHelper::planningMainLoop()
 {
     // Make sure we've been given a start and goal state
     assert(forward_tree_.size() > 0);
-    assert(backward_tree_.size() > 0);
+    assert(grippers_goal_set_.size() > 0);
     // Make sure the tree is properly linked
     assert(CheckTreeLinkage(forward_tree_));
 
@@ -1775,50 +1789,44 @@ void RRTHelper::planningMainLoop()
 //    assert(CheckTreeLinkage(backward_tree_));
 
     // Plan
-    ROS_INFO_NAMED("rrt", "Using bispace tree");
+    ROS_INFO_NAMED("rrt", "Using single directional tree");
     std::chrono::duration<double> time_ellapsed = std::chrono::steady_clock::now() - start_time_;
-//    bool forward_iteration = true;
     while (!path_found_ && time_ellapsed < time_limit_)
     {
-//        if (forward_iteration)
+        ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Starting forward iteration. Tree size: " << forward_tree_.size());
+
+        //////////////// Extend (connect) the first tree towards a random target ////////////////
+        const bool sample_band = true;
+        const RRTNode random_target = configSampling(sample_band);
+        const int64_t forward_tree_start_idx = nearestNeighbour(true, random_target);
+        const size_t num_random_nodes_created = connectForwardTree(forward_tree_start_idx, random_target, true);
+        if (path_found_)
         {
-            ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Starting forward iteration. Tree size: " << forward_tree_.size());
-            for (size_t itr = 0; !path_found_ && itr < forward_tree_extend_iterations_ && time_ellapsed < time_limit_; ++itr)
-            {
-                ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Inner iteration # " << itr);
-
-                //////////////// Extend (connect) the first tree towards a random target ////////////////
-                const bool sample_band = true;
-                const RRTNode random_target = configSampling(sample_band);
-                const size_t num_random_nodes_created = connectForwardTree(random_target, true);
-                if (path_found_)
-                {
-                    ROS_INFO_NAMED("rrt", "Goal found via random exploration");
-                    break;
-                }
-
-                //////////////// Attempt to connect to the backward tree ////////////////////////////////
-                const bool sample_goal = uniform_unit_distribution_(*generator_) < goal_bias_;
-                if (sample_goal)
-                {
-                    const int64_t last_node_idx_in_forward_tree_branch = num_random_nodes_created > 0 ?
-                                (int64_t)forward_tree_.size() - 1 : forward_tree_nearest_neighbour_idx_;
-                    const size_t num_goal_directed_nodes_created = connectForwardTreeToBackwardTreeBispace(last_node_idx_in_forward_tree_branch);
-                    (void)num_goal_directed_nodes_created;
-                    if (path_found_)
-                    {
-                        break;
-                    }
-                }
-
-                time_ellapsed = std::chrono::steady_clock::now() - start_time_;
-            }
-
-            ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Ending forward iteration. Tree size: " << forward_tree_.size());
+            ROS_INFO_NAMED("rrt", "Goal found via random exploration");
+            break;
         }
 
-        ROS_WARN_THROTTLE_NAMED(0.1, "rrt", "Note: BiSpace backwards tree disabled");
-//        forward_iteration = !forward_iteration;
+        //////////////// Attempt to connect to the backward tree ////////////////////////////////
+        const int64_t last_node_idx_in_forward_tree_branch = num_random_nodes_created > 0 ?
+                    (int64_t)forward_tree_.size() - 1 : forward_tree_start_idx;
+        RRTNode& last_node = forward_tree_[last_node_idx_in_forward_tree_branch];
+
+        const bool sample_goal = uniform_unit_distribution_(*generator_) < goal_bias_;
+        if (!last_node.already_extended_towards_goal_set_
+            && sample_goal)
+        {
+            last_node.already_extended_towards_goal_set_ = true;
+            connectTreeToGrippersGoalSet(last_node_idx_in_forward_tree_branch);
+        }
+
+        if (path_found_)
+        {
+            ROS_INFO_NAMED("rrt", "Goal found via targetting backwards tree");
+            break;
+        }
+
+        time_ellapsed = std::chrono::steady_clock::now() - start_time_;
+        ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Ending forward iteration. Tree size: " << forward_tree_.size());
     }
 }
 
@@ -1871,8 +1879,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     time_limit_ = time_limit;
 
     // Setup the backward tree
-    backward_tree_.clear();
-    backward_tree_.reserve(estimated_tree_size);
+    grippers_goal_set_.clear();
+    grippers_goal_set_.reserve(estimated_tree_size);
     // If we're using the whole robot, we may need to tweak the goal config to be feasible
     if (planning_for_whole_robot_)
     {
@@ -1888,7 +1896,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
 
         for (size_t idx = 0; idx < goal_configurations.size(); ++idx)
         {
-            backward_tree_.push_back(
+            grippers_goal_set_.push_back(
                         RRTNode(
                             grippers_goal_poses_,
                             goal_configurations[idx],
@@ -1900,7 +1908,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         grippers_goal_poses_ = grippers_goal_poses;
         RRTRobotRepresentation goal_configuration(6);
         goal_configuration << grippers_goal_poses_.first.translation(), grippers_goal_poses_.second.translation();
-        backward_tree_.push_back(RRTNode(grippers_goal_poses_, goal_configuration, start.band()));
+        grippers_goal_set_.push_back(RRTNode(grippers_goal_poses_, goal_configuration, start.band()));
     }
 
     // Double check that the input goal location isn't immediately impossible
@@ -1922,16 +1930,24 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     }
 
     // Clear the forward tree flann data
+    forward_nn_data_idx_to_tree_idx_.clear();
+    forward_nn_data_idx_to_tree_idx_.reserve(estimated_tree_size);
     forward_nn_raw_data_.clear();
     forward_nn_raw_data_.reserve(total_dof_ * estimated_tree_size);
     forward_nn_index_ = std::make_shared<NNIndexType>(flann::KDTreeSingleIndexParams(), flann::L2_weighted<float>(robot_->getJointWeights()));
     forward_next_idx_to_add_to_nn_dataset_ = 0;
 
     // Clear the backward tree flann data
-    backward_nn_raw_data_.clear();
-    backward_nn_raw_data_.reserve(total_dof_ * estimated_tree_size);
-    backward_nn_index_ = std::make_shared<NNIndexType>(flann::KDTreeSingleIndexParams(), flann::L2_weighted<float>(robot_->getJointWeights()));
-    backward_next_idx_to_add_to_nn_dataset_ = 0;
+    goal_set_nn_data_idx_to_tree_idx_.clear();
+    goal_set_nn_data_idx_to_tree_idx_.reserve(estimated_tree_size);
+    goal_set_nn_raw_data_.clear();
+    goal_set_nn_raw_data_.reserve(total_dof_ * estimated_tree_size);
+    goal_set_nn_index_ = std::make_shared<NNIndexType>(flann::KDTreeSingleIndexParams(), flann::L2_weighted<float>(robot_->getJointWeights()));
+    goal_set_next_idx_to_add_to_nn_dataset_ = 0;
+
+    // Force an initializion the backward tree flann data
+//    const bool force_rebuild = true;
+//    rebuildNNIndex(goal_set_nn_index_, goal_set_nn_raw_data_, goal_set_nn_data_idx_to_tree_idx_, grippers_goal_set_, goal_set_next_idx_to_add_to_nn_dataset_, force_rebuild);
 
     if (visualization_enabled_globally_)
     {
@@ -2012,7 +2028,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
 
         planning_statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless_;
         planning_statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful_;
-        planning_statistics_["planning_size05_backward_states                         "] = (double)backward_tree_.size();
+        planning_statistics_["planning_size05_backward_states                         "] = (double)grippers_goal_set_.size();
 
         planning_statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless_;
         planning_statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful_;
@@ -2091,7 +2107,7 @@ bool RRTHelper::CheckTreeLinkage(const std::vector<RRTNode, RRTAllocator>& tree)
     {
         // For every state, make sure all the parent<->child linkages are valid
         const auto& current_node = tree[current_index];
-        if (!current_node.isInitialized())
+        if (!current_node.initialized())
         {
             std::cerr << "Tree contains uninitialized node(s) " << current_index << std::endl;
             return false;
@@ -2103,7 +2119,7 @@ bool RRTHelper::CheckTreeLinkage(const std::vector<RRTNode, RRTAllocator>& tree)
             if (parent_index != (int64_t)current_index)
             {
                 const auto& parent_node = tree[parent_index];
-                if (!parent_node.isInitialized())
+                if (!parent_node.initialized())
                 {
                     std::cerr << "Tree contains uninitialized node(s) " << parent_index << std::endl;
                     return false;
@@ -2139,7 +2155,7 @@ bool RRTHelper::CheckTreeLinkage(const std::vector<RRTNode, RRTAllocator>& tree)
                 if (current_child_index != (int64_t)current_index)
                 {
                     const auto& child_state = tree[current_child_index];
-                    if (!child_state.isInitialized())
+                    if (!child_state.initialized())
                     {
                         std::cerr << "Tree contains uninitialized node(s) " << current_child_index << std::endl;
                         return false;
@@ -2799,7 +2815,7 @@ void RRTHelper::visualizeBothTrees() const
                 draw_band);
 
     visualizeTree(
-                backward_tree_,
+                grippers_goal_set_,
                 0,
                 RRT_BACKWARD_TREE_GRIPPER_A_NS,
                 RRT_BACKWARD_TREE_GRIPPER_B_NS,

@@ -304,6 +304,7 @@ void TaskFramework::execute()
         const auto goal_bias                        = GetRRTGoalBias(ph_);
         const auto best_near_radius                 = GetRRTBestNearRadius(ph_);
         const auto feasibility_dist_scale_factor    = GetRRTFeasibilityDistanceScaleFactor(ph_);
+        const auto default_propogation_confidence   = GetRRTDefaultPropagationConfidence(ph_);
         assert(!use_cbirrt_style_projection && "CBiRRT style projection is no longer supported");
         RRTHelper::PlanningParams planning_params =
         {
@@ -313,7 +314,8 @@ void TaskFramework::execute()
             kd_tree_grow_threshold,
             best_near_radius * best_near_radius,
             goal_bias,
-            feasibility_dist_scale_factor
+            feasibility_dist_scale_factor,
+            default_propogation_confidence
         };
 
         // Smoothing parameters

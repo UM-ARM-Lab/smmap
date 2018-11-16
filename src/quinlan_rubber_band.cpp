@@ -59,8 +59,8 @@ QuinlanRubberBand::QuinlanRubberBand(
     , resampled_band_()
     , resample_max_pointwise_dist_(resample_max_pointwise_dist)
     , upsampled_band_()
+    , upsampled_band_single_vector_(upsample_num_points)
     , upsample_num_points_(upsample_num_points)
-    , upsampled_band_single_vector_()
 
     , max_safe_band_length_(max_safe_band_length)
     #warning "Magic numbers in band smoothing code"
