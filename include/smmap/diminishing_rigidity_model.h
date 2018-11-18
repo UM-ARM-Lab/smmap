@@ -13,9 +13,11 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             DiminishingRigidityModel(
+                    std::shared_ptr<ros::NodeHandle> nh,
                     const double deformability);
 
             DiminishingRigidityModel(
+                    std::shared_ptr<ros::NodeHandle> nh,
                     const double translation_deformability,
                     const double rotation_deformability);
 

@@ -22,14 +22,15 @@ namespace smmap
     {
         public:
             typedef std::shared_ptr<TaskSpecification> Ptr;
+            typedef std::shared_ptr<const TaskSpecification> ConstPtr;
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Static builder function
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             static TaskSpecification::Ptr MakeTaskSpecification(
-                    ros::NodeHandle& nh,
-                    ros::NodeHandle& ph,
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
                     smmap_utilities::Visualizer::Ptr vis);
 
         public:
@@ -39,8 +40,8 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             TaskSpecification(
-                    ros::NodeHandle& nh,
-                    ros::NodeHandle& ph,
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
                     smmap_utilities::Visualizer::Ptr vis,
                     const bool is_dijkstras_type_task = false);
 
@@ -169,9 +170,9 @@ namespace smmap
             // Objects shared by all task specifications
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            ros::NodeHandle nh_;
-            ros::NodeHandle ph_;
-            smmap_utilities::Visualizer::Ptr vis_;
+            const std::shared_ptr<ros::NodeHandle> nh_;
+            const std::shared_ptr<ros::NodeHandle> ph_;
+            const smmap_utilities::Visualizer::Ptr vis_;
 
             const std::vector<GripperData> grippers_data_;
             const Eigen::MatrixXd object_initial_node_distance_;
@@ -224,8 +225,8 @@ namespace smmap
     {
         public:
             ModelAccuracyTestTask(
-                    ros::NodeHandle& nh,
-                    ros::NodeHandle& ph,
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
                     smmap_utilities::Visualizer::Ptr vis);
 
         private:
@@ -245,8 +246,8 @@ namespace smmap
     {
         public:
             CoverageTask(
-                    ros::NodeHandle& nh,
-                    ros::NodeHandle& ph,
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
                     smmap_utilities::Visualizer::Ptr vis,
                     const bool is_dijkstras_type_task);
 
@@ -276,8 +277,8 @@ namespace smmap
     {
         public:
             DirectCoverageTask(
-                    ros::NodeHandle& nh,
-                    ros::NodeHandle& ph,
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
                     smmap_utilities::Visualizer::Ptr vis);
 
         private:
@@ -316,8 +317,8 @@ namespace smmap
             };
 
             DijkstrasCoverageTask(
-                    ros::NodeHandle& nh,
-                    ros::NodeHandle& ph,
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
                     smmap_utilities::Visualizer::Ptr vis);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -409,8 +410,8 @@ namespace smmap
     {
         public:
             DistanceBasedCorrespondencesTask(
-                    ros::NodeHandle& nh,
-                    ros::NodeHandle& ph,
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
                     smmap_utilities::Visualizer::Ptr vis);
 
         private:
@@ -426,8 +427,8 @@ namespace smmap
     {
         public:
             FixedCorrespondencesTask(
-                    ros::NodeHandle& nh,
-                    ros::NodeHandle& ph,
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
                     smmap_utilities::Visualizer::Ptr vis);
 
         protected:

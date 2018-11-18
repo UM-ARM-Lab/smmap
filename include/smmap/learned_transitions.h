@@ -4,7 +4,7 @@
 #include <arc_utilities/maybe.hpp>
 #include <smmap_utilities/visualization_tools.h>
 #include "smmap/trajectory.hpp"
-#include "smmap/rubber_band.hpp"
+#include "smmap/quinlan_rubber_band.h"
 #include "smmap/task_specification.h"
 
 namespace smmap
@@ -42,8 +42,8 @@ namespace smmap
         ////////////////////////////////////////////////////////////////////////
 
         TransitionEstimation(
-                ros::NodeHandle& nh,
-                ros::NodeHandle& ph,
+                std::shared_ptr<ros::NodeHandle> nh,
+                std::shared_ptr<ros::NodeHandle> ph,
                 const DijkstrasCoverageTask::ConstPtr& task,
                 const smmap_utilities::Visualizer::ConstPtr& vis);
 
@@ -91,7 +91,7 @@ namespace smmap
 
         // If the transition could be applicable, then it returns the distance
         Maybe::Maybe<double> transitionUseful(
-                const RubberBand& band,
+                const RubberBand::ConstPtr& band,
                 const Action& action,
                 const StateTransition& transition) const;
 
@@ -101,11 +101,11 @@ namespace smmap
         // I.e.; confidence 1 does not mean that the transition will happen, but rather
         // that it *could* happen.
         std::vector<std::pair<RubberBand::Ptr, double>> applyLearnedTransitions(
-                const RubberBand& band,
+                const RubberBand::ConstPtr& band,
                 const Action& action) const;
 
         RubberBand::Ptr applyTransition(
-                const RubberBand& band,
+                const RubberBand::ConstPtr& band,
                 const Action& action,
                 const StateTransition& transition) const;
 
@@ -113,8 +113,8 @@ namespace smmap
 
     private:
 
-        ros::NodeHandle nh_;
-        ros::NodeHandle ph_;
+        const std::shared_ptr<ros::NodeHandle> nh_;
+        const std::shared_ptr<ros::NodeHandle> ph_;
 
         const DijkstrasCoverageTask::ConstPtr task_;
         const smmap_utilities::Visualizer::ConstPtr vis_;

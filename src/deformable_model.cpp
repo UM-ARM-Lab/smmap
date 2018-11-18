@@ -9,11 +9,10 @@ using namespace smmap;
 // Constructor
 ////////////////////////////////////////////////////////////////////////////////
 
-DeformableModel::DeformableModel()
+DeformableModel::DeformableModel(
+        std::shared_ptr<ros::NodeHandle> nh)
+    : computation_time_log_(std::make_shared<Log::Log>(GetLogFolder(*nh) + "/model_prediction_time.txt"))
 {
-    ros::NodeHandle nh;
-    computation_time_log_ = std::make_shared<Log::Log>(GetLogFolder(nh) + "/model_prediction_time.txt");
-
     if (!grippers_data_initialized_.load())
     {
         throw_arc_exception(std::runtime_error,
@@ -70,7 +69,7 @@ void DeformableModel::updateModel(
 
 ObjectPointSet DeformableModel::getObjectDelta(
         const WorldState& world_state,
-        const AllGrippersSinglePoseDelta& grippers_pose_delta)
+        const AllGrippersSinglePoseDelta& grippers_pose_delta) const
 {
     arc_utilities::Stopwatch stopwatch;
     const auto retval = getObjectDelta_impl(world_state, grippers_pose_delta);

@@ -12,7 +12,10 @@ namespace smmap
     class ClothColabFolding : public TaskSpecification
     {
         public:
-            ClothColabFolding(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
+            ClothColabFolding(
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
+                    smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual double calculateError_impl(
@@ -30,10 +33,10 @@ namespace smmap
 
         private:
             const PointReflector point_reflector_;
-            static PointReflector createPointReflector(ros::NodeHandle& nh);
+            static PointReflector CreatePointReflector(ros::NodeHandle& nh);
 
             const std::map<long, long> mirror_map_;
-            static std::map<long, long> createMirrorMap(ros::NodeHandle& nh, const PointReflector& point_reflector);
+            static std::map<long, long> CreateMirrorMap(ros::NodeHandle& nh, const PointReflector& point_reflector);
     };
 
 
@@ -43,7 +46,10 @@ namespace smmap
     class RopeCylinderCoverage : public DirectCoverageTask
     {
         public:
-            RopeCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
+            RopeCylinderCoverage(
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
+                    smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
@@ -60,7 +66,10 @@ namespace smmap
     class ClothTableCoverage : public DirectCoverageTask
     {
         public:
-            ClothTableCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
+            ClothTableCoverage(
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
+                    smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
@@ -81,7 +90,10 @@ namespace smmap
     class ClothDistanceBasedCorrespondences : public DistanceBasedCorrespondencesTask
     {
         public:
-            ClothDistanceBasedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
+            ClothDistanceBasedCorrespondences(
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
+                    smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
@@ -100,7 +112,10 @@ namespace smmap
     class RopeFixedCorrespondences : public FixedCorrespondencesTask
     {
         public:
-            RopeFixedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
+            RopeFixedCorrespondences(
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
+                    smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
@@ -119,7 +134,10 @@ namespace smmap
     class ClothFixedCorrespondences : public FixedCorrespondencesTask
     {
         public:
-            ClothFixedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis);
+            ClothFixedCorrespondences(
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
+                    smmap_utilities::Visualizer::Ptr vis);
 
         private:
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;

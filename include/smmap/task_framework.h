@@ -11,7 +11,7 @@
 #include "smmap/robot_interface.hpp"
 #include "smmap/deformable_model.h"
 #include "smmap/deformable_controller.h"
-#include "smmap/rubber_band.hpp"
+#include "smmap/quinlan_rubber_band.h"
 #include "smmap/rrt_helper.h"
 #include "smmap/learned_transitions.h"
 
@@ -36,11 +36,11 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             TaskFramework(
-                    ros::NodeHandle& nh,
-                    ros::NodeHandle& ph,
-                    const RobotInterface::Ptr& robot,
-                    const smmap_utilities::Visualizer::Ptr vis,
-                    const TaskSpecification::Ptr& task_specification);
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
+                    RobotInterface::Ptr robot,
+                    smmap_utilities::Visualizer::Ptr vis,
+                    TaskSpecification::Ptr task_specification);
 
             void execute();
 
@@ -49,14 +49,14 @@ namespace smmap
             // Multipurpose
             ////////////////////////////////////////////////////////////////////
 
-            ros::NodeHandle nh_;
-            ros::NodeHandle ph_;
+            const std::shared_ptr<ros::NodeHandle> nh_;
+            const std::shared_ptr<ros::NodeHandle> ph_;
             const unsigned long seed_;
-            std::shared_ptr<std::mt19937_64> generator_;
+            const std::shared_ptr<std::mt19937_64> generator_;
 
-            RobotInterface::Ptr robot_;
-            TaskSpecification::Ptr task_specification_;
-            DijkstrasCoverageTask::Ptr dijkstras_task_;
+            const RobotInterface::Ptr robot_;
+            const TaskSpecification::Ptr task_specification_;
+            const DijkstrasCoverageTask::Ptr dijkstras_task_;
 
             ////////////////////////////////////////////////////////////////////
             // Sending gripper commands

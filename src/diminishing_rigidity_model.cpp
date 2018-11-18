@@ -36,14 +36,17 @@ void DiminishingRigidityModel::SetInitialObjectConfiguration(
 ////////////////////////////////////////////////////////////////////////////////
 
 DiminishingRigidityModel::DiminishingRigidityModel(
+        std::shared_ptr<ros::NodeHandle> nh,
         const double deformability)
-    : DiminishingRigidityModel(deformability, deformability)
+    : DiminishingRigidityModel(nh, deformability, deformability)
 {}
 
 DiminishingRigidityModel::DiminishingRigidityModel(
+        std::shared_ptr<ros::NodeHandle> nh,
         const double translation_deformability,
         const double rotation_deformability)
-    : translation_deformability_(translation_deformability)
+    : JacobianModel(nh)
+    , translation_deformability_(translation_deformability)
     , rotation_deformability_(rotation_deformability)
 {
     if (!static_data_initialized_.load())

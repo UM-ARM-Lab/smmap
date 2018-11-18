@@ -85,14 +85,16 @@ void ConstraintJacobianModel::SetInitialObjectConfiguration(
 ////////////////////////////////////////////////////////////////////////////////
 
 ConstraintJacobianModel::ConstraintJacobianModel(
+        std::shared_ptr<ros::NodeHandle> nh,
         const double translation_dir_deformability,
         const double translation_dis_deformability,
         const double rotation_deformability,
         const sdf_tools::SignedDistanceField::ConstPtr& environment_sdf)
-    : translation_dir_deformability_(translation_dir_deformability)
+    : DeformableModel(nh)
+    , translation_dir_deformability_(translation_dir_deformability)
     , translation_dis_deformability_(translation_dis_deformability)
     , rotation_deformability_(rotation_deformability)
-    , environment_sdf_(environment_sdf)
+    , sdf_(environment_sdf)
     , obstacle_threshold_(0.0)
 {
     if (!static_data_initialized_.load())
@@ -144,14 +146,14 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
         const auto node = current_configuration.col(node_ind);
         // Do nothing if we are not in collision
         #warning "Changed from legacy to new projection here"
-        if (environment_sdf_->EstimateDistance3d(node).first > obstacle_threshold_)
+        if (sdf_->EstimateDistance3d(node).first > obstacle_threshold_)
         {
             continue;
         }
         else
         {
             const Vector3d& node_p_dot = object_delta.block<3, 1>(node_ind * 3, 0);
-            std::vector<double> sur_n = environment_sdf_->GetGradient3d(node);
+            std::vector<double> sur_n = sdf_->GetGradient3d(node);
             if (sur_n.size() > 1)
             {
                 const Vector3d surface_normal = Vector3d::Map(sur_n.data(), sur_n.size()).normalized();

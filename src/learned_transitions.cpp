@@ -12,18 +12,18 @@ constexpr char TransitionEstimation::MDP_ACTION_NS[];
 constexpr char TransitionEstimation::MDP_POST_STATE_NS[];
 
 TransitionEstimation::TransitionEstimation(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
         const DijkstrasCoverageTask::ConstPtr &task,
         const smmap_utilities::Visualizer::ConstPtr& vis)
     : nh_(nh)
     , ph_(ph)
     , task_(task)
     , vis_(vis)
-    , action_dist_threshold_(GetTransitionActionDistThreshold(ph_))
-    , action_dist_scale_factor(GetTransitionActionDistScaleFactor(ph_))
-    , band_dist_threshold_(GetTransitionBandDistThreshold(ph_))
-    , band_dist_scale_factor_(GetTransitionBandDistScaleFactor(ph_))
+    , action_dist_threshold_(GetTransitionActionDistThreshold(*ph_))
+    , action_dist_scale_factor(GetTransitionActionDistScaleFactor(*ph_))
+    , band_dist_threshold_(GetTransitionBandDistThreshold(*ph_))
+    , band_dist_scale_factor_(GetTransitionBandDistScaleFactor(*ph_))
 {}
 
 // Assumes the vectors have already been appropriately discretized/resampled
@@ -162,7 +162,7 @@ double TransitionEstimation::actionDistance(const Action& a1, const Action& a2) 
 }
 
 Maybe::Maybe<double> TransitionEstimation::transitionUseful(
-        const RubberBand& band,
+        const RubberBand::ConstPtr& band,
         const Action& action,
         const StateTransition& transition) const
 {
@@ -172,18 +172,18 @@ Maybe::Maybe<double> TransitionEstimation::transitionUseful(
         return Maybe::Maybe<double>();
     }
 
-    const double actual_band_dist = band.distance(*transition.starting_state.rubber_band_);
+    const double actual_band_dist = band->distance(*transition.starting_state.rubber_band_);
     bool actual_band_match = false;
     if (actual_band_dist < band_dist_threshold_)
     {
-        actual_band_match = checkFirstOrderHomotopy(band, *transition.starting_state.rubber_band_);
+        actual_band_match = checkFirstOrderHomotopy(*band, *transition.starting_state.rubber_band_);
     }
 
-    const double planned_band_dist = band.distance(*transition.starting_state.planned_rubber_band_);
+    const double planned_band_dist = band->distance(*transition.starting_state.planned_rubber_band_);
     bool planned_band_match = false;
     if (planned_band_dist < band_dist_threshold_)
     {
-        planned_band_match = checkFirstOrderHomotopy(band, *transition.starting_state.planned_rubber_band_);
+        planned_band_match = checkFirstOrderHomotopy(*band, *transition.starting_state.planned_rubber_band_);
     }
 
     // If only one matches, then return that distance
@@ -209,7 +209,7 @@ Maybe::Maybe<double> TransitionEstimation::transitionUseful(
 }
 
 std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::applyLearnedTransitions(
-        const RubberBand& band,
+        const RubberBand::ConstPtr& band,
         const Action& action) const
 {
     std::vector<std::pair<RubberBand::Ptr, double>> possible_transitions;
@@ -229,14 +229,14 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::applyLearn
 }
 
 RubberBand::Ptr TransitionEstimation::applyTransition(
-        const RubberBand& band,
+        const RubberBand::ConstPtr& band,
         const Action& action,
         const StateTransition& transition) const
 {
     auto resulting_band = std::make_shared<RubberBand>(*transition.ending_state.rubber_band_);
 
     const bool verbose = false;
-    const auto endpoints = band.getEndpoints();
+    const auto endpoints = band->getEndpoints();
     resulting_band->forwardPropagateRubberBandToEndpointTargets(
                 endpoints.first + action.first,
                 endpoints.second + action.second,

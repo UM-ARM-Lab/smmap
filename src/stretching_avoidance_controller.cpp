@@ -80,35 +80,34 @@ void StretchingAvoidanceController::visualizeCone(const Vector3d& cone_direction
 
 
 StretchingAvoidanceController::StretchingAvoidanceController(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
-        const RobotInterface::Ptr& robot,
-        const Visualizer::Ptr& vis,
-        const DeformableModel::Ptr& deformable_model,
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
+        RobotInterface::Ptr robot,
+        Visualizer::Ptr vis,
+        const DeformableModel::ConstPtr& model,
         const sdf_tools::SignedDistanceField::ConstPtr sdf,
         const std::shared_ptr<std::mt19937_64>& generator,
         const StretchingAvoidanceControllerSolverType gripper_controller_type,
         const int max_count)
-    : DeformableController(nh, ph, robot, vis)
-    , gripper_collision_checker_(nh)
+    : DeformableController(nh, ph, robot, vis, model)
+    , gripper_collision_checker_(*nh_)
     , grippers_data_(robot->getGrippersData())
     , environment_sdf_(sdf)
     , generator_(generator)
     , uniform_unit_distribution_(0.0, 1.0)
     , gripper_controller_type_(gripper_controller_type)
-    , deformable_type_(GetDeformableType(nh))
-    , task_type_(GetTaskType(nh))
-    , model_(deformable_model)
-    , nominal_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
-    , max_node_distance_(GetMaxStretchFactor(ph) * nominal_distance_)
+    , deformable_type_(GetDeformableType(*nh_))
+    , task_type_(GetTaskType(*nh_))
+    , nominal_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(*nh_)))
+    , max_node_distance_(GetMaxStretchFactor(*ph_) * nominal_distance_)
     , max_node_squared_distance_(max_node_distance_.cwiseProduct(max_node_distance_))
     , distance_to_obstacle_threshold_(GetRobotGripperRadius())
-    , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
+    , stretching_cosine_threshold_(GetStretchingCosineThreshold(*ph_))
     , max_count_(max_count)
     , sample_count_(-1)
-    , fix_step_(GetUseFixedGripperDeltaSize(ph))
+    , fix_step_(GetUseFixedGripperDeltaSize(*ph_))
     , overstretch_(false)
-    , log_file_path_(GetLogFolder(nh))
+    , log_file_path_(GetLogFolder(*nh_))
     , num_model_calls_(log_file_path_ + "num_model_calls.txt", false)
 {}
 

@@ -34,11 +34,11 @@ using namespace arc_utilities;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
         Visualizer::Ptr vis)
 {
-    const TaskType task_type = GetTaskType(nh);
+    const TaskType task_type = GetTaskType(*nh);
 
     switch (task_type)
     {
@@ -84,8 +84,8 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TaskSpecification::TaskSpecification(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
         Visualizer::Ptr vis,
         const bool is_dijkstras_type_task)
     : first_step_calculated_(false)
@@ -95,24 +95,24 @@ TaskSpecification::TaskSpecification(
     , current_error_last_simtime_calced_(NAN)
     , current_error_(NAN)
 
-    , desired_motion_scaling_factor_(GetDesiredMotionScalingFactor(ph))
+    , desired_motion_scaling_factor_(GetDesiredMotionScalingFactor(*ph))
 
-    , deformable_type_(GetDeformableType(nh))
-    , task_type_(GetTaskType(nh))
+    , deformable_type_(GetDeformableType(*nh))
+    , task_type_(GetTaskType(*nh))
     , is_dijkstras_type_task_(is_dijkstras_type_task)
 
     , nh_(nh)
     , ph_(ph)
     , vis_(vis)
 
-    , grippers_data_(GetGrippersData(nh_))
-    , object_initial_node_distance_(EigenHelpers::CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
+    , grippers_data_(GetGrippersData(*nh_))
+    , object_initial_node_distance_(EigenHelpers::CalculateDistanceMatrix(GetObjectInitialConfiguration(*nh_)))
     , num_nodes_(object_initial_node_distance_.cols())
-    , default_deformability_(GetDefaultDeformability(ph_))
-    , collision_scaling_factor_(GetCollisionScalingFactor(ph_))
-    , max_stretch_factor_(GetMaxStretchFactor(ph_))
-    , max_band_length_(GetMaxBandLength(ph_))
-    , max_time_(GetMaxTime(ph_))
+    , default_deformability_(GetDefaultDeformability(*ph_))
+    , collision_scaling_factor_(GetCollisionScalingFactor(*ph_))
+    , max_stretch_factor_(GetMaxStretchFactor(*ph_))
+    , max_band_length_(GetMaxBandLength(*ph_))
+    , max_time_(GetMaxTime(*ph_))
 {}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -505,9 +505,9 @@ void TaskSpecification::visualizeDeformableObject_impl(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ModelAccuracyTestTask::ModelAccuracyTestTask(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
-        smmap_utilities::Visualizer::Ptr vis)
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
+        Visualizer::Ptr vis)
     : TaskSpecification(nh, ph, vis, false)
 {}
 
@@ -546,26 +546,26 @@ bool ModelAccuracyTestTask::taskDone_impl(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 CoverageTask::CoverageTask(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
         Visualizer::Ptr vis,
         const bool is_dijkstras_type_task)
     : TaskSpecification(nh, ph, vis, is_dijkstras_type_task)
-    , sdf_(GetEnvironmentSDF(nh))
+    , sdf_(GetEnvironmentSDF(*nh_))
     , work_space_grid_(sdf_->GetOriginTransform(),
                        sdf_->GetFrame(),
-                       GetWorldXStep(nh),
-                       GetWorldYStep(nh),
-                       GetWorldZStep(nh),
-                       GetWorldXNumSteps(nh),
-                       GetWorldYNumSteps(nh),
-                       GetWorldZNumSteps(nh))
-    , cover_points_(GetCoverPoints(nh))
-    , cover_point_normals_(GetCoverPointNormals(nh))
+                       GetWorldXStep(*nh_),
+                       GetWorldYStep(*nh_),
+                       GetWorldZStep(*nh_),
+                       GetWorldXNumSteps(*nh_),
+                       GetWorldYNumSteps(*nh_),
+                       GetWorldZNumSteps(*nh_))
+    , cover_points_(GetCoverPoints(*nh_))
+    , cover_point_normals_(GetCoverPointNormals(*nh_))
     , num_cover_points_(cover_points_.cols())
-    , error_threshold_along_normal_(GetErrorThresholdAlongNormal(ph))
-    , error_threshold_distance_to_normal_(GetErrorThresholdDistanceToNormal(ph))
-    , error_threshold_task_done_(GetErrorThresholdTaskDone(ph))
+    , error_threshold_along_normal_(GetErrorThresholdAlongNormal(*ph_))
+    , error_threshold_distance_to_normal_(GetErrorThresholdDistanceToNormal(*ph_))
+    , error_threshold_task_done_(GetErrorThresholdTaskDone(*ph_))
 {
     assert(sdf_->GetFrame() == GetWorldFrameName());
     assert(work_space_grid_.getFrame() == GetWorldFrameName());
@@ -586,8 +586,8 @@ bool CoverageTask::pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DirectCoverageTask::DirectCoverageTask(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
         Visualizer::Ptr vis)
     : CoverageTask(nh, ph, vis, false)
 {}
@@ -680,18 +680,18 @@ ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_imp
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DijkstrasCoverageTask::DijkstrasCoverageTask(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
         Visualizer::Ptr vis)
     : CoverageTask(nh, ph, vis, true)
     , current_correspondences_calculated_(false)
     , current_correspondences_last_simtime_calced_(std::numeric_limits<double>::quiet_NaN())
     , current_correspondences_(num_nodes_)
-    , visualize_correspondences_(GetVisualizeCorrespondences(ph_))
+    , visualize_correspondences_(GetVisualizeCorrespondences(*ph_))
 {
-    GetFreeSpaceGraph(nh, free_space_graph_, cover_ind_to_free_space_graph_ind_);
+    GetFreeSpaceGraph(*nh_, free_space_graph_, cover_ind_to_free_space_graph_ind_);
     assert(cover_ind_to_free_space_graph_ind_.size() == (size_t)num_cover_points_);
-    if (!GetDisableAllVisualizations(ph_) && GetVisualizeFreeSpaceGraph(ph_))
+    if (!GetDisableAllVisualizations(*ph_) && GetVisualizeFreeSpaceGraph(*ph_))
     {
         visualizeFreeSpaceGraph();
     }
@@ -1051,7 +1051,7 @@ bool DijkstrasCoverageTask::saveDijkstrasResults()
         arc_utilities::SerializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(dijkstras_results_, buffer, pair_serializer);
 
         // Compress and save to file
-        const std::string dijkstras_file_path = GetDijkstrasStorageLocation(nh_);
+        const std::string dijkstras_file_path = GetDijkstrasStorageLocation(*nh_);
         ROS_INFO_STREAM_NAMED("coverage_task", "Compressing and saving to file " << dijkstras_file_path);
         ZlibHelpers::CompressAndWriteToFile(buffer, dijkstras_file_path);
         return true;
@@ -1069,7 +1069,7 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
     {
         Stopwatch stopwatch;
         ROS_INFO_NAMED("coverage_task", "Checking if Dijkstra's solution already exists");
-        const std::string dijkstras_file_path = GetDijkstrasStorageLocation(nh_);
+        const std::string dijkstras_file_path = GetDijkstrasStorageLocation(*nh_);
         const auto decompressed_dijkstras_results = ZlibHelpers::LoadFromFileAndDecompress(dijkstras_file_path);
 
         // First check that the graph we have matches the graph that is stored
@@ -1202,8 +1202,8 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DistanceBasedCorrespondencesTask::DistanceBasedCorrespondencesTask(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
         Visualizer::Ptr vis)
     : DijkstrasCoverageTask(nh, ph, vis)
 {}
@@ -1312,8 +1312,8 @@ std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::fin
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 FixedCorrespondencesTask::FixedCorrespondencesTask(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
         Visualizer::Ptr vis)
     : DijkstrasCoverageTask(nh, ph, vis)
 {}

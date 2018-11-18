@@ -13,8 +13,9 @@ namespace smmap
     {
         public:
             typedef std::shared_ptr<DeformableModel> Ptr;
+            typedef std::shared_ptr<const DeformableModel> ConstPtr;
 
-            DeformableModel();
+            DeformableModel(std::shared_ptr<ros::NodeHandle> nh);
 
             ////////////////////////////////////////////////////////////////////
             // Virtual functions that define the interface
@@ -24,7 +25,7 @@ namespace smmap
 
             ObjectPointSet getObjectDelta(
                     const WorldState& world_state,
-                    const AllGrippersSinglePoseDelta& grippers_pose_delta);
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const;
 
             ////////////////////////////////////////////////////////////////////
             // Update/Set function for static members
@@ -68,7 +69,7 @@ namespace smmap
             // Logging
             ////////////////////////////////////////////////////////////////////
 
-            std::shared_ptr<Log::Log> computation_time_log_;
+            const std::shared_ptr<Log::Log> computation_time_log_;
     };
 }
 

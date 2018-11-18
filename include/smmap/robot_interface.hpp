@@ -22,7 +22,9 @@ namespace smmap
             typedef std::shared_ptr<RobotInterface> Ptr;
             typedef std::shared_ptr<const RobotInterface> ConstPtr;
 
-            RobotInterface(ros::NodeHandle& nh, ros::NodeHandle& ph);
+            RobotInterface(
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph);
             ~RobotInterface();
 
             WorldState start();
@@ -129,8 +131,8 @@ namespace smmap
             // ROS objects and helpers
             ////////////////////////////////////////////////////////////////////
 
-            ros::NodeHandle nh_;
-            ros::NodeHandle ph_;
+            const std::shared_ptr<ros::NodeHandle> nh_;
+            const std::shared_ptr<ros::NodeHandle> ph_;
 
         public:
             const std::string bullet_frame_name_;

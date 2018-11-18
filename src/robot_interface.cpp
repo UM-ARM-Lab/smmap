@@ -9,7 +9,7 @@
 
 namespace smmap
 {
-    RobotInterface::RobotInterface(ros::NodeHandle& nh, ros::NodeHandle& ph)
+    RobotInterface::RobotInterface(std::shared_ptr<ros::NodeHandle> nh, std::shared_ptr<ros::NodeHandle> ph)
         : nh_(nh)
         , ph_(ph)
 
@@ -18,14 +18,14 @@ namespace smmap
         , tf_buffer_()
         , tf_listener_(tf_buffer_)
 
-        , grippers_data_(GetGrippersData(nh_))
-        , gripper_collision_checker_(nh_)
-        , execute_gripper_movement_client_(nh_.serviceClient<deformable_manipulation_msgs::ExecuteRobotMotion>(GetExecuteRobotMotionTopic(nh_), true))
-        , test_grippers_poses_client_(nh_, GetTestRobotMotionTopic(nh_), false)
-        , dt_(GetRobotControlPeriod(nh_))
-        , max_gripper_velocity_norm_(GetMaxGripperVelocityNorm(nh_))
-        , max_dof_velocity_norm_(GetMaxDOFVelocityNorm(nh_))
-        , min_controller_distance_to_obstacles_(GetControllerMinDistanceToObstacles(ph_))
+        , grippers_data_(GetGrippersData(*nh_))
+        , gripper_collision_checker_(*nh_)
+        , execute_gripper_movement_client_(nh_->serviceClient<deformable_manipulation_msgs::ExecuteRobotMotion>(GetExecuteRobotMotionTopic(*nh_), true))
+        , test_grippers_poses_client_(*nh_, GetTestRobotMotionTopic(*nh_), false)
+        , dt_(GetRobotControlPeriod(*nh_))
+        , max_gripper_velocity_norm_(GetMaxGripperVelocityNorm(*nh_))
+        , max_dof_velocity_norm_(GetMaxDOFVelocityNorm(*nh_))
+        , min_controller_distance_to_obstacles_(GetControllerMinDistanceToObstacles(*ph_))
 
         // TODO: remove this hardcoded spin period
         , spin_thread_(ROSHelpers::Spin, 0.01)
@@ -83,7 +83,7 @@ namespace smmap
 
     void RobotInterface::shutdown()
     {
-        ros::ServiceClient shutdown_sim_client_ = nh_.serviceClient<std_srvs::Empty>(GetTerminateSimulationTopic(nh_));
+        ros::ServiceClient shutdown_sim_client_ = nh_->serviceClient<std_srvs::Empty>(GetTerminateSimulationTopic(*nh_));
         std_srvs::Empty empty;
         shutdown_sim_client_.call(empty);
 
@@ -102,7 +102,7 @@ namespace smmap
         for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
         {
             ros::ServiceClient gripper_pose_client =
-                nh_.serviceClient<deformable_manipulation_msgs::GetGripperPose>(GetGripperPoseTopic(nh_));
+                nh_->serviceClient<deformable_manipulation_msgs::GetGripperPose>(GetGripperPoseTopic(*nh_));
             gripper_pose_client.waitForExistence();
 
             deformable_manipulation_msgs::GetGripperPose pose_srv_data;
@@ -459,7 +459,7 @@ namespace smmap
 
         // TODO: resolve code duplication between here, getGrippersPose(), and toRosTestPosesGoal() etc.
         ros::ServiceClient gripper_pose_client =
-                nh_.serviceClient<deformable_manipulation_msgs::GetGripperPose>(GetGripperPoseTopic(nh_));
+                nh_->serviceClient<deformable_manipulation_msgs::GetGripperPose>(GetGripperPoseTopic(*nh_));
         gripper_pose_client.waitForExistence();
         for (size_t gripper_ind = 0; gripper_ind < grippers_data_.size(); gripper_ind++)
         {
@@ -475,7 +475,7 @@ namespace smmap
         }
 
         ros::ServiceClient robot_configuration_client =
-                nh_.serviceClient<deformable_manipulation_msgs::GetRobotConfiguration>(GetRobotConfigurationTopic(nh_));
+                nh_->serviceClient<deformable_manipulation_msgs::GetRobotConfiguration>(GetRobotConfigurationTopic(*nh_));
         robot_configuration_client.waitForExistence();
         deformable_manipulation_msgs::GetRobotConfiguration robot_config_srv_data;
         robot_configuration_client.call(robot_config_srv_data);
@@ -541,7 +541,7 @@ namespace smmap
         {
             ROS_WARN_THROTTLE_NAMED(1.0, "robot_interface", "Sending a gripper movement to the robot failed, reconnecting");
             execute_gripper_movement_client_ =
-                    nh_.serviceClient<deformable_manipulation_msgs::ExecuteRobotMotion>(GetExecuteRobotMotionTopic(nh_), true);
+                    nh_->serviceClient<deformable_manipulation_msgs::ExecuteRobotMotion>(GetExecuteRobotMotionTopic(*nh_), true);
             execute_gripper_movement_client_.waitForExistence();
         }
         CHECK_FRAME_NAME("robot_interface", world_frame_name_, result.world_state.header.frame_id);
@@ -574,8 +574,8 @@ namespace smmap
         feedback_recieved_.clear();
         feedback_recieved_.resize(goal.poses_to_test.size(), false);
 
-        ros::Subscriber internal_feedback_sub = nh_.subscribe<deformable_manipulation_msgs::TestRobotMotionActionFeedback>(
-                    GetTestRobotMotionTopic(nh_) + "/feedback",
+        ros::Subscriber internal_feedback_sub = nh_->subscribe<deformable_manipulation_msgs::TestRobotMotionActionFeedback>(
+                    GetTestRobotMotionTopic(*nh_) + "/feedback",
                     1000,
                     boost::bind(&RobotInterface::internalTestPoseFeedbackCallback, this, _1, feedback_callback));
 

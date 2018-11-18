@@ -13,9 +13,10 @@ using namespace EigenHelpersConversions;
 ////////////////////////////////////////////////////////////////////////////////
 
 AdaptiveJacobianModel::AdaptiveJacobianModel(
+        std::shared_ptr<ros::NodeHandle> nh,
         const MatrixXd& initial_jacobian,
         const double learning_rate)
-    : JacobianModel()
+    : JacobianModel(nh)
     , current_jacobian_(initial_jacobian)
     , learning_rate_(learning_rate)
 {

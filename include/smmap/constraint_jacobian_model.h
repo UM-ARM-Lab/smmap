@@ -15,6 +15,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             ConstraintJacobianModel(
+                    std::shared_ptr<ros::NodeHandle> nh,
                     const double translation_dir_deformability,
                     const double translation_dis_deformability,
                     const double rotation_deformability,
@@ -71,7 +72,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
             // Obstacle information from sdf tool
             ////////////////////////////////////////////////////////////////////
-            const sdf_tools::SignedDistanceField::ConstPtr environment_sdf_;
+            const sdf_tools::SignedDistanceField::ConstPtr sdf_;
             const double obstacle_threshold_;
 
             ////////////////////////////////////////////////////////////////////

@@ -2,6 +2,7 @@
 #define LEAST_SQUARES_CONTROLLER_WITH_STRETCHING_CONSTRAINT_H
 
 #include "smmap/deformable_controller.h"
+#include "smmap/jacobian_model.h"
 
 namespace smmap
 {
@@ -9,11 +10,11 @@ namespace smmap
     {
         public:
             LeastSquaresControllerWithStretchingConstraint(
-                    ros::NodeHandle& nh,
-                    ros::NodeHandle& ph,
-                    const RobotInterface::Ptr& robot,
-                    const smmap_utilities::Visualizer::Ptr& vis,
-                    const DeformableModel::Ptr& model);
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
+                    RobotInterface::Ptr robot,
+                    smmap_utilities::Visualizer::Ptr vis,
+                    const JacobianModel::ConstPtr& model);
 
         private:
             virtual OutputData getGripperMotion_impl(const InputData& input_data) override final;
@@ -36,7 +37,6 @@ namespace smmap
             const std::vector<GripperData> grippers_data_;
 
             // Model/Task Data
-            const DeformableModel::Ptr model_;
             const Eigen::MatrixXd nominal_distance_;
             const Eigen::MatrixXd max_node_distance_;
             const Eigen::MatrixXd max_node_squared_distance_;

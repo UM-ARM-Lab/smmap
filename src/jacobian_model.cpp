@@ -8,7 +8,8 @@ using namespace EigenHelpers;
 // Constructors and Destructor
 ////////////////////////////////////////////////////////////////////////////////
 
-JacobianModel::JacobianModel()
+JacobianModel::JacobianModel(std::shared_ptr<ros::NodeHandle> nh)
+    : DeformableModel(nh)
 {}
 
 Eigen::MatrixXd JacobianModel::computeGrippersToDeformableObjectJacobian(

@@ -12,7 +12,8 @@ namespace smmap
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
-            AdaptiveJacobianModel(const Eigen::MatrixXd& initial_jacobian,
+            AdaptiveJacobianModel(std::shared_ptr<ros::NodeHandle> nh,
+                                  const Eigen::MatrixXd& initial_jacobian,
                                   const double learning_rate);
 
             ////////////////////////////////////////////////////////////////////

@@ -588,16 +588,16 @@ double RRTDistance::RobotPathDistance(const std::vector<RRTNode, RRTAllocator>& 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 RRTHelper::RRTHelper(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
         const WorldParams& world_params,
         const PlanningParams& planning_params,
         const SmoothingParams& smoothing_params,
         const TaskParams& task_params,
-        const smmap_utilities::Visualizer::Ptr vis,
+        Visualizer::Ptr vis,
         const bool visualization_enabled)
     : nh_(nh)
-    , ph_(ph.getNamespace() + "/rrt")
+    , ph_(std::make_shared<ros::NodeHandle>(ph->getNamespace() + "/rrt"))
     , robot_(world_params.robot_)
     , planning_for_whole_robot_(world_params.planning_for_whole_robot_)
     , sdf_(world_params.sdf_)
@@ -1314,7 +1314,7 @@ const std::pair<bool, RRTRobotRepresentation> RRTHelper::projectToValidConfig(
 }
 
 std::vector<std::pair<RubberBand::Ptr, double>> RRTHelper::forwardPropogateBand(
-        RubberBand band,
+        const RubberBand::ConstPtr& starting_band,
         const RRTGrippersRepresentation& next_grippers_poses)
 {
     const bool rubber_band_verbose = false && visualization_enabled_globally_;
@@ -1322,11 +1322,11 @@ std::vector<std::pair<RubberBand::Ptr, double>> RRTHelper::forwardPropogateBand(
     Stopwatch stopwatch;
     arc_helpers::DoNotOptimize(next_grippers_poses);
 
-    const auto band_endpoints = band.getEndpoints();
+    const auto starting_band_endpoints = starting_band->getEndpoints();
     TransitionEstimation::Action action = {
-        next_grippers_poses.first.translation() - band_endpoints.first,
-        next_grippers_poses.second.translation() - band_endpoints.second};
-    auto transitions = transition_estimator_->applyLearnedTransitions(band, action);
+        next_grippers_poses.first.translation() - starting_band_endpoints.first,
+        next_grippers_poses.second.translation() - starting_band_endpoints.second};
+    auto transitions = transition_estimator_->applyLearnedTransitions(starting_band, action);
     ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", transitions.size() << " learned transitions applied");
     if (SMMAP_RRT_VERBOSE)
     {
@@ -1336,23 +1336,24 @@ std::vector<std::pair<RubberBand::Ptr, double>> RRTHelper::forwardPropogateBand(
         }
     }
 
+    auto next_band = std::make_shared<RubberBand>(*starting_band);
     // Forward simulate the rubber band to test this transition
-    band.forwardPropagateRubberBandToEndpointTargets(
+    next_band->forwardPropagateRubberBandToEndpointTargets(
                 next_grippers_poses.first.translation(),
                 next_grippers_poses.second.translation(),
                 rubber_band_verbose);
 
     // Only add this transition if the band endpoints match the target points,
     // and the band is not overstretched after moving
-    if (bandEndpointsMatchGripperPositions(band, next_grippers_poses))
+    if (bandEndpointsMatchGripperPositions(*next_band, next_grippers_poses))
     {
-        if (band.isOverstretched())
+        if (next_band->isOverstretched())
         {
             ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", "Stopped due to band overstretch");
         }
         else
         {
-            transitions.push_back({std::make_shared<RubberBand>(band), default_propogation_confidence_});
+            transitions.push_back({next_band, default_propogation_confidence_});
         }
     }
     else
@@ -1552,38 +1553,55 @@ size_t RRTHelper::forwardPropogationFunction(
         }
 
         // Generate next possible bands, then 'cluster' (if needed) to determine splits
-        const auto next_bands = forwardPropogateBand(*prev_band, next_grippers_poses);
+        const auto next_bands = forwardPropogateBand(prev_band, next_grippers_poses);
         if (next_bands.size() == 0)
         {
             break;
         }
-        auto next_band = next_bands.back().first;
 
         // The new configuation is valid, add it to the tree
         const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
         const double additional_cost = RRTDistance::Distance(prev_robot_config, next_robot_config);
         const double next_cost_to_come = prev_node.costToCome() + additional_cost;
 
-        const double p_transition = 1.0;
-        const RRTNode next_node(
-                    next_grippers_poses,
-                    next_robot_config,
-                    next_band,
-                    next_cost_to_come,
-                    prev_node.pReachability() * p_transition,
-                    p_transition,
-                    parent_idx,
-                    next_state_index_,
-                    next_transition_index_,
-                    false ? next_split_index_ : -1);
-        tree_to_extend.push_back(next_node);
-        const int64_t new_node_idx = (int64_t)tree_to_extend.size() - 1;
-        prev_node.addChildIndex(new_node_idx);
+        // Determine the total transion weight we have, used to determine probabilties in the next step
+        double total_transition_weight = 0.0;
+        for (size_t idx = 0; idx < next_bands.size(); ++idx)
+        {
+            total_transition_weight += next_bands[idx].second;
+        }
 
-        parent_idx = new_node_idx;
+        // Add each potential child to the tree
+        for (const std::pair<RubberBand::Ptr, double>& child_band : next_bands)
+        {
+            auto next_band = child_band.first;
+
+            const double p_transition = child_band.second / total_transition_weight;
+            const RRTNode next_node(
+                        next_grippers_poses,
+                        next_robot_config,
+                        next_band,
+                        next_cost_to_come,
+                        prev_node.pReachability() * p_transition,
+                        p_transition,
+                        parent_idx,
+                        next_state_index_,
+                        next_transition_index_,
+                        false ? next_split_index_ : -1);
+            tree_to_extend.push_back(next_node);
+            prev_node.addChildIndex(next_state_index_);
+
+            ++next_state_index_;
+        }
+
+        if (next_bands.size() > 1)
+        {
+            split_happened = true;
+        }
+
+        // Note that parent_idx and step_index are only relevant at this point if there was no split
+        parent_idx = (int64_t)tree_to_extend.size() - 1;
         ++step_index;
-
-        ++next_state_index_;
         ++next_transition_index_;
     }
 
@@ -1838,7 +1856,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         const RRTGrippersRepresentation& grippers_goal_poses,
         const std::chrono::duration<double>& time_limit)
 {
-    const auto estimated_tree_size = ROSHelpers::GetParam(ph_, "estimated_tree_size", 100000);
+    const auto estimated_tree_size = ROSHelpers::GetParam(*ph_, "estimated_tree_size", 100000);
 
     // Extract start information
     starting_band_ = std::make_shared<RubberBand>(*start.band());
@@ -2902,13 +2920,13 @@ void RRTHelper::storePath(const std::vector<RRTNode, RRTAllocator>& path, std::s
 //    {
         if (file_path.empty())
         {
-            const auto log_folder = ROSHelpers::GetParamRequiredDebugLog<std::string>(nh_, "log_folder", __func__);
+            const auto log_folder = ROSHelpers::GetParamRequiredDebugLog<std::string>(*nh_, "log_folder", __func__);
             if (!log_folder.Valid())
             {
                 throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
             }
             arc_utilities::CreateDirectory(log_folder.GetImmutable());
-            const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "path_file_name_prefix", __func__);
+            const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "path_file_name_prefix", __func__);
             if (!file_name_prefix.Valid())
             {
                 throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_prefix from parameter server");
@@ -2949,17 +2967,17 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::loadStoredPath(std::string file_pa
     {
         if (file_path.empty())
         {
-            const auto log_folder = ROSHelpers::GetParamRequired<std::string>(nh_, "log_folder", __func__);
+            const auto log_folder = ROSHelpers::GetParamRequired<std::string>(*nh_, "log_folder", __func__);
             if (!log_folder.Valid())
             {
                 throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
             }
-            const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "path_file_name_prefix", __func__);
+            const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "path_file_name_prefix", __func__);
             if (!file_name_prefix.Valid())
             {
                 throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_prefix from parameter server");
             }
-            const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "path_file_name_suffix_to_load", __func__);
+            const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "path_file_name_suffix_to_load", __func__);
             if (!file_name_suffix.Valid())
             {
                 throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_suffix_to_load from parameter server");
@@ -2989,5 +3007,5 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::loadStoredPath(std::string file_pa
 
 bool RRTHelper::useStoredPath() const
 {
-    return ROSHelpers::GetParamRequired<bool>(ph_, "use_stored_path", __func__).GetImmutable();
+    return ROSHelpers::GetParamRequired<bool>(*ph_, "use_stored_path", __func__).GetImmutable();
 }

@@ -11,26 +11,20 @@ namespace smmap
     class QuinlanRubberBand
     {
     public:
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         typedef std::shared_ptr<QuinlanRubberBand> Ptr;
         typedef std::shared_ptr<const QuinlanRubberBand> ConstPtr;
 
         QuinlanRubberBand(
-                const Eigen::Vector3d& start_point,
-                const Eigen::Vector3d& end_point,
-                const double resample_max_pointwise_dist,
-                const size_t upsample_num_points,
-                const std::shared_ptr<DijkstrasCoverageTask>& task,
-                const smmap_utilities::Visualizer::Ptr vis,
-                const std::shared_ptr<std::mt19937_64>& generator);
-
-        QuinlanRubberBand(
+                std::shared_ptr<ros::NodeHandle> nh,
+                std::shared_ptr<ros::NodeHandle> ph,
+                smmap_utilities::Visualizer::Ptr vis,
+                const DijkstrasCoverageTask::ConstPtr& task,
                 EigenHelpers::VectorVector3d starting_points,
                 const double resample_max_pointwise_dist,
                 const size_t upsample_num_points,
-                const double max_total_band_distance,
-                const std::shared_ptr<DijkstrasCoverageTask>& task,
-                const smmap_utilities::Visualizer::Ptr vis,
-                const std::shared_ptr<std::mt19937_64>& generator);
+                const double max_total_band_distance);
 
         QuinlanRubberBand& operator=(const QuinlanRubberBand& other);
 
@@ -97,8 +91,9 @@ namespace smmap
         static double Distance(const QuinlanRubberBand& b1, const QuinlanRubberBand& b2);
 
     private:
-        ros::NodeHandle ph_;
-        const DijkstrasCoverageTask::Ptr task_;
+        const std::shared_ptr<ros::NodeHandle> nh_;
+        const std::shared_ptr<ros::NodeHandle> ph_;
+        const DijkstrasCoverageTask::ConstPtr task_;
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
         const smmap_utilities::Visualizer::Ptr vis_;
 
@@ -142,6 +137,8 @@ namespace smmap
         void loadStoredBand();
         bool useStoredBand() const;
     };
+
+    typedef QuinlanRubberBand RubberBand;
 }
 
 #endif //QUINLAN_RUBBER_BAND

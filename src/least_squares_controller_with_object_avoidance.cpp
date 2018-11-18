@@ -1,6 +1,5 @@
 #include "smmap/least_squares_controller_with_object_avoidance.h"
 #include <smmap_utilities/gurobi_solvers.h>
-#include "smmap/jacobian_model.h"
 
 using namespace smmap;
 using namespace smmap_utilities;
@@ -12,21 +11,17 @@ using namespace EigenHelpers;
 #define LEAST_SQUARES_DAMPING_VALUE     (1e-3)
 
 LeastSquaresControllerWithObjectAvoidance::LeastSquaresControllerWithObjectAvoidance(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
-        const RobotInterface::Ptr& robot,
-        const smmap_utilities::Visualizer::Ptr& vis,
-        const DeformableModel::Ptr& model,
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
+        RobotInterface::Ptr robot,
+        Visualizer::Ptr vis,
+        const JacobianModel::ConstPtr& model,
         const double obstacle_avoidance_scale,
         const bool optimize)
-    : DeformableController(nh, ph, robot, vis)
-    , model_(model)
+    : DeformableController(nh, ph, robot, vis, model)
     , obstacle_avoidance_scale_(obstacle_avoidance_scale)
     , optimize_(optimize)
-{
-    // TODO: Why can't I just put this cast inside the constructor and define model_ to be a JacobianModel::Ptr?
-    assert(std::dynamic_pointer_cast<JacobianModel>(model_) != nullptr && "Invalid model type passed to constructor");
-}
+{}
 
 DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getGripperMotion_impl(
         const InputData& input_data)
@@ -48,7 +43,7 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
 
     // Recalculate the jacobian at each timestep, because of rotations being non-linear
     // We can use a static pointer cast here because we check the input on construction
-    const auto jacobian_based_model = std::static_pointer_cast<JacobianModel>(model_);
+    const auto jacobian_based_model = std::static_pointer_cast<const JacobianModel>(model_);
     const MatrixXd grippers_poses_to_object_jacobian =
             jacobian_based_model->computeGrippersToDeformableObjectJacobian(input_data.world_current_state_);
 

@@ -25,32 +25,18 @@ using namespace smmap;
 using namespace smmap_utilities;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
-QuinlanRubberBand::QuinlanRubberBand(
-        const Eigen::Vector3d& start_point,
-        const Eigen::Vector3d& end_point,
-        const double resample_max_pointwise_dist,
-        const size_t upsample_num_points,
-        const std::shared_ptr<DijkstrasCoverageTask>& task,
-        const Visualizer::Ptr vis,
-        const std::shared_ptr<std::mt19937_64>& generator)
-    : QuinlanRubberBand({start_point, end_point},
-                        resample_max_pointwise_dist,
-                        upsample_num_points,
-                        (end_point - start_point).norm() * task_->maxStretchFactor(),
-                        task,
-                        vis,
-                        generator)
-{}
 
 QuinlanRubberBand::QuinlanRubberBand(
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
+        Visualizer::Ptr vis,
+        const DijkstrasCoverageTask::ConstPtr& task,
         const EigenHelpers::VectorVector3d starting_points,
         const double resample_max_pointwise_dist,
         const size_t upsample_num_points,
-        const double max_safe_band_length,
-        const std::shared_ptr<DijkstrasCoverageTask>& task,
-        const Visualizer::Ptr vis,
-        const std::shared_ptr<std::mt19937_64>& generator)
-    : ph_("/smmap_planner_node/band")
+        const double max_safe_band_length)
+    : nh_(nh)
+    , ph_(std::make_shared<ros::NodeHandle>(ph->getNamespace() + "/band"))
     , task_(task)
     , sdf_(task_->sdf_)
     , vis_(vis)
@@ -70,7 +56,6 @@ QuinlanRubberBand::QuinlanRubberBand(
     , backtrack_threshold_(0.1)
     , smoothing_iterations_(100)
 {
-    (void)generator;
     setPointsAndSmooth(starting_points);
     assert(bandIsValidWithVisualization());
 }
@@ -1133,13 +1118,13 @@ void QuinlanRubberBand::storeBand() const
 {
     try
     {
-        const auto log_folder = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "log_folder", __func__);
+        const auto log_folder = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "log_folder", __func__);
         if (!log_folder.Valid())
         {
             throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
         }
         arc_utilities::CreateDirectory(log_folder.GetImmutable());
-        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "band_file_name_prefix", __func__);
+        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "band_file_name_prefix", __func__);
         if (!file_name_prefix.Valid())
         {
             throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_prefix from parameter server");
@@ -1164,17 +1149,17 @@ void QuinlanRubberBand::loadStoredBand()
 {
     try
     {
-        const auto log_folder = ROSHelpers::GetParamRequired<std::string>(ph_, "log_folder", __func__);
+        const auto log_folder = ROSHelpers::GetParamRequired<std::string>(*ph_, "log_folder", __func__);
         if (!log_folder.Valid())
         {
             throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
         }
-        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "band_file_name_prefix", __func__);
+        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "band_file_name_prefix", __func__);
         if (!file_name_prefix.Valid())
         {
             throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_prefix from parameter server");
         }
-        const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "band_file_name_suffix_to_load", __func__);
+        const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "band_file_name_suffix_to_load", __func__);
         if (!file_name_suffix.Valid())
         {
             throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_suffix_to_load from parameter server");
@@ -1197,7 +1182,7 @@ void QuinlanRubberBand::loadStoredBand()
 
 bool QuinlanRubberBand::useStoredBand() const
 {
-    return ROSHelpers::GetParamRequired<bool>(ph_, "use_stored_band", __func__).GetImmutable();
+    return ROSHelpers::GetParamRequired<bool>(*ph_, "use_stored_band", __func__).GetImmutable();
 }
 
 

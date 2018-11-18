@@ -166,43 +166,43 @@ std::vector<uint32_t> numberOfPointsInEachCluster(
  * @param task_specification
  */
 TaskFramework::TaskFramework(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
-        const RobotInterface::Ptr& robot,
-        const Visualizer::Ptr vis,
-        const TaskSpecification::Ptr& task_specification)
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
+        RobotInterface::Ptr robot,
+        smmap_utilities::Visualizer::Ptr vis,
+        TaskSpecification::Ptr task_specification)
     // Robot and task parameters
     : nh_(nh)
     , ph_(ph)
-    , seed_(GetPlannerSeed(ph_))
+    , seed_(GetPlannerSeed(*ph_))
     , generator_(std::make_shared<std::mt19937_64>(seed_))
     , robot_(robot)
     , task_specification_(task_specification)
     , dijkstras_task_(std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_)) // If possible, this will be done, if not, it will be NULL (nullptr?)
     // Multi-model and regret based model selection parameters
-    , collect_results_for_all_models_(GetCollectResultsForAllModels(ph_))
+    , collect_results_for_all_models_(GetCollectResultsForAllModels(*ph_))
     , reward_std_dev_scale_factor_(REWARD_STANDARD_DEV_SCALING_FACTOR_START)
-    , process_noise_factor_(GetProcessNoiseFactor(ph_))
-    , observation_noise_factor_(GetObservationNoiseFactor(ph_))
-    , correlation_strength_factor_(GetCorrelationStrengthFactor(ph_))
+    , process_noise_factor_(GetProcessNoiseFactor(*ph_))
+    , observation_noise_factor_(GetObservationNoiseFactor(*ph_))
+    , correlation_strength_factor_(GetCorrelationStrengthFactor(*ph_))
     // 'Stuck' detection and RRT prameters
-    , enable_stuck_detection_(GetEnableStuckDetection(ph_))
-    , max_lookahead_steps_(GetNumLookaheadSteps(ph_))
-    , max_grippers_pose_history_length_(GetMaxGrippersPoseHistoryLength(ph_))
+    , enable_stuck_detection_(GetEnableStuckDetection(*ph_))
+    , max_lookahead_steps_(GetNumLookaheadSteps(*ph_))
+    , max_grippers_pose_history_length_(GetMaxGrippersPoseHistoryLength(*ph_))
     , executing_global_trajectory_(false)
     , global_plan_next_timestep_(-1)
     , rrt_helper_(nullptr)
     , transition_estimator_(nullptr)
     // Used to generate some log data by some controllers
-    , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh_)))
+    , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(*nh_)))
     , initial_grippers_distance_(robot_->getGrippersInitialDistance())
     // Logging and visualization parameters
-    , bandits_logging_enabled_(GetBanditsLoggingEnabled(ph_))
-    , controller_logging_enabled_(GetControllerLoggingEnabled(ph_))
+    , bandits_logging_enabled_(GetBanditsLoggingEnabled(*ph_))
+    , controller_logging_enabled_(GetControllerLoggingEnabled(*ph_))
     , vis_(vis)
-    , visualize_desired_motion_(!GetDisableAllVisualizations(ph_) && GetVisualizeObjectDesiredMotion(ph_))
-    , visualize_gripper_motion_(!GetDisableAllVisualizations(ph_) && GetVisualizerGripperMotion(ph_))
-    , visualize_predicted_motion_(!GetDisableAllVisualizations(ph_) && GetVisualizeObjectPredictedMotion(ph_))
+    , visualize_desired_motion_(!GetDisableAllVisualizations(*ph_) && GetVisualizeObjectDesiredMotion(*ph_))
+    , visualize_gripper_motion_(!GetDisableAllVisualizations(*ph_) && GetVisualizerGripperMotion(*ph_))
+    , visualize_predicted_motion_(!GetDisableAllVisualizations(*ph_) && GetVisualizeObjectPredictedMotion(*ph_))
 {
     ROS_INFO_STREAM_NAMED("task_framework", "Using seed " << std::hex << seed_ );
     initializeBanditsLogging();
@@ -246,22 +246,23 @@ void TaskFramework::execute()
             return dijkstras_task_->getNodeNeighbours(node);
         };
         path_between_grippers_through_object_ = getShortestPathBetweenGrippersThroughObject(
-                    robot_->getGrippersData(), GetObjectInitialConfiguration(nh_), neighbour_fn);
+                    robot_->getGrippersData(), GetObjectInitialConfiguration(*nh_), neighbour_fn);
 
         // Create the initial rubber band
         const double resampled_band_max_pointwise_dist = dijkstras_task_->work_space_grid_.minStepDimension() / 2.0;
-        const size_t upsampled_band_num_points = GetRRTBandMaxPoints(ph_);
+        const size_t upsampled_band_num_points = GetRRTBandMaxPoints(*ph_);
 
         const auto starting_band_points = getPathBetweenGrippersThroughObject(
                     world_feedback, path_between_grippers_through_object_);
         rubber_band_between_grippers_ = std::make_shared<RubberBand>(
+                    nh_,
+                    ph_,
+                    vis_,
+                    dijkstras_task_,
                     starting_band_points,
                     resampled_band_max_pointwise_dist,
                     upsampled_band_num_points,
-                    dijkstras_task_->maxBandLength(),
-                    dijkstras_task_,
-                    vis_,
-                    generator_);
+                    dijkstras_task_->maxBandLength());
 
 #if ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE
         if (useStoredWorldState())
@@ -296,15 +297,15 @@ void TaskFramework::execute()
         };
 
         // Algorithm parameters
-        const auto use_cbirrt_style_projection      = GetUseCBiRRTStyleProjection(ph_);
-        const auto forward_tree_extend_iterations   = GetRRTForwardTreeExtendIterations(ph_);
-        const auto backward_tree_extend_iterations  = GetRRTBackwardTreeExtendIterations(ph_);
-        const auto kd_tree_grow_threshold           = GetKdTreeGrowThreshold(ph_);
-        const auto use_brute_force_nn               = GetUseBruteForceNN(ph_);
-        const auto goal_bias                        = GetRRTGoalBias(ph_);
-        const auto best_near_radius                 = GetRRTBestNearRadius(ph_);
-        const auto feasibility_dist_scale_factor    = GetRRTFeasibilityDistanceScaleFactor(ph_);
-        const auto default_propogation_confidence   = GetRRTDefaultPropagationConfidence(ph_);
+        const auto use_cbirrt_style_projection      = GetUseCBiRRTStyleProjection(*ph_);
+        const auto forward_tree_extend_iterations   = GetRRTForwardTreeExtendIterations(*ph_);
+        const auto backward_tree_extend_iterations  = GetRRTBackwardTreeExtendIterations(*ph_);
+        const auto kd_tree_grow_threshold           = GetKdTreeGrowThreshold(*ph_);
+        const auto use_brute_force_nn               = GetUseBruteForceNN(*ph_);
+        const auto goal_bias                        = GetRRTGoalBias(*ph_);
+        const auto best_near_radius                 = GetRRTBestNearRadius(*ph_);
+        const auto feasibility_dist_scale_factor    = GetRRTFeasibilityDistanceScaleFactor(*ph_);
+        const auto default_propogation_confidence   = GetRRTDefaultPropagationConfidence(*ph_);
         assert(!use_cbirrt_style_projection && "CBiRRT style projection is no longer supported");
         RRTHelper::PlanningParams planning_params =
         {
@@ -319,9 +320,9 @@ void TaskFramework::execute()
         };
 
         // Smoothing parameters
-        const auto max_shortcut_index_distance = GetRRTMaxShortcutIndexDistance(ph_);
-        const auto max_smoothing_iterations = GetRRTMaxSmoothingIterations(ph_);
-        const auto max_failed_smoothing_iterations = GetRRTMaxFailedSmoothingIterations(ph_);
+        const auto max_shortcut_index_distance = GetRRTMaxShortcutIndexDistance(*ph_);
+        const auto max_smoothing_iterations = GetRRTMaxSmoothingIterations(*ph_);
+        const auto max_failed_smoothing_iterations = GetRRTMaxFailedSmoothingIterations(*ph_);
         RRTHelper::SmoothingParams smoothing_params =
         {
             max_shortcut_index_distance,
@@ -332,20 +333,20 @@ void TaskFramework::execute()
         // Task defined parameters
         const auto task_aligned_frame = robot_->getWorldToTaskFrameTf();
         const auto task_frame_lower_limits = Vector3d(
-                    GetRRTPlanningXMinBulletFrame(ph_),
-                    GetRRTPlanningYMinBulletFrame(ph_),
-                    GetRRTPlanningZMinBulletFrame(ph_));
+                    GetRRTPlanningXMinBulletFrame(*ph_),
+                    GetRRTPlanningYMinBulletFrame(*ph_),
+                    GetRRTPlanningZMinBulletFrame(*ph_));
         const auto task_frame_upper_limits = Vector3d(
-                    GetRRTPlanningXMaxBulletFrame(ph_),
-                    GetRRTPlanningYMaxBulletFrame(ph_),
-                    GetRRTPlanningZMaxBulletFrame(ph_));
+                    GetRRTPlanningXMaxBulletFrame(*ph_),
+                    GetRRTPlanningYMaxBulletFrame(*ph_),
+                    GetRRTPlanningZMaxBulletFrame(*ph_));
         const auto max_gripper_step_size = dijkstras_task_->work_space_grid_.minStepDimension();
-        const auto max_robot_step_size = GetRRTMaxRobotDOFStepSize(ph_);
-        const auto min_robot_step_size = GetRRTMinRobotDOFStepSize(ph_);
-        const auto max_gripper_rotation = GetRRTMaxGripperRotation(ph_); // only matters for real robot
+        const auto max_robot_step_size = GetRRTMaxRobotDOFStepSize(*ph_);
+        const auto min_robot_step_size = GetRRTMinRobotDOFStepSize(*ph_);
+        const auto max_gripper_rotation = GetRRTMaxGripperRotation(*ph_); // only matters for real robot
         const auto goal_reached_radius = dijkstras_task_->work_space_grid_.minStepDimension();
-        const auto min_gripper_distance_to_obstacles = GetRRTMinGripperDistanceToObstacles(ph_); // only matters for simulation
-        const auto band_distance2_scaling_factor = GetRRTBandDistance2ScalingFactor(ph_);
+        const auto min_gripper_distance_to_obstacles = GetRRTMinGripperDistanceToObstacles(*ph_); // only matters for simulation
+        const auto band_distance2_scaling_factor = GetRRTBandDistance2ScalingFactor(*ph_);
         RRTHelper::TaskParams task_params = {
             task_aligned_frame,
             task_frame_lower_limits,
@@ -361,7 +362,7 @@ void TaskFramework::execute()
         };
 
         // Visualization
-        const auto enable_rrt_visualizations = GetVisualizeRRT(ph_);
+        const auto enable_rrt_visualizations = GetVisualizeRRT(*ph_);
 
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         rrt_helper_ = std::make_shared<RRTHelper>(
@@ -507,7 +508,7 @@ WorldState TaskFramework::sendNextCommand(
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "task_framework", "Invoking global planner due to collision");
                 ROS_INFO_NAMED("task_framework", "----------------------------------------------------------------------------");
 
-                if (!GetDisableAllVisualizations(ph_))
+                if (!GetDisableAllVisualizations(*ph_))
                 {
                     vis_->forcePublishNow(2.0);
                 }
@@ -1077,7 +1078,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
 bool TaskFramework::globalPlannerNeededDueToOverstretch(
         const WorldState& current_world_state)
 {
-    static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(ph_);
+    static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(*ph_);
 
     const bool visualization_enabled = true;
     const auto projection_results = projectFutureSystemState(current_world_state, visualization_enabled);
@@ -1117,8 +1118,8 @@ bool TaskFramework::globalPlannerNeededDueToOverstretch(
 
 bool TaskFramework::globalPlannerNeededDueToLackOfProgress()
 {
-    static double error_delta_threshold_for_progress = GetErrorDeltaThresholdForProgress(ph_);
-    static double grippers_distance_delta_threshold_for_progress = GetGrippersDistanceDeltaThresholdForProgress(ph_);
+    static double error_delta_threshold_for_progress = GetErrorDeltaThresholdForProgress(*ph_);
+    static double grippers_distance_delta_threshold_for_progress = GetGrippersDistanceDeltaThresholdForProgress(*ph_);
 
     // If we have not yet collected enough data, then assume we are not stuck
     if (grippers_pose_history_.size() < max_grippers_pose_history_length_)
@@ -1167,7 +1168,7 @@ bool TaskFramework::globalPlannerNeededDueToLackOfProgress()
 
 bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization_enabled)
 {
-    static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(ph_);
+    static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(*ph_);
 
     //#warning "!!!!!!! Global plan overstretch check disabled!!!!!"
     //return false;
@@ -1473,7 +1474,7 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
     }
 
     // Project the targets out of collision
-    const double min_dist_to_obstacles = std::max(GetControllerMinDistanceToObstacles(ph_), GetRRTMinGripperDistanceToObstacles(ph_)) * GetRRTTargetMinDistanceScaleFactor(ph_);
+    const double min_dist_to_obstacles = std::max(GetControllerMinDistanceToObstacles(*ph_), GetRRTMinGripperDistanceToObstacles(*ph_)) * GetRRTTargetMinDistanceScaleFactor(*ph_);
     const Vector3d gripper0_position_pre_project = target_gripper_poses[0].translation();
     const Vector3d gripper1_position_pre_project = target_gripper_poses[1].translation();
     target_gripper_poses[0].translation() = dijkstras_task_->sdf_->ProjectOutOfCollisionToMinimumDistance3d(gripper0_position_pre_project, min_dist_to_obstacles);
@@ -1481,8 +1482,8 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
 
     // Visualization
     {
-        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Magenta(), 1);
-        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), Visualizer::Red(), 5);
+        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), rrt_helper_->gripper_a_forward_tree_color_, 1);
+        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), rrt_helper_->gripper_b_forward_tree_color_, 5);
 
         std::vector<std_msgs::ColorRGBA> colors;
         for (size_t idx = 0; idx < cluster_targets.size(); ++idx)
@@ -1523,12 +1524,12 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     vis_->purgeMarkerList();
 
     rrt_planned_path_.clear();
-    if (GetRRTReuseOldResults(ph_))
+    if (GetRRTReuseOldResults(*ph_))
     {
         // Deserialization
         ROS_INFO_NAMED("rrt_planner_results", "Checking if RRT solution already exists");
         const std::string file_path =
-                GetLogFolder(nh_) +
+                GetLogFolder(*nh_) +
                 "rrt_cache_step." +
                 PrettyPrint::PrettyPrint(num_times_invoked);
         rrt_planned_path_ = rrt_helper_->loadStoredPath(file_path);
@@ -1576,8 +1577,8 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                     target_grippers_poses_vec[0],
                     target_grippers_poses_vec[1]);
 
-        const std::chrono::duration<double> time_limit(GetRRTTimeout(ph_));
-        const size_t num_trials = GetRRTNumTrials(ph_);
+        const std::chrono::duration<double> time_limit(GetRRTTimeout(*ph_));
+        const size_t num_trials = GetRRTNumTrials(*ph_);
         for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
         {
             // Only use the seed resetting if we are performing more than 1 trial
@@ -1604,7 +1605,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                             time_limit);
             }
 
-            if (!GetDisableAllVisualizations(ph_))
+            if (!GetDisableAllVisualizations(*ph_))
             {
                 vis_->deleteObjects(RRTHelper::RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
                 rrt_helper_->visualizePath(rrt_planned_path_);
@@ -1612,11 +1613,11 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
             }
 
             // Serialization
-            if (GetRRTStoreNewResults(ph_))
+            if (GetRRTStoreNewResults(*ph_))
             {
                 ROS_INFO_NAMED("rrt_planner_results", "Compressing and saving RRT results to file for storage");
                 const std::string file_path =
-                        GetLogFolder(nh_) +
+                        GetLogFolder(*nh_) +
                         "rrt_cache_step." +
                         PrettyPrint::PrettyPrint(num_times_invoked);
                 rrt_helper_->storePath(rrt_planned_path_, file_path);
@@ -1647,19 +1648,19 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
     // Initialze each model type with the shared data
     DeformableModel::SetGrippersData(robot_->getGrippersData());
     DeformableModel::SetCallbackFunctions(std::bind(&RobotInterface::checkGripperCollision, robot_, std::placeholders::_1));
-    DiminishingRigidityModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
-    ConstraintJacobianModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(nh_));
+    DiminishingRigidityModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(*nh_));
+    ConstraintJacobianModel::SetInitialObjectConfiguration(GetObjectInitialConfiguration(*nh_));
 
-    const bool optimization_enabled = GetJacobianControllerOptimizationEnabled(ph_);
-    const TrialType trial_type = GetTrialType(ph_);
+    const bool optimization_enabled = GetJacobianControllerOptimizationEnabled(*ph_);
+    const TrialType trial_type = GetTrialType(*ph_);
 
     switch (trial_type)
     {
         case DIMINISHING_RIGIDITY_SINGLE_MODEL_LEAST_SQUARES_STRETCHING_AVOIDANCE_CONTROLLER:
         {
             double translational_deformability, rotational_deformability;
-            if (ph_.getParam("translational_deformability", translational_deformability) &&
-                     ph_.getParam("rotational_deformability", rotational_deformability))
+            if (ph_->getParam("translational_deformability", translational_deformability) &&
+                ph_->getParam("rotational_deformability", rotational_deformability))
             {
                 ROS_INFO_STREAM_NAMED("task_framework", "Overriding deformability values to "
                                        << translational_deformability << " "
@@ -1673,32 +1674,29 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                        << task_specification_->defaultDeformability());
             }
 
-            model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                      translational_deformability,
-                                      rotational_deformability));
-
+            const auto model = std::make_shared<DiminishingRigidityModel>(
+                        nh_,
+                        translational_deformability,
+                        rotational_deformability);
+            model_list_.push_back(model);
             controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                           nh_,
-                                           ph_,
-                                           robot_,
-                                           vis_,
-                                           model_list_.back(),
+                                           nh_, ph_, robot_, vis_, model,
                                            task_specification_->collisionScalingFactor(),
                                            optimization_enabled));
             break;
         }
         case ADAPTIVE_JACOBIAN_SINGLE_MODEL_LEAST_SQUARES_STRETCHING_AVOIDANCE_CONTROLLER:
         {
-            model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
-                                      DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(initial_world_state),
-                                      GetAdaptiveModelLearningRate(ph_)));
+            const auto tmp_model = DiminishingRigidityModel(nh_, task_specification_->defaultDeformability(), false);
+            const auto starting_jacobian = tmp_model.computeGrippersToDeformableObjectJacobian(initial_world_state);
 
+            const auto model = std::make_shared<AdaptiveJacobianModel>(
+                        nh_,
+                        starting_jacobian,
+                        GetAdaptiveModelLearningRate(*ph_));
+            model_list_.push_back(model);
             controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                           nh_,
-                                           ph_,
-                                           robot_,
-                                           vis_,
-                                           model_list_.back(),
+                                           nh_, ph_, robot_, vis_, model,
                                            task_specification_->collisionScalingFactor(),
                                            optimization_enabled));
             break;
@@ -1706,8 +1704,8 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
         case DIMINISHING_RIGIDITY_SINGLE_MODEL_LEAST_SQUARES_STRETCHING_CONSTRAINT_CONTROLLER:
         {
             double translational_deformability, rotational_deformability;
-            if (ph_.getParam("translational_deformability", translational_deformability) &&
-                     ph_.getParam("rotational_deformability", rotational_deformability))
+            if (ph_->getParam("translational_deformability", translational_deformability) &&
+                ph_->getParam("rotational_deformability", rotational_deformability))
             {
                 ROS_INFO_STREAM_NAMED("task_framework", "Overriding deformability values to "
                                        << translational_deformability << " "
@@ -1721,46 +1719,38 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                        << task_specification_->defaultDeformability());
             }
 
-            model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                      translational_deformability,
-                                      rotational_deformability));
-
+            const auto model = std::make_shared<DiminishingRigidityModel>(
+                        nh_,
+                        translational_deformability,
+                        rotational_deformability);
+            model_list_.push_back(model);
             controller_list_.push_back(std::make_shared<LeastSquaresControllerWithStretchingConstraint>(
-                                           nh_,
-                                           ph_,
-                                           robot_,
-                                           vis_,
-                                           model_list_.back()));
+                                           nh_, ph_, robot_, vis_, model));
             break;
         }
         case CONSTRAINT_SINGLE_MODEL_CONSTRAINT_CONTROLLER:
         {
             ROS_INFO_NAMED("task_framework", "Using constraint model and random sampling controller");
 
-            const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
-            const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
-            const double rotation_deformability = GetConstraintRotational(ph_);
-//            const double translational_deformability = GetConstraintTranslationalOldVersion(ph_);
+            const double translation_dir_deformability = GetConstraintTranslationalDir(*ph_);
+            const double translation_dis_deformability = GetConstraintTranslationalDis(*ph_);
+            const double rotation_deformability = GetConstraintRotational(*ph_);
 
-            const sdf_tools::SignedDistanceField::ConstPtr environment_sdf(GetEnvironmentSDF(nh_));
+            const auto sdf = GetEnvironmentSDF(*nh_);
 
-            model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
-                                  translation_dir_deformability,
-                                  translation_dis_deformability,
-                                  rotation_deformability,
-//                                  translational_deformability,
-                                  environment_sdf));
-
+            const auto model = std::make_shared<ConstraintJacobianModel>(
+                        nh_,
+                        translation_dir_deformability,
+                        translation_dis_deformability,
+                        rotation_deformability,
+                        sdf);
+            model_list_.push_back(model);
             controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
-                                           nh_,
-                                           ph_,
-                                           robot_,
-                                           vis_,
-                                           model_list_.back(),
-                                           environment_sdf,
+                                           nh_, ph_, robot_, vis_, model,
+                                           sdf,
                                            generator_,
-                                           GetStretchingAvoidanceControllerSolverType(ph_),
-                                           GetMaxSamplingCounts(ph_)));
+                                           GetStretchingAvoidanceControllerSolverType(*ph_),
+                                           GetMaxSamplingCounts(*ph_)));
             break;
         }
         case DIMINISHING_RIGIDITY_SINGLE_MODEL_CONSTRAINT_CONTROLLER:
@@ -1768,10 +1758,10 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
             ROS_INFO_NAMED("task_framework", "Using dminishing model and random sampling controller");
 
             double translational_deformability, rotational_deformability;
-            const sdf_tools::SignedDistanceField::ConstPtr environment_sdf(GetEnvironmentSDF(nh_));
+            const auto sdf = GetEnvironmentSDF(*nh_);
 
-            if (ph_.getParam("translational_deformability", translational_deformability) &&
-                     ph_.getParam("rotational_deformability", rotational_deformability))
+            if (ph_->getParam("translational_deformability", translational_deformability) &&
+                ph_->getParam("rotational_deformability", rotational_deformability))
             {
                 ROS_INFO_STREAM_NAMED("task_framework", "Overriding deformability values to "
                                        << translational_deformability << " "
@@ -1785,20 +1775,17 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                        << task_specification_->defaultDeformability());
             }
 
-            model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                      translational_deformability,
-                                      rotational_deformability));
-
+            const auto model = std::make_shared<DiminishingRigidityModel>(
+                        nh_,
+                        translational_deformability,
+                        rotational_deformability);
+            model_list_.push_back(model);
             controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
-                                           nh_,
-                                           ph_,
-                                           robot_,
-                                           vis_,
-                                           model_list_.back(),
-                                           environment_sdf,
+                                           nh_, ph_, robot_, vis_, model,
+                                           sdf,
                                            generator_,
-                                           GetStretchingAvoidanceControllerSolverType(ph_),
-                                           GetMaxSamplingCounts(ph_)));
+                                           GetStretchingAvoidanceControllerSolverType(*ph_),
+                                           GetMaxSamplingCounts(*ph_)));
             break;
         }
         case MULTI_MODEL_BANDIT_TEST:
@@ -1806,55 +1793,54 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
             ////////////////////////////////////////////////////////////////////////
             // Diminishing rigidity models
             ////////////////////////////////////////////////////////////////////////
-
-            #pragma message "Magic numbers: Multi-model deform range"
-            const double deform_min = 0.0;
-            const double deform_max = 25.0;
-            const double deform_step = 4.0;
-
-            for (double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step)
             {
-                for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
-                {
-                    model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                              trans_deform,
-                                              rot_deform));
+                #pragma message "Magic numbers: Multi-model deform range"
+                const double deform_min = 0.0;
+                const double deform_max = 25.0;
+                const double deform_step = 4.0;
 
-                    controller_list_.push_back(std::make_shared<LeastSquaresControllerWithStretchingConstraint>(
-                                                   nh_,
-                                                   ph_,
-                                                   robot_,
-                                                   vis_,
-                                                   model_list_.back()));
+                for (double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step)
+                {
+                    for (double rot_deform = deform_min; rot_deform < deform_max; rot_deform += deform_step)
+                    {
+                        const auto model = std::make_shared<DiminishingRigidityModel>(
+                                    nh_,
+                                    trans_deform,
+                                    rot_deform);
+                        model_list_.push_back(model);
+                        controller_list_.push_back(std::make_shared<LeastSquaresControllerWithStretchingConstraint>(
+                                                       nh_, ph_, robot_, vis_, model));
+                    }
                 }
+                ROS_INFO_STREAM_NAMED("task_framework", "Num diminishing rigidity models: "
+                                       << std::floor((deform_max - deform_min) / deform_step));
             }
-            ROS_INFO_STREAM_NAMED("task_framework", "Num diminishing rigidity models: "
-                                   << std::floor((deform_max - deform_min) / deform_step));
 
             ////////////////////////////////////////////////////////////////////////
             // Adaptive jacobian models
             ////////////////////////////////////////////////////////////////////////
-
-            #pragma message "Magic numbers: Multi-model adaptive range"
-            const double learning_rate_min = 1e-10;
-            const double learning_rate_max = 1.1e0;
-            const double learning_rate_step = 10.0;
-
-            for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
             {
-                    model_list_.push_back(std::make_shared<AdaptiveJacobianModel>(
-                                              DiminishingRigidityModel(task_specification_->defaultDeformability(), false).computeGrippersToDeformableObjectJacobian(initial_world_state),
-                                              learning_rate));
+                #pragma message "Magic numbers: Multi-model adaptive range"
+                const double learning_rate_min = 1e-10;
+                const double learning_rate_max = 1.1e0;
+                const double learning_rate_step = 10.0;
 
+                const auto tmp_model = DiminishingRigidityModel(nh_, task_specification_->defaultDeformability(), false);
+                const auto starting_jacobian = tmp_model.computeGrippersToDeformableObjectJacobian(initial_world_state);
+
+                for (double learning_rate = learning_rate_min; learning_rate < learning_rate_max; learning_rate *= learning_rate_step)
+                {
+                    const auto model = std::make_shared<AdaptiveJacobianModel>(
+                                nh_,
+                                starting_jacobian,
+                                learning_rate);
+                    model_list_.push_back(model);
                     controller_list_.push_back(std::make_shared<LeastSquaresControllerWithStretchingConstraint>(
-                                                   nh_,
-                                                   ph_,
-                                                   robot_,
-                                                   vis_,
-                                                   model_list_.back()));
+                                                   nh_, ph_, robot_, vis_, model));
+                }
+                ROS_INFO_STREAM_NAMED("task_framework", "Num adaptive Jacobian models: "
+                                       << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
             }
-            ROS_INFO_STREAM_NAMED("task_framework", "Num adaptive Jacobian models: "
-                                   << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
             break;
         }
         case MULTI_MODEL_CONTROLLER_TEST:
@@ -1863,75 +1849,32 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
 
             // Constraint Model with New Controller. (MM)
             {
-                const sdf_tools::SignedDistanceField::ConstPtr environment_sdf(GetEnvironmentSDF(nh_));
+                const auto sdf = GetEnvironmentSDF(*nh_);
 
-                const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
-                const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
-                const double rotation_deformability = GetConstraintRotational(ph_);
-//                const double translational_deformability = GetConstraintTranslationalOldVersion(ph_);
+                const double translation_dir_deformability = GetConstraintTranslationalDir(*ph_);
+                const double translation_dis_deformability = GetConstraintTranslationalDis(*ph_);
+                const double rotation_deformability = GetConstraintRotational(*ph_);
 
-                model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
-                                      translation_dir_deformability,
-                                      translation_dis_deformability,
-                                      rotation_deformability,
-//                                      translational_deformability,
-                                      environment_sdf));
-
+                const auto model = std::make_shared<ConstraintJacobianModel>(
+                            nh_,
+                            translation_dir_deformability,
+                            translation_dis_deformability,
+                            rotation_deformability,
+                            sdf);
+                model_list_.push_back(model);
                 controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
-                                               nh_,
-                                               ph_,
-                                               robot_,
-                                               vis_,
-                                               model_list_.back(),
-                                               environment_sdf,
+                                               nh_, ph_, robot_, vis_, model,
+                                               sdf,
                                                generator_,
-                                               GetStretchingAvoidanceControllerSolverType(ph_),
-                                               GetMaxSamplingCounts(ph_)));
+                                               GetStretchingAvoidanceControllerSolverType(*ph_),
+                                               GetMaxSamplingCounts(*ph_)));
             }
-
-            // Dminishing Model with New Controller. (DM)
-            /*
-            {
-                double translational_deformability, rotational_deformability;
-                const sdf_tools::SignedDistanceField environment_sdf(GetEnvironmentSDF(nh_));
-
-                if (ph_.getParam("translational_deformability", translational_deformability) &&
-                         ph_.getParam("rotational_deformability", rotational_deformability))
-                {
-                    ROS_INFO_STREAM_NAMED("task_framework", "Overriding deformability values to "
-                                           << translational_deformability << " "
-                                           << rotational_deformability);
-                }
-                else
-                {
-                    translational_deformability = task_specification_->defaultDeformability();
-                    rotational_deformability = task_specification_->defaultDeformability();
-                    ROS_INFO_STREAM_NAMED("task_framework", "Using default deformability value of "
-                                           << task_specification_->defaultDeformability());
-                }
-
-                model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                          translational_deformability,
-                                          rotational_deformability));
-
-                controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
-                                               nh_,
-                                               ph_,
-                                               robot_,
-                                               vis_,
-                                               model_list_.back(),
-                                               environment_sdf,
-                                               generator_,
-                                               GetStretchingAvoidanceControllerSolverType(ph_),
-                                               GetMaxSamplingCounts(ph_)));
-            }
-            */
 
             // Dminishing Model with Old Controller. (DD)
             {
                 double translational_deformability, rotational_deformability;
-                if (ph_.getParam("translational_deformability", translational_deformability) &&
-                         ph_.getParam("rotational_deformability", rotational_deformability))
+                if (ph_->getParam("translational_deformability", translational_deformability) &&
+                    ph_->getParam("rotational_deformability", rotational_deformability))
                 {
                     ROS_INFO_STREAM_NAMED("task_framework", "Overriding deformability values to "
                                            << translational_deformability << " "
@@ -1945,16 +1888,14 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                            << task_specification_->defaultDeformability());
                 }
 
-                model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                          translational_deformability,
-                                          rotational_deformability));
+                const auto model = std::make_shared<DiminishingRigidityModel>(
+                            nh_,
+                            translational_deformability,
+                            rotational_deformability);
+                model_list_.push_back(model);
 
                 controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
-                                               nh_,
-                                               ph_,
-                                               robot_,
-                                               vis_,
-                                               model_list_.back(),
+                                               nh_, ph_, robot_, vis_, model,
                                                task_specification_->collisionScalingFactor(),
                                                optimization_enabled));
             }
@@ -1964,32 +1905,27 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
         {
             // Constraint Model
             {
-                const sdf_tools::SignedDistanceField::ConstPtr environment_sdf(GetEnvironmentSDF(nh_));
+                const auto sdf = GetEnvironmentSDF(*nh_);
 
-                const double translation_dir_deformability = GetConstraintTranslationalDir(ph_);
-                const double translation_dis_deformability = GetConstraintTranslationalDis(ph_);
-                const double rotation_deformability = GetConstraintRotational(ph_);
-//                const double translational_deformability = GetConstraintTranslationalOldVersion(ph_);
+                const double translation_dir_deformability = GetConstraintTranslationalDir(*ph_);
+                const double translation_dis_deformability = GetConstraintTranslationalDis(*ph_);
+                const double rotation_deformability = GetConstraintRotational(*ph_);
 
-                model_list_.push_back(std::make_shared<ConstraintJacobianModel>(
-                                      translation_dir_deformability,
-                                      translation_dis_deformability,
-                                      rotation_deformability,
-//                                      translational_deformability,
-                                      environment_sdf));
-
+                const auto model = std::make_shared<ConstraintJacobianModel>(
+                            nh_,
+                            translation_dir_deformability,
+                            translation_dis_deformability,
+                            rotation_deformability,
+                            sdf);
+                model_list_.push_back(model);
                 controller_list_.push_back(std::make_shared<StraightLineController>(
-                                               nh_,
-                                               ph_,
-                                               robot_,
-                                               vis_,
-                                               model_list_.back()));
+                                               nh_, ph_, robot_, vis_, model));
             }
             // Dminishing Rigidity Model
             {
                 double translational_deformability, rotational_deformability;
-                if (ph_.getParam("translational_deformability", translational_deformability) &&
-                         ph_.getParam("rotational_deformability", rotational_deformability))
+                if (ph_->getParam("translational_deformability", translational_deformability) &&
+                    ph_->getParam("rotational_deformability", rotational_deformability))
                 {
                     ROS_INFO_STREAM_NAMED("task_framework", "Overriding deformability values to "
                                            << translational_deformability << " "
@@ -2003,16 +1939,13 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                            << task_specification_->defaultDeformability());
                 }
 
-                model_list_.push_back(std::make_shared<DiminishingRigidityModel>(
-                                          translational_deformability,
-                                          rotational_deformability));
-
+                const auto model = std::make_shared<DiminishingRigidityModel>(
+                            nh_,
+                            translational_deformability,
+                            rotational_deformability);
+                model_list_.push_back(model);
                 controller_list_.push_back(std::make_shared<StraightLineController>(
-                                               nh_,
-                                               ph_,
-                                               robot_,
-                                               vis_,
-                                               model_list_.back()));
+                                               nh_, ph_, robot_, vis_, model));
             }
             break;
         }
@@ -2065,7 +1998,7 @@ void TaskFramework::updateModels(
         const ssize_t model_used,
         const WorldState& world_feedback)
 {
-    const static double reward_annealing_factor = GetRewardScaleAnnealingFactor(ph_);
+    const static double reward_annealing_factor = GetRewardScaleAnnealingFactor(*ph_);
 
     // First we update the bandit algorithm
     const double starting_error = task_specification_->calculateError(starting_world_state);
@@ -2238,7 +2171,7 @@ void TaskFramework::initializeBanditsLogging()
 {
     if (bandits_logging_enabled_)
     {
-        const std::string log_folder = GetLogFolder(nh_);
+        const std::string log_folder = GetLogFolder(*nh_);
         ROS_INFO_STREAM_NAMED("task_framework", "Logging to " << log_folder);
 
         Log::Log seed_log(log_folder + "seed.txt", false);
@@ -2282,7 +2215,7 @@ void TaskFramework::initializeControllerLogging()
 {
     if(controller_logging_enabled_)
     {
-        const std::string log_folder = GetLogFolder(nh_);
+        const std::string log_folder = GetLogFolder(*nh_);
         ROS_INFO_STREAM_NAMED("task_framework", "Logging to " << log_folder);
 
         Log::Log seed_log(log_folder + "seed.txt", false);
@@ -2487,9 +2420,9 @@ void TaskFramework::storeWorldState(const WorldState& world_state, const RubberB
 {
     try
     {
-        const auto log_folder = GetLogFolder(nh_);
+        const auto log_folder = GetLogFolder(*nh_);
         arc_utilities::CreateDirectory(log_folder);
-        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "world_state_file_name_prefix", __func__);
+        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state_file_name_prefix", __func__);
         if (!file_name_prefix.Valid())
         {
             throw_arc_exception(std::invalid_argument, "Unable to load world_state_file_name_prefix from parameter server");
@@ -2520,13 +2453,13 @@ std::pair<WorldState, RubberBand::Ptr> TaskFramework::loadStoredWorldState()
 
     try
     {
-        const auto log_folder = GetLogFolder(nh_);
-        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "world_state_file_name_prefix", __func__);
+        const auto log_folder = GetLogFolder(*nh_);
+        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state_file_name_prefix", __func__);
         if (!file_name_prefix.Valid())
         {
             throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_prefix from parameter server");
         }
-        const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(ph_, "world_state_file_name_suffix_to_load", __func__);
+        const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state_file_name_suffix_to_load", __func__);
         if (!file_name_suffix.Valid())
         {
             throw_arc_exception(std::invalid_argument, "Unable to load world_state_file_name_suffix_to_load from parameter server");
@@ -2553,5 +2486,5 @@ std::pair<WorldState, RubberBand::Ptr> TaskFramework::loadStoredWorldState()
 
 bool TaskFramework::useStoredWorldState() const
 {
-    return ROSHelpers::GetParamDebugLog<bool>(ph_, "use_stored_world_state", false);
+    return ROSHelpers::GetParamDebugLog<bool>(*ph_, "use_stored_world_state", false);
 }

@@ -8,7 +8,7 @@
 #include <flann/flann.hpp>
 
 #include "smmap/learned_transitions.h"
-#include "smmap/rubber_band.hpp"
+#include "smmap/quinlan_rubber_band.h"
 #include "smmap/robot_interface.hpp"
 
 namespace flann
@@ -267,13 +267,13 @@ namespace smmap
         };
 
         RRTHelper(
-                ros::NodeHandle& nh,
-                ros::NodeHandle& ph,
+                std::shared_ptr<ros::NodeHandle> nh,
+                std::shared_ptr<ros::NodeHandle> ph,
                 const WorldParams& world_params,
                 const PlanningParams& planning_params,
                 const SmoothingParams& smoothing_params,
                 const TaskParams& task_params,
-                const smmap_utilities::Visualizer::Ptr vis,
+                smmap_utilities::Visualizer::Ptr vis,
                 const bool visualization_enabled);
 
         std::vector<RRTNode, RRTAllocator> plan(
@@ -373,8 +373,8 @@ namespace smmap
                 const bool project_to_translation_bound) const;
 
         // Returns possible bands, and our confidence in each
-        std::vector<std::pair<QuinlanRubberBand::Ptr, double>> forwardPropogateBand(
-                RubberBand band,
+        std::vector<std::pair<RubberBand::Ptr, double>> forwardPropogateBand(
+                const RubberBand::ConstPtr& starting_band,
                 const RRTGrippersRepresentation& next_grippers_poses);
 
         size_t forwardPropogationFunction(
@@ -403,8 +403,8 @@ namespace smmap
 
 
     private:
-        ros::NodeHandle nh_;
-        ros::NodeHandle ph_;
+        const std::shared_ptr<ros::NodeHandle> nh_;
+        const std::shared_ptr<ros::NodeHandle> ph_;
         const RobotInterface::ConstPtr robot_;
         const bool planning_for_whole_robot_;
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
@@ -519,11 +519,13 @@ namespace smmap
         // Visualization
         const smmap_utilities::Visualizer::Ptr vis_;
         const bool visualization_enabled_globally_;
+    public:
         const std_msgs::ColorRGBA gripper_a_forward_tree_color_;
         const std_msgs::ColorRGBA gripper_b_forward_tree_color_;
         const std_msgs::ColorRGBA gripper_a_backward_tree_color_;
         const std_msgs::ColorRGBA gripper_b_backward_tree_color_;
         const std_msgs::ColorRGBA band_tree_color_;
+    private:
         // Used in the forward propagation function
         int32_t tree_marker_id_;
         size_t forward_tree_next_visualized_node_;

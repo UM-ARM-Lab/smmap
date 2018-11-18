@@ -12,25 +12,21 @@ using namespace EigenHelpers;
 
 
 LeastSquaresControllerWithStretchingConstraint::LeastSquaresControllerWithStretchingConstraint(
-        ros::NodeHandle& nh,
-        ros::NodeHandle& ph,
-        const RobotInterface::Ptr& robot,
-        const Visualizer::Ptr& vis,
-        const DeformableModel::Ptr& model)
-    : DeformableController(nh, ph, robot, vis)
-    , deformable_type_(GetDeformableType(nh))
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
+        RobotInterface::Ptr robot,
+        Visualizer::Ptr vis,
+        const JacobianModel::ConstPtr& model)
+    : DeformableController(nh, ph, robot, vis, model)
+    , deformable_type_(GetDeformableType(*nh_))
     , grippers_data_(robot->getGrippersData())
-    , model_(model)
-    , nominal_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(nh)))
-    , max_node_distance_(GetMaxStretchFactor(ph) * nominal_distance_)
+    , nominal_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(*nh_)))
+    , max_node_distance_(GetMaxStretchFactor(*ph_) * nominal_distance_)
     , max_node_squared_distance_(max_node_distance_.cwiseProduct(max_node_distance_))
     , distance_to_obstacle_threshold_(GetRobotGripperRadius())
-    , stretching_cosine_threshold_(GetStretchingCosineThreshold(ph))
-    , visualize_overstretch_cones_(GetVisualizeOverstretchCones(ph))
-{
-    // TODO: Why can't I just put this cast inside the constructor and define model_ to be a JacobianModel::Ptr?
-    assert(std::dynamic_pointer_cast<JacobianModel>(model_) != nullptr && "Invalid model type passed to constructor");
-}
+    , stretching_cosine_threshold_(GetStretchingCosineThreshold(*ph_))
+    , visualize_overstretch_cones_(GetVisualizeOverstretchCones(*ph_))
+{}
 
 DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint::getGripperMotion_impl(
         const InputData& input_data)
@@ -120,7 +116,7 @@ DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint:
 
     // Recalculate the jacobian at each timestep, because of rotations being non-linear
     // We can use a static pointer cast here because we check the input on construction
-    const auto jacobian_based_model = std::static_pointer_cast<JacobianModel>(model_);
+    const auto jacobian_based_model = std::static_pointer_cast<const JacobianModel>(model_);
     const MatrixXd grippers_poses_to_object_jacobian =
             jacobian_based_model->computeGrippersToDeformableObjectJacobian(input_data.world_current_state_);
 

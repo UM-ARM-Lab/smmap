@@ -12,7 +12,7 @@ namespace smmap
             // Constructors and Destructor
             ////////////////////////////////////////////////////////////////////
 
-            JacobianModel();
+            JacobianModel(std::shared_ptr<ros::NodeHandle> nh);
 
             Eigen::MatrixXd computeGrippersToDeformableObjectJacobian(
                     const WorldState& world_state) const;

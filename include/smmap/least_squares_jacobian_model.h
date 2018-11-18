@@ -13,6 +13,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             LeastSquaresJacobianModel(
+                    std::shared_ptr<ros::NodeHandle> nh,
                     const Eigen::MatrixXd& initial_jacobian,
                     const long extra_samples);
 

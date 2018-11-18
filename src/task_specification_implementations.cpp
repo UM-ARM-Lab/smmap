@@ -7,11 +7,14 @@ using namespace smmap_utilities;
 // Colab folding
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothColabFolding::ClothColabFolding(ros::NodeHandle& nh, ros::NodeHandle& ph, Visualizer::Ptr vis)
+ClothColabFolding::ClothColabFolding(
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
+        Visualizer::Ptr vis)
     : TaskSpecification(nh, ph, vis)
-    , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
-    , point_reflector_(createPointReflector(nh))
-    , mirror_map_(createMirrorMap(nh, point_reflector_))
+    , neighbours_(num_nodes_, GetClothNumControlPointsX(*nh_))
+    , point_reflector_(CreatePointReflector(*nh_))
+    , mirror_map_(CreateMirrorMap(*nh_, point_reflector_))
 {}
 
 double ClothColabFolding::calculateError_impl(
@@ -59,7 +62,7 @@ std::vector<ssize_t> ClothColabFolding::getNodeNeighbours_impl(const ssize_t nod
     return neighbours_.getNodeNeighbours(node);
 }
 
-PointReflector ClothColabFolding::createPointReflector(ros::NodeHandle& nh)
+PointReflector ClothColabFolding::CreatePointReflector(ros::NodeHandle& nh)
 {
     ROS_INFO_NAMED("cloth_colab_folding" , "Getting mirror line");
 
@@ -78,7 +81,7 @@ PointReflector ClothColabFolding::createPointReflector(ros::NodeHandle& nh)
                           mirror_line_data.response.max_y);
 }
 
-std::map<long, long> ClothColabFolding::createMirrorMap(ros::NodeHandle& nh, const PointReflector& point_reflector)
+std::map<long, long> ClothColabFolding::CreateMirrorMap(ros::NodeHandle& nh, const PointReflector& point_reflector)
 {
     ROS_INFO_NAMED("cloth_colab_folding", "Finding point correspondences");
 
@@ -112,7 +115,10 @@ bool ClothColabFolding::taskDone_impl(
 // Rope cylinder coverage
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-RopeCylinderCoverage::RopeCylinderCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
+RopeCylinderCoverage::RopeCylinderCoverage(
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
+        smmap_utilities::Visualizer::Ptr vis)
     : DirectCoverageTask(nh, ph, vis)
     , neighbours_(num_nodes_)
 {}
@@ -132,9 +138,12 @@ bool RopeCylinderCoverage::taskDone_impl(
 // Cloth table coverage
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothTableCoverage::ClothTableCoverage(ros::NodeHandle& nh, ros::NodeHandle& ph, Visualizer::Ptr vis)
+ClothTableCoverage::ClothTableCoverage(
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
+        smmap_utilities::Visualizer::Ptr vis)
     : DirectCoverageTask(nh, ph, vis)
-    , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
+    , neighbours_(num_nodes_, GetClothNumControlPointsX(*nh_))
 {}
 
 std::vector<ssize_t> ClothTableCoverage::getNodeNeighbours_impl(const ssize_t node) const
@@ -152,9 +161,12 @@ bool ClothTableCoverage::taskDone_impl(
 // Cloth - Distance Based Correspondences - Using Dijkstras
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothDistanceBasedCorrespondences::ClothDistanceBasedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
+ClothDistanceBasedCorrespondences::ClothDistanceBasedCorrespondences(
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
+        smmap_utilities::Visualizer::Ptr vis)
     : DistanceBasedCorrespondencesTask(nh, ph, vis)
-    , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
+    , neighbours_(num_nodes_, GetClothNumControlPointsX(*nh_))
 {
     if (task_type_ == CLOTH_WALL)
     {
@@ -185,7 +197,10 @@ bool ClothDistanceBasedCorrespondences::taskDone_impl(
 // Rope - Fixed Correspondences - Using Dijkstras
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-RopeFixedCorrespondences::RopeFixedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
+RopeFixedCorrespondences::RopeFixedCorrespondences(
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
+        smmap_utilities::Visualizer::Ptr vis)
     : FixedCorrespondencesTask(nh, ph, vis)
     , neighbours_(num_nodes_)
 {
@@ -215,9 +230,12 @@ bool RopeFixedCorrespondences::taskDone_impl(
 // Cloth - Fixed Correspondences - Using Dijkstras
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothFixedCorrespondences::ClothFixedCorrespondences(ros::NodeHandle& nh, ros::NodeHandle& ph, smmap_utilities::Visualizer::Ptr vis)
+ClothFixedCorrespondences::ClothFixedCorrespondences(
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
+        smmap_utilities::Visualizer::Ptr vis)
     : FixedCorrespondencesTask(nh, ph, vis)
-    , neighbours_(num_nodes_, GetClothNumControlPointsX(nh))
+    , neighbours_(num_nodes_, GetClothNumControlPointsX(*nh_))
 {
     assert(num_nodes_ == num_cover_points_);
 
