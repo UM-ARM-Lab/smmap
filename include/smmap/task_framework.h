@@ -2,8 +2,7 @@
 #define SMMAP_PLANNER_H
 
 #include <arc_utilities/log.hpp>
-#include <smmap_utilities/kalman_filter_multiarm_bandit.hpp>
-#include <smmap_utilities/ucb_multiarm_bandit.hpp>
+#include <smmap_utilities/multiarm_bandits.hpp>
 #include <smmap_utilities/visualization_tools.h>
 
 #include "smmap/task_function_pointer_types.h"
@@ -17,17 +16,6 @@
 
 namespace smmap
 {
-#warning "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! I did stupid things with a define here !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-#ifdef UCB_BANDIT
-    #define TaskFramework TaskFrameworkUCB
-#endif
-#ifdef KFMANB_BANDIT
-    #define TaskFramework TaskFrameworkKFMANB
-#endif
-#ifdef KFMANDB_BANDIT
-    #define TaskFramework TaskFrameworkKFMANDB
-#endif
-
     class TaskFramework
     {
         public:
@@ -113,15 +101,8 @@ namespace smmap
             std::vector<DeformableModel::Ptr> model_list_;
             std::vector<DeformableController::Ptr> controller_list_;
 
-#ifdef UCB_BANDIT
-            smmap_utilities::UCB1Normal<std::mt19937_64> model_utility_bandit_;
-#endif
-#ifdef KFMANB_BANDIT
-            smmap_utilities::KalmanFilterMANB<std::mt19937_64> model_utility_bandit_;
-#endif
-#ifdef KFMANDB_BANDIT
-            smmap_utilities::KalmanFilterMANDB<std::mt19937_64> model_utility_bandit_;
-#endif
+            const MABAlgorithm mab_algorithm_;
+            std::shared_ptr<smmap_utilities::MABBase> model_utility_bandit_;
             double reward_std_dev_scale_factor_;
             const double process_noise_factor_;
             const double observation_noise_factor_;
@@ -190,7 +171,7 @@ namespace smmap
                     const WorldState& resulting_world_state,
                     const std::vector<WorldState>& individual_model_results,
                     const Eigen::VectorXd& model_utility_mean,
-                    const Eigen::MatrixXd& model_utility_covariance,
+                    const Eigen::MatrixXd& model_utility_second_stat,
                     const ssize_t model_used);
 
             void controllerLogData(

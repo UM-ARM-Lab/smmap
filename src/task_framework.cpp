@@ -181,6 +181,7 @@ TaskFramework::TaskFramework(
     , dijkstras_task_(std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_)) // If possible, this will be done, if not, it will be NULL (nullptr?)
     // Multi-model and regret based model selection parameters
     , collect_results_for_all_models_(GetCollectResultsForAllModels(*ph_))
+    , mab_algorithm_(GetMABAlgorithm(*ph_))
     , reward_std_dev_scale_factor_(REWARD_STANDARD_DEV_SCALING_FACTOR_START)
     , process_noise_factor_(GetProcessNoiseFactor(*ph_))
     , observation_noise_factor_(GetObservationNoiseFactor(*ph_))
@@ -609,9 +610,9 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
     }
 
     // Pick an arm to use
-    const ssize_t model_to_use = model_utility_bandit_.selectArmToPull(*generator_);
+    const ssize_t model_to_use = model_utility_bandit_->selectArmToPull(*generator_);
 
-    const bool get_action_for_all_models = model_utility_bandit_.generateAllModelActions();
+    const bool get_action_for_all_models = model_utility_bandit_->generateAllModelActions();
     ROS_INFO_STREAM_COND_NAMED(num_models_ > 1, "task_framework", "Using model index " << model_to_use);
 
     // Querry each model for it's best gripper delta
@@ -782,7 +783,7 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
     ROS_INFO_STREAM_NAMED("task_framework", "Total local controller time                     " << controller_time << " seconds");
 
     ROS_INFO_NAMED("task_framework", "Logging data");
-    logBanditsData(current_world_state, world_feedback, individual_model_results, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), model_to_use);
+    logBanditsData(current_world_state, world_feedback, individual_model_results, model_utility_bandit_->getMean(), model_utility_bandit_->getSecondStat(), model_to_use);
     controllerLogData(current_world_state, world_feedback, individual_model_results, model_input_data, controller_computation_time, model_prediction_errors_weighted, model_prediction_errors_unweighted);
 
     return world_feedback;
@@ -892,7 +893,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     }
 
     const std::vector<WorldState> fake_all_models_results(num_models_, world_feedback);
-    logBanditsData(current_world_state, world_feedback, fake_all_models_results, model_utility_bandit_.getMean(), model_utility_bandit_.getSecondStat(), -1);
+    logBanditsData(current_world_state, world_feedback, fake_all_models_results, model_utility_bandit_->getMean(), model_utility_bandit_->getSecondStat(), -1);
 
     return world_feedback;
 }
@@ -1966,19 +1967,31 @@ void TaskFramework::createBandits()
     num_models_ = (ssize_t)model_list_.size();
     ROS_INFO_STREAM_NAMED("task_framework", "Generating bandits for " << num_models_ << " bandits");
 
-#ifdef UCB_BANDIT
-    model_utility_bandit_ = UCB1Normal<std::mt19937_64>(num_models_);
-#endif
-#ifdef KFMANB_BANDIT
-    model_utility_bandit_ = KalmanFilterMANB<std::mt19937_64>(
-                VectorXd::Zero(num_models_),
-                VectorXd::Ones(num_models_) * 1e6);
-#endif
-#ifdef KFMANDB_BANDIT
-    model_utility_bandit_ = KalmanFilterMANDB<std::mt19937_64>(
-                VectorXd::Zero(num_models_),
-                MatrixXd::Identity(num_models_, num_models_) * 1e6);
-#endif
+    switch (mab_algorithm_)
+    {
+        case UCB1Normal:
+        {
+            model_utility_bandit_ = std::make_shared<UCB1NormalBandit>((size_t)num_models_);
+            break;
+        }
+
+        case KFMANB:
+        {
+            model_utility_bandit_ = std::make_shared<KalmanFilterMANB>(
+                    VectorXd::Zero(num_models_), VectorXd::Ones(num_models_) * 1e6);
+            break;
+        }
+
+        case KFMANDB:
+        {
+            model_utility_bandit_ = std::make_shared<KalmanFilterMANDB>(
+                    VectorXd::Zero(num_models_), MatrixXd::Identity(num_models_, num_models_) * 1e6);
+            break;
+        }
+
+        default:
+            assert(false && "Impossibu!");
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2007,33 +2020,53 @@ void TaskFramework::updateModels(
     const double process_noise_scaling_factor = process_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);
     const double observation_noise_scaling_factor = observation_noise_factor_ * std::pow(reward_std_dev_scale_factor_, 2);
 
-#ifdef UCB_BANDIT
-    (void)task_desired_motion;
-    (void)suggested_commands;
-    (void)process_noise_scaling_factor;
-    (void)observation_noise_scaling_factor;
-    model_utility_bandit_.updateArms(model_used, true_error_reduction);
-#endif
-#ifdef KFMANB_BANDIT
-    (void)task_desired_motion;
-    (void)suggested_commands;
-    model_utility_bandit_.updateArms(process_noise_scaling_factor * VectorXd::Ones(num_models_), model_used, true_error_reduction, observation_noise_scaling_factor * 1.0);
-#endif
-#ifdef KFMANDB_BANDIT
-    (void)task_desired_motion;
+    switch (mab_algorithm_)
+    {
+        case UCB1Normal:
+        {
+            (void)task_desired_motion;
+            (void)suggested_commands;
+            (void)process_noise_scaling_factor;
+            (void)observation_noise_scaling_factor;
+            model_utility_bandit_->updateArms(model_used, true_error_reduction);
+            break;
+        }
 
-    const MatrixXd process_noise = calculateProcessNoise(suggested_commands);
-    MatrixXd observation_matrix = RowVectorXd::Zero(num_models_);
-    observation_matrix(0, model_used) = 1.0;
-    const VectorXd observed_reward = VectorXd::Ones(1) * true_error_reduction;
-    const MatrixXd observation_noise = MatrixXd::Ones(1, 1);
+        case KFMANB:
+        {
+            (void)task_desired_motion;
+            (void)suggested_commands;
+            model_utility_bandit_->updateArms(
+                        process_noise_scaling_factor * VectorXd::Ones(num_models_),
+                        model_used,
+                        true_error_reduction,
+                        observation_noise_scaling_factor * 1.0);
+            break;
+        }
 
-    model_utility_bandit_.updateArms(
-                process_noise_scaling_factor * process_noise,
-                observation_matrix,
-                observed_reward,
-                observation_noise_scaling_factor * observation_noise);
-#endif
+        case KFMANDB:
+        {
+            (void)task_desired_motion;
+
+            const MatrixXd process_noise = calculateProcessNoise(suggested_commands);
+            MatrixXd observation_matrix = RowVectorXd::Zero(num_models_);
+            observation_matrix(0, model_used) = 1.0;
+            const VectorXd observed_reward = VectorXd::Ones(1) * true_error_reduction;
+            const MatrixXd observation_noise = MatrixXd::Ones(1, 1);
+
+            model_utility_bandit_->updateArms(
+                        process_noise_scaling_factor * process_noise,
+                        observation_matrix,
+                        observed_reward,
+                        observation_noise_scaling_factor * observation_noise);
+            break;
+        }
+
+        default:
+        {
+            assert(false && "Impossibu!");
+        }
+    }
 
     // Then we allow each model to update itself based on the new data
     #pragma omp parallel for
@@ -2254,7 +2287,7 @@ void TaskFramework::logBanditsData(
         const WorldState& resulting_world_state,
         const std::vector<WorldState>& individual_model_results,
         const VectorXd& model_utility_mean,
-        const MatrixXd& model_utility_covariance,
+        const MatrixXd& model_utility_second_stat,
         const ssize_t model_used)
 {
     if (bandits_logging_enabled_)
@@ -2285,7 +2318,7 @@ void TaskFramework::logBanditsData(
              model_utility_mean.format(single_line));
 
         LOG(loggers_.at("utility_covariance"),
-             model_utility_covariance.format(single_line));
+             model_utility_second_stat.format(single_line));
 
         LOG(loggers_.at("model_chosen"),
              model_used);
