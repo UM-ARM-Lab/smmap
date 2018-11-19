@@ -1533,7 +1533,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 GetLogFolder(*nh_) +
                 "rrt_cache_step." +
                 PrettyPrint::PrettyPrint(num_times_invoked);
-        rrt_planned_path_ = rrt_helper_->loadStoredPath(file_path);
+        rrt_planned_path_ = rrt_helper_->loadStoredTree(file_path);
 
         if (world_state.robot_configuration_valid_)
         {
@@ -1621,7 +1621,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                         GetLogFolder(*nh_) +
                         "rrt_cache_step." +
                         PrettyPrint::PrettyPrint(num_times_invoked);
-                rrt_helper_->storePath(rrt_planned_path_, file_path);
+                rrt_helper_->storeTree(rrt_planned_path_, file_path);
             }
         }
     }

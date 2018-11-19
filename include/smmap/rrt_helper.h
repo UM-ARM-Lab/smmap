@@ -276,28 +276,27 @@ namespace smmap
                 smmap_utilities::Visualizer::Ptr vis,
                 const bool visualization_enabled);
 
+        //////// Planning functions //////////////////////////////////////////////////////////
+
         std::vector<RRTNode, RRTAllocator> plan(
                 const RRTNode& start,
                 const RRTGrippersRepresentation& grippers_goal_poses,
                 const std::chrono::duration<double>& time_limit);
 
+        void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
+        void clearBlacklist();
 
-        static std::vector<Eigen::VectorXd> ConvertRRTPathToRobotPath(
-                const std::vector<RRTNode, RRTAllocator>& path);
+        //////// Policy extraction functions /////////////////////////////////////////////////
 
         static bool CheckTreeLinkage(
                 const std::vector<RRTNode, RRTAllocator>& tree);
 
+        static std::vector<Eigen::VectorXd> ConvertRRTPathToRobotPath(
+                const std::vector<RRTNode, RRTAllocator>& path);
+
         static std::vector<RRTNode, RRTAllocator> ExtractSolutionPath(
                 const std::vector<RRTNode, RRTAllocator>& tree,
                 const int64_t goal_node_idx);
-
-
-        void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
-        void clearBlacklist();
-
-        bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const;
-        bool isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band);
 
         ///////////////////////////////////////////////////////////////////////////////////////
         // Visualization and other debugging tools
@@ -316,33 +315,33 @@ namespace smmap
                 const std_msgs::ColorRGBA& color_b,
                 const std_msgs::ColorRGBA& color_band,
                 const bool draw_band) const;
-
         void visualizeBothTrees() const;
-
         void deleteTreeVisualizations() const;
-
         void visualizePath(const std::vector<RRTNode, RRTAllocator>& path) const;
-
         void visualizeBlacklist() const;
 
-        void storePath(const std::vector<RRTNode, RRTAllocator>& path, std::string file_path = "") const;
-
-        std::vector<RRTNode, RRTAllocator> loadStoredPath(std::string file_path = "") const;
-
-        bool useStoredPath() const;
+        void storeTree(const std::vector<RRTNode, RRTAllocator>& tree, std::string file_path = "") const;
+        std::vector<RRTNode, RRTAllocator> loadStoredTree(std::string file_path = "") const;
+        bool useStoredTree() const;
 
     private:
         ///////////////////////////////////////////////////////////////////////////////////////
         // Helper functions and data for internal rrt planning algorithm
+        //  - Order is roughly the order that they are used internally
         ///////////////////////////////////////////////////////////////////////////////////////
 
-        void rebuildNNIndex(
-                std::shared_ptr<NNIndexType> index,
-                std::vector<float>& nn_raw_data,
-                std::vector<size_t>& nn_data_idx_to_tree_idx,
-                const std::vector<RRTNode, RRTAllocator>& tree,
-                size_t& new_data_start_idx,
-                const bool force_rebuild);
+        void planningMainLoop();
+
+        //////// Sampling functions //////////////////////////////////////////////////////////
+
+        RRTNode configSampling(const bool sample_band);
+        // Used for timing purposes
+        // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
+        RRTGrippersRepresentation posPairSampling_internal();
+        RRTRobotRepresentation robotConfigPairSampling_internal();
+        EigenHelpers::VectorVector3d bandSampling_internal();
+
+        //////// Nearest neighbour functions /////////////////////////////////////////////////
 
         // Used for timing purposes
         // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
@@ -357,25 +356,18 @@ namespace smmap
         int64_t nearestBestNeighbourFullSpace(
                 const RRTNode& config);
 
-        RRTNode configSampling(const bool sample_band);
-        // Used for timing purposes
-        // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c
-        RRTGrippersRepresentation posPairSampling_internal();
-        RRTRobotRepresentation robotConfigPairSampling_internal();
-        EigenHelpers::VectorVector3d bandSampling_internal();
+        void rebuildNNIndex(
+                std::shared_ptr<NNIndexType> index,
+                std::vector<float>& nn_raw_data,
+                std::vector<size_t>& nn_data_idx_to_tree_idx,
+                const std::vector<RRTNode, RRTAllocator>& tree,
+                size_t& new_data_start_idx,
+                const bool force_rebuild);
 
-        bool goalReached(const RRTNode& node);
+        //////// Tree extensions functions ///////////////////////////////////////////////////
 
-        const std::pair<bool, RRTRobotRepresentation> projectToValidConfig(
-                const RRTRobotRepresentation& configuration,
-                const AllGrippersSinglePose& poses,
-                const bool project_to_rotation_bound,
-                const bool project_to_translation_bound) const;
-
-        // Returns possible bands, and our confidence in each
-        std::vector<std::pair<RubberBand::Ptr, double>> forwardPropogateBand(
-                const RubberBand::ConstPtr& starting_band,
-                const RRTGrippersRepresentation& next_grippers_poses);
+        size_t connectForwardTree(const int64_t forward_tree_start_idx, const RRTNode& target, const bool is_random);
+        size_t connectTreeToGrippersGoalSet(const int64_t last_node_idx_in_forward_tree_branch);
 
         size_t forwardPropogationFunction(
                 std::vector<RRTNode, RRTAllocator>& tree_to_extend,
@@ -383,24 +375,32 @@ namespace smmap
                 const RRTNode& target,
                 const bool visualization_enabled_locally);
 
-        size_t connectForwardTree(const int64_t forward_tree_start_idx, const RRTNode& target, const bool is_random);
-        size_t connectTreeToGrippersGoalSet(const int64_t last_node_idx_in_forward_tree_branch);
+        // Returns possible bands, and our confidence in each
+        std::vector<std::pair<RubberBand::Ptr, double>> forwardPropogateBand(
+                const RubberBand::ConstPtr& starting_band,
+                const RRTGrippersRepresentation& next_grippers_poses);
 
-        void planningMainLoop();
+        //////// Goal check and node blacklist management functions //////////////////////////
 
-        ///////////////////////////////////////////////////////////////////////////////////////
-        // Helper function for shortcut smoothing
-        ///////////////////////////////////////////////////////////////////////////////////////
+        void checkNewStatesForGoal(const ssize_t num_nodes);
+        bool goalReached(const RRTNode& node);
+        bool isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band);
+        bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const;
 
-        std::pair<bool, std::vector<RRTNode, RRTAllocator>> forwardSimulateGrippersPath(
-                const std::vector<RRTNode, RRTAllocator>& path,
-                const size_t start_index,
-                RubberBand rubber_band);
+        void goalReachedCallback(const int64_t node_idx);
+        bool isRootOfBranch(const int64_t node_idx);
+        void blacklistGoalBranch(const int64_t root_idx);
+
+        //////// Shortcut smoothing functions ////////////////////////////////////////////////
 
         std::vector<RRTNode, RRTAllocator> rrtShortcutSmooth(
                 std::vector<RRTNode, RRTAllocator> path,
                 const bool visualization_enabled_locally);
 
+        std::pair<bool, std::vector<RRTNode, RRTAllocator>> forwardSimulateGrippersPath(
+                const std::vector<RRTNode, RRTAllocator>& path,
+                const size_t start_index,
+                RubberBand rubber_band);
 
     private:
         const std::shared_ptr<ros::NodeHandle> nh_;
@@ -412,7 +412,6 @@ namespace smmap
         const TransitionEstimation::ConstPtr transition_estimator_;
         const std::shared_ptr<std::mt19937_64> generator_;
         std::uniform_real_distribution<double> uniform_unit_distribution_;
-
 
     private:
         const Eigen::Isometry3d task_aligned_frame_transform_;
