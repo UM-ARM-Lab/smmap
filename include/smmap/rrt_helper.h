@@ -294,7 +294,7 @@ namespace smmap
         static std::vector<Eigen::VectorXd> ConvertRRTPathToRobotPath(
                 const std::vector<RRTNode, RRTAllocator>& path);
 
-        static std::vector<RRTNode, RRTAllocator> ExtractSolutionPath(
+        static std::vector<RRTNode, RRTAllocator> ExtractSolutionPolicy(
                 const std::vector<RRTNode, RRTAllocator>& tree,
                 const int64_t goal_node_idx);
 
@@ -388,8 +388,9 @@ namespace smmap
         bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const;
 
         void goalReachedCallback(const int64_t node_idx);
-        bool isRootOfBranch(const int64_t node_idx);
+        bool isRootOfGoalBranch(const int64_t node_idx) const;
         void blacklistGoalBranch(const int64_t root_idx);
+        void updatePGoalReachable(const int64_t node_idx);
 
         //////// Shortcut smoothing functions ////////////////////////////////////////////////
 
@@ -511,8 +512,8 @@ namespace smmap
         size_t forward_split_id_;
 
         // Success and timeout tracking
-        bool path_found_;
-        int64_t goal_idx_in_forward_tree_;
+//        bool path_found_;
+//        int64_t goal_idx_in_forward_tree_;
         std::chrono::time_point<std::chrono::steady_clock> start_time_;
 
         // Visualization

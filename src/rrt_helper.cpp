@@ -224,6 +224,11 @@ double RRTNode::getpGoalReachable() const
 
 void RRTNode::setpGoalReachable(const double p_goal_reachable)
 {
+    // Do some error checking to make sure things are still sane before recording the value
+    if ((p_goal_reachable < 0.0) || (p_goal_reachable > 1.0))
+    {
+        throw_arc_exception(std::runtime_error, "p_goal_reachable out of range [0, 1]");
+    }
     p_goal_reachable_ = p_goal_reachable;
 }
 
@@ -674,8 +679,8 @@ RRTHelper::RRTHelper(
     , backward_connection_attempts_useful_(0)
     , backward_connection_attempts_useless_(0)
     , backward_connections_made_(0)
-    , path_found_(false)
-    , goal_idx_in_forward_tree_(-1)
+//    , path_found_(false)
+//    , goal_idx_in_forward_tree_(-1)
 
     , vis_(vis)
     , visualization_enabled_globally_(visualization_enabled)
@@ -853,8 +858,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     backward_connection_attempts_useless_ = 0;
     backward_connections_made_ = 0;
 
-    path_found_ = false;
-    goal_idx_in_forward_tree_ = -1;
+//    path_found_ = false;
+//    goal_idx_in_forward_tree_ = -1;
 
     ROS_INFO_NAMED("rrt", "Starting SimpleHybridRRTPlanner");
     std::vector<RRTNode, RRTAllocator> path;
@@ -875,7 +880,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
         const std::chrono::duration<double> planning_time(end_time - start_time_);
         robot_->unlockEnvironment();
 
-        ROS_INFO_STREAM_NAMED("rrt", "Finished planning, for better or worse. Path found? " << path_found_);
+        ROS_INFO_STREAM_NAMED("rrt", "Finished planning, for better or worse. Path found with probability " << forward_tree_[0].getpGoalReachable());
 
         planning_statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
         planning_statistics_["planning_time1_1_nearest_neighbour_index_building       "] = total_nearest_neighbour_index_building_time_;
@@ -919,11 +924,11 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
             vis_->forcePublishNow(0.5);
         }
 
-        if (path_found_)
+        if (forward_tree_[0].getpGoalReachable() > 0.0)
         {
-            assert(goal_idx_in_forward_tree_ >= 0 && goal_idx_in_forward_tree_ < (int64_t)forward_tree_.size());
-            ROS_INFO_NAMED("rrt", "Extracting solution path");
-            path = ExtractSolutionPath(forward_tree_, goal_idx_in_forward_tree_);
+//            assert(goal_idx_in_forward_tree_ >= 0 && goal_idx_in_forward_tree_ < (int64_t)forward_tree_.size());
+            ROS_INFO_NAMED("rrt", "Extracting solution policy");
+            path = ExtractSolutionPolicy(forward_tree_, (int64_t)forward_tree_.size() - 1);
             storeTree(path);
         }
     }
@@ -1063,7 +1068,7 @@ bool RRTHelper::CheckTreeLinkage(const std::vector<RRTNode, RRTAllocator>& tree)
     return true;
 }
 
-std::vector<RRTNode, RRTAllocator> RRTHelper::ExtractSolutionPath(
+std::vector<RRTNode, RRTAllocator> RRTHelper::ExtractSolutionPolicy(
         const std::vector<RRTNode, RRTAllocator>& tree,
         const int64_t goal_node_idx)
 {
@@ -1383,7 +1388,8 @@ void RRTHelper::planningMainLoop()
     // Plan
     ROS_INFO_NAMED("rrt", "Using single directional tree");
     std::chrono::duration<double> time_ellapsed = std::chrono::steady_clock::now() - start_time_;
-    while (!path_found_ && time_ellapsed < time_limit_)
+    bool path_found = false;
+    while (!path_found && time_ellapsed < time_limit_)
     {
         ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Starting forward iteration. Tree size: " << forward_tree_.size());
 
@@ -1393,31 +1399,33 @@ void RRTHelper::planningMainLoop()
         const int64_t forward_tree_start_idx = nearestNeighbour(true, random_target);
         const size_t num_random_nodes_created = connectForwardTree(forward_tree_start_idx, random_target, true);
         checkNewStatesForGoal(num_random_nodes_created);
-        if (path_found_)
+        if (forward_tree_[0].getpGoalReachable() == 1.0)
         {
-            ROS_INFO_NAMED("rrt", "Goal found via random exploration");
-            break;
+            path_found = true;
+            ROS_INFO_NAMED("rrt", "Goal found with probability 1.0 via random exploration");
         }
-
-        //////////////// Attempt to connect to the backward tree ////////////////////////////////
-        const int64_t last_node_idx_in_forward_tree_branch = num_random_nodes_created > 0 ?
-                    (int64_t)forward_tree_.size() - 1 : forward_tree_start_idx;
-        RRTNode& last_node = forward_tree_[last_node_idx_in_forward_tree_branch];
-
-        const bool sample_goal = uniform_unit_distribution_(*generator_) < goal_bias_;
-        if (!last_node.already_extended_towards_goal_set_
-            && sample_goal)
+        else
         {
-            last_node.already_extended_towards_goal_set_ = true;
-            const size_t num_goal_directed_nodes_created =
-                    connectTreeToGrippersGoalSet(last_node_idx_in_forward_tree_branch);
-            checkNewStatesForGoal(num_goal_directed_nodes_created);
-        }
+            //////////////// Attempt to connect to the backward tree ////////////////////////////////
+            const int64_t last_node_idx_in_forward_tree_branch = num_random_nodes_created > 0 ?
+                        (int64_t)forward_tree_.size() - 1 : forward_tree_start_idx;
+            RRTNode& last_node = forward_tree_[last_node_idx_in_forward_tree_branch];
 
-        if (path_found_)
-        {
-            ROS_INFO_NAMED("rrt", "Goal found via targetting backwards tree");
-            break;
+            const bool sample_goal = uniform_unit_distribution_(*generator_) < goal_bias_;
+            if (!last_node.already_extended_towards_goal_set_
+                && sample_goal)
+            {
+                last_node.already_extended_towards_goal_set_ = true;
+                const size_t num_goal_directed_nodes_created =
+                        connectTreeToGrippersGoalSet(last_node_idx_in_forward_tree_branch);
+                checkNewStatesForGoal(num_goal_directed_nodes_created);
+            }
+
+            if (forward_tree_[0].getpGoalReachable() == 1.0)
+            {
+                path_found = true;
+                ROS_INFO_NAMED("rrt", "Goal found with probability 1.0 via targetting goal set");
+            }
         }
 
         time_ellapsed = std::chrono::steady_clock::now() - start_time_;
@@ -2003,18 +2011,6 @@ size_t RRTHelper::connectForwardTree(const int64_t forward_tree_start_idx, const
         }
     }
 
-    // Check if any of the new nodes reached the goal
-    for (size_t idx = forward_tree_.size() - num_random_nodes_created; idx < forward_tree_.size(); ++idx)
-    {
-        const RRTNode& test_node = forward_tree_[idx];
-        if (goalReached(test_node))
-        {
-            path_found_ = true;
-            goal_idx_in_forward_tree_ = idx;
-            ROS_INFO_NAMED("rrt", "Goal found durring 'connect' operation");
-        }
-    }
-
     return num_random_nodes_created;
 }
 
@@ -2431,11 +2427,11 @@ void RRTHelper::checkNewStatesForGoal(const ssize_t num_nodes)
     // Check if any of the new nodes reached the goal
     for (size_t idx = forward_tree_.size() - num_nodes; idx < forward_tree_.size(); ++idx)
     {
-        const RRTNode& test_node = forward_tree_[idx];
+        RRTNode& test_node = forward_tree_[idx];
         if (goalReached(test_node))
         {
-            path_found_ = true;
-            goal_idx_in_forward_tree_ = idx;
+            test_node.setpGoalReachable(1.0);
+            goalReachedCallback(idx);
         }
     }
 }
@@ -2503,24 +2499,154 @@ void RRTHelper::goalReachedCallback(const int64_t node_idx)
     // Backtrack through the tree until we reach the root of the current "goal branch"
     // - i.e.; find the first relevant split
     int64_t current_index = node_idx;
-    int64_t goal_branch_root_index = -1;
-    while (goal_branch_root_index == -1)
+    while (!isRootOfGoalBranch(current_index))
     {
-        const RRTNode& current_node = forward_tree_[node_idx];
+        current_index = forward_tree_[current_index].parentIndex();
     }
-    assert(goal_branch_root_index >= 0 && goal_branch_root_index < forward_tree_.size());
+    assert(current_index >= 0 && current_index < (int64_t)forward_tree_.size());
+    const int64_t root_index = current_index;
 
-    //
+    // First, blacklist the root and all children thereof
+    blacklistGoalBranch(root_index);
+
+    // Next, update p_goal_reachable_ for every node from the current node to the root of the entire forward_tree_
+    updatePGoalReachable(node_idx);
 }
 
-bool RRTHelper::isRootOfBranch(const int64_t node_idx)
+bool RRTHelper::isRootOfGoalBranch(const int64_t node_idx) const
 {
-    return false;
+    const RRTNode& node = forward_tree_[node_idx];
+
+    // Two possible ways a state can be the root
+    // 1) The node itself is the root of the tree
+    const bool is_root_of_tree = (node.stateIndex() == 0);
+
+    // 2) The transition leading to the state is the result of an unresolved split
+    //    An unresolved split is one where there is at least one other child of this same
+    //    split that has not yet reached the goal
+    const bool is_child_of_split = (node.splitIndex() > 0) ? true : false;
+    bool is_unresolved_split = false;
+    if (is_child_of_split)
+    {
+        const RRTNode& parent = forward_tree_[node.parentIndex()];
+        const std::vector<int64_t> parents_children = parent.getChildIndices();
+        bool other_children_resolved = true;
+        for (size_t idx = 0; idx < parents_children.size(); ++idx)
+        {
+            const RRTNode& other_child = forward_tree_[parents_children[idx]];
+            if (other_child.splitIndex() == node.splitIndex() && !other_child.blacklisted_from_nn_search_)
+            {
+                other_children_resolved = false;
+                break;
+            }
+        }
+
+        if (other_children_resolved)
+        {
+            is_unresolved_split = false;
+        }
+        else
+        {
+            is_unresolved_split = true;
+        }
+    }
+    return is_root_of_tree || is_unresolved_split;
 }
 
 void RRTHelper::blacklistGoalBranch(const int64_t root_idx)
 {
+    if (root_idx < 0)
+    {
+        ROS_ERROR_STREAM_NAMED("rrt", "Asked to blacklist a negative root_idx; this should not be possible: " << root_idx);
+        return;
+    }
+    else if (root_idx == 0)
+    {
+        ROS_WARN_NAMED("rrt", "Asked to blacklist the start node, blacklisting all children but not the root itself");
+        const auto children = forward_tree_[0].getChildIndices();
+        for (size_t idx = 0; children.size(); ++idx)
+        {
+            blacklistGoalBranch(children[idx]);
+        }
+    }
+    else
+    {
+        ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Blacklist branch starting with idx: " << root_idx);
+        // Get the current node and blacklist it
+        RRTNode& current_node = forward_tree_[(size_t)root_idx];
+        current_node.blacklisted_from_nn_search_ = true;
+        // Recursively blacklist each child
+        const std::vector<int64_t>& child_indices = current_node.getChildIndices();
+        for (size_t idx = 0; idx < child_indices.size(); ++idx)
+        {
+            int64_t child_index = child_indices[idx];
+            blacklistGoalBranch(child_index);
+        }
+    }
+}
 
+void RRTHelper::updatePGoalReachable(const int64_t node_idx)
+{
+    RRTNode& new_goal = forward_tree_[node_idx];
+    // Make sure something hasn't gone wrong
+    if (new_goal.getpGoalReachable() <= 0.0)
+    {
+        throw_arc_exception(std::runtime_error, "new_goal cannot reach the goal (GoalPfeasibility() <= 0)");
+    }
+
+    // Backtrack up the tree, updating states as we go
+    int64_t current_idx = node_idx;
+    while (current_idx >= 0)
+    {
+        RRTNode& current_node = forward_tree_[current_idx];
+        const auto& child_indices = current_node.getChildIndices();
+
+        // Check all the children of the current node, and update the node's goal reached probability accordingly
+        //
+        // Naively, the goal reached probability of a node is the maximum of the child goal reached probabilities;
+        // intuitively, the probability of reaching the goal is that of reaching the goal if we follow the best child.
+        //
+        // HOWEVER - the existence of "split" child states, where multiple states result from a single control input,
+        // makes this more compilcated. For split child states, the goal reached probability of the split is the sum
+        // over every split option of (split goal probability * probability of split)
+        //
+        // We can identify split nodes as children which share a transition id
+        // First, we go through the children and separate them based on transition id (this puts all the children of a
+        // transition together in one place)
+        std::map<int64_t, std::vector<int64_t>> effective_child_branches;
+        for (size_t idx = 0; idx < child_indices.size(); ++idx)
+        {
+            const int64_t current_child_index = child_indices[idx];
+            const int64_t child_transition_idx = forward_tree_[(size_t)current_child_index].transitionIndex();
+            effective_child_branches[child_transition_idx].push_back(current_child_index);
+        }
+
+        // Now that we have the splits separated out, compute the goal probability of each transition,
+        // keeping only the largest
+        double p_goal_reachable = 0.0;
+        for (auto itr = effective_child_branches.begin(); itr != effective_child_branches.end(); ++itr)
+        {
+            const std::vector<int64_t>& current_transition_children = itr->second;
+            double p_goal_reachable_current_transition = 0.0;
+            for (size_t child_idx = 0; child_idx < current_transition_children.size(); ++child_idx)
+            {
+                const RRTNode& child = forward_tree_[current_transition_children[child_idx]];
+                p_goal_reachable_current_transition += child.pTransition() * child.getpGoalReachable();
+            }
+            p_goal_reachable = std::max(p_goal_reachable, p_goal_reachable_current_transition);
+        }
+
+        // Check for numerical errors and store the final value
+        if ((p_goal_reachable >= 0.999) && (p_goal_reachable <= 1.001))
+        {
+            ROS_WARN_STREAM_NAMED("RRT", "Total P(goal reached) = " << p_goal_reachable << ". Probably anumerical error, rounding to 1.0");
+            p_goal_reachable = 1.0;
+        }
+        current_node.setpGoalReachable(p_goal_reachable);
+
+        // Move on to the parent of this node
+        current_idx = current_node.parentIndex();
+    }
 }
 
 //////// Shortcut smoothing functions //////////////////////////////////////////////////////////////////////////////////
