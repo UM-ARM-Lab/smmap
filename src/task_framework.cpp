@@ -287,7 +287,7 @@ void TaskFramework::execute()
         transition_estimator_ = std::make_shared<TransitionEstimation>(nh_, ph_, dijkstras_task_, vis_);
 
         // "World" params used by planning
-        RRTHelper::WorldParams world_params =
+        BandRRT::WorldParams world_params =
         {
             robot_,
             world_feedback.robot_configuration_valid_,
@@ -308,7 +308,7 @@ void TaskFramework::execute()
         const auto feasibility_dist_scale_factor    = GetRRTFeasibilityDistanceScaleFactor(*ph_);
         const auto default_propogation_confidence   = GetRRTDefaultPropagationConfidence(*ph_);
         assert(!use_cbirrt_style_projection && "CBiRRT style projection is no longer supported");
-        RRTHelper::PlanningParams planning_params =
+        BandRRT::PlanningParams planning_params =
         {
             forward_tree_extend_iterations,
             backward_tree_extend_iterations,
@@ -324,7 +324,7 @@ void TaskFramework::execute()
         const auto max_shortcut_index_distance = GetRRTMaxShortcutIndexDistance(*ph_);
         const auto max_smoothing_iterations = GetRRTMaxSmoothingIterations(*ph_);
         const auto max_failed_smoothing_iterations = GetRRTMaxFailedSmoothingIterations(*ph_);
-        RRTHelper::SmoothingParams smoothing_params =
+        BandRRT::SmoothingParams smoothing_params =
         {
             max_shortcut_index_distance,
             max_smoothing_iterations,
@@ -348,7 +348,7 @@ void TaskFramework::execute()
         const auto goal_reached_radius = dijkstras_task_->work_space_grid_.minStepDimension();
         const auto min_gripper_distance_to_obstacles = GetRRTMinGripperDistanceToObstacles(*ph_); // only matters for simulation
         const auto band_distance2_scaling_factor = GetRRTBandDistance2ScalingFactor(*ph_);
-        RRTHelper::TaskParams task_params = {
+        BandRRT::TaskParams task_params = {
             task_aligned_frame,
             task_frame_lower_limits,
             task_frame_upper_limits,
@@ -366,7 +366,7 @@ void TaskFramework::execute()
         const auto enable_rrt_visualizations = GetVisualizeRRT(*ph_);
 
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
-        rrt_helper_ = std::make_shared<RRTHelper>(
+        rrt_helper_ = std::make_shared<BandRRT>(
                     nh_,
                     ph_,
                     world_params,
@@ -1608,7 +1608,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
             if (!GetDisableAllVisualizations(*ph_))
             {
-                vis_->deleteObjects(RRTHelper::RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
+                vis_->deleteObjects(BandRRT::RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
                 rrt_helper_->visualizePath(rrt_planned_path_);
                 vis_->forcePublishNow(0.5);
             }

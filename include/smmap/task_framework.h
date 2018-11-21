@@ -11,7 +11,7 @@
 #include "smmap/deformable_model.h"
 #include "smmap/deformable_controller.h"
 #include "smmap/quinlan_rubber_band.h"
-#include "smmap/rrt_helper.h"
+#include "smmap/band_rrt.h"
 #include "smmap/learned_transitions.h"
 
 namespace smmap
@@ -136,7 +136,7 @@ namespace smmap
 
             bool executing_global_trajectory_;
             size_t global_plan_next_timestep_;
-            std::shared_ptr<RRTHelper> rrt_helper_;
+            std::shared_ptr<BandRRT> rrt_helper_;
             std::vector<RRTNode, RRTAllocator> rrt_planned_path_;
             std::vector<TransitionEstimation::State, TransitionEstimation::StateAllocator> rrt_executed_path_;
             TransitionEstimation::Ptr transition_estimator_;

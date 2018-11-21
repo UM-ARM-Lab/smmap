@@ -1,4 +1,4 @@
-#include "smmap/rrt_helper.h"
+#include "smmap/band_rrt.h"
 #include "smmap/task_framework.h"
 
 #include <thread>
@@ -22,21 +22,21 @@ using namespace EigenHelpers;
 
 RRTRobotRepresentation RRTDistance::joint_weights_;
 
-constexpr char RRTHelper::RRT_BLACKLISTED_GOAL_BANDS_NS[];
-constexpr char RRTHelper::RRT_GOAL_TESTING_NS[];
+constexpr char BandRRT::RRT_BLACKLISTED_GOAL_BANDS_NS[];
+constexpr char BandRRT::RRT_GOAL_TESTING_NS[];
 
-constexpr char RRTHelper::RRT_FORWARD_TREE_GRIPPER_A_NS[];
-constexpr char RRTHelper::RRT_FORWARD_TREE_GRIPPER_B_NS[];
-constexpr char RRTHelper::RRT_BACKWARD_TREE_GRIPPER_A_NS[];
-constexpr char RRTHelper::RRT_BACKWARD_TREE_GRIPPER_B_NS[];
-constexpr char RRTHelper::RRT_TREE_BAND_NS[];
+constexpr char BandRRT::RRT_FORWARD_TREE_GRIPPER_A_NS[];
+constexpr char BandRRT::RRT_FORWARD_TREE_GRIPPER_B_NS[];
+constexpr char BandRRT::RRT_BACKWARD_TREE_GRIPPER_A_NS[];
+constexpr char BandRRT::RRT_BACKWARD_TREE_GRIPPER_B_NS[];
+constexpr char BandRRT::RRT_TREE_BAND_NS[];
 
-constexpr char RRTHelper::RRT_SAMPLE_NS[];
-constexpr char RRTHelper::RRT_FORWARD_PROP_START_NS[];
+constexpr char BandRRT::RRT_SAMPLE_NS[];
+constexpr char BandRRT::RRT_FORWARD_PROP_START_NS[];
 
-constexpr char RRTHelper::RRT_SOLUTION_GRIPPER_A_NS[];
-constexpr char RRTHelper::RRT_SOLUTION_GRIPPER_B_NS[];
-constexpr char RRTHelper::RRT_SOLUTION_RUBBER_BAND_NS[];
+constexpr char BandRRT::RRT_SOLUTION_GRIPPER_A_NS[];
+constexpr char BandRRT::RRT_SOLUTION_GRIPPER_B_NS[];
+constexpr char BandRRT::RRT_SOLUTION_RUBBER_BAND_NS[];
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper function for assertion testing
@@ -560,7 +560,7 @@ double RRTDistance::Distance(const RRTRobotRepresentation& r1, const RRTRobotRep
 }
 
 // Only calculates the distance travelled by the grippers, not the entire band
-double RRTDistance::GrippersPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index)
+double RRTDistance::GrippersPathDistance(const RRTTree& path, const size_t start_index, const size_t end_index)
 {
     assert(start_index < end_index);
     assert(end_index < path.size());
@@ -572,7 +572,7 @@ double RRTDistance::GrippersPathDistance(const std::vector<RRTNode, RRTAllocator
     return path_distance;
 }
 
-double RRTDistance::RobotPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index)
+double RRTDistance::RobotPathDistance(const RRTTree& path, const size_t start_index, const size_t end_index)
 {
     assert(start_index < end_index);
     assert(end_index < path.size());
@@ -592,7 +592,7 @@ double RRTDistance::RobotPathDistance(const std::vector<RRTNode, RRTAllocator>& 
 // Constructor
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-RRTHelper::RRTHelper(
+BandRRT::BandRRT(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
         const WorldParams& world_params,
@@ -708,7 +708,7 @@ RRTHelper::RRTHelper(
 /*
  * Builds the helper functions needed by simple_rrt_planner and invokes the planner (and shortcut smoother)
  */
-std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
+RRTTree BandRRT::plan(
         const RRTNode& start,
         const RRTGrippersRepresentation& grippers_goal_poses,
         const std::chrono::duration<double>& time_limit)
@@ -862,7 +862,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
 //    goal_idx_in_forward_tree_ = -1;
 
     ROS_INFO_NAMED("rrt", "Starting SimpleHybridRRTPlanner");
-    std::vector<RRTNode, RRTAllocator> path;
+    RRTTree path;
     if (useStoredTree())
     {
         path = loadStoredTree();
@@ -970,12 +970,12 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::plan(
     return path;
 }
 
-void RRTHelper::addBandToBlacklist(const VectorVector3d& band)
+void BandRRT::addBandToBlacklist(const VectorVector3d& band)
 {
     blacklisted_goal_rubber_bands_.push_back(band);
 }
 
-void RRTHelper::clearBlacklist()
+void BandRRT::clearBlacklist()
 {
     blacklisted_goal_rubber_bands_.clear();
 }
@@ -984,7 +984,7 @@ void RRTHelper::clearBlacklist()
 
 /* Checks the planner tree to make sure the parent-child linkages are correct
  */
-bool RRTHelper::CheckTreeLinkage(const std::vector<RRTNode, RRTAllocator>& tree)
+bool BandRRT::CheckTreeLinkage(const RRTTree& tree)
 {
     // Step through each state in the tree. Make sure that the linkage to the parent and child states are correct
     for (size_t current_index = 0; current_index < tree.size(); current_index++)
@@ -1068,13 +1068,13 @@ bool RRTHelper::CheckTreeLinkage(const std::vector<RRTNode, RRTAllocator>& tree)
     return true;
 }
 
-std::vector<RRTNode, RRTAllocator> RRTHelper::ExtractSolutionPolicy(
-        const std::vector<RRTNode, RRTAllocator>& tree,
+RRTTree BandRRT::ExtractSolutionPolicy(
+        const RRTTree& tree,
         const int64_t goal_node_idx)
 {
     assert(false && "Redo this function - a path is a policy now");
 
-    std::vector<RRTNode, RRTAllocator> solution_path;
+    RRTTree solution_path;
     int64_t next_index = goal_node_idx;
     while (next_index >= 0)
     {
@@ -1088,7 +1088,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::ExtractSolutionPolicy(
     return solution_path;
 }
 
-std::vector<VectorXd> RRTHelper::ConvertRRTPathToRobotPath(const std::vector<RRTNode, RRTAllocator>& path)
+std::vector<VectorXd> BandRRT::ConvertRRTPathToRobotPath(const RRTTree& path)
 {
     assert(false && "Redo this function - a path is a policy now");
     std::vector<VectorXd> robot_config_path(path.size());
@@ -1104,8 +1104,8 @@ std::vector<VectorXd> RRTHelper::ConvertRRTPathToRobotPath(const std::vector<RRT
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Draws lines connecting all nodes in the tree, from start_idx through to the end of the vector
-void RRTHelper::visualizeTree(
-        const std::vector<RRTNode, RRTAllocator>& tree,
+void BandRRT::visualizeTree(
+        const RRTTree& tree,
         const size_t start_idx,
         const std::string ns_a,
         const std::string ns_b,
@@ -1171,7 +1171,7 @@ void RRTHelper::visualizeTree(
     }
 }
 
-void RRTHelper::visualizeBothTrees() const
+void BandRRT::visualizeBothTrees() const
 {
     deleteTreeVisualizations();
 
@@ -1208,7 +1208,7 @@ void RRTHelper::visualizeBothTrees() const
     vis_->forcePublishNow();
 }
 
-void RRTHelper::deleteTreeVisualizations() const
+void BandRRT::deleteTreeVisualizations() const
 {
     vis_->purgeMarkerList();
     visualization_msgs::Marker marker;
@@ -1223,7 +1223,7 @@ void RRTHelper::deleteTreeVisualizations() const
     vis_->visualizeCubes(TaskFramework::CLUSTERING_RESULTS_POST_PROJECT_NS, {grippers_goal_poses_.second.translation()}, Vector3d::Ones() * work_space_grid_.minStepDimension(), gripper_b_forward_tree_color_, 5);
 }
 
-void RRTHelper::visualizePath(const std::vector<RRTNode, RRTAllocator>& path) const
+void BandRRT::visualizePath(const RRTTree& path) const
 {
     VectorVector3d gripper_a_cubes;
     VectorVector3d gripper_b_cubes;
@@ -1255,7 +1255,7 @@ void RRTHelper::visualizePath(const std::vector<RRTNode, RRTAllocator>& path) co
 //        vis_->visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
 }
 
-void RRTHelper::visualizeBlacklist() const
+void BandRRT::visualizeBlacklist() const
 {
     VectorVector3d line_start_points;
     VectorVector3d line_end_points;
@@ -1273,7 +1273,7 @@ void RRTHelper::visualizeBlacklist() const
     vis_->visualizeLines(RRT_BLACKLISTED_GOAL_BANDS_NS, line_start_points, line_end_points, Visualizer::Red(), 1, 0.01);
 }
 
-void RRTHelper::storeTree(const std::vector<RRTNode, RRTAllocator>& tree, std::string file_path) const
+void BandRRT::storeTree(const RRTTree& tree, std::string file_path) const
 {
     try
     {
@@ -1308,7 +1308,7 @@ void RRTHelper::storeTree(const std::vector<RRTNode, RRTAllocator>& tree, std::s
                 return RRTNode::Deserialize(buffer, current, *starting_band_);
             };
 
-            const std::vector<RRTNode, RRTAllocator> retrieved_path =
+            const RRTTree retrieved_path =
                     arc_utilities::DeserializeVector<RRTNode, RRTAllocator>(buffer, 0, deserializer).first;
 
             assert(retrieved_path == tree);
@@ -1320,7 +1320,7 @@ void RRTHelper::storeTree(const std::vector<RRTNode, RRTAllocator>& tree, std::s
     }
 }
 
-std::vector<RRTNode, RRTAllocator> RRTHelper::loadStoredTree(std::string file_path) const
+RRTTree BandRRT::loadStoredTree(std::string file_path) const
 {
     try
     {
@@ -1361,10 +1361,10 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::loadStoredTree(std::string file_pa
         ROS_ERROR_STREAM_NAMED("rrt", "Failed to load stored path: "  <<  e.what());
     }
 
-    return std::vector<RRTNode, RRTAllocator>();
+    return RRTTree();
 }
 
-bool RRTHelper::useStoredTree() const
+bool BandRRT::useStoredTree() const
 {
     return ROSHelpers::GetParamRequired<bool>(*ph_, "use_stored_path", __func__).GetImmutable();
 }
@@ -1374,7 +1374,7 @@ bool RRTHelper::useStoredTree() const
 //  - Order is roughly the order that they are used internally
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void RRTHelper::planningMainLoop()
+void BandRRT::planningMainLoop()
 {
     // Make sure we've been given a start and goal state
     assert(forward_tree_.size() > 0);
@@ -1435,7 +1435,7 @@ void RRTHelper::planningMainLoop()
 
 //////// Sampling functions ////////////////////////////////////////////////////////////////////////////////////////////
 
-RRTNode RRTHelper::configSampling(const bool sample_band)
+RRTNode BandRRT::configSampling(const bool sample_band)
 {
     Stopwatch stopwatch;
     arc_helpers::DoNotOptimize(generator_);
@@ -1474,7 +1474,7 @@ RRTNode RRTHelper::configSampling(const bool sample_band)
     return sample;
 }
 
-RRTGrippersRepresentation RRTHelper::posPairSampling_internal()
+RRTGrippersRepresentation BandRRT::posPairSampling_internal()
 {
     Vector3d gripper_a_pos, gripper_b_pos;
 
@@ -1515,7 +1515,7 @@ RRTGrippersRepresentation RRTHelper::posPairSampling_internal()
     return rand_sample;
 }
 
-RRTRobotRepresentation RRTHelper::robotConfigPairSampling_internal()
+RRTRobotRepresentation BandRRT::robotConfigPairSampling_internal()
 {
     RRTRobotRepresentation rand_sample(total_dof_);
     for (ssize_t idx = 0; idx < total_dof_; ++idx)
@@ -1525,7 +1525,7 @@ RRTRobotRepresentation RRTHelper::robotConfigPairSampling_internal()
     return rand_sample;
 }
 
-VectorVector3d RRTHelper::bandSampling_internal()
+VectorVector3d BandRRT::bandSampling_internal()
 {
     VectorVector3d band_points;
     band_points.reserve(band_max_points_);
@@ -1568,7 +1568,7 @@ static std::pair<int64_t, double> getNearest(
 
 static std::pair<int64_t, double> getNearest(
         const RRTRobotRepresentation& robot_config,
-        const std::vector<RRTNode, RRTAllocator>& tree,
+        const RRTTree& tree,
         const size_t start_idx)
 {
     std::pair<int64_t, double> nearest(-1, std::numeric_limits<double>::infinity());
@@ -1620,7 +1620,7 @@ static std::vector<std::pair<int64_t, double>> radiusSearch(
 
 static std::vector<std::pair<int64_t, double>> radiusSearch(
         const RRTRobotRepresentation& robot_config,
-        const std::vector<RRTNode, RRTAllocator>& tree,
+        const RRTTree& tree,
         const size_t start_idx,
         const double radius2)
 {
@@ -1644,7 +1644,7 @@ static std::vector<std::pair<int64_t, double>> radiusSearch(
 
 static std::pair<int64_t, double> getNearestFullConfig(
         const RRTNode& config,
-        const std::vector<RRTNode, RRTAllocator>& tree,
+        const RRTTree& tree,
         const double band_distance2_scaling_factor_,
         const std::vector<std::pair<int64_t, double>>& radius_search_set_1,
         const std::vector<std::pair<int64_t, double>>& radius_search_set_2)
@@ -1683,7 +1683,7 @@ static std::pair<int64_t, double> getNearestFullConfig(
 }
 
 static std::pair<int64_t, double> getBestFullConfig(
-        const std::vector<RRTNode, RRTAllocator>& tree,
+        const RRTTree& tree,
         const std::vector<std::pair<int64_t, double>>& radius_search_set_1,
         const std::vector<std::pair<int64_t, double>>& radius_search_set_2)
 {
@@ -1720,7 +1720,7 @@ static std::pair<int64_t, double> getBestFullConfig(
 
 //////// Nearest neighbour functions ///////////////////////////////////////////////////////////////////////////////////
 
-int64_t RRTHelper::nearestNeighbour(
+int64_t BandRRT::nearestNeighbour(
         const bool use_forward_tree,
         const RRTNode& config)
 {
@@ -1745,11 +1745,11 @@ int64_t RRTHelper::nearestNeighbour(
     return nn_idx;
 }
 
-std::pair<int64_t, double> RRTHelper::nearestNeighbourRobotSpace(
+std::pair<int64_t, double> BandRRT::nearestNeighbourRobotSpace(
         const bool use_forward_tree,
         const RRTNode& config)
 {
-    std::vector<RRTNode, RRTAllocator>* tree = nullptr;
+    RRTTree* tree = nullptr;
     std::shared_ptr<NNIndexType> nn_index = nullptr;
     std::vector<size_t>* nn_data_idx_to_tree_idx = nullptr;
     std::vector<float>* nn_raw_data = nullptr;
@@ -1829,7 +1829,7 @@ std::pair<int64_t, double> RRTHelper::nearestNeighbourRobotSpace(
     return nearest;
 }
 
-int64_t RRTHelper::nearestBestNeighbourFullSpace(
+int64_t BandRRT::nearestBestNeighbourFullSpace(
         const RRTNode &config)
 {
     const std::pair<int64_t, double> nearest_robot_space = nearestNeighbourRobotSpace(true, config);
@@ -1903,11 +1903,11 @@ int64_t RRTHelper::nearestBestNeighbourFullSpace(
     }
 }
 
-void RRTHelper::rebuildNNIndex(
+void BandRRT::rebuildNNIndex(
         std::shared_ptr<NNIndexType> index,
         std::vector<float>& nn_raw_data,
         std::vector<size_t>& nn_data_idx_to_tree_idx,
-        const std::vector<RRTNode, RRTAllocator>& tree,
+        const RRTTree& tree,
         size_t& new_data_start_idx,
         const bool force_rebuild)
 {
@@ -1964,7 +1964,7 @@ void RRTHelper::rebuildNNIndex(
 
 //////// Tree extension functions //////////////////////////////////////////////////////////////////////////////////////
 
-size_t RRTHelper::connectForwardTree(const int64_t forward_tree_start_idx, const RRTNode& target, const bool is_random)
+size_t BandRRT::connectForwardTree(const int64_t forward_tree_start_idx, const RRTNode& target, const bool is_random)
 {
     const bool fwd_prop_local_visualization_enabled = true;
 
@@ -2014,7 +2014,7 @@ size_t RRTHelper::connectForwardTree(const int64_t forward_tree_start_idx, const
     return num_random_nodes_created;
 }
 
-size_t RRTHelper::connectTreeToGrippersGoalSet(const int64_t last_node_idx_in_forward_tree_branch)
+size_t BandRRT::connectTreeToGrippersGoalSet(const int64_t last_node_idx_in_forward_tree_branch)
 {
     const bool nn_forward_tree = false;
     const bool fwd_prop_local_visualization_enabled = true;
@@ -2043,8 +2043,8 @@ size_t RRTHelper::connectTreeToGrippersGoalSet(const int64_t last_node_idx_in_fo
     return num_goal_directed_nodes_created;
 }
 
-size_t RRTHelper::forwardPropogationFunction(
-        std::vector<RRTNode, RRTAllocator>& tree_to_extend,
+size_t BandRRT::forwardPropogationFunction(
+        RRTTree& tree_to_extend,
         const int64_t& nearest_neighbor_idx,
         const RRTNode& target,
         const bool visualization_enabled_locally)
@@ -2365,7 +2365,7 @@ size_t RRTHelper::forwardPropogationFunction(
     return nodes_created;
 }
 
-std::vector<std::pair<RubberBand::Ptr, double>> RRTHelper::forwardPropogateBand(
+std::vector<std::pair<RubberBand::Ptr, double>> BandRRT::forwardPropogateBand(
         const RubberBand::ConstPtr& starting_band,
         const RRTGrippersRepresentation& next_grippers_poses)
 {
@@ -2422,7 +2422,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> RRTHelper::forwardPropogateBand(
 
 //////// Goal check and node blacklist management functions ////////////////////////////////////////////////////////////
 
-void RRTHelper::checkNewStatesForGoal(const ssize_t num_nodes)
+void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
 {
     // Check if any of the new nodes reached the goal
     for (size_t idx = forward_tree_.size() - num_nodes; idx < forward_tree_.size(); ++idx)
@@ -2436,7 +2436,7 @@ void RRTHelper::checkNewStatesForGoal(const ssize_t num_nodes)
     }
 }
 
-bool RRTHelper::goalReached(const RRTNode& node)
+bool BandRRT::goalReached(const RRTNode& node)
 {
     // Check if the grippers are close enough to the goal position
     if (RRTDistance::Distance(node.grippers(), grippers_goal_poses_) > goal_reach_radius_)
@@ -2469,7 +2469,7 @@ bool RRTHelper::goalReached(const RRTNode& node)
     return true;
 }
 
-bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band)
+bool BandRRT::isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band)
 {
     Stopwatch stopwatch;
     const auto vector_representation = test_band.resampleBand();
@@ -2480,7 +2480,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band)
     return is_first_order_visible;
 }
 
-bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_band) const
+bool BandRRT::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_band) const
 {
     for (size_t idx = 0; idx < blacklisted_goal_rubber_bands_.size(); idx++)
     {
@@ -2494,7 +2494,7 @@ bool RRTHelper::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_b
     return false;
 }
 
-void RRTHelper::goalReachedCallback(const int64_t node_idx)
+void BandRRT::goalReachedCallback(const int64_t node_idx)
 {
     // Backtrack through the tree until we reach the root of the current "goal branch"
     // - i.e.; find the first relevant split
@@ -2513,7 +2513,7 @@ void RRTHelper::goalReachedCallback(const int64_t node_idx)
     updatePGoalReachable(node_idx);
 }
 
-bool RRTHelper::isRootOfGoalBranch(const int64_t node_idx) const
+bool BandRRT::isRootOfGoalBranch(const int64_t node_idx) const
 {
     const RRTNode& node = forward_tree_[node_idx];
 
@@ -2553,7 +2553,7 @@ bool RRTHelper::isRootOfGoalBranch(const int64_t node_idx) const
     return is_root_of_tree || is_unresolved_split;
 }
 
-void RRTHelper::blacklistGoalBranch(const int64_t root_idx)
+void BandRRT::blacklistGoalBranch(const int64_t root_idx)
 {
     if (root_idx < 0)
     {
@@ -2585,7 +2585,7 @@ void RRTHelper::blacklistGoalBranch(const int64_t root_idx)
     }
 }
 
-void RRTHelper::updatePGoalReachable(const int64_t node_idx)
+void BandRRT::updatePGoalReachable(const int64_t node_idx)
 {
     RRTNode& new_goal = forward_tree_[node_idx];
     // Make sure something hasn't gone wrong
@@ -2652,7 +2652,7 @@ void RRTHelper::updatePGoalReachable(const int64_t node_idx)
 //////// Shortcut smoothing functions //////////////////////////////////////////////////////////////////////////////////
 
 static VectorVector3d findFirstGripperWaypoints(
-        const std::vector<RRTNode, RRTAllocator>& path,
+        const RRTTree& path,
         const size_t start_index,
         const size_t end_index)
 {
@@ -2689,7 +2689,7 @@ static VectorVector3d findFirstGripperWaypoints(
 }
 
 static VectorVector3d findSecondGripperWaypoints(
-        const std::vector<RRTNode, RRTAllocator>& path,
+        const RRTTree& path,
         const size_t start_index,
         const size_t end_index)
 {
@@ -2752,8 +2752,8 @@ static VectorVector3d createOtherGripperWaypoints(
     return other_gripper_waypoints;
 }
 
-std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
-        std::vector<RRTNode, RRTAllocator> path,
+RRTTree BandRRT::rrtShortcutSmooth(
+        RRTTree path,
         const bool visualization_enabled_locally)
 {
     Stopwatch function_wide_stopwatch;
@@ -2810,9 +2810,9 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
         ///////////////////// Attempte a shortcut //////////////////////////////////////////////////////////////////////
 
         // Create structures to hold the results which will get filled by each part of the if/else chain
-        std::vector<RRTNode, RRTAllocator> smoothed_segment;
+        RRTTree smoothed_segment;
         smoothed_segment.reserve(256);
-        std::pair<bool, std::vector<RRTNode, RRTAllocator>> end_of_smoothing_to_goal_results;
+        std::pair<bool, RRTTree> end_of_smoothing_to_goal_results;
 
         const bool fwd_prop_local_visualization_enabled = false;
 
@@ -2997,7 +2997,7 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
 //            std::cout << "Smoothing valid\n";
 
             // Allocate space for the total smoothed path
-            std::vector<RRTNode, RRTAllocator> smoothed_path;
+            RRTTree smoothed_path;
             smoothed_path.reserve((smoothing_start_index  + 1) + (smoothed_segment.size() - 1) + (end_of_smoothing_to_goal_path_.size() - 1));
 
             // Insert the starting unchanged part of the path
@@ -3045,8 +3045,8 @@ std::vector<RRTNode, RRTAllocator> RRTHelper::rrtShortcutSmooth(
  * @param end_index
  * @return A vector of RRTConfig of at most (end_index - start_index) elements; includes path[start_index].
  */
-std::pair<bool, std::vector<RRTNode, RRTAllocator>> RRTHelper::forwardSimulateGrippersPath(
-        const std::vector<RRTNode, RRTAllocator>& path,
+std::pair<bool, RRTTree> BandRRT::forwardSimulateGrippersPath(
+        const RRTTree& path,
         const size_t start_index,
         RubberBand rubber_band)
 {
@@ -3069,7 +3069,7 @@ std::pair<bool, std::vector<RRTNode, RRTAllocator>> RRTHelper::forwardSimulateGr
     }
 
     // Collect the results for use by the rrtShortcutSmooth function
-    std::vector<RRTNode, RRTAllocator> resulting_path;
+    RRTTree resulting_path;
     // Put the start position on the path
     {
         resulting_path.reserve(path.size() - start_index);

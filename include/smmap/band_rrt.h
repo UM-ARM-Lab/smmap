@@ -1,5 +1,4 @@
-#ifndef RRT_HELPER_H
-#define RRT_HELPER_H
+#pragma once
 
 #include <random>
 #include <arc_utilities/eigen_helpers.hpp>
@@ -74,6 +73,8 @@ namespace smmap
 {
     class RRTNode;
     typedef Eigen::aligned_allocator<RRTNode> RRTAllocator;
+    typedef std::vector<RRTNode, RRTAllocator> RRTTree;
+
     typedef std::pair<Eigen::Isometry3d, Eigen::Isometry3d> RRTGrippersRepresentation;
     typedef Eigen::VectorXd RRTRobotRepresentation;
     typedef flann::KDTreeSingleIndex<flann::L2_weighted<float>> NNIndexType;
@@ -187,14 +188,14 @@ namespace smmap
             static double DistanceSquared(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2);
             static double Distance(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2);
 
-            static double GrippersPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index);
-            static double RobotPathDistance(const std::vector<RRTNode, RRTAllocator>& path, const size_t start_index, const size_t end_index);
+            static double GrippersPathDistance(const RRTTree& path, const size_t start_index, const size_t end_index);
+            static double RobotPathDistance(const RRTTree& path, const size_t start_index, const size_t end_index);
 
         private:
             static RRTRobotRepresentation joint_weights_;
     };
 
-    class RRTHelper
+    class BandRRT
     {
     public:
         static constexpr double NN_BLACKLIST_DISTANCE = std::numeric_limits<double>::max() - 1e10;
@@ -266,7 +267,7 @@ namespace smmap
             size_t band_max_points_;
         };
 
-        RRTHelper(
+        BandRRT(
                 std::shared_ptr<ros::NodeHandle> nh,
                 std::shared_ptr<ros::NodeHandle> ph,
                 const WorldParams& world_params,
@@ -278,7 +279,7 @@ namespace smmap
 
         //////// Planning functions //////////////////////////////////////////////////////////
 
-        std::vector<RRTNode, RRTAllocator> plan(
+        RRTTree plan(
                 const RRTNode& start,
                 const RRTGrippersRepresentation& grippers_goal_poses,
                 const std::chrono::duration<double>& time_limit);
@@ -289,13 +290,13 @@ namespace smmap
         //////// Policy extraction functions /////////////////////////////////////////////////
 
         static bool CheckTreeLinkage(
-                const std::vector<RRTNode, RRTAllocator>& tree);
+                const RRTTree& tree);
 
         static std::vector<Eigen::VectorXd> ConvertRRTPathToRobotPath(
-                const std::vector<RRTNode, RRTAllocator>& path);
+                const RRTTree& path);
 
-        static std::vector<RRTNode, RRTAllocator> ExtractSolutionPolicy(
-                const std::vector<RRTNode, RRTAllocator>& tree,
+        static RRTTree ExtractSolutionPolicy(
+                const RRTTree& tree,
                 const int64_t goal_node_idx);
 
         ///////////////////////////////////////////////////////////////////////////////////////
@@ -303,7 +304,7 @@ namespace smmap
         ///////////////////////////////////////////////////////////////////////////////////////
 
         void visualizeTree(
-                const std::vector<RRTNode, RRTAllocator>& tree,
+                const RRTTree& tree,
                 const size_t start_idx,
                 const std::string ns_a,
                 const std::string ns_b,
@@ -317,11 +318,11 @@ namespace smmap
                 const bool draw_band) const;
         void visualizeBothTrees() const;
         void deleteTreeVisualizations() const;
-        void visualizePath(const std::vector<RRTNode, RRTAllocator>& path) const;
+        void visualizePath(const RRTTree& path) const;
         void visualizeBlacklist() const;
 
-        void storeTree(const std::vector<RRTNode, RRTAllocator>& tree, std::string file_path = "") const;
-        std::vector<RRTNode, RRTAllocator> loadStoredTree(std::string file_path = "") const;
+        void storeTree(const RRTTree& tree, std::string file_path = "") const;
+        RRTTree loadStoredTree(std::string file_path = "") const;
         bool useStoredTree() const;
 
     private:
@@ -360,7 +361,7 @@ namespace smmap
                 std::shared_ptr<NNIndexType> index,
                 std::vector<float>& nn_raw_data,
                 std::vector<size_t>& nn_data_idx_to_tree_idx,
-                const std::vector<RRTNode, RRTAllocator>& tree,
+                const RRTTree& tree,
                 size_t& new_data_start_idx,
                 const bool force_rebuild);
 
@@ -370,7 +371,7 @@ namespace smmap
         size_t connectTreeToGrippersGoalSet(const int64_t last_node_idx_in_forward_tree_branch);
 
         size_t forwardPropogationFunction(
-                std::vector<RRTNode, RRTAllocator>& tree_to_extend,
+                RRTTree& tree_to_extend,
                 const int64_t& nearest_neighbor_idx,
                 const RRTNode& target,
                 const bool visualization_enabled_locally);
@@ -394,12 +395,12 @@ namespace smmap
 
         //////// Shortcut smoothing functions ////////////////////////////////////////////////
 
-        std::vector<RRTNode, RRTAllocator> rrtShortcutSmooth(
-                std::vector<RRTNode, RRTAllocator> path,
+        RRTTree rrtShortcutSmooth(
+                RRTTree path,
                 const bool visualization_enabled_locally);
 
-        std::pair<bool, std::vector<RRTNode, RRTAllocator>> forwardSimulateGrippersPath(
-                const std::vector<RRTNode, RRTAllocator>& path,
+        std::pair<bool, RRTTree> forwardSimulateGrippersPath(
+                const RRTTree& path,
                 const size_t start_index,
                 RubberBand rubber_band);
 
@@ -467,8 +468,8 @@ namespace smmap
         int64_t next_split_index_;
 
         // Trees and nearest neighbour data structures
-        std::vector<RRTNode, RRTAllocator> forward_tree_;
-        std::vector<RRTNode, RRTAllocator> grippers_goal_set_; // Note that the band portion of the backward tree is invalid
+        RRTTree forward_tree_;
+        RRTTree grippers_goal_set_; // Note that the band portion of the backward tree is invalid
         std::vector<size_t> forward_nn_data_idx_to_tree_idx_;
         std::vector<size_t> goal_set_nn_data_idx_to_tree_idx_;
         std::vector<float> forward_nn_raw_data_;
@@ -532,5 +533,3 @@ namespace smmap
         size_t backward_tree_next_visualized_node_;
     };
 }
-
-#endif // ifndef RRT_HELPER_H
