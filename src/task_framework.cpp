@@ -191,8 +191,9 @@ TaskFramework::TaskFramework(
     , max_lookahead_steps_(GetNumLookaheadSteps(*ph_))
     , max_grippers_pose_history_length_(GetMaxGrippersPoseHistoryLength(*ph_))
     , executing_global_trajectory_(false)
-    , global_plan_next_timestep_(-1)
-    , rrt_helper_(nullptr)
+    , band_rrt_(nullptr)
+    , policy_current_idx_(-1)
+    , policy_segment_next_idx_(-1)
     , transition_estimator_(nullptr)
     // Used to generate some log data by some controllers
     , object_initial_node_distance_(CalculateDistanceMatrix(GetObjectInitialConfiguration(*nh_)))
@@ -366,7 +367,7 @@ void TaskFramework::execute()
         const auto enable_rrt_visualizations = GetVisualizeRRT(*ph_);
 
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
-        rrt_helper_ = std::make_shared<BandRRT>(
+        band_rrt_ = std::make_shared<BandRRT>(
                     nh_,
                     ph_,
                     world_params,
@@ -798,7 +799,9 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
         const WorldState& current_world_state)
 {
     assert(executing_global_trajectory_);
-    assert(global_plan_next_timestep_ < rrt_planned_path_.size());
+    assert(policy_current_idx_ < rrt_planned_policy_.size());
+    const RRTPath& current_segment = rrt_planned_policy_[policy_current_idx_].first;
+    assert(policy_segment_next_idx_ < current_segment.size());
 
     // Check if we need to interpolate the command - we only advance the traj waypoint
     // pointer if we started within one step of the current target
@@ -807,8 +810,8 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     AllGrippersSinglePose next_grippers_target(0);
     if (current_world_state.robot_configuration_valid_)
     {
-        next_dof_target = rrt_planned_path_[global_plan_next_timestep_].robotConfiguration();
-        const auto& grippers_poses_as_pair = rrt_planned_path_[global_plan_next_timestep_].grippers();
+        next_dof_target = current_segment[policy_segment_next_idx_].robotConfiguration();
+        const auto& grippers_poses_as_pair = current_segment[policy_segment_next_idx_].grippers();
         next_grippers_target = {grippers_poses_as_pair.first, grippers_poses_as_pair.second};
 
         const double max_dof_delta = robot_->max_dof_velocity_norm_ * robot_->dt_;
@@ -828,7 +831,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     }
     else
     {
-        const auto& grippers_poses_as_pair = rrt_planned_path_[global_plan_next_timestep_].grippers();
+        const auto& grippers_poses_as_pair = current_segment[policy_segment_next_idx_].grippers();
         next_grippers_target = {grippers_poses_as_pair.first, grippers_poses_as_pair.second};
 
         const double max_grippers_delta = robot_->max_gripper_velocity_norm_ * robot_->dt_;
@@ -857,28 +860,39 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     const auto band_points = getPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
     rubber_band_between_grippers_->setPointsAndSmooth(band_points);
 
+    // If we targetted the last node of the current path segment, then we need to handle
+    // recording data differently and determine which path segment to follow next
+    const bool last_waypoint_targetted = next_waypoint_targetted
+            && (policy_segment_next_idx_ + 1 == current_segment.size());
+
+    const bool split_in_policy = last_waypoint_targetted
+            && (rrt_planned_policy_[policy_current_idx_].second.size() != 0);
+
     // If we are directly targetting the waypoint itself (i.e., no interpolation)
     // then update the waypoint index, and record the resulting configuration in
     // the "path actually taken" list
-    if (next_waypoint_targetted)
+    if (next_waypoint_targetted && !split_in_policy)
     {
         rrt_executed_path_.push_back({
                     world_feedback.object_configuration_,
                     std::make_shared<RubberBand>(*rubber_band_between_grippers_),
-                    std::make_shared<RubberBand>(*rrt_planned_path_[global_plan_next_timestep_].band())});
+                    std::make_shared<RubberBand>(*current_segment[policy_segment_next_idx_].band())});
 
-        ++global_plan_next_timestep_;
-
-//        rrt_executed_path_.back().rubber_band_->visualize("actual_band", Visualizer::Cyan(), Visualizer::Cyan(), 1);
-//        rrt_executed_path_.back().planned_rubber_band_->visualize("planned_band", Visualizer::Blue(), Visualizer::Blue(), 1);
-//        vis_->forcePublishNow(0.5);
+        ++policy_segment_next_idx_;
     }
 
-    if (global_plan_next_timestep_ == rrt_planned_path_.size())
+    if (last_waypoint_targetted && split_in_policy)
+    {
+        policy_current_idx_ = findBestBandMatchAtEndOfSegment();
+        policy_segment_next_idx_ = 1;
+    }
+    else if (last_waypoint_targetted && !split_in_policy)
     {
         ROS_INFO_NAMED("task_framework", "Global plan finished, resetting grippers pose history and error history");
 
         executing_global_trajectory_ = false;
+        policy_current_idx_ = -1;
+        policy_segment_next_idx_ = -1;
         grippers_pose_history_.clear();
         error_history_.clear();
 
@@ -896,6 +910,32 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     logBanditsData(current_world_state, world_feedback, fake_all_models_results, model_utility_bandit_->getMean(), model_utility_bandit_->getSecondStat(), -1);
 
     return world_feedback;
+}
+
+size_t TaskFramework::findBestBandMatchAtEndOfSegment() const
+{
+    assert(policy_current_idx_ < rrt_planned_policy_.size());
+    const std::vector<size_t>& child_paths = rrt_planned_policy_[policy_current_idx_].second;
+    assert(child_paths.size() > 0);
+
+    size_t best_idx = -1;
+    double best_dist = std::numeric_limits<double>::infinity();
+    for (size_t child_idx = 0; child_idx < child_paths.size(); ++child_idx)
+    {
+        const size_t path_idx = child_paths[child_idx];
+        const RRTPath& child_path = rrt_planned_policy_[path_idx].first;
+        const RRTNode& first_node = child_path[0];
+
+        ROS_WARN_THROTTLE_NAMED(4.0, "task_framework", "Band distance check to determine which branch of the policy to follow is not using homotopy");
+        const double dist = RubberBand::Distance(*rubber_band_between_grippers_, *first_node.band());
+        if (dist < best_dist)
+        {
+            best_dist = dist;
+            best_idx = path_idx;
+        }
+    }
+    assert(best_idx < rrt_planned_policy_.size());
+    return best_idx;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1171,10 +1211,13 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
 {
     static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(*ph_);
 
-    //#warning "!!!!!!! Global plan overstretch check disabled!!!!!"
-    //return false;
+//    #warning "!!!!!!! Global plan overstretch check disabled!!!!!"
+//    return false;
 
-    assert(global_plan_next_timestep_ < rrt_planned_path_.size());
+    ROS_WARN_THROTTLE_NAMED(4.0, "task_framewor", "Only predicting stuck using the current segment, and not using transition learning in the process");
+
+    const RRTPath& current_segment = rrt_planned_policy_[policy_current_idx_].first;
+    assert(policy_segment_next_idx_ < current_segment.size());
 
     constexpr bool band_verbose = false;
 
@@ -1186,10 +1229,10 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
     for (size_t t = 0; t < max_lookahead_steps_; ++t)
     {
         // Always predict the full number of steps, duplicating the last point in the path as needed
-        const size_t next_idx = std::min(rrt_planned_path_.size() - 1, global_plan_next_timestep_+ t);
+        const size_t next_idx = std::min(current_segment.size() - 1, policy_segment_next_idx_+ t);
 
         // Forward project the band and check for overstretch
-        const auto& grippers_pose = rrt_planned_path_[next_idx].grippers();
+        const auto& grippers_pose = current_segment[next_idx].grippers();
         band.forwardPropagateRubberBandToEndpointTargets(
                     grippers_pose.first.translation(),
                     grippers_pose.second.translation(),
@@ -1212,6 +1255,48 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
     vis_->forcePublishNow();
 
     return overstretch_predicted;
+}
+
+void TaskFramework::predictNextBandStatesGlobalPlanResults(const RubberBand::Ptr starting_band, const int horizion, const size_t policy_current_idx, const size_t policy_segment_next_idx) const
+{
+    assert(false && "This code is not tested, intended to do a tree-style prediction");
+
+    static double default_propogation_confidence = GetRRTDefaultPropagationConfidence(*ph_);
+
+    if (horizion == 0)
+    {
+        return;
+    }
+
+    assert(policy_current_idx < rrt_planned_policy_.size());
+    const RRTPath& current_segment = rrt_planned_policy_[policy_current_idx].first;
+    assert(policy_segment_next_idx < current_segment.size());
+    const RRTGrippersRepresentation& next_grippers_poses = current_segment[policy_segment_next_idx].grippers();
+
+    const auto starting_band_endpoints = starting_band->getEndpoints();
+    TransitionEstimation::Action action = {
+        next_grippers_poses.first.translation() - starting_band_endpoints.first,
+        next_grippers_poses.second.translation() - starting_band_endpoints.second};
+    auto transitions = transition_estimator_->applyLearnedTransitions(starting_band, action);
+
+    auto next_band = std::make_shared<RubberBand>(*starting_band);
+    const bool rubber_band_verbose = false;
+    // Forward simulate the rubber band to test this transition
+    next_band->forwardPropagateRubberBandToEndpointTargets(
+                next_grippers_poses.first.translation(),
+                next_grippers_poses.second.translation(),
+                rubber_band_verbose);
+
+    transitions.push_back({next_band, default_propogation_confidence});
+
+    if (policy_segment_next_idx + 1 < current_segment.size())
+    {
+        for (size_t transition_idx; transition_idx < transitions.size(); ++transition_idx)
+        {
+//            auto next_predictions =
+                    predictNextBandStatesGlobalPlanResults(transitions[transition_idx].first, horizion - 1, policy_current_idx, policy_segment_next_idx);
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1483,8 +1568,8 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
 
     // Visualization
     {
-        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), rrt_helper_->gripper_a_forward_tree_color_, 1);
-        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), rrt_helper_->gripper_b_forward_tree_color_, 5);
+        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[0].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), band_rrt_->gripper_a_forward_tree_color_, 1);
+        vis_->visualizeCubes(CLUSTERING_RESULTS_POST_PROJECT_NS, {target_gripper_poses[1].translation()}, Vector3d::Ones() * dijkstras_task_->work_space_grid_.minStepDimension(), band_rrt_->gripper_b_forward_tree_color_, 5);
 
         std::vector<std_msgs::ColorRGBA> colors;
         for (size_t idx = 0; idx < cluster_targets.size(); ++idx)
@@ -1513,7 +1598,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     ROS_INFO_STREAM("!!!!!!!!!!!!!!!!!! Planner Invoked " << num_times_invoked << " times!!!!!!!!!!!");
 
     // Resample the band for the purposes of first order vis checking
-    rrt_helper_->addBandToBlacklist(rubber_band_between_grippers_->resampleBand());
+    band_rrt_->addBandToBlacklist(rubber_band_between_grippers_->resampleBand());
 
     vis_->purgeMarkerList();
     visualization_msgs::Marker marker;
@@ -1524,7 +1609,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     vis_->forcePublishNow();
     vis_->purgeMarkerList();
 
-    rrt_planned_path_.clear();
+    rrt_planned_policy_.clear();
     if (GetRRTReuseOldResults(*ph_))
     {
         // Deserialization
@@ -1533,7 +1618,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 GetLogFolder(*nh_) +
                 "rrt_cache_step." +
                 PrettyPrint::PrettyPrint(num_times_invoked);
-        rrt_planned_path_ = rrt_helper_->loadStoredTree(file_path);
+        rrt_planned_policy_ = band_rrt_->loadStoredPolicy(file_path);
 
         if (world_state.robot_configuration_valid_)
         {
@@ -1544,13 +1629,13 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
             if (input != "yes")
             {
                 std::cerr << "Ignoring path loaded from file, replanning.\n";
-                rrt_planned_path_.clear();
+                rrt_planned_policy_.clear();
             }
         }
     }
 
     // Planning if we did not load a plan from file
-    if (rrt_planned_path_.size() == 0)
+    if (rrt_planned_policy_.size() == 0)
     {
         const RRTGrippersRepresentation gripper_config(
                     world_state.all_grippers_single_pose_[0],
@@ -1597,10 +1682,10 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 std::cout << "Trial idx: " << trial_idx << std::endl;
             }
 
-            rrt_planned_path_.clear();
-            while (rrt_planned_path_.size() == 0)
+            rrt_planned_policy_.clear();
+            while (rrt_planned_policy_.size() == 0)
             {
-                rrt_planned_path_ = rrt_helper_->plan(
+                rrt_planned_policy_ = band_rrt_->plan(
                             start_config,
                             target_grippers_poses,
                             time_limit);
@@ -1609,7 +1694,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
             if (!GetDisableAllVisualizations(*ph_))
             {
                 vis_->deleteObjects(BandRRT::RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
-                rrt_helper_->visualizePath(rrt_planned_path_);
+                band_rrt_->visualizePolicy(rrt_planned_policy_);
                 vis_->forcePublishNow(0.5);
             }
 
@@ -1621,12 +1706,14 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                         GetLogFolder(*nh_) +
                         "rrt_cache_step." +
                         PrettyPrint::PrettyPrint(num_times_invoked);
-                rrt_helper_->storeTree(rrt_planned_path_, file_path);
+                band_rrt_->storePolicy(rrt_planned_policy_, file_path);
             }
         }
     }
 
-    global_plan_next_timestep_ = 0;
+    // We set the next index to "1" because the policy starts with the current configuration
+    policy_current_idx_ = 0;
+    policy_segment_next_idx_ = 1;
     executing_global_trajectory_ = true;
 
     rrt_executed_path_.clear();

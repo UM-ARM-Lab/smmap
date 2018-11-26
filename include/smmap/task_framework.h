@@ -60,6 +60,8 @@ namespace smmap
             WorldState sendNextCommandUsingGlobalPlannerResults(
                     const WorldState& current_world_state);
 
+            size_t findBestBandMatchAtEndOfSegment() const;
+
             ////////////////////////////////////////////////////////////////////
             // Constraint violation detection
             ////////////////////////////////////////////////////////////////////
@@ -77,6 +79,8 @@ namespace smmap
             bool globalPlannerNeededDueToLackOfProgress();
 
             bool predictStuckForGlobalPlannerResults(const bool visualization_enabled = true);
+
+            void predictNextBandStatesGlobalPlanResults(const RubberBand::Ptr starting_band, const int horizion, const size_t policy_current_idx, const size_t policy_segment_next_idx) const;
 
             ////////////////////////////////////////////////////////////////////
             // Global gripper planner functions
@@ -135,9 +139,10 @@ namespace smmap
             std::vector<double> error_history_;
 
             bool executing_global_trajectory_;
-            size_t global_plan_next_timestep_;
-            std::shared_ptr<BandRRT> rrt_helper_;
-            std::vector<RRTNode, RRTAllocator> rrt_planned_path_;
+            std::shared_ptr<BandRRT> band_rrt_;
+            RRTPolicy rrt_planned_policy_;
+            size_t policy_current_idx_;
+            size_t policy_segment_next_idx_;
             std::vector<TransitionEstimation::State, TransitionEstimation::StateAllocator> rrt_executed_path_;
             TransitionEstimation::Ptr transition_estimator_;
 

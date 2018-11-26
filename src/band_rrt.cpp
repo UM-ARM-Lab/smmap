@@ -16,8 +16,8 @@ using namespace EigenHelpers;
 
 #warning "!!!!!!!!! Magic number !!!!!!!!!!!"
 #define GRIPPER_TRANSLATION_IS_APPROX_DIST 0.001
-//#define SMMAP_RRT_VERBOSE true
-#define SMMAP_RRT_VERBOSE false
+#define SMMAP_RRT_VERBOSE true
+//#define SMMAP_RRT_VERBOSE false
 
 
 RRTRobotRepresentation RRTDistance::joint_weights_;
@@ -254,12 +254,12 @@ int64_t RRTNode::splitIndex() const
 }
 
 
-const std::vector<int64_t>& RRTNode::getChildIndices() const
+const std::vector<int64_t>& RRTNode::childIndices() const
 {
     return child_indices_;
 }
 
-void RRTNode::clearChildIndicies()
+void RRTNode::clearChildIndices()
 {
     child_indices_.clear();
 }
@@ -708,7 +708,7 @@ BandRRT::BandRRT(
 /*
  * Builds the helper functions needed by simple_rrt_planner and invokes the planner (and shortcut smoother)
  */
-RRTTree BandRRT::plan(
+RRTPolicy BandRRT::plan(
         const RRTNode& start,
         const RRTGrippersRepresentation& grippers_goal_poses,
         const std::chrono::duration<double>& time_limit)
@@ -861,15 +861,12 @@ RRTTree BandRRT::plan(
 //    path_found_ = false;
 //    goal_idx_in_forward_tree_ = -1;
 
-    ROS_INFO_NAMED("rrt", "Starting SimpleHybridRRTPlanner");
-    RRTTree path;
+    ROS_INFO_NAMED("rrt", "Starting BandRRT");
     if (useStoredTree())
     {
-        path = loadStoredTree();
+        forward_tree_ = loadStoredTree();
     }
-
-    // If we failed to retreive a path (or we didn't try) then plan a path
-    if (path.size() == 0)
+    else
     {
         robot_->lockEnvironment();
         start_time_ = std::chrono::steady_clock::now();
@@ -914,33 +911,35 @@ RRTTree BandRRT::plan(
 //        planning_statistics_["planning_size11_backward_connections_made               "] = (double)backward_connections_made_;
 
         ROS_INFO_STREAM_NAMED("rrt", "RRT Helper Planning Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl);
+        storeTree(forward_tree_);
 
         if (visualization_enabled_globally_)
         {
             ROS_INFO_NAMED("rrt", "Visualizing tree.");
             visualizeBothTrees();
             visualizeBlacklist();
-            visualizePath(path);
             vis_->forcePublishNow(0.5);
-        }
-
-        if (forward_tree_[0].getpGoalReachable() > 0.0)
-        {
-//            assert(goal_idx_in_forward_tree_ >= 0 && goal_idx_in_forward_tree_ < (int64_t)forward_tree_.size());
-            ROS_INFO_NAMED("rrt", "Extracting solution policy");
-            path = ExtractSolutionPolicy(forward_tree_, (int64_t)forward_tree_.size() - 1);
-            storeTree(path);
         }
     }
 
+    RRTPolicy unsmoothed_policy;
+    if (forward_tree_[0].getpGoalReachable() > 0.0)
+    {
+        ROS_INFO_NAMED("rrt", "Extracting solution policy");
+        unsmoothed_policy = ExtractSolutionPolicy(forward_tree_);
+        deleteTreeVisualizations();
+        visualizePolicy(unsmoothed_policy);
+    }
+
+    /*
     // If we either retreived a path, or made a new one, visualize and do smoothing
-    if (path.size() != 0)
+    if (tree.size() != 0)
     {
         if (visualization_enabled_globally_)
         {
             deleteTreeVisualizations();
             visualizeBlacklist();
-            visualizePath(path);
+            visualizePath(tree);
             vis_->forcePublishNow(0.05);
         }
 
@@ -950,9 +949,9 @@ RRTTree BandRRT::plan(
         ROS_INFO_NAMED("rrt", "Starting Shortcut Smoothing");
         robot_->lockEnvironment();
         const bool visualize_rrt_smoothing = visualization_enabled_globally_ && true;
-        path = rrtShortcutSmooth(path, visualize_rrt_smoothing);
+        tree = rrtShortcutSmooth(tree, visualize_rrt_smoothing);
         robot_->unlockEnvironment();
-        storeTree(path);
+        storeTree(tree);
         std::cout << "RRT Helper Smoothing Statistics:\n" << PrettyPrint::PrettyPrint(smoothing_statistics_, false, "\n") << std::endl << std::endl;
 
 //        ROS_INFO_NAMED("rrt", "Playing back smoothed path in OpenRAVE");
@@ -961,13 +960,13 @@ RRTTree BandRRT::plan(
         if (visualization_enabled_globally_)
         {
             visualizeBlacklist();
-            visualizePath(path);
+            visualizePath(tree);
             vis_->forcePublishNow(0.05);
         }
-
     }
+    */
 
-    return path;
+    return unsmoothed_policy;
 }
 
 void BandRRT::addBandToBlacklist(const VectorVector3d& band)
@@ -1009,7 +1008,7 @@ bool BandRRT::CheckTreeLinkage(const RRTTree& tree)
                     return false;
                 }
                 // Make sure the corresponding parent contains the current node in the list of child indices
-                const std::vector<int64_t>& parent_child_indices = parent_node.getChildIndices();
+                const std::vector<int64_t>& parent_child_indices = parent_node.childIndices();
                 auto index_found = std::find(parent_child_indices.begin(), parent_child_indices.end(), (int64_t)current_index);
                 if (index_found == parent_child_indices.end())
                 {
@@ -1029,7 +1028,7 @@ bool BandRRT::CheckTreeLinkage(const RRTTree& tree)
             return false;
         }
         // Check the linkage to the child states
-        const std::vector<int64_t>& current_child_indices = current_node.getChildIndices();
+        const std::vector<int64_t>& current_child_indices = current_node.childIndices();
         for (size_t idx = 0; idx < current_child_indices.size(); idx++)
         {
             // Get the current child index
@@ -1068,24 +1067,231 @@ bool BandRRT::CheckTreeLinkage(const RRTTree& tree)
     return true;
 }
 
-RRTTree BandRRT::ExtractSolutionPolicy(
-        const RRTTree& tree,
-        const int64_t goal_node_idx)
+/* Checks the planner tree to make sure the parent-child linkages are correct, and that the object is a path
+ */
+bool BandRRT::CheckPathLinkage(const RRTPath& path)
 {
-    assert(false && "Redo this function - a path is a policy now");
-
-    RRTTree solution_path;
-    int64_t next_index = goal_node_idx;
-    while (next_index >= 0)
+    // Step through each state in the path. Make sure that the linkage to the parent and child states are correct
+    for (size_t current_index = 0; current_index < path.size(); current_index++)
     {
-        assert(next_index < (int64_t)tree.size());
-        const auto& parent_node = tree[next_index];
-        solution_path.push_back(parent_node);
-        next_index = parent_node.parentIndex();
+        // For every state, make sure all the parent<->child linkages are valid
+        const auto& current_node = path[current_index];
+        if (!current_node.initialized())
+        {
+            std::cerr << "Path contains uninitialized node " << current_index << std::endl;
+            return false;
+        }
+
+        // Check the linkage to the parent state
+        const int64_t parent_index = current_node.parentIndex();
+        if (parent_index != (int64_t)current_index - 1)
+        {
+            std::cerr << "Path contains a node whose parent is not the immediate prior node " << current_index << std::endl;
+        }
+        // Check the linkage to the child states
+        const auto& current_child_indices = current_node.childIndices();
+        // Check that the current node at most one child
+        if (current_child_indices.size() > 1)
+        {
+            std::cerr << "Path contains a node with multiple children " << current_index << std::endl;
+            return false;
+        }
+        // Check that if there are no children, then it is the last node
+        if (current_child_indices.size() == 0 && current_index != path.size() - 1)
+        {
+            std::cerr << "Path contains a node with no children that is not the last node " << current_index << std::endl;
+            return false;
+        }
+        // Check that if this is the last node, then it has no children
+        if (current_index == path.size() - 1 && current_child_indices.size() != 0)
+        {
+            std::cerr << "Last node in path contains children " << current_index << std::endl;
+            return false;
+        }
+        // Check that the child is the next index in the path
+        if (current_child_indices[0] != (int64_t)current_index + 1)
+        {
+            std::cerr << "Path contains a node whose children are not the next node in the path " << current_index << std::endl;
+            return false;
+        }
     }
-    // Put it in the right order
-    std::reverse(solution_path.begin(), solution_path.end());
-    return solution_path;
+    return true;
+}
+
+/* Extracts the portion of the tree that can potentially reach the goal,
+ * removing all "stranded" branches, as well as any dominated branches
+ *
+ * A path is dominated if there is some other action that has a higher probability of reaching the goal.
+ * In the event of a tie, paths without splits are preferred (chosen greedily from the root).
+ * If there is still a tie, visualize a bunch of stuff and revist this question later.
+ *
+ * Returned value is a serpies of paths, each with the potential next paths to take
+ * depending on the resolution of a split.
+ *         Stricktly speaking this duplicates the functionality of the RRTNode/RRTTree structure
+ *         but the different implementation potentially makes it easier to understand which way
+ *         to interpret the data, and avoid repeatedly scanning through and separating the data
+ *         into the needed segments for smoothing
+ *
+ * The node indices of the returned paths will be rewritten assume that there is only one branch.
+ * This is done to make later shortcut smoothing easier with the existing framework.
+ *
+ * Each path overlaps with the preceeding and the following paths in the robot configuration.
+ * The final configuration of the planned band is not meaningful if there is a following path.
+ */
+RRTPolicy BandRRT::ExtractSolutionPolicy(const RRTTree& tree)
+{
+    assert(CheckTreeLinkage(tree));
+
+    ROS_WARN_NAMED("rrt", "Extracting a solution policy from the tree");
+    if (tree.empty())
+    {
+        ROS_ERROR_NAMED("rrt", "Asked to extract policy from empty tree; this doesn't make sense. Returning an empty policy");
+        return {};
+    }
+
+    const RRTNode& root = tree[0];
+    if (root.getpGoalReachable() <= 0.0)
+    {
+        ROS_ERROR_NAMED("rrt", "Asked to extract policy from a tree that cannot reach the goal. Returning an empty policy");
+        return {};
+    }
+
+    // Roots of each path; we will add to this list as we find splits in the dominant path
+    // Note that the fact that we have chosen a queue lets us choose a convininet way to keep track of the paths by index
+    size_t next_path_idx = 0;
+    std::queue<int64_t> path_roots;
+    path_roots.push(0);
+    ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Added root of tree to path roots queue");
+
+    std::vector<std::pair<RRTPath, std::vector<size_t>>> policy;
+    while (!path_roots.empty())
+    {
+        // Retrieve the next path_root to consider, updating the corresponding counter
+        const RRTNode& path_root = tree[path_roots.front()];
+        path_roots.pop();
+        ++next_path_idx;
+        ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Popped node with state idx: " << path_root.stateIndex() << " from path roots queue");
+
+        // Travel down the tree, choosing the dominating path until the dominating path contains a split
+        RRTPath path;
+        RRTNode next_node = path_root;
+        bool goal_reached = false;
+        bool split_reached = false;
+        do
+        {
+            const RRTNode& curr_node = next_node;
+            path.push_back(curr_node);
+            ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "    Added node with state idx: " << curr_node.stateIndex() << " to path");
+
+            // Find the action with the highest probability of reaching the goal
+
+            // First, extract the potential options
+            const auto child_indices = curr_node.childIndices();
+            std::map<int64_t, std::vector<int64_t>> effective_child_branches;
+            for (size_t idx = 0; idx < child_indices.size(); ++idx)
+            {
+                const int64_t current_child_index = child_indices[idx];
+                const int64_t child_transition_idx = tree[(size_t)current_child_index].transitionIndex();
+                effective_child_branches[child_transition_idx].push_back(current_child_index);
+            }
+            ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "    " << effective_child_branches.size() << " transitions taken out of this node");
+
+            // Now that we have the splits separated out, compute the goal probability of each transition,
+            // keeping only the largest
+            double p_goal_reachable = 0.0;
+            std::vector<int64_t> best_transition_idx; // should be only one element long, ideally. A vector is stored to catch edge conditions that we have not yet decided how to resolve.
+            for (auto itr = effective_child_branches.begin(); itr != effective_child_branches.end(); ++itr)
+            {
+                const std::vector<int64_t>& current_transition_children = itr->second;
+                double p_goal_reachable_current_transition = 0.0;
+                for (size_t child_idx = 0; child_idx < current_transition_children.size(); ++child_idx)
+                {
+                    const RRTNode& child = tree[current_transition_children[child_idx]];
+                    p_goal_reachable_current_transition += child.pTransition() * child.getpGoalReachable();
+                }
+
+                if (p_goal_reachable_current_transition > p_goal_reachable)
+                {
+                    best_transition_idx = {itr->first};
+                    p_goal_reachable = p_goal_reachable_current_transition;
+                }
+                else if (p_goal_reachable_current_transition == p_goal_reachable)
+                {
+                    best_transition_idx.push_back(itr->first);
+                }
+
+                ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "    Transition idx " << itr->first << " p_goal_reachable_current_transition: " << p_goal_reachable_current_transition);
+            }
+
+            if (best_transition_idx.size() == 0)
+            {
+                // If there are no children, and we're at this point in the tree, then this had better satisfy the goal check.
+                // TODO: make this function non static and explicitly use the goalCheck function
+                assert(curr_node.getpGoalReachable() == 1.0);
+                goal_reached = true;
+                assert(path.size() > 1);
+                std::vector<size_t> child_paths;
+                policy.push_back({path, child_paths});
+            }
+            else if (best_transition_idx.size() == 1)
+            {
+                const std::vector<int64_t> next_child_indices = effective_child_branches[best_transition_idx[0]];
+                ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "    Using transition idx " << best_transition_idx[0]);
+                // We are not at the goal, so we should have some children
+                assert(next_child_indices.size() > 0);
+
+                // If the next child is a singleton (i.e., not a split), carry on.
+                // If the next node is the child of a split, this will cause the loop to exit
+                next_node = tree.at(next_child_indices[0]);
+
+                // If reached the end of this path, record the next paths to consider and upate the data structures
+                if (next_child_indices.size() > 1)
+                {
+                    split_reached = true;
+
+                    std::vector<size_t> child_paths;
+                    for (const int64_t next_child_idx : next_child_indices)
+                    {
+                        path_roots.push(next_child_idx);
+                        child_paths.push_back(next_path_idx);
+                        ++next_path_idx;
+                    }
+
+                    // Note that we are including the next_node in the current path to ensure overlap between the paths
+                    path.push_back(next_node);
+                    assert(child_paths.size() > 1);
+                    assert(path.size() > 1);
+                    policy.push_back({path, child_paths});
+                }
+            }
+            else
+            {
+                std::cerr << "Unhandled edge case when considering 'best transition'.\n"
+                          << "    p_goal_reachable = " << p_goal_reachable << "    Transitions: " << PrettyPrint::PrettyPrint(best_transition_idx, false, " ") << std::endl;
+                assert(best_transition_idx.size() == 1);
+            }
+        }
+        // Keep iterating so long as the next node is not the result of a split
+        while(!goal_reached && !split_reached);
+    }
+
+    // Post process the paths to clean them up and make the indices independent of the given tree
+    for (auto& partial_result : policy)
+    {
+        RRTPath& path = partial_result.first;
+        for (int64_t path_idx = 0; path_idx < (int64_t)path.size(); ++path_idx)
+        {
+            RRTNode& node = path[path_idx];
+            node.state_index_ = path_idx;
+            node.parent_index_ = path_idx - 1;
+            node.clearChildIndices();
+            node.addChildIndex(node.stateIndex() + 1);
+        }
+        path.back().clearChildIndices();
+        assert(CheckPathLinkage(path));
+    }
+
+    return policy;
 }
 
 std::vector<VectorXd> BandRRT::ConvertRRTPathToRobotPath(const RRTTree& path)
@@ -1223,7 +1429,8 @@ void BandRRT::deleteTreeVisualizations() const
     vis_->visualizeCubes(TaskFramework::CLUSTERING_RESULTS_POST_PROJECT_NS, {grippers_goal_poses_.second.translation()}, Vector3d::Ones() * work_space_grid_.minStepDimension(), gripper_b_forward_tree_color_, 5);
 }
 
-void BandRRT::visualizePath(const RRTTree& path) const
+// Assumes the path that is passed is sequential
+void BandRRT::visualizePath(const RRTPath& path, const int32_t id) const
 {
     VectorVector3d gripper_a_cubes;
     VectorVector3d gripper_b_cubes;
@@ -1236,6 +1443,7 @@ void BandRRT::visualizePath(const RRTTree& path) const
     for (int32_t ind = 0; ind < (int32_t)path.size(); ++ind)
     {
         const RRTNode& config = path[ind];
+        assert(config.childIndices().size() <= 1);
         const RRTGrippersRepresentation& gripper_positions = config.grippers();
         const RubberBand::Ptr& rubber_band = config.band();
 
@@ -1250,9 +1458,18 @@ void BandRRT::visualizePath(const RRTTree& path) const
         }
     }
 
-    vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.005, 0.005, 0.005), gripper_a_forward_tree_color_, 1);
-    vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.005, 0.005, 0.005), gripper_b_forward_tree_color_, 1);
+    vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.005, 0.005, 0.005), gripper_a_forward_tree_color_, id);
+    vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.005, 0.005, 0.005), gripper_b_forward_tree_color_, id);
 //        vis_->visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
+}
+
+void BandRRT::visualizePolicy(const RRTPolicy& policy) const
+{
+    for (size_t path_idx = 0; path_idx < policy.size(); ++path_idx)
+    {
+        const RRTPath& path = policy[path_idx].first;
+        visualizePath(path, (int32_t)path_idx + 1);
+    }
 }
 
 void BandRRT::visualizeBlacklist() const
@@ -1359,14 +1576,23 @@ RRTTree BandRRT::loadStoredTree(std::string file_path) const
     catch (const std::exception& e)
     {
         ROS_ERROR_STREAM_NAMED("rrt", "Failed to load stored path: "  <<  e.what());
+        return RRTTree();
     }
-
-    return RRTTree();
 }
 
 bool BandRRT::useStoredTree() const
 {
     return ROSHelpers::GetParamRequired<bool>(*ph_, "use_stored_path", __func__).GetImmutable();
+}
+
+void BandRRT::storePolicy(const RRTPolicy& policy, std::string file_path) const
+{
+
+}
+
+RRTPolicy BandRRT::loadStoredPolicy(std::string file_path) const
+{
+    return RRTPolicy();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2427,10 +2653,9 @@ void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
     // Check if any of the new nodes reached the goal
     for (size_t idx = forward_tree_.size() - num_nodes; idx < forward_tree_.size(); ++idx)
     {
-        RRTNode& test_node = forward_tree_[idx];
-        if (goalReached(test_node))
+        if (goalReached(forward_tree_[idx]))
         {
-            test_node.setpGoalReachable(1.0);
+            forward_tree_[idx].setpGoalReachable(1.0);
             goalReachedCallback(idx);
         }
     }
@@ -2496,6 +2721,8 @@ bool BandRRT::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_ban
 
 void BandRRT::goalReachedCallback(const int64_t node_idx)
 {
+    assert(CheckTreeLinkage(forward_tree_));
+
     // Backtrack through the tree until we reach the root of the current "goal branch"
     // - i.e.; find the first relevant split
     int64_t current_index = node_idx;
@@ -2510,7 +2737,10 @@ void BandRRT::goalReachedCallback(const int64_t node_idx)
     blacklistGoalBranch(root_index);
 
     // Next, update p_goal_reachable_ for every node from the current node to the root of the entire forward_tree_
+    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Node " << node_idx << " reached goal, updating pGoalReachable from this node to root.");
     updatePGoalReachable(node_idx);
+
+    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Root p_goal_reachable: " << forward_tree_[0].getpGoalReachable());
 }
 
 bool BandRRT::isRootOfGoalBranch(const int64_t node_idx) const
@@ -2529,7 +2759,7 @@ bool BandRRT::isRootOfGoalBranch(const int64_t node_idx) const
     if (is_child_of_split)
     {
         const RRTNode& parent = forward_tree_[node.parentIndex()];
-        const std::vector<int64_t> parents_children = parent.getChildIndices();
+        const std::vector<int64_t> parents_children = parent.childIndices();
         bool other_children_resolved = true;
         for (size_t idx = 0; idx < parents_children.size(); ++idx)
         {
@@ -2563,8 +2793,8 @@ void BandRRT::blacklistGoalBranch(const int64_t root_idx)
     else if (root_idx == 0)
     {
         ROS_WARN_NAMED("rrt", "Asked to blacklist the start node, blacklisting all children but not the root itself");
-        const auto children = forward_tree_[0].getChildIndices();
-        for (size_t idx = 0; children.size(); ++idx)
+        const auto children = forward_tree_[0].childIndices();
+        for (size_t idx = 0; idx < children.size(); ++idx)
         {
             blacklistGoalBranch(children[idx]);
         }
@@ -2576,11 +2806,10 @@ void BandRRT::blacklistGoalBranch(const int64_t root_idx)
         RRTNode& current_node = forward_tree_[(size_t)root_idx];
         current_node.blacklisted_from_nn_search_ = true;
         // Recursively blacklist each child
-        const std::vector<int64_t>& child_indices = current_node.getChildIndices();
+        const std::vector<int64_t>& child_indices = current_node.childIndices();
         for (size_t idx = 0; idx < child_indices.size(); ++idx)
         {
-            int64_t child_index = child_indices[idx];
-            blacklistGoalBranch(child_index);
+            blacklistGoalBranch(child_indices[idx]);
         }
     }
 }
@@ -2589,17 +2818,19 @@ void BandRRT::updatePGoalReachable(const int64_t node_idx)
 {
     RRTNode& new_goal = forward_tree_[node_idx];
     // Make sure something hasn't gone wrong
-    if (new_goal.getpGoalReachable() <= 0.0)
+    if (new_goal.getpGoalReachable() != 1.0)
     {
-        throw_arc_exception(std::runtime_error, "new_goal cannot reach the goal (GoalPfeasibility() <= 0)");
+        throw_arc_exception(std::runtime_error, "new_goal should have p_goal_reachable == 1.0 as it itself passes the goal check");
     }
 
     // Backtrack up the tree, updating states as we go
-    int64_t current_idx = node_idx;
+    int64_t current_idx = new_goal.parentIndex();
     while (current_idx >= 0)
     {
+        ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Updating pGoalReachable for node " << current_idx);
+
         RRTNode& current_node = forward_tree_[current_idx];
-        const auto& child_indices = current_node.getChildIndices();
+        const auto& child_indices = current_node.childIndices();
 
         // Check all the children of the current node, and update the node's goal reached probability accordingly
         //
@@ -2633,16 +2864,18 @@ void BandRRT::updatePGoalReachable(const int64_t node_idx)
                 const RRTNode& child = forward_tree_[current_transition_children[child_idx]];
                 p_goal_reachable_current_transition += child.pTransition() * child.getpGoalReachable();
             }
+            ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Transition pGoalReachable " << p_goal_reachable_current_transition);
             p_goal_reachable = std::max(p_goal_reachable, p_goal_reachable_current_transition);
         }
 
         // Check for numerical errors and store the final value
-        if ((p_goal_reachable >= 0.999) && (p_goal_reachable <= 1.001))
+        if ((p_goal_reachable >= 0.999) && (p_goal_reachable <= 1.001) && (p_goal_reachable != 1.0))
         {
-            ROS_WARN_STREAM_NAMED("RRT", "Total P(goal reached) = " << p_goal_reachable << ". Probably anumerical error, rounding to 1.0");
+            ROS_WARN_STREAM_NAMED("rrt", "Total P(goal reached) = " << p_goal_reachable << ". Probably a numerical error, rounding to 1.0");
             p_goal_reachable = 1.0;
         }
         current_node.setpGoalReachable(p_goal_reachable);
+        ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Setting  pGoalReachable for node " << current_idx << " to " << p_goal_reachable);
 
         // Move on to the parent of this node
         current_idx = current_node.parentIndex();
@@ -2756,6 +2989,8 @@ RRTTree BandRRT::rrtShortcutSmooth(
         RRTTree path,
         const bool visualization_enabled_locally)
 {
+    /*
+
     Stopwatch function_wide_stopwatch;
 
     uint32_t num_iterations = 0;
@@ -3031,6 +3266,8 @@ RRTTree BandRRT::rrtShortcutSmooth(
     smoothing_statistics_["smoothing6_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
     smoothing_statistics_["smoothing7_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
     smoothing_statistics_["smoothing8_total_time                                   "] = smoothing_time;
+
+    */
 
     return path;
 }

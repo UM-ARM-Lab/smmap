@@ -73,7 +73,12 @@ namespace smmap
 {
     class RRTNode;
     typedef Eigen::aligned_allocator<RRTNode> RRTAllocator;
+    // An RRT path is a single unbroken chain of nodes, with no splits, with each node having a single child
+    typedef std::vector<RRTNode, RRTAllocator> RRTPath;
+    // An RRTTree can be any arbitrary set of nodes, so long as each node has a single parent.
+    // Notably a node can have multiple children via splits or otherwise
     typedef std::vector<RRTNode, RRTAllocator> RRTTree;
+    typedef std::vector<std::pair<RRTPath, std::vector<size_t>>> RRTPolicy;
 
     typedef std::pair<Eigen::Isometry3d, Eigen::Isometry3d> RRTGrippersRepresentation;
     typedef Eigen::VectorXd RRTRobotRepresentation;
@@ -135,8 +140,8 @@ namespace smmap
         int64_t transitionIndex() const;
         int64_t splitIndex() const;
 
-        const std::vector<int64_t>& getChildIndices() const;
-        void clearChildIndicies();
+        const std::vector<int64_t>& childIndices() const;
+        void clearChildIndices();
         void addChildIndex(const int64_t child_index);
         void removeChildIndex(const int64_t child_index);
 
@@ -148,7 +153,8 @@ namespace smmap
         static uint64_t Serialize(const RRTNode& config, std::vector<uint8_t>& buffer);
         static std::pair<RRTNode, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current, const RubberBand& starting_band);
 
-    private:
+    public:
+        // Made public for convinience
 
         // Note that when planning in gripper pose space, the robot_configuration_ is exactly the position of both grippers
         RRTGrippersRepresentation grippers_poses_;
@@ -279,7 +285,7 @@ namespace smmap
 
         //////// Planning functions //////////////////////////////////////////////////////////
 
-        RRTTree plan(
+        RRTPolicy plan(
                 const RRTNode& start,
                 const RRTGrippersRepresentation& grippers_goal_poses,
                 const std::chrono::duration<double>& time_limit);
@@ -291,13 +297,14 @@ namespace smmap
 
         static bool CheckTreeLinkage(
                 const RRTTree& tree);
+        
+        static bool CheckPathLinkage(
+                const RRTPath& path);
 
         static std::vector<Eigen::VectorXd> ConvertRRTPathToRobotPath(
                 const RRTTree& path);
 
-        static RRTTree ExtractSolutionPolicy(
-                const RRTTree& tree,
-                const int64_t goal_node_idx);
+        static std::vector<std::pair<RRTPath, std::vector<size_t>>> ExtractSolutionPolicy(const RRTTree& tree);
 
         ///////////////////////////////////////////////////////////////////////////////////////
         // Visualization and other debugging tools
@@ -318,12 +325,17 @@ namespace smmap
                 const bool draw_band) const;
         void visualizeBothTrees() const;
         void deleteTreeVisualizations() const;
-        void visualizePath(const RRTTree& path) const;
+        void visualizePath(const RRTPath& path, const int32_t id) const;
+        void visualizePolicy(const RRTPolicy& policy) const;
         void visualizeBlacklist() const;
 
         void storeTree(const RRTTree& tree, std::string file_path = "") const;
         RRTTree loadStoredTree(std::string file_path = "") const;
         bool useStoredTree() const;
+
+
+        void storePolicy(const RRTPolicy& policy, std::string file_path) const;
+        RRTPolicy loadStoredPolicy(std::string file_path) const;
 
     private:
         ///////////////////////////////////////////////////////////////////////////////////////
