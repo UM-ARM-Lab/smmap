@@ -325,11 +325,13 @@ void TaskFramework::execute()
         const auto max_shortcut_index_distance = GetRRTMaxShortcutIndexDistance(*ph_);
         const auto max_smoothing_iterations = GetRRTMaxSmoothingIterations(*ph_);
         const auto max_failed_smoothing_iterations = GetRRTMaxFailedSmoothingIterations(*ph_);
+        const auto smoothing_band_dist_threshold = GetRRTSmoothingBandDistThreshold(*ph_);
         BandRRT::SmoothingParams smoothing_params =
         {
             max_shortcut_index_distance,
             max_smoothing_iterations,
-            max_failed_smoothing_iterations
+            max_failed_smoothing_iterations,
+            smoothing_band_dist_threshold
         };
 
         // Task defined parameters
@@ -481,6 +483,9 @@ WorldState TaskFramework::sendNextCommand(
                     transition_estimator_->learnTransition(last_bad_transition.GetImmutable());
                     transition_estimator_->visualizeTransition(last_bad_transition.GetImmutable());
                     vis_->forcePublishNow(0.5);
+                    std::cout << "Waiting for string " << std::endl;
+                    std::string tmp;
+                    std::cin >> tmp;
                 }
                 else
                 {

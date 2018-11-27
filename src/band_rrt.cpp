@@ -38,6 +38,9 @@ constexpr char BandRRT::RRT_SOLUTION_GRIPPER_A_NS[];
 constexpr char BandRRT::RRT_SOLUTION_GRIPPER_B_NS[];
 constexpr char BandRRT::RRT_SOLUTION_RUBBER_BAND_NS[];
 
+constexpr char BandRRT::RRT_SMOOTHING_GRIPPER_A_NS[];
+constexpr char BandRRT::RRT_SMOOTHING_GRIPPER_B_NS[];
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper function for assertion testing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -643,6 +646,7 @@ BandRRT::BandRRT(
     , max_shortcut_index_distance_(smoothing_params.max_shortcut_index_distance_)
     , max_smoothing_iterations_(smoothing_params.max_smoothing_iterations_)
     , max_failed_smoothing_iterations_(smoothing_params.max_failed_smoothing_iterations_)
+    , smoothing_band_dist_threshold_(smoothing_params.smoothing_band_dist_threshold_)
     , uniform_shortcut_smoothing_int_distribution_(1, 4)
 
     , default_propogation_confidence_(planning_params.default_propogation_confidence_)
@@ -922,24 +926,21 @@ RRTPolicy BandRRT::plan(
         }
     }
 
-    RRTPolicy unsmoothed_policy;
+    RRTPolicy policy;
     if (forward_tree_[0].getpGoalReachable() > 0.0)
     {
         ROS_INFO_NAMED("rrt", "Extracting solution policy");
-        unsmoothed_policy = ExtractSolutionPolicy(forward_tree_);
-        deleteTreeVisualizations();
-        visualizePolicy(unsmoothed_policy);
+        policy = ExtractSolutionPolicy(forward_tree_);
     }
 
-    /*
     // If we either retreived a path, or made a new one, visualize and do smoothing
-    if (tree.size() != 0)
+    if (policy.size() != 0)
     {
         if (visualization_enabled_globally_)
         {
             deleteTreeVisualizations();
             visualizeBlacklist();
-            visualizePath(tree);
+            visualizePolicy(policy);
             vis_->forcePublishNow(0.05);
         }
 
@@ -949,9 +950,8 @@ RRTPolicy BandRRT::plan(
         ROS_INFO_NAMED("rrt", "Starting Shortcut Smoothing");
         robot_->lockEnvironment();
         const bool visualize_rrt_smoothing = visualization_enabled_globally_ && true;
-        tree = rrtShortcutSmooth(tree, visualize_rrt_smoothing);
+        shortcutSmoothPolicy(policy, visualize_rrt_smoothing);
         robot_->unlockEnvironment();
-        storeTree(tree);
         std::cout << "RRT Helper Smoothing Statistics:\n" << PrettyPrint::PrettyPrint(smoothing_statistics_, false, "\n") << std::endl << std::endl;
 
 //        ROS_INFO_NAMED("rrt", "Playing back smoothed path in OpenRAVE");
@@ -959,14 +959,14 @@ RRTPolicy BandRRT::plan(
 
         if (visualization_enabled_globally_)
         {
+            deleteTreeVisualizations();
             visualizeBlacklist();
-            visualizePath(tree);
+            visualizePolicy(policy);
             vis_->forcePublishNow(0.05);
         }
     }
-    */
 
-    return unsmoothed_policy;
+    return policy;
 }
 
 void BandRRT::addBandToBlacklist(const VectorVector3d& band)
@@ -1587,11 +1587,12 @@ bool BandRRT::useStoredTree() const
 
 void BandRRT::storePolicy(const RRTPolicy& policy, std::string file_path) const
 {
-
+    ROS_ERROR_NAMED("rrt", "storePolicy not implemented.");
 }
 
 RRTPolicy BandRRT::loadStoredPolicy(std::string file_path) const
 {
+    ROS_ERROR_NAMED("rrt", "loadStoredPolicy not implemented.");
     return RRTPolicy();
 }
 
@@ -2459,6 +2460,8 @@ size_t BandRRT::forwardPropogationFunction(
         {
             break;
         }
+        split_happened = (next_bands.size() > 1);
+        ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE && split_happened, "rrt.prop", "Split happend during forward propagation, loop should terminate");
 
         // The new configuation is valid, add it to the tree
         const RRTRobotRepresentation& prev_robot_config = prev_node.robotConfiguration();
@@ -2488,23 +2491,23 @@ size_t BandRRT::forwardPropogationFunction(
                         parent_idx,
                         next_state_index_,
                         next_transition_index_,
-                        false ? next_split_index_ : -1);
+                        split_happened ? next_split_index_ : -1);
             tree_to_extend.push_back(next_node);
             prev_node.addChildIndex(next_state_index_);
 
             ++next_state_index_;
         }
 
-        if (next_bands.size() > 1)
-        {
-            split_happened = true;
-        }
-
         // Note that parent_idx and step_index are only relevant at this point if there was no split
         parent_idx = (int64_t)tree_to_extend.size() - 1;
         ++step_index;
         ++next_transition_index_;
+        if (split_happened)
+        {
+            ++next_split_index_;
+        }
     }
+    ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE && split_happened, "rrt.prop", "Split happend during forward propagation, this is immediately after the loop exit");
 
     const size_t nodes_at_end_of_propogation = tree_to_extend.size();
     const size_t nodes_created = nodes_at_end_of_propogation - nodes_at_start_of_propogation;
@@ -2985,16 +2988,14 @@ static VectorVector3d createOtherGripperWaypoints(
     return other_gripper_waypoints;
 }
 
-RRTTree BandRRT::rrtShortcutSmooth(
-        RRTTree path,
+// To smooth a policy, we smooth each segment independently,
+// making sure that the transitions between segments are still valid
+void BandRRT::shortcutSmoothPolicy(
+        RRTPolicy& policy,
         const bool visualization_enabled_locally)
 {
-    /*
-
     Stopwatch function_wide_stopwatch;
 
-    uint32_t num_iterations = 0;
-    uint32_t failed_iterations = 0;
     total_forward_kinematics_time_ = 0.0;
     total_projection_time_ = 0.0;
     total_collision_check_time_ = 0.0;
@@ -3002,10 +3003,71 @@ RRTTree BandRRT::rrtShortcutSmooth(
     total_first_order_vis_propogation_time_ = 0.0;
     total_everything_included_forward_propogation_time_ = 0.0;
 
-    if (visualization_enabled_globally_ && visualization_enabled_locally)
+    for (size_t segment_idx = 0; segment_idx < policy.size(); ++segment_idx)
     {
-        visualizePath(path);
+        RRTPath& segment = policy[segment_idx].first;
+        const std::vector<size_t>& child_segment_indices = policy[segment_idx].second;
+
+        // Segments that have no children must end at the goal, so we need to maintain that when smoothing
+        const bool maintain_goal_reach_invariant = (child_segment_indices.size() == 0);
+
+        // Other segments need to maintain the same transitions, so extract them
+//        std::vector<RubberBand::ConstPtr> transition_targets;
+//        if (!maintain_goal_reach_invariant)
+//        {
+//            for (const size_t child_segment_indices_idx : child_segment_indices)
+//            {
+//                const RRTPath& child_segment = policy[child_segment_indices_idx];
+//                // We want the 2nd element of the path due to the fact that we are
+//                // ensuring overlap between "adjacent" segments
+//                const RubberBand::ConstPtr target_band = child_segment.at(1).band();
+//                transition_targets.push_back(target_band);
+//            }
+//        }
+
+        shortcutSmoothPath(
+                    segment,
+                    maintain_goal_reach_invariant,
+//                    transition_targets,
+                    visualization_enabled_locally,
+                    (int32_t)segment_idx + 1);
     }
+
+    // Record the statistics and return the result
+    const double smoothing_time = function_wide_stopwatch(READ);
+
+//    smoothing_statistics_["smoothing0_failed_iterations                            "] = (double)failed_iterations;
+//    smoothing_statistics_["smoothing1_iterations                                   "] = (double)num_iterations;
+    smoothing_statistics_["smoothing2_forward_propogation_fk_time                  "] = total_forward_kinematics_time_;
+    smoothing_statistics_["smoothing3_forward_propogation_crrt_projection_time     "] = total_projection_time_;
+    smoothing_statistics_["smoothing4_forward_propogation_collision_check_time     "] = total_collision_check_time_;
+    smoothing_statistics_["smoothing5_forward_propogation_band_sim_time            "] = total_band_forward_propogation_time_;
+    smoothing_statistics_["smoothing6_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
+    smoothing_statistics_["smoothing7_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
+    smoothing_statistics_["smoothing8_total_time                                   "] = smoothing_time;
+}
+
+void BandRRT::shortcutSmoothPath(
+        RRTPath& path,
+        const bool maintain_goal_reach_invariant,
+//        const std::vector<RubberBand::ConstPtr>& transition_targets,
+        const bool visualization_enabled_locally,
+        const int32_t visualization_idx)
+{
+    if (path.size() < 2)
+    {
+        return;
+    }
+
+    // We should either be maintaining the goal reach invariant,
+    // or the transition targets, not both, so make sure that's true
+//    assert(maintain_goal_reach_invariant ^ (transition_targets.size() == 0));
+    // For the time being, just use the band immediately before the last
+    // transition as the invariant if we are not using the "goal reach" invariant
+    const RRTNode second_last_original_node = *(path.end() - 2);
+
+    uint32_t num_iterations = 0;
+    uint32_t failed_iterations = 0;
 
     // The main smoothing loop
     while (path.size() > 2 &&
@@ -3033,6 +3095,21 @@ RRTTree BandRRT::rrtShortcutSmooth(
         const auto& smoothing_start_config = path[smoothing_start_index];
         const auto& smoothing_end_config = path[smoothing_end_index];
 
+        if (visualization_enabled_locally)
+        {
+            VectorVector3d gripper_a_cubes;
+            VectorVector3d gripper_b_cubes;
+
+            gripper_a_cubes.push_back(smoothing_start_config.grippers().first.translation());
+            gripper_a_cubes.push_back(smoothing_end_config.grippers().first.translation());
+
+            gripper_b_cubes.push_back(smoothing_start_config.grippers().second.translation());
+            gripper_b_cubes.push_back(smoothing_end_config.grippers().second.translation());
+
+            vis_->visualizeCubes(RRT_SMOOTHING_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.01, 0.01, 0.01), gripper_a_forward_tree_color_, 1);
+            vis_->visualizeCubes(RRT_SMOOTHING_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.01, 0.01, 0.01), gripper_b_forward_tree_color_, 2);
+        }
+
         ///////////////////// Determine if a shortcut is even possible /////////////////////////////////////////////////
 
         // We know start_index <= end_index, this essentially checks if start == end or start + 1 == end
@@ -3053,6 +3130,7 @@ RRTTree BandRRT::rrtShortcutSmooth(
 
         if (planning_for_whole_robot_)
         {
+            assert(false && "Not updated based on using policies");
             // Check if the edge possibly can be smoothed
             const double minimum_distance = RRTDistance::Distance(smoothing_start_config.robotConfiguration(), smoothing_end_config.robotConfiguration());
             const double path_distance = RRTDistance::RobotPathDistance(path, smoothing_start_index, smoothing_end_index);
@@ -3102,6 +3180,8 @@ RRTTree BandRRT::rrtShortcutSmooth(
                 // Essentially this checks if there is a kink in the path
                 if (IsApprox(path_distance, minimum_distance, 1e-6))
                 {
+                    ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Skipping smoothing attempt as there is very little kink in sampled sub path");
+                    ++failed_iterations;
                     continue;
                 }
 
@@ -3132,6 +3212,8 @@ RRTTree BandRRT::rrtShortcutSmooth(
                     // Essentially this checks if there is a kink in the path
                     if (IsApprox(path_distance, minimum_distance, 1e-6))
                     {
+                        ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Skipping smoothing attempt as there is very little kink in sampled sub path");
+                        ++failed_iterations;
                         continue;
                     }
 
@@ -3155,6 +3237,8 @@ RRTTree BandRRT::rrtShortcutSmooth(
                     // Essentially this checks if there is a kink in the path
                     if (IsApprox(path_distance, minimum_distance, 1e-6))
                     {
+                        ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Skipping smoothing attempt as there is very little kink in sampled sub path");
+                        ++failed_iterations;
                         continue;
                     }
 
@@ -3171,7 +3255,7 @@ RRTTree BandRRT::rrtShortcutSmooth(
                 assert(target_waypoints_first_gripper.size() == target_waypoints_second_gripper.size());
                 const size_t num_waypoints = target_waypoints_first_gripper.size();
 
-                // Now that we have the waypoints, start building the smoothed path, exiting early if we encouter an infeasible configuration
+                // Now that we have the waypoints, start building the smoothed path
                 smoothed_segment.push_back(smoothing_start_config);
                 for (size_t waypoint_idx = 1; waypoint_idx < num_waypoints; ++waypoint_idx)
                 {
@@ -3187,6 +3271,20 @@ RRTTree BandRRT::rrtShortcutSmooth(
 
                     const int64_t start_idx = (int64_t)smoothed_segment.size() - 1;
                     forwardPropogationFunction(smoothed_segment, start_idx, forward_prop_target_config, fwd_prop_local_visualization_enabled);
+                    // Exit early if we hit any of "failure" conditions
+                    // Check if the we hit a split
+                    if (smoothed_segment.back().splitIndex() >= 0)
+                    {
+                        break;
+                    }
+
+                    // Check if the rubber band gets overstretched while propogating the grippers on the new path
+                    const auto& target_gripper_position = forward_prop_target_config.grippers();
+                    const auto& last_gripper_position = smoothed_segment.back().grippers();
+                    if (!gripperPositionsAreApproximatelyEqual(last_gripper_position, target_gripper_position))
+                    {
+                        break;
+                    }
                 }
             }
             else
@@ -3194,11 +3292,24 @@ RRTTree BandRRT::rrtShortcutSmooth(
                 assert(false && "Smoothing type was something other than [1, 4], this ougth to be impossible");
             }
 
+            // Check if the we hit a split
+            if (smoothed_segment.back().splitIndex() >= 0)
+            {
+                ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Shortcut failed, split happened during smoothing");
+                vis_->forcePublishNow(0.05);
+                std::cout << "Waiting for string input " << std::endl;
+                std::string tmp;
+                std::cin >> tmp;
+                ++failed_iterations;
+                continue;
+            }
+
             // Check if the rubber band gets overstretched while propogating the grippers on the new path
             const auto& target_gripper_position = smoothing_end_config.grippers();
             const auto& last_gripper_position = smoothed_segment.back().grippers();
             if (!gripperPositionsAreApproximatelyEqual(last_gripper_position, target_gripper_position))
             {
+                ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Shortcut failed, gripper positions don't match targets, thus the band got overstretched");
                 ++failed_iterations;
                 continue;
             }
@@ -3209,19 +3320,43 @@ RRTTree BandRRT::rrtShortcutSmooth(
         }
 
         const bool final_band_at_goal_success = end_of_smoothing_to_goal_results.first;
-        const auto& end_of_smoothing_to_goal_path_ = end_of_smoothing_to_goal_results.second;
+        const auto& end_of_smoothing_to_goal_path = end_of_smoothing_to_goal_results.second;
 
         // Check if the rubber band gets overstretched or ends up in a blacklisted first order
         // homotopy class while following the tail of the starting trajectory
+        if (maintain_goal_reach_invariant)
         {
-            const auto& final_node_of_smoothing = end_of_smoothing_to_goal_path_.back();
+            const auto& final_node_of_smoothing = end_of_smoothing_to_goal_path.back();
             const bool final_band_visible_to_blacklist = isBandFirstOrderVisibileToBlacklist(*final_node_of_smoothing.band());
             if (!final_band_at_goal_success || final_band_visible_to_blacklist)
             {
-//                std::cout << "Shortcut failed, continuing "
-//                          << "    Band at goal? " << final_band_at_goal_success
-//                          << "    Band visible? " << final_band_visible_to_blacklist
-//                          << "\n";
+                ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Shortcut failed"
+                                                                     << "    Band at goal? " << final_band_at_goal_success
+                                                                     << "    Band visible? " << final_band_visible_to_blacklist);
+                ++failed_iterations;
+                continue;
+            }
+        }
+        // Here we check that the 2nd last band state still matches close enough
+        // to approximately ensure that all previously applied transitions are still valid
+        else
+        {
+            RRTNode second_last_smoothed_node;
+            if (end_of_smoothing_to_goal_path.size() >= 2)
+            {
+                second_last_smoothed_node = *(end_of_smoothing_to_goal_path.end() - 2);
+            }
+            else
+            {
+                assert(smoothed_segment.size() >= 2);
+                second_last_smoothed_node = *(smoothed_segment.end() - 2);
+            }
+
+            const double band_dist = second_last_original_node.band()->distance(*second_last_smoothed_node.band());
+            if (band_dist > smoothing_band_dist_threshold_)
+            {
+                ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Shortcut failed"
+                                                                     << "    Distance between original 2nd last band and new band: " << band_dist);
                 ++failed_iterations;
                 continue;
             }
@@ -3229,20 +3364,20 @@ RRTTree BandRRT::rrtShortcutSmooth(
 
         ///////////////////// Smoothing success - Create the new smoothed path /////////////////////////////////////////
         {
-//            std::cout << "Smoothing valid\n";
+            ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Shortcut valid, accepting");
 
             // Allocate space for the total smoothed path
             RRTTree smoothed_path;
-            smoothed_path.reserve((smoothing_start_index  + 1) + (smoothed_segment.size() - 1) + (end_of_smoothing_to_goal_path_.size() - 1));
+            smoothed_path.reserve((smoothing_start_index  + 1) + (smoothed_segment.size() - 1) + (end_of_smoothing_to_goal_path.size() - 1));
 
             // Insert the starting unchanged part of the path
             smoothed_path.insert(smoothed_path.end(), path.begin(), path.begin() + smoothing_start_index + 1);
 
-            // Insert the smoothed portion
+            // Insert the smoothed portion (note that we are removing the overlap as we go here)
             smoothed_path.insert(smoothed_path.end(), smoothed_segment.begin() + 1, smoothed_segment.end());
 
-            // Insert the changed end of the path with the new rubber band - gripper/robot positions are identical
-            smoothed_path.insert(smoothed_path.end(), end_of_smoothing_to_goal_path_.begin() + 1, end_of_smoothing_to_goal_path_.end());
+            // Insert the changed end of the path with the new rubber band - gripper/robot positions are identical (note that we are removing the overlap as we go here)
+            smoothed_path.insert(smoothed_path.end(), end_of_smoothing_to_goal_path.begin() + 1, end_of_smoothing_to_goal_path.end());
 
             // Record the change and re-visualize
             path = smoothed_path;
@@ -3250,26 +3385,9 @@ RRTTree BandRRT::rrtShortcutSmooth(
 
         if (visualization_enabled_globally_ && visualization_enabled_locally)
         {
-            visualizePath(path);
+            visualizePath(path, visualization_idx);
         }
     }
-
-    // Record the statistics and return the result
-    const double smoothing_time = function_wide_stopwatch(READ);
-
-    smoothing_statistics_["smoothing0_failed_iterations                            "] = (double)failed_iterations;
-    smoothing_statistics_["smoothing1_iterations                                   "] = (double)num_iterations;
-    smoothing_statistics_["smoothing2_forward_propogation_fk_time                  "] = total_forward_kinematics_time_;
-    smoothing_statistics_["smoothing3_forward_propogation_crrt_projection_time     "] = total_projection_time_;
-    smoothing_statistics_["smoothing4_forward_propogation_collision_check_time     "] = total_collision_check_time_;
-    smoothing_statistics_["smoothing5_forward_propogation_band_sim_time            "] = total_band_forward_propogation_time_;
-    smoothing_statistics_["smoothing6_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
-    smoothing_statistics_["smoothing7_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
-    smoothing_statistics_["smoothing8_total_time                                   "] = smoothing_time;
-
-    */
-
-    return path;
 }
 
 /**
@@ -3305,7 +3423,7 @@ std::pair<bool, RRTTree> BandRRT::forwardSimulateGrippersPath(
         assert(false && "Band endpoints do not match recorded gripper positions");
     }
 
-    // Collect the results for use by the rrtShortcutSmooth function
+    // Collect the results for use by the shortcutSmoothPath function
     RRTTree resulting_path;
     // Put the start position on the path
     {

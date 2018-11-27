@@ -223,6 +223,9 @@ namespace smmap
         static constexpr char RRT_SOLUTION_GRIPPER_B_NS[]       = "rrt_solution_gripper_b";
         static constexpr char RRT_SOLUTION_RUBBER_BAND_NS[]     = "rrt_solution_rubber_band";
 
+        static constexpr char RRT_SMOOTHING_GRIPPER_A_NS[]      = "rrt_smoothing_gripper_a";
+        static constexpr char RRT_SMOOTHING_GRIPPER_B_NS[]      = "rrt_smoothing_gripper_b";
+
         struct WorldParams
         {
         public:
@@ -253,6 +256,7 @@ namespace smmap
             int64_t max_shortcut_index_distance_;
             uint32_t max_smoothing_iterations_;
             uint32_t max_failed_smoothing_iterations_;
+            double smoothing_band_dist_threshold_;
         };
 
         struct TaskParams
@@ -407,9 +411,16 @@ namespace smmap
 
         //////// Shortcut smoothing functions ////////////////////////////////////////////////
 
-        RRTTree rrtShortcutSmooth(
-                RRTTree path,
+        void shortcutSmoothPolicy(
+                RRTPolicy& policy,
                 const bool visualization_enabled_locally);
+
+        void shortcutSmoothPath(
+                RRTPath& path,
+                const bool maintain_goal_reach_invariant,
+//                const std::vector<QuinlanRubberBand::ConstPtr>& transition_targets,
+                const bool visualization_enabled_locally,
+                const int32_t visualization_idx);
 
         std::pair<bool, RRTTree> forwardSimulateGrippersPath(
                 const RRTTree& path,
@@ -460,6 +471,7 @@ namespace smmap
         const int64_t max_shortcut_index_distance_;
         const uint32_t max_smoothing_iterations_;
         const uint32_t max_failed_smoothing_iterations_;
+        const double smoothing_band_dist_threshold_;
         std::uniform_int_distribution<int> uniform_shortcut_smoothing_int_distribution_;
 
         // Set/updated on each call of "rrtPlan"
