@@ -25,7 +25,7 @@ namespace smmap
         };
         typedef Eigen::aligned_allocator<State> StateAllocator;
 
-        typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> Action;
+        typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> GripperPositions;
 
         struct StateTransition
         {
@@ -33,7 +33,12 @@ namespace smmap
             EIGEN_MAKE_ALIGNED_OPERATOR_NEW
             State starting_state;
             State ending_state;
-            Action action_;
+            // This is the target position of the grippers.
+            // In practice this data is duplicated in the endpoints of the band,
+            // but this is being kept to keep everything in the
+            // "state, action, next state" framework
+            GripperPositions starting_gripper_positions_;
+            GripperPositions ending_gripper_positions_;
         };
         typedef Eigen::aligned_allocator<StateTransition> StateTransitionAllocator;
 
@@ -71,28 +76,27 @@ namespace smmap
 
 
         void visualizeTransition(
-                const StateTransition& transition, const
-                int32_t id = 1) const;
+                const StateTransition& transition,
+                const int32_t id = 1,
+                const std::string& ns_prefix = "") const;
 
-        void visualizeLearnedTransitions() const;
+        void visualizeLearnedTransitions(
+                const std::string& ns_prefix = "all_") const;
+        void clearVisualizations() const;
 
         // Topic names used for publishing visualization data
-        static constexpr char MDP_PRE_STATE_NS[]    = "mdp_pre_state";
-        static constexpr char MDP_ACTION_NS[]       = "mdp_action";
-        static constexpr char MDP_POST_STATE_NS[]   = "mdp_post_state";
+        static constexpr char MDP_PRE_STATE_NS[]        = "mdp_pre_state";
+        static constexpr char MDP_TESTING_STATE_NS[]    = "mdp_testing_state";
+        static constexpr char MDP_POST_STATE_NS[]       = "mdp_post_state";
 
         ////////////////////////////////////////////////////////////////////////
         // Using transitions
         ////////////////////////////////////////////////////////////////////////
 
-        double actionDistance(
-                const Action& a1,
-                const Action& a2) const;
-
         // If the transition could be applicable, then it returns the distance
         Maybe::Maybe<double> transitionUseful(
-                const RubberBand::ConstPtr& band,
-                const Action& action,
+                const RubberBand::ConstPtr& test_band,
+                const GripperPositions& test_ending_gripper_positions,
                 const StateTransition& transition) const;
 
         // Returns vector of potential outcomes of the action, and a relative
@@ -102,11 +106,10 @@ namespace smmap
         // that it *could* happen.
         std::vector<std::pair<RubberBand::Ptr, double>> applyLearnedTransitions(
                 const RubberBand::ConstPtr& band,
-                const Action& action) const;
+                const GripperPositions& ending_gripper_positions) const;
 
         RubberBand::Ptr applyTransition(
-                const RubberBand::ConstPtr& band,
-                const Action& action,
+                const GripperPositions& ending_gripper_positions,
                 const StateTransition& transition) const;
 
         double confidence(const double dist) const;
@@ -120,8 +123,8 @@ namespace smmap
         const smmap_utilities::Visualizer::ConstPtr vis_;
         std::vector<StateTransition, StateTransitionAllocator> learned_transitions_;
 
-        const double action_dist_threshold_;
-        const double action_dist_scale_factor;
+//        const double action_dist_threshold_;
+//        const double action_dist_scale_factor;
         const double band_dist_threshold_;
         const double band_dist_scale_factor_;
     };

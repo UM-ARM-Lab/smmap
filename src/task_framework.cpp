@@ -397,6 +397,7 @@ void TaskFramework::execute()
 
             vis_->purgeMarkerList();
             visualization_msgs::Marker marker;
+            marker.ns = "delete_markers";
             marker.action = visualization_msgs::Marker::DELETEALL;
             vis_->publish(marker);
             vis_->forcePublishNow();
@@ -483,9 +484,9 @@ WorldState TaskFramework::sendNextCommand(
                     transition_estimator_->learnTransition(last_bad_transition.GetImmutable());
                     transition_estimator_->visualizeTransition(last_bad_transition.GetImmutable());
                     vis_->forcePublishNow(0.5);
-                    std::cout << "Waiting for string " << std::endl;
-                    std::string tmp;
-                    std::cin >> tmp;
+//                    std::cout << "Waiting for string " << std::endl;
+//                    std::string tmp;
+//                    std::cin >> tmp;
                 }
                 else
                 {
@@ -530,6 +531,7 @@ WorldState TaskFramework::sendNextCommand(
 
             vis_->purgeMarkerList();
             visualization_msgs::Marker marker;
+            marker.ns = "delete_markers";
             marker.action = visualization_msgs::Marker::DELETEALL;
             marker.header.frame_id = "world_origin";
             marker.header.stamp = ros::Time::now();
@@ -903,6 +905,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
 
         vis_->purgeMarkerList();
         visualization_msgs::Marker marker;
+        marker.ns = "delete_markers";
         marker.action = visualization_msgs::Marker::DELETEALL;
         marker.header.frame_id = "world_origin";
         marker.header.stamp = ros::Time::now();
@@ -1266,42 +1269,42 @@ void TaskFramework::predictNextBandStatesGlobalPlanResults(const RubberBand::Ptr
 {
     assert(false && "This code is not tested, intended to do a tree-style prediction");
 
-    static double default_propogation_confidence = GetRRTDefaultPropagationConfidence(*ph_);
+//    static double default_propogation_confidence = GetRRTDefaultPropagationConfidence(*ph_);
 
-    if (horizion == 0)
-    {
-        return;
-    }
+//    if (horizion == 0)
+//    {
+//        return;
+//    }
 
-    assert(policy_current_idx < rrt_planned_policy_.size());
-    const RRTPath& current_segment = rrt_planned_policy_[policy_current_idx].first;
-    assert(policy_segment_next_idx < current_segment.size());
-    const RRTGrippersRepresentation& next_grippers_poses = current_segment[policy_segment_next_idx].grippers();
+//    assert(policy_current_idx < rrt_planned_policy_.size());
+//    const RRTPath& current_segment = rrt_planned_policy_[policy_current_idx].first;
+//    assert(policy_segment_next_idx < current_segment.size());
+//    const RRTGrippersRepresentation& next_grippers_poses = current_segment[policy_segment_next_idx].grippers();
 
-    const auto starting_band_endpoints = starting_band->getEndpoints();
-    TransitionEstimation::Action action = {
-        next_grippers_poses.first.translation() - starting_band_endpoints.first,
-        next_grippers_poses.second.translation() - starting_band_endpoints.second};
-    auto transitions = transition_estimator_->applyLearnedTransitions(starting_band, action);
+//    const auto starting_band_endpoints = starting_band->getEndpoints();
+//    TransitionEstimation::Action action = {
+//        next_grippers_poses.first.translation() - starting_band_endpoints.first,
+//        next_grippers_poses.second.translation() - starting_band_endpoints.second};
+//    auto transitions = transition_estimator_->applyLearnedTransitions(starting_band, action);
 
-    auto next_band = std::make_shared<RubberBand>(*starting_band);
-    const bool rubber_band_verbose = false;
-    // Forward simulate the rubber band to test this transition
-    next_band->forwardPropagateRubberBandToEndpointTargets(
-                next_grippers_poses.first.translation(),
-                next_grippers_poses.second.translation(),
-                rubber_band_verbose);
+//    auto next_band = std::make_shared<RubberBand>(*starting_band);
+//    const bool rubber_band_verbose = false;
+//    // Forward simulate the rubber band to test this transition
+//    next_band->forwardPropagateRubberBandToEndpointTargets(
+//                next_grippers_poses.first.translation(),
+//                next_grippers_poses.second.translation(),
+//                rubber_band_verbose);
 
-    transitions.push_back({next_band, default_propogation_confidence});
+//    transitions.push_back({next_band, default_propogation_confidence});
 
-    if (policy_segment_next_idx + 1 < current_segment.size())
-    {
-        for (size_t transition_idx; transition_idx < transitions.size(); ++transition_idx)
-        {
-//            auto next_predictions =
-                    predictNextBandStatesGlobalPlanResults(transitions[transition_idx].first, horizion - 1, policy_current_idx, policy_segment_next_idx);
-        }
-    }
+//    if (policy_segment_next_idx + 1 < current_segment.size())
+//    {
+//        for (size_t transition_idx; transition_idx < transitions.size(); ++transition_idx)
+//        {
+////            auto next_predictions =
+//                    predictNextBandStatesGlobalPlanResults(transitions[transition_idx].first, horizion - 1, policy_current_idx, policy_segment_next_idx);
+//        }
+//    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1603,10 +1606,14 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     ROS_INFO_STREAM("!!!!!!!!!!!!!!!!!! Planner Invoked " << num_times_invoked << " times!!!!!!!!!!!");
 
     // Resample the band for the purposes of first order vis checking
-    band_rrt_->addBandToBlacklist(rubber_band_between_grippers_->resampleBand());
+    if (!executing_global_trajectory_)
+    {
+        band_rrt_->addBandToBlacklist(rubber_band_between_grippers_->resampleBand());
+    }
 
     vis_->purgeMarkerList();
     visualization_msgs::Marker marker;
+    marker.ns = "delete_markers";
     marker.action = visualization_msgs::Marker::DELETEALL;
     marker.header.frame_id = "world_origin";
     marker.header.stamp = ros::Time::now();

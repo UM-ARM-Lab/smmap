@@ -8,7 +8,7 @@ using namespace smmap;
 using namespace smmap_utilities;
 
 constexpr char TransitionEstimation::MDP_PRE_STATE_NS[];
-constexpr char TransitionEstimation::MDP_ACTION_NS[];
+constexpr char TransitionEstimation::MDP_TESTING_STATE_NS[];
 constexpr char TransitionEstimation::MDP_POST_STATE_NS[];
 
 TransitionEstimation::TransitionEstimation(
@@ -20,8 +20,8 @@ TransitionEstimation::TransitionEstimation(
     , ph_(ph)
     , task_(task)
     , vis_(vis)
-    , action_dist_threshold_(GetTransitionActionDistThreshold(*ph_))
-    , action_dist_scale_factor(GetTransitionActionDistScaleFactor(*ph_))
+//    , action_dist_threshold_(GetTransitionActionDistThreshold(*ph_))
+//    , action_dist_scale_factor(GetTransitionActionDistScaleFactor(*ph_))
     , band_dist_threshold_(GetTransitionBandDistThreshold(*ph_))
     , band_dist_scale_factor_(GetTransitionBandDistScaleFactor(*ph_))
 {}
@@ -110,15 +110,9 @@ Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMo
         {
             const auto& start_state = trajectory[idx - 1];
             const auto& end_state = trajectory[idx];
-
-            const auto start_state_endpoints = start_state.planned_rubber_band_->getEndpoints();
-            const auto end_state_endpoints = end_state.planned_rubber_band_->getEndpoints();
-
-            const Action action = {
-                end_state_endpoints.first - start_state_endpoints.first,
-                end_state_endpoints.second - start_state_endpoints.second};
-
-            return Maybe::Maybe<StateTransition>({start_state, end_state, action});
+            const GripperPositions starting_gripper_positions = start_state.planned_rubber_band_->getEndpoints();
+            const GripperPositions ending_gripper_positions = end_state.planned_rubber_band_->getEndpoints();
+            return Maybe::Maybe<StateTransition>({start_state, end_state, starting_gripper_positions, ending_gripper_positions});
         }
     }
 
@@ -134,94 +128,120 @@ void TransitionEstimation::learnTransition(const StateTransition& transition)
     learned_transitions_.push_back(transition);
 }
 
-void TransitionEstimation::visualizeTransition(const StateTransition& transition, const int32_t id) const
+void TransitionEstimation::visualizeTransition(
+        const StateTransition& transition,
+        const int32_t id,
+        const std::string& ns_prefix) const
 {
-    task_->visualizeDeformableObject(MDP_PRE_STATE_NS, transition.starting_state.deform_config_, Visualizer::Red(), id);
-    transition.starting_state.rubber_band_->visualize(MDP_PRE_STATE_NS, Visualizer::Yellow(), Visualizer::Yellow(), id + 1);
-    transition.starting_state.planned_rubber_band_->visualize(MDP_PRE_STATE_NS, Visualizer::Green(), Visualizer::Green(), id + 2);
+//    task_->visualizeDeformableObject(ns_prefix + MDP_PRE_STATE_NS, transition.starting_state.deform_config_, Visualizer::Red(), id);
+    transition.starting_state.rubber_band_->visualize(ns_prefix + MDP_PRE_STATE_NS, Visualizer::Yellow(), Visualizer::Yellow(), id + 1);
+    transition.starting_state.planned_rubber_band_->visualize(ns_prefix + MDP_PRE_STATE_NS, Visualizer::Green(), Visualizer::Green(), id + 2);
 
-    task_->visualizeDeformableObject(MDP_POST_STATE_NS, transition.ending_state.deform_config_, Visualizer::Red(0.4f), id);
-    transition.ending_state.rubber_band_->visualize(MDP_POST_STATE_NS, Visualizer::Yellow(0.4f), Visualizer::Yellow(0.4f), id + 1);
-    transition.ending_state.planned_rubber_band_->visualize(MDP_POST_STATE_NS, Visualizer::Green(0.4f), Visualizer::Green(0.4f), id + 2);
+//    task_->visualizeDeformableObject(ns_prefix + MDP_POST_STATE_NS, transition.ending_state.deform_config_, Visualizer::Red(0.4f), id);
+    transition.ending_state.rubber_band_->visualize(ns_prefix + MDP_POST_STATE_NS, Visualizer::Yellow(0.4f), Visualizer::Yellow(0.4f), id + 1);
+    transition.ending_state.planned_rubber_band_->visualize(ns_prefix + MDP_POST_STATE_NS, Visualizer::Green(0.4f), Visualizer::Green(0.4f), id + 2);
 }
 
-void TransitionEstimation::visualizeLearnedTransitions() const
+void TransitionEstimation::visualizeLearnedTransitions(const std::string& ns_prefix) const
 {
     for (size_t idx = 0; idx < learned_transitions_.size(); ++idx)
     {
-        visualizeTransition(learned_transitions_[idx], (int32_t)(3 * idx + 1));
+        visualizeTransition(learned_transitions_[idx], (int32_t)(3 * idx + 1), ns_prefix);
     }
 }
 
-
-double TransitionEstimation::actionDistance(const Action& a1, const Action& a2) const
+void TransitionEstimation::clearVisualizations() const
 {
-    return std::sqrt(
-                (a1.first - a2.first).squaredNorm() +
-                (a1.second - a2.second).squaredNorm());
+    vis_->deleteObjects(MDP_PRE_STATE_NS, 0, (int32_t)(learned_transitions_.size() + 1) * 3);
+    vis_->deleteObjects(MDP_POST_STATE_NS, 0, (int32_t)(learned_transitions_.size() + 1) * 3);
+    vis_->deleteObjects(MDP_TESTING_STATE_NS, 0, (int32_t)(learned_transitions_.size() + 1) * 3);
 }
 
 Maybe::Maybe<double> TransitionEstimation::transitionUseful(
-        const RubberBand::ConstPtr& band,
-        const Action& action,
+        const RubberBand::ConstPtr& test_band,
+        const GripperPositions& test_ending_gripper_positions,
         const StateTransition& transition) const
 {
-    const double action_dist = actionDistance(action, transition.action_);
-    if (action_dist > action_dist_threshold_)
+    // First check if the start points of the grippers and the end points of the grippers are
+    // within 1 work space grid cell. This tries to ensure that when propagating, we don't
+    // "hop over" any obstacles
     {
-        return Maybe::Maybe<double>();
+        const double max_dist = task_->work_space_grid_.minStepDimension() * 8;
+        const auto& test_starting_gripper_positions = test_band->getEndpoints();
+        if ((transition.starting_gripper_positions_.first - test_starting_gripper_positions.first).norm() > max_dist)
+        {
+            return Maybe::Maybe<double>();
+        }
+        if ((transition.starting_gripper_positions_.second - test_starting_gripper_positions.second).norm() > max_dist)
+        {
+            return Maybe::Maybe<double>();
+        }
+        if ((transition.ending_gripper_positions_.first - test_ending_gripper_positions.first).norm() > max_dist)
+        {
+            return Maybe::Maybe<double>();
+        }
+        if ((transition.ending_gripper_positions_.second - test_ending_gripper_positions.second).norm() > max_dist)
+        {
+            return Maybe::Maybe<double>();
+        }
     }
 
-    const double actual_band_dist = band->distance(*transition.starting_state.rubber_band_);
+    const double actual_band_dist = test_band->distance(*transition.starting_state.rubber_band_);
     bool actual_band_match = false;
     if (actual_band_dist < band_dist_threshold_)
     {
-        actual_band_match = checkFirstOrderHomotopy(*band, *transition.starting_state.rubber_band_);
+        actual_band_match = checkFirstOrderHomotopy(*test_band, *transition.starting_state.rubber_band_);
     }
 
-    const double planned_band_dist = band->distance(*transition.starting_state.planned_rubber_band_);
+    const double planned_band_dist = test_band->distance(*transition.starting_state.planned_rubber_band_);
     bool planned_band_match = false;
     if (planned_band_dist < band_dist_threshold_)
     {
-        planned_band_match = checkFirstOrderHomotopy(*band, *transition.starting_state.planned_rubber_band_);
+        planned_band_match = checkFirstOrderHomotopy(*test_band, *transition.starting_state.planned_rubber_band_);
     }
 
+    double band_dist = std::numeric_limits<double>::infinity();
     // If only one matches, then return that distance
     if (actual_band_match && !planned_band_match)
     {
-        return action_dist_scale_factor * action_dist + band_dist_scale_factor_ * actual_band_dist;
+        band_dist = actual_band_dist;
     }
     else if (!actual_band_match && planned_band_match)
     {
-        return action_dist_scale_factor * action_dist + band_dist_scale_factor_ * planned_band_dist;
+        band_dist = planned_band_dist;
     }
     // If both bands match, then take the shorter distance;
     else if (actual_band_match && planned_band_match)
     {
-        const double band_dist = std::min(actual_band_dist, planned_band_dist);
-        return action_dist_scale_factor * action_dist + band_dist_scale_factor_ * band_dist;
+        band_dist = std::min(actual_band_dist, planned_band_dist);
     }
     // Otherwise, return no useful transition
     else
     {
         return Maybe::Maybe<double>();
     }
+    return band_dist_scale_factor_ * band_dist;
 }
 
 std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::applyLearnedTransitions(
-        const RubberBand::ConstPtr& band,
-        const Action& action) const
+        const RubberBand::ConstPtr& test_band,
+        const GripperPositions& ending_gripper_positions) const
 {
     std::vector<std::pair<RubberBand::Ptr, double>> possible_transitions;
 
-    for (const StateTransition& transition : learned_transitions_)
+    for (size_t idx = 0; idx < learned_transitions_.size(); ++idx)
     {
-        Maybe::Maybe<double> dist = transitionUseful(band, action, transition);
+        const StateTransition& transition = learned_transitions_[idx];
+        Maybe::Maybe<double> dist = transitionUseful(test_band, ending_gripper_positions, transition);
         if (dist.Valid())
         {
             possible_transitions.push_back({
-                    applyTransition(band, action, transition),
+                    applyTransition(ending_gripper_positions, transition),
                     confidence(dist.GetImmutable())});
+
+            visualizeTransition(transition, (int32_t)(3 * idx + 1));
+            test_band->visualize(MDP_TESTING_STATE_NS, Visualizer::Silver(), Visualizer::White(), (int32_t)idx + 1);
+            possible_transitions.back().first->visualize(MDP_TESTING_STATE_NS, Visualizer::Silver(), Visualizer::White(), (int32_t)idx + 2);
         }
     }
 
@@ -229,17 +249,15 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::applyLearn
 }
 
 RubberBand::Ptr TransitionEstimation::applyTransition(
-        const RubberBand::ConstPtr& band,
-        const Action& action,
+        const GripperPositions& ending_gripper_positions,
         const StateTransition& transition) const
 {
     auto resulting_band = std::make_shared<RubberBand>(*transition.ending_state.rubber_band_);
 
     const bool verbose = false;
-    const auto endpoints = band->getEndpoints();
     resulting_band->forwardPropagateRubberBandToEndpointTargets(
-                endpoints.first + action.first,
-                endpoints.second + action.second,
+                ending_gripper_positions.first,
+                ending_gripper_positions.second,
                 verbose);
 
     return resulting_band;

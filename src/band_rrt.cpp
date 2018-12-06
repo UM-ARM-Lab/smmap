@@ -1,7 +1,6 @@
 #include "smmap/band_rrt.h"
 #include "smmap/task_framework.h"
 
-#include <thread>
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/timing.hpp>
 #include <arc_utilities/filesystem.hpp>
@@ -16,8 +15,8 @@ using namespace EigenHelpers;
 
 #warning "!!!!!!!!! Magic number !!!!!!!!!!!"
 #define GRIPPER_TRANSLATION_IS_APPROX_DIST 0.001
-#define SMMAP_RRT_VERBOSE true
-//#define SMMAP_RRT_VERBOSE false
+//#define SMMAP_RRT_VERBOSE true
+#define SMMAP_RRT_VERBOSE false
 
 
 RRTRobotRepresentation RRTDistance::joint_weights_;
@@ -833,7 +832,11 @@ RRTPolicy BandRRT::plan(
         tree_marker_id_ = 1;
         forward_tree_next_visualized_node_ = 0;
         backward_tree_next_visualized_node_ = 0;
+        deleteTreeVisualizations();
         visualizeBlacklist();
+        transition_estimator_->visualizeLearnedTransitions("all_");
+        vis_->forcePublishNow(0.02);
+        vis_->purgeMarkerList();
     }
 
     // Clear statistics
@@ -876,7 +879,6 @@ RRTPolicy BandRRT::plan(
         start_time_ = std::chrono::steady_clock::now();
         ROS_INFO_NAMED("rrt", "Starting planning...");
         planningMainLoop();
-//        planningMainLoopBidirectional();
         const std::chrono::time_point<std::chrono::steady_clock> end_time = std::chrono::steady_clock::now();
         const std::chrono::duration<double> planning_time(end_time - start_time_);
         robot_->unlockEnvironment();
@@ -940,6 +942,7 @@ RRTPolicy BandRRT::plan(
         {
             deleteTreeVisualizations();
             visualizeBlacklist();
+            transition_estimator_->visualizeLearnedTransitions("all_");
             visualizePolicy(policy);
             vis_->forcePublishNow(0.05);
         }
@@ -961,8 +964,9 @@ RRTPolicy BandRRT::plan(
         {
             deleteTreeVisualizations();
             visualizeBlacklist();
+            transition_estimator_->visualizeLearnedTransitions("all_");
             visualizePolicy(policy);
-            vis_->forcePublishNow(0.05);
+            vis_->forcePublishNow(0.5);
         }
     }
 
@@ -1418,6 +1422,7 @@ void BandRRT::deleteTreeVisualizations() const
 {
     vis_->purgeMarkerList();
     visualization_msgs::Marker marker;
+    marker.ns = "delete_markers";
     marker.action = visualization_msgs::Marker::DELETEALL;
     marker.header.frame_id = "world_origin";
     marker.header.stamp = ros::Time::now();
@@ -1625,6 +1630,16 @@ void BandRRT::planningMainLoop()
         const RRTNode random_target = configSampling(sample_band);
         const int64_t forward_tree_start_idx = nearestNeighbour(true, random_target);
         const size_t num_random_nodes_created = connectForwardTree(forward_tree_start_idx, random_target, true);
+        if (forward_tree_.back().splitIndex() >= 0)
+        {
+            ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Split happened during connect to random operation");
+            vis_->forcePublishNow(0.05);
+            std::cout << "Waiting for string input " << std::endl;
+            std::string tmp;
+            std::cin >> tmp;
+            transition_estimator_->clearVisualizations();
+            continue;
+        }
         checkNewStatesForGoal(num_random_nodes_created);
         if (forward_tree_[0].getpGoalReachable() == 1.0)
         {
@@ -1645,6 +1660,16 @@ void BandRRT::planningMainLoop()
                 last_node.already_extended_towards_goal_set_ = true;
                 const size_t num_goal_directed_nodes_created =
                         connectTreeToGrippersGoalSet(last_node_idx_in_forward_tree_branch);
+                if (forward_tree_.back().splitIndex() >= 0)
+                {
+                    ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Split happened during connect to backwards tree");
+                    vis_->forcePublishNow(0.05);
+                    std::cout << "Waiting for string input " << std::endl;
+                    std::string tmp;
+                    std::cin >> tmp;
+                    transition_estimator_->clearVisualizations();
+                    continue;
+                }
                 checkNewStatesForGoal(num_goal_directed_nodes_created);
             }
 
@@ -2001,7 +2026,7 @@ std::pair<int64_t, double> BandRRT::nearestNeighbourRobotSpace(
         manual_search_start_idx = &goal_set_next_idx_to_add_to_nn_dataset_;
     }
 
-    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.nn", "Querry:                    " << config.robotConfiguration().transpose());
+//    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.nn", "Querry:                    " << config.robotConfiguration().transpose());
 
     // Check if we should rebuild the NN Index
     if (!use_brute_force_nn_ &&
@@ -2320,7 +2345,7 @@ size_t BandRRT::forwardPropogationFunction(
     }
 
     const size_t visualization_period = 100;
-    const size_t force_vis_publish_period = 10;
+    const size_t force_vis_publish_period = 10; // Every this many markers, force a publish
 
     const RRTGrippersRepresentation& starting_grippers_poses = nearest_neighbour.grippers();
     const RRTRobotRepresentation& starting_robot_config = nearest_neighbour.robotConfiguration();
@@ -2454,7 +2479,7 @@ size_t BandRRT::forwardPropogationFunction(
             }
         }
 
-        // Generate next possible bands, then 'cluster' (if needed) to determine splits
+        // Generate next possible bands (no clustering)
         const auto next_bands = forwardPropogateBand(prev_band, next_grippers_poses);
         if (next_bands.size() == 0)
         {
@@ -2512,7 +2537,8 @@ size_t BandRRT::forwardPropogationFunction(
     const size_t nodes_at_end_of_propogation = tree_to_extend.size();
     const size_t nodes_created = nodes_at_end_of_propogation - nodes_at_start_of_propogation;
 
-    bool visualize = false;
+    // Decide if we should draw any new parts of the tree
+    bool visualize = split_happened;
     if (visualization_enabled_globally_ &&
         visualization_enabled_locally &&
         nodes_created > 0)
@@ -2582,9 +2608,18 @@ size_t BandRRT::forwardPropogationFunction(
 
         if (tree_marker_id_ % force_vis_publish_period == 0)
         {
-            vis_->forcePublishNow();
+            vis_->forcePublishNow(0.02);
             vis_->purgeMarkerList();
         }
+    }
+
+    if (split_happened)
+    {
+        vis_->forcePublishNow(0.05);
+        std::cout << "Split happend\n";
+        std::cout << "Waiting for string input " << std::endl;
+        std::string tmp;
+        std::cin >> tmp;
     }
 
     arc_helpers::DoNotOptimize(nodes_created);
@@ -2603,11 +2638,10 @@ std::vector<std::pair<RubberBand::Ptr, double>> BandRRT::forwardPropogateBand(
     Stopwatch stopwatch;
     arc_helpers::DoNotOptimize(next_grippers_poses);
 
-    const auto starting_band_endpoints = starting_band->getEndpoints();
-    TransitionEstimation::Action action = {
-        next_grippers_poses.first.translation() - starting_band_endpoints.first,
-        next_grippers_poses.second.translation() - starting_band_endpoints.second};
-    auto transitions = transition_estimator_->applyLearnedTransitions(starting_band, action);
+    const TransitionEstimation::GripperPositions test_gripper_positions = {
+        next_grippers_poses.first.translation(),
+        next_grippers_poses.second.translation()};
+    auto transitions = transition_estimator_->applyLearnedTransitions(starting_band, test_gripper_positions);
     ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", transitions.size() << " learned transitions applied");
     if (SMMAP_RRT_VERBOSE)
     {
@@ -2660,6 +2694,15 @@ void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
         {
             forward_tree_[idx].setpGoalReachable(1.0);
             goalReachedCallback(idx);
+            if (forward_tree_[0].getpGoalReachable() < 1.0)
+            {
+                ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Goal reached, pGoalReachable < 1.0");
+                visualizeBothTrees();
+                visualizeBlacklist();
+                std::cout << "Waiting for string input " << std::endl;
+                std::string tmp;
+                std::cin >> tmp;
+            }
         }
     }
 }
@@ -3095,21 +3138,6 @@ void BandRRT::shortcutSmoothPath(
         const auto& smoothing_start_config = path[smoothing_start_index];
         const auto& smoothing_end_config = path[smoothing_end_index];
 
-        if (visualization_enabled_locally)
-        {
-            VectorVector3d gripper_a_cubes;
-            VectorVector3d gripper_b_cubes;
-
-            gripper_a_cubes.push_back(smoothing_start_config.grippers().first.translation());
-            gripper_a_cubes.push_back(smoothing_end_config.grippers().first.translation());
-
-            gripper_b_cubes.push_back(smoothing_start_config.grippers().second.translation());
-            gripper_b_cubes.push_back(smoothing_end_config.grippers().second.translation());
-
-            vis_->visualizeCubes(RRT_SMOOTHING_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.01, 0.01, 0.01), gripper_a_forward_tree_color_, 1);
-            vis_->visualizeCubes(RRT_SMOOTHING_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.01, 0.01, 0.01), gripper_b_forward_tree_color_, 2);
-        }
-
         ///////////////////// Determine if a shortcut is even possible /////////////////////////////////////////////////
 
         // We know start_index <= end_index, this essentially checks if start == end or start + 1 == end
@@ -3296,11 +3324,26 @@ void BandRRT::shortcutSmoothPath(
             if (smoothed_segment.back().splitIndex() >= 0)
             {
                 ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Shortcut failed, split happened during smoothing");
-                vis_->forcePublishNow(0.05);
+                if (visualization_enabled_locally)
+                {
+                    VectorVector3d gripper_a_cubes;
+                    VectorVector3d gripper_b_cubes;
+
+                    gripper_a_cubes.push_back(smoothing_start_config.grippers().first.translation());
+                    gripper_a_cubes.push_back(smoothing_end_config.grippers().first.translation());
+
+                    gripper_b_cubes.push_back(smoothing_start_config.grippers().second.translation());
+                    gripper_b_cubes.push_back(smoothing_end_config.grippers().second.translation());
+
+                    vis_->visualizeCubes(RRT_SMOOTHING_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.01, 0.01, 0.01), gripper_a_forward_tree_color_, 1);
+                    vis_->visualizeCubes(RRT_SMOOTHING_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.01, 0.01, 0.01), gripper_b_forward_tree_color_, 2);
+                    vis_->forcePublishNow(0.05);
+                }
                 std::cout << "Waiting for string input " << std::endl;
                 std::string tmp;
                 std::cin >> tmp;
                 ++failed_iterations;
+                transition_estimator_->clearVisualizations();
                 continue;
             }
 
@@ -3386,6 +3429,7 @@ void BandRRT::shortcutSmoothPath(
         if (visualization_enabled_globally_ && visualization_enabled_locally)
         {
             visualizePath(path, visualization_idx);
+            vis_->forcePublishNow(0.01);
         }
     }
 }
