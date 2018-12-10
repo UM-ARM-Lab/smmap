@@ -67,7 +67,7 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
 
         case TaskType::ROPE_MAZE:
         case TaskType::ROPE_ZIG_MATCH:
-        case TaskType::ROPE_HOOKS_BASIC:
+        case TaskType::ROPE_HOOKS:
             return std::make_shared<RopeFixedCorrespondences>(nh, ph, vis);
 
         case TaskType::CLOTH_PLACEMAT_LIVE_ROBOT:

@@ -166,7 +166,7 @@ Maybe::Maybe<double> TransitionEstimation::transitionUseful(
     // within 1 work space grid cell. This tries to ensure that when propagating, we don't
     // "hop over" any obstacles
     {
-        const double max_dist = task_->work_space_grid_.minStepDimension() * 8;
+        const double max_dist = task_->work_space_grid_.minStepDimension() * std::sqrt(2.0);
         const auto& test_starting_gripper_positions = test_band->getEndpoints();
         if ((transition.starting_gripper_positions_.first - test_starting_gripper_positions.first).norm() > max_dist)
         {
@@ -240,8 +240,14 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::applyLearn
                     confidence(dist.GetImmutable())});
 
             visualizeTransition(transition, (int32_t)(3 * idx + 1));
-            test_band->visualize(MDP_TESTING_STATE_NS, Visualizer::Silver(), Visualizer::White(), (int32_t)idx + 1);
-            possible_transitions.back().first->visualize(MDP_TESTING_STATE_NS, Visualizer::Silver(), Visualizer::White(), (int32_t)idx + 2);
+            test_band->visualize(MDP_TESTING_STATE_NS + std::string("_pre"), Visualizer::White(), Visualizer::White(), (int32_t)idx + 1);
+            possible_transitions.back().first->visualize(MDP_TESTING_STATE_NS + std::string("_post"), Visualizer::Silver(), Visualizer::Silver(), (int32_t)idx + 2);
+
+            vis_->forcePublishNow(0.02);
+            std::cerr << "    Useful transition followed" << std::endl;
+            std::cerr << "    Waiting for input " << std::endl;
+            std::string tmp;
+            std::cin >> tmp;
         }
     }
 

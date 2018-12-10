@@ -1633,10 +1633,6 @@ void BandRRT::planningMainLoop()
         if (forward_tree_.back().splitIndex() >= 0)
         {
             ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Split happened during connect to random operation");
-            vis_->forcePublishNow(0.05);
-            std::cout << "Waiting for string input " << std::endl;
-            std::string tmp;
-            std::cin >> tmp;
             transition_estimator_->clearVisualizations();
             continue;
         }
@@ -1663,12 +1659,12 @@ void BandRRT::planningMainLoop()
                 if (forward_tree_.back().splitIndex() >= 0)
                 {
                     ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Split happened during connect to backwards tree");
-                    vis_->forcePublishNow(0.05);
-                    std::cout << "Waiting for string input " << std::endl;
-                    std::string tmp;
-                    std::cin >> tmp;
-                    transition_estimator_->clearVisualizations();
-                    continue;
+//                    vis_->forcePublishNow(0.05);
+//                    std::cout << "Waiting for string input " << std::endl;
+//                    std::string tmp;
+//                    std::cin >> tmp;
+//                    transition_estimator_->clearVisualizations();
+//                    continue;
                 }
                 checkNewStatesForGoal(num_goal_directed_nodes_created);
             }
@@ -2538,23 +2534,29 @@ size_t BandRRT::forwardPropogationFunction(
     const size_t nodes_created = nodes_at_end_of_propogation - nodes_at_start_of_propogation;
 
     // Decide if we should draw any new parts of the tree
-    bool visualize = split_happened;
+    bool visualize = false;
     if (visualization_enabled_globally_ &&
-        visualization_enabled_locally &&
-        nodes_created > 0)
+        visualization_enabled_locally)
     {
-        if (&tree_to_extend == &forward_tree_)
+        if (split_happened)
         {
-            if (tree_to_extend.size() - forward_tree_next_visualized_node_ >= visualization_period)
-            {
-                visualize = true;
-            }
+            visualize = true;
         }
-        else
+        else if (nodes_created > 0)
         {
-            if (tree_to_extend.size() - backward_tree_next_visualized_node_ >= visualization_period)
+            if (&tree_to_extend == &forward_tree_)
             {
-                visualize = true;
+                if (tree_to_extend.size() - forward_tree_next_visualized_node_ >= visualization_period)
+                {
+                    visualize = true;
+                }
+            }
+            else
+            {
+                if (tree_to_extend.size() - backward_tree_next_visualized_node_ >= visualization_period)
+                {
+                    visualize = true;
+                }
             }
         }
     }
@@ -2613,14 +2615,14 @@ size_t BandRRT::forwardPropogationFunction(
         }
     }
 
-    if (split_happened)
-    {
-        vis_->forcePublishNow(0.05);
-        std::cout << "Split happend\n";
-        std::cout << "Waiting for string input " << std::endl;
-        std::string tmp;
-        std::cin >> tmp;
-    }
+//    if (split_happened)
+//    {
+//        vis_->forcePublishNow(0.05);
+//        std::cout << "Split happend\n";
+//        std::cout << "Waiting for string input " << std::endl;
+//        std::string tmp;
+//        std::cin >> tmp;
+//    }
 
     arc_helpers::DoNotOptimize(nodes_created);
     const double everything_included_forward_propogation_time = function_wide_stopwatch(READ);
@@ -3093,7 +3095,6 @@ void BandRRT::shortcutSmoothPolicy(
 void BandRRT::shortcutSmoothPath(
         RRTPath& path,
         const bool maintain_goal_reach_invariant,
-//        const std::vector<RubberBand::ConstPtr>& transition_targets,
         const bool visualization_enabled_locally,
         const int32_t visualization_idx)
 {
@@ -3213,6 +3214,21 @@ void BandRRT::shortcutSmoothPath(
                     continue;
                 }
 
+                if (visualization_enabled_locally)
+                {
+                    VectorVector3d gripper_a_cubes;
+                    VectorVector3d gripper_b_cubes;
+
+                    gripper_a_cubes.push_back(smoothing_start_config.grippers().first.translation());
+                    gripper_a_cubes.push_back(smoothing_end_config.grippers().first.translation());
+
+                    gripper_b_cubes.push_back(smoothing_start_config.grippers().second.translation());
+                    gripper_b_cubes.push_back(smoothing_end_config.grippers().second.translation());
+
+                    vis_->visualizeCubes(RRT_SMOOTHING_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.01, 0.01, 0.01), gripper_a_forward_tree_color_, 1);
+                    vis_->visualizeCubes(RRT_SMOOTHING_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.01, 0.01, 0.01), gripper_b_forward_tree_color_, 2);
+                }
+
                 // Forward simulate the rubber band along the straight line between gripper positions
                 const int64_t start_idx = 0;
                 smoothed_segment.push_back(smoothing_start_config);
@@ -3279,9 +3295,20 @@ void BandRRT::shortcutSmoothPath(
                                 second_gripper_end_pos);
                 }
 
-                // Make a guess about the number of nodes we'll end up using
                 assert(target_waypoints_first_gripper.size() == target_waypoints_second_gripper.size());
                 const size_t num_waypoints = target_waypoints_first_gripper.size();
+
+                if (visualization_enabled_locally)
+                {
+                    VectorVector3d gripper_a_cubes = {smoothing_start_config.grippers().first.translation()};
+                    VectorVector3d gripper_b_cubes = {smoothing_start_config.grippers().second.translation()};
+
+                    gripper_a_cubes.insert(gripper_a_cubes.end(), target_waypoints_first_gripper.begin(), target_waypoints_first_gripper.end());
+                    gripper_b_cubes.insert(gripper_b_cubes.end(), target_waypoints_second_gripper.begin(), target_waypoints_second_gripper.end());
+
+                    vis_->visualizeCubes(RRT_SMOOTHING_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.01, 0.01, 0.01), gripper_a_forward_tree_color_, 1);
+                    vis_->visualizeCubes(RRT_SMOOTHING_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.01, 0.01, 0.01), gripper_b_forward_tree_color_, 2);
+                }
 
                 // Now that we have the waypoints, start building the smoothed path
                 smoothed_segment.push_back(smoothing_start_config);
@@ -3324,26 +3351,11 @@ void BandRRT::shortcutSmoothPath(
             if (smoothed_segment.back().splitIndex() >= 0)
             {
                 ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Shortcut failed, split happened during smoothing");
-                if (visualization_enabled_locally)
-                {
-                    VectorVector3d gripper_a_cubes;
-                    VectorVector3d gripper_b_cubes;
-
-                    gripper_a_cubes.push_back(smoothing_start_config.grippers().first.translation());
-                    gripper_a_cubes.push_back(smoothing_end_config.grippers().first.translation());
-
-                    gripper_b_cubes.push_back(smoothing_start_config.grippers().second.translation());
-                    gripper_b_cubes.push_back(smoothing_end_config.grippers().second.translation());
-
-                    vis_->visualizeCubes(RRT_SMOOTHING_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.01, 0.01, 0.01), gripper_a_forward_tree_color_, 1);
-                    vis_->visualizeCubes(RRT_SMOOTHING_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.01, 0.01, 0.01), gripper_b_forward_tree_color_, 2);
-                    vis_->forcePublishNow(0.05);
-                }
-                std::cout << "Waiting for string input " << std::endl;
-                std::string tmp;
-                std::cin >> tmp;
-                ++failed_iterations;
-                transition_estimator_->clearVisualizations();
+//                std::cout << "Waiting for string input " << std::endl;
+//                std::string tmp;
+//                std::cin >> tmp;
+//                ++failed_iterations;
+//                transition_estimator_->clearVisualizations();
                 continue;
             }
 
