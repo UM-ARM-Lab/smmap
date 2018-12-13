@@ -20,25 +20,63 @@ namespace smmap
         public:
             EIGEN_MAKE_ALIGNED_OPERATOR_NEW
             ObjectPointSet deform_config_;
-            RubberBand::ConstPtr rubber_band_;
-            RubberBand::ConstPtr planned_rubber_band_;
+            RubberBand::Ptr rubber_band_;
+            RubberBand::Ptr planned_rubber_band_;
+
+            uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
+
+            uint64_t deserializeIntoSelf(
+                    const std::vector<uint8_t>& buffer,
+                    const uint64_t current);
+
+            static uint64_t Serialize(
+                    const State& state,
+                    std::vector<uint8_t>& buffer);
+
+            static std::pair<State, uint64_t> Deserialize(
+                    const std::vector<uint8_t>& buffer,
+                    const uint64_t current,
+                    const RubberBand& template_band);
         };
         typedef Eigen::aligned_allocator<State> StateAllocator;
 
         typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> GripperPositions;
+        static uint64_t SerializeGrippers(
+                const GripperPositions& grippers,
+                std::vector<uint8_t>& buffer);
+        static std::pair<GripperPositions, uint64_t> DeserializeGrippers(
+                const std::vector<uint8_t>& buffer,
+                const uint64_t current);
 
         struct StateTransition
         {
         public:
             EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-            State starting_state;
-            State ending_state;
+            State starting_state_;
+            State ending_state_;
             // This is the target position of the grippers.
             // In practice this data is duplicated in the endpoints of the band,
             // but this is being kept to keep everything in the
             // "state, action, next state" framework
             GripperPositions starting_gripper_positions_;
             GripperPositions ending_gripper_positions_;
+
+            uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
+
+            uint64_t deserializeIntoSelf(
+                    const std::vector<uint8_t>& buffer,
+                    const uint64_t current);
+
+            static uint64_t Serialize(
+                    const StateTransition& state_transition,
+                    std::vector<uint8_t>& buffer);
+
+            static std::pair<StateTransition, uint64_t> Deserialize(
+                    const std::vector<uint8_t>& buffer,
+                    const uint64_t current,
+                    const RubberBand& template_band);
+
+            std::string toString() const;
         };
         typedef Eigen::aligned_allocator<StateTransition> StateTransitionAllocator;
 
@@ -50,7 +88,8 @@ namespace smmap
                 std::shared_ptr<ros::NodeHandle> nh,
                 std::shared_ptr<ros::NodeHandle> ph,
                 const DijkstrasCoverageTask::ConstPtr& task,
-                const smmap_utilities::Visualizer::ConstPtr& vis);
+                const smmap_utilities::Visualizer::ConstPtr& vis,
+                const RubberBand& template_band);
 
         ////////////////////////////////////////////////////////////////////////
         // Helper functions - used externally and internally
@@ -66,28 +105,13 @@ namespace smmap
                 const RubberBand& b2) const;
 
         ////////////////////////////////////////////////////////////////////////
-        // Learning and visualizing transitions
+        // Learning
         ////////////////////////////////////////////////////////////////////////
 
         Maybe::Maybe<StateTransition> findMostRecentBadTransition(
                 const std::vector<State, StateAllocator>& trajectory) const;
 
         void learnTransition(const StateTransition& transition);
-
-
-        void visualizeTransition(
-                const StateTransition& transition,
-                const int32_t id = 1,
-                const std::string& ns_prefix = "") const;
-
-        void visualizeLearnedTransitions(
-                const std::string& ns_prefix = "all_") const;
-        void clearVisualizations() const;
-
-        // Topic names used for publishing visualization data
-        static constexpr char MDP_PRE_STATE_NS[]        = "mdp_pre_state";
-        static constexpr char MDP_TESTING_STATE_NS[]    = "mdp_testing_state";
-        static constexpr char MDP_POST_STATE_NS[]       = "mdp_post_state";
 
         ////////////////////////////////////////////////////////////////////////
         // Using transitions
@@ -114,6 +138,26 @@ namespace smmap
 
         double confidence(const double dist) const;
 
+        ////////////////////////////////////////////////////////////////////////
+        // Visualizing transitions
+        ////////////////////////////////////////////////////////////////////////
+
+        void visualizeTransition(
+                const StateTransition& transition,
+                const int32_t id = 1,
+                const std::string& ns_prefix = "") const;
+
+        void visualizeLearnedTransitions(
+                const std::string& ns_prefix = "all_") const;
+
+        void clearVisualizations() const;
+
+        // Topic names used for publishing visualization data
+        static constexpr char MDP_PRE_STATE_NS[]        = "mdp_pre_state";
+        static constexpr char MDP_TESTING_STATE_NS[]    = "mdp_testing_state";
+        static constexpr char MDP_POST_STATE_NS[]       = "mdp_post_state";
+
+
     private:
 
         const std::shared_ptr<ros::NodeHandle> nh_;
@@ -127,7 +171,18 @@ namespace smmap
 //        const double action_dist_scale_factor;
         const double band_dist_threshold_;
         const double band_dist_scale_factor_;
+
+        ////////////////////////////////////////////////////////////////////////
+        // Saving and loading learned transitions
+        ////////////////////////////////////////////////////////////////////////
+
+        bool useStoredTransitions() const;
+        void storeTransitions() const;
+        void loadSavedTransitions();
+        const RubberBand& template_band_;
     };
+
+    std::ostream& operator<<(std::ostream& out, const TransitionEstimation::StateTransition& t);
 }
 
 #endif

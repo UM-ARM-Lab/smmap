@@ -1074,42 +1074,24 @@ void QuinlanRubberBand::printBandData(const EigenHelpers::VectorVector3d& test_b
 
 uint64_t QuinlanRubberBand::serialize(std::vector<uint8_t>& buffer) const
 {
-    uint64_t bytes_written = 0;
-    bytes_written += arc_utilities::SerializeVector(band_, buffer, arc_utilities::SerializeEigen<double, 3, 1>);
-    bytes_written += arc_utilities::SerializeVector(resampled_band_, buffer, arc_utilities::SerializeEigen<double, 3, 1>);
-//    bytes_written += arc_utilities::SerializeFixedSizePOD(resample_max_pointwise_dist_, buffer);
-    bytes_written += arc_utilities::SerializeVector(upsampled_band_, buffer, arc_utilities::SerializeEigen<double, 3, 1>);
-//    bytes_written += arc_utilities::SerializeFixedSizePOD(upsample_num_points_, buffer);
-
-    return bytes_written;
+    // Note that we only serialize band_ because everything else is const,
+    // or is derived from const properties and band_
+    return arc_utilities::SerializeVector(band_, buffer, arc_utilities::SerializeEigen<double, 3, 1>);
 }
 
 uint64_t QuinlanRubberBand::deserializeIntoSelf(const std::vector<uint8_t>& buffer, const uint64_t current)
 {
-    uint64_t bytes_read = 0;
-
-    const auto deserialized_band_results = arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
-                buffer, current + bytes_read, arc_utilities::DeserializeEigen<Eigen::Vector3d>);
+    const auto deserialized_band_results =
+            arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
+                buffer, current, arc_utilities::DeserializeEigen<Eigen::Vector3d>);
     band_ = deserialized_band_results.first;
-    bytes_read += deserialized_band_results.second;
+    auto bytes_read = deserialized_band_results.second;
 
-    const auto deserialized_resampled_results = arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
-                buffer, current + bytes_read, arc_utilities::DeserializeEigen<Eigen::Vector3d>);
-    resampled_band_ = deserialized_resampled_results.first;
-    bytes_read += deserialized_resampled_results.second;
-
-//    const auto deserialized_max_dist_results = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current + bytes_read);
-//    resample_max_pointwise_dist_ = deserialized_max_dist_results.first;
-//    bytes_read += deserialized_max_dist_results.second;
-
-    const auto deserialized_upsampled_results = arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
-                buffer, current + bytes_read, arc_utilities::DeserializeEigen<Eigen::Vector3d>);
-    upsampled_band_ = deserialized_upsampled_results.first;
-    bytes_read += deserialized_upsampled_results.second;
-
-//    const auto deserialized_upsample_count_results = arc_utilities::DeserializeFixedSizePOD<size_t>(buffer, current + bytes_read);
-//    upsample_num_points_ = deserialized_upsample_count_results.first;
-//    bytes_read += deserialized_upsample_count_results.second;
+    // Reset internal versions of band_
+    resampled_band_.clear();
+    upsampled_band_.clear();
+    resampleBand();
+    upsampleBand();
 
     return bytes_read;
 }

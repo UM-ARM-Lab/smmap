@@ -3056,24 +3056,9 @@ void BandRRT::shortcutSmoothPolicy(
         // Segments that have no children must end at the goal, so we need to maintain that when smoothing
         const bool maintain_goal_reach_invariant = (child_segment_indices.size() == 0);
 
-        // Other segments need to maintain the same transitions, so extract them
-//        std::vector<RubberBand::ConstPtr> transition_targets;
-//        if (!maintain_goal_reach_invariant)
-//        {
-//            for (const size_t child_segment_indices_idx : child_segment_indices)
-//            {
-//                const RRTPath& child_segment = policy[child_segment_indices_idx];
-//                // We want the 2nd element of the path due to the fact that we are
-//                // ensuring overlap between "adjacent" segments
-//                const RubberBand::ConstPtr target_band = child_segment.at(1).band();
-//                transition_targets.push_back(target_band);
-//            }
-//        }
-
         shortcutSmoothPath(
                     segment,
                     maintain_goal_reach_invariant,
-//                    transition_targets,
                     visualization_enabled_locally,
                     (int32_t)segment_idx + 1);
     }
@@ -3330,6 +3315,7 @@ void BandRRT::shortcutSmoothPath(
                     // Check if the we hit a split
                     if (smoothed_segment.back().splitIndex() >= 0)
                     {
+                        ROS_WARN_NAMED("rrt.smoothing", "Split in path while smoothing single gripper, rejecting smoothing attempt");
                         break;
                     }
 
@@ -3350,7 +3336,7 @@ void BandRRT::shortcutSmoothPath(
             // Check if the we hit a split
             if (smoothed_segment.back().splitIndex() >= 0)
             {
-                ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Shortcut failed, split happened during smoothing");
+                ROS_WARN_NAMED("rrt.smoothing", "Shortcut failed, split happened during smoothing");
 //                std::cout << "Waiting for string input " << std::endl;
 //                std::string tmp;
 //                std::cin >> tmp;

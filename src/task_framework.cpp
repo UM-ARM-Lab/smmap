@@ -256,7 +256,7 @@ void TaskFramework::execute()
 
         const auto starting_band_points = getPathBetweenGrippersThroughObject(
                     world_feedback, path_between_grippers_through_object_);
-        rubber_band_between_grippers_ = std::make_shared<RubberBand>(
+        rubber_band_ = std::make_shared<RubberBand>(
                     nh_,
                     ph_,
                     vis_,
@@ -285,7 +285,7 @@ void TaskFramework::execute()
 #endif
 
         // Initialize the MDP transition learner
-        transition_estimator_ = std::make_shared<TransitionEstimation>(nh_, ph_, dijkstras_task_, vis_);
+        transition_estimator_ = std::make_shared<TransitionEstimation>(nh_, ph_, dijkstras_task_, vis_, *rubber_band_);
 
         // "World" params used by planning
         BandRRT::WorldParams world_params =
@@ -559,7 +559,7 @@ WorldState TaskFramework::sendNextCommand(
 
             // Update the band with the new position of the deformable object
             const auto band_points = getPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
-            rubber_band_between_grippers_->setPointsAndSmooth(band_points);
+            rubber_band_->setPointsAndSmooth(band_points);
         }
 
         // Keep the last N grippers positions recorded to detect if the grippers are stuck
@@ -865,7 +865,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
                                        current_world_state.robot_configuration_valid_);
     // Update the band with the new position of the deformable object
     const auto band_points = getPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
-    rubber_band_between_grippers_->setPointsAndSmooth(band_points);
+    rubber_band_->setPointsAndSmooth(band_points);
 
     // If we targetted the last node of the current path segment, then we need to handle
     // recording data differently and determine which path segment to follow next
@@ -882,7 +882,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     {
         rrt_executed_path_.push_back({
                     world_feedback.object_configuration_,
-                    std::make_shared<RubberBand>(*rubber_band_between_grippers_),
+                    std::make_shared<RubberBand>(*rubber_band_),
                     std::make_shared<RubberBand>(*current_segment[policy_segment_next_idx_].band())});
 
         ++policy_segment_next_idx_;
@@ -935,7 +935,7 @@ size_t TaskFramework::findBestBandMatchAtEndOfSegment() const
         const RRTNode& first_node = child_path[0];
 
         ROS_WARN_THROTTLE_NAMED(4.0, "task_framework", "Band distance check to determine which branch of the policy to follow is not using homotopy");
-        const double dist = RubberBand::Distance(*rubber_band_between_grippers_, *first_node.band());
+        const double dist = RubberBand::Distance(*rubber_band_, *first_node.band());
         if (dist < best_dist)
         {
             best_dist = dist;
@@ -1015,8 +1015,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     WorldState world_state_copy = starting_world_state;
-    RubberBand rubber_band_between_grippers_copy = *rubber_band_between_grippers_.get();
-    rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, 1, visualization_enabled);
+    RubberBand rubber_band_copy = *rubber_band_;
+    rubber_band_copy.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, 1, visualization_enabled);
 
     projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.reserve(actual_lookahead_steps);
     for (size_t t = 0; t < actual_lookahead_steps; ++t)
@@ -1089,16 +1089,16 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
         }
 
         // Move the virtual rubber band to follow the grippers, projecting out of collision as needed
-        rubber_band_between_grippers_copy.forwardPropagateRubberBandToEndpointTargets(
+        rubber_band_copy.forwardPropagateRubberBandToEndpointTargets(
                     world_state_copy.all_grippers_single_pose_[0].translation(),
                     world_state_copy.all_grippers_single_pose_[1].translation(),
                     band_verbose);
-        projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.push_back(rubber_band_between_grippers_copy);
+        projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.push_back(rubber_band_copy);
 
         // Visualize
         if (visualization_enabled)
         {
-            rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, (int32_t)t + 2, visualization_enabled);
+            rubber_band_copy.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, (int32_t)t + 2, visualization_enabled);
             vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, PREDICTION_GRIPPER_COLOR, (int32_t)(2 * t) + 2);
         }
 
@@ -1112,7 +1112,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
     {
         for (size_t t = actual_lookahead_steps; t < max_lookahead_steps_; ++t)
         {
-            rubber_band_between_grippers_copy.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, (int32_t)t + 2, visualization_enabled);
+            rubber_band_copy.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, (int32_t)t + 2, visualization_enabled);
             vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, world_state_copy.all_grippers_single_pose_, PREDICTION_GRIPPER_COLOR, (int32_t)(2 * t) + 2);
         }
         vis_->forcePublishNow();
@@ -1229,7 +1229,7 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
 
     constexpr bool band_verbose = false;
 
-    RubberBand band = *rubber_band_between_grippers_;
+    RubberBand band = *rubber_band_;
 
     bool overstretch_predicted = false;
     double filtered_band_length = band.totalLength();
@@ -1263,48 +1263,6 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
     vis_->forcePublishNow();
 
     return overstretch_predicted;
-}
-
-void TaskFramework::predictNextBandStatesGlobalPlanResults(const RubberBand::Ptr starting_band, const int horizion, const size_t policy_current_idx, const size_t policy_segment_next_idx) const
-{
-    assert(false && "This code is not tested, intended to do a tree-style prediction");
-
-//    static double default_propogation_confidence = GetRRTDefaultPropagationConfidence(*ph_);
-
-//    if (horizion == 0)
-//    {
-//        return;
-//    }
-
-//    assert(policy_current_idx < rrt_planned_policy_.size());
-//    const RRTPath& current_segment = rrt_planned_policy_[policy_current_idx].first;
-//    assert(policy_segment_next_idx < current_segment.size());
-//    const RRTGrippersRepresentation& next_grippers_poses = current_segment[policy_segment_next_idx].grippers();
-
-//    const auto starting_band_endpoints = starting_band->getEndpoints();
-//    TransitionEstimation::Action action = {
-//        next_grippers_poses.first.translation() - starting_band_endpoints.first,
-//        next_grippers_poses.second.translation() - starting_band_endpoints.second};
-//    auto transitions = transition_estimator_->applyLearnedTransitions(starting_band, action);
-
-//    auto next_band = std::make_shared<RubberBand>(*starting_band);
-//    const bool rubber_band_verbose = false;
-//    // Forward simulate the rubber band to test this transition
-//    next_band->forwardPropagateRubberBandToEndpointTargets(
-//                next_grippers_poses.first.translation(),
-//                next_grippers_poses.second.translation(),
-//                rubber_band_verbose);
-
-//    transitions.push_back({next_band, default_propogation_confidence});
-
-//    if (policy_segment_next_idx + 1 < current_segment.size())
-//    {
-//        for (size_t transition_idx; transition_idx < transitions.size(); ++transition_idx)
-//        {
-////            auto next_predictions =
-//                    predictNextBandStatesGlobalPlanResults(transitions[transition_idx].first, horizion - 1, policy_current_idx, policy_segment_next_idx);
-//        }
-//    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1603,12 +1561,12 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 {
     static int num_times_invoked = 0;
     num_times_invoked++;
-    ROS_INFO_STREAM("!!!!!!!!!!!!!!!!!! Planner Invoked " << num_times_invoked << " times!!!!!!!!!!!");
+    ROS_INFO_STREAM_NAMED("task_framework", "!!!!!!!!!!!!!!!!!! Planner Invoked " << num_times_invoked << " times!!!!!!!!!!!");
 
     // Resample the band for the purposes of first order vis checking
     if (!executing_global_trajectory_)
     {
-        band_rrt_->addBandToBlacklist(rubber_band_between_grippers_->resampleBand());
+        band_rrt_->addBandToBlacklist(rubber_band_->resampleBand());
     }
 
     vis_->purgeMarkerList();
@@ -1668,7 +1626,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         const RRTNode start_config(
                     gripper_config,
                     robot_config,
-                    rubber_band_between_grippers_);
+                    rubber_band_);
 
         const AllGrippersSinglePose target_grippers_poses_vec = getGripperTargets(world_state);
         const RRTGrippersRepresentation target_grippers_poses(
@@ -1731,8 +1689,8 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     rrt_executed_path_.clear();
     rrt_executed_path_.push_back({
                 world_state.object_configuration_,
-                std::make_shared<RubberBand>(*rubber_band_between_grippers_),
-                std::make_shared<RubberBand>(*rubber_band_between_grippers_)});
+                std::make_shared<RubberBand>(*rubber_band_),
+                std::make_shared<RubberBand>(*rubber_band_)});
 
 //    assert(false && "Terminating as this is just a planning test");
 //    std::cout << "Waiting on keystroke before executing trajectory" << std::endl;
@@ -2563,7 +2521,7 @@ void TaskFramework::storeWorldState(const WorldState& world_state, const RubberB
         const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsStringWithMilliseconds(); //arc_helpers::GetCurrentTimeAsString();
         const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
         const std::string full_path = log_folder + file_name;
-        ROS_DEBUG_STREAM("Saving world_state to " << full_path);
+        ROS_DEBUG_STREAM_NAMED("task_framework", "Saving world_state to " << full_path);
 
         std::vector<uint8_t> buffer;
         world_state.serialize(buffer);
@@ -2575,7 +2533,7 @@ void TaskFramework::storeWorldState(const WorldState& world_state, const RubberB
     }
     catch (const std::exception& e)
     {
-        ROS_ERROR_STREAM("Failed to store world_state: "  <<  e.what());
+        ROS_ERROR_STREAM_NAMED("task_framework", "Failed to store world_state: "  <<  e.what());
     }
 }
 
@@ -2589,7 +2547,7 @@ std::pair<WorldState, RubberBand::Ptr> TaskFramework::loadStoredWorldState()
         const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state_file_name_prefix", __func__);
         if (!file_name_prefix.Valid())
         {
-            throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_prefix from parameter server");
+            throw_arc_exception(std::invalid_argument, "Unable to load world_state_file_name_prefix from parameter server");
         }
         const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state_file_name_suffix_to_load", __func__);
         if (!file_name_suffix.Valid())
@@ -2599,18 +2557,18 @@ std::pair<WorldState, RubberBand::Ptr> TaskFramework::loadStoredWorldState()
 
         const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix.GetImmutable() + ".compressed";
         const std::string full_path = log_folder + file_name;
-        ROS_INFO_STREAM("Loading world state from " << full_path);
+        ROS_INFO_STREAM_NAMED("task_framework", "Loading world state from " << full_path);
 
         const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(full_path);
         const auto deserialized_world_state = WorldState::Deserialize(buffer, 0);
         deserialized_result.first = deserialized_world_state.first;
 
-        deserialized_result.second = std::make_shared<RubberBand>(*rubber_band_between_grippers_);
+        deserialized_result.second = std::make_shared<RubberBand>(*rubber_band_);
         deserialized_result.second->deserializeIntoSelf(buffer, deserialized_world_state.second);
     }
     catch (const std::exception& e)
     {
-        ROS_ERROR_STREAM("Failed to load stored world_state: "  <<  e.what());
+        ROS_ERROR_STREAM_NAMED("task_framework", "Failed to load stored world_state: "  <<  e.what());
     }
 
     return deserialized_result;

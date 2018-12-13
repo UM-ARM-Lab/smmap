@@ -80,8 +80,6 @@ namespace smmap
 
             bool predictStuckForGlobalPlannerResults(const bool visualization_enabled = true);
 
-            void predictNextBandStatesGlobalPlanResults(const RubberBand::Ptr starting_band, const int horizion, const size_t policy_current_idx, const size_t policy_segment_next_idx) const;
-
             ////////////////////////////////////////////////////////////////////
             // Global gripper planner functions
             ////////////////////////////////////////////////////////////////////
@@ -131,7 +129,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             const bool enable_stuck_detection_;
-            RubberBand::Ptr rubber_band_between_grippers_;
+            RubberBand::Ptr rubber_band_;
             std::vector<ssize_t> path_between_grippers_through_object_;
             const size_t max_lookahead_steps_;
             const size_t max_grippers_pose_history_length_;
