@@ -1633,8 +1633,10 @@ void BandRRT::planningMainLoop()
         if (forward_tree_.back().splitIndex() >= 0)
         {
             ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Split happened during connect to random operation");
+            std::cerr << "Waiting for input " << std::flush;
+            std::getchar();
+
             transition_estimator_->clearVisualizations();
-            continue;
         }
         checkNewStatesForGoal(num_random_nodes_created);
         if (forward_tree_[0].getpGoalReachable() == 1.0)
@@ -1659,12 +1661,8 @@ void BandRRT::planningMainLoop()
                 if (forward_tree_.back().splitIndex() >= 0)
                 {
                     ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Split happened during connect to backwards tree");
-//                    vis_->forcePublishNow(0.05);
-//                    std::cout << "Waiting for string input " << std::endl;
-//                    std::string tmp;
-//                    std::cin >> tmp;
-//                    transition_estimator_->clearVisualizations();
-//                    continue;
+                    std::cerr << "Waiting for input " << std::flush;
+                    std::getchar();
                 }
                 checkNewStatesForGoal(num_goal_directed_nodes_created);
             }

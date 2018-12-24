@@ -22,7 +22,7 @@
 
 #include "smmap/least_squares_controller_with_object_avoidance.h"
 #include "smmap/least_squares_stretching_constraint_controller.h"
-#include "smmap/stretching_avoidance_controller.h"
+#include "smmap/stretching_constraint_controller.h"
 #include "smmap/straight_line_controller.h"
 
 using namespace smmap;
@@ -1803,11 +1803,11 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                         rotation_deformability,
                         sdf);
             model_list_.push_back(model);
-            controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+            controller_list_.push_back(std::make_shared<StretchingConstraintController>(
                                            nh_, ph_, robot_, vis_, model,
                                            sdf,
                                            generator_,
-                                           GetStretchingAvoidanceControllerSolverType(*ph_),
+                                           GetStretchingConstraintControllerSolverType(*ph_),
                                            GetMaxSamplingCounts(*ph_)));
             break;
         }
@@ -1838,16 +1838,28 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                         translational_deformability,
                         rotational_deformability);
             model_list_.push_back(model);
-            controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+            controller_list_.push_back(std::make_shared<StretchingConstraintController>(
                                            nh_, ph_, robot_, vis_, model,
                                            sdf,
                                            generator_,
-                                           GetStretchingAvoidanceControllerSolverType(*ph_),
+                                           GetStretchingConstraintControllerSolverType(*ph_),
                                            GetMaxSamplingCounts(*ph_)));
             break;
         }
         case MULTI_MODEL_BANDIT_TEST:
         {
+            bool use_stretching_constraint_controller = false;
+            if (initial_world_state.all_grippers_single_pose_.size() == 2)
+            {
+                use_stretching_constraint_controller = true;
+                ROS_INFO_NAMED("task_framework", "Using least squares controllers with stretching constraint");
+            }
+            else
+            {
+                use_stretching_constraint_controller = false;
+                ROS_INFO_NAMED("task_framework", "Using least squares controllers with stretching avoidance");
+            }
+
             ////////////////////////////////////////////////////////////////////////
             // Diminishing rigidity models
             ////////////////////////////////////////////////////////////////////////
@@ -1866,12 +1878,21 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                     trans_deform,
                                     rot_deform);
                         model_list_.push_back(model);
-                        controller_list_.push_back(std::make_shared<LeastSquaresControllerWithStretchingConstraint>(
-                                                       nh_, ph_, robot_, vis_, model));
+                        if (use_stretching_constraint_controller)
+                        {
+                            controller_list_.push_back(std::make_shared<LeastSquaresControllerWithStretchingConstraint>(
+                                                           nh_, ph_, robot_, vis_, model));
+                        }
+                        else
+                        {
+                            controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                                           nh_, ph_, robot_, vis_, model,
+                                                           task_specification_->collisionScalingFactor(),
+                                                           optimization_enabled));
+                        }
                     }
                 }
-                ROS_INFO_STREAM_NAMED("task_framework", "Num diminishing rigidity models: "
-                                       << std::floor((deform_max - deform_min) / deform_step));
+                ROS_INFO_STREAM_NAMED("task_framework", "Num diminishing rigidity models: " << model_list_.size());
             }
 
             ////////////////////////////////////////////////////////////////////////
@@ -1893,8 +1914,19 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                                 starting_jacobian,
                                 learning_rate);
                     model_list_.push_back(model);
-                    controller_list_.push_back(std::make_shared<LeastSquaresControllerWithStretchingConstraint>(
-                                                   nh_, ph_, robot_, vis_, model));
+
+                    if (use_stretching_constraint_controller)
+                    {
+                        controller_list_.push_back(std::make_shared<LeastSquaresControllerWithStretchingConstraint>(
+                                                       nh_, ph_, robot_, vis_, model));
+                    }
+                    else
+                    {
+                        controller_list_.push_back(std::make_shared<LeastSquaresControllerWithObjectAvoidance>(
+                                                       nh_, ph_, robot_, vis_, model,
+                                                       task_specification_->collisionScalingFactor(),
+                                                       optimization_enabled));
+                    }
                 }
                 ROS_INFO_STREAM_NAMED("task_framework", "Num adaptive Jacobian models: "
                                        << std::floor(std::log(learning_rate_max / learning_rate_min) / std::log(learning_rate_step)));
@@ -1920,11 +1952,11 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
                             rotation_deformability,
                             sdf);
                 model_list_.push_back(model);
-                controller_list_.push_back(std::make_shared<StretchingAvoidanceController>(
+                controller_list_.push_back(std::make_shared<StretchingConstraintController>(
                                                nh_, ph_, robot_, vis_, model,
                                                sdf,
                                                generator_,
-                                               GetStretchingAvoidanceControllerSolverType(*ph_),
+                                               GetStretchingConstraintControllerSolverType(*ph_),
                                                GetMaxSamplingCounts(*ph_)));
             }
 

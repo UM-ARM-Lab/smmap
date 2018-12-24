@@ -846,6 +846,22 @@ namespace smmap
         };
         return arc_utilities::DeserializeVector(buffer, current, item_deserializer);
     }
+
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////                Printing to screen                                  ////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+
+    inline std::string print(const AllGrippersSinglePoseDelta& delta)
+    {
+        assert(delta.size() == 2);
+
+        std::ostringstream strm;
+        strm << "0th: " << delta[0].transpose() << "     1st: " << delta[1].transpose();
+
+        return strm.str();
+    }
 }
 
 #endif // GRIPPERS_HPP

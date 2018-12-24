@@ -1,5 +1,5 @@
-#ifndef STRETCHINGAVOIDANCECONTROLLER_H
-#define STRETCHINGAVOIDANCECONTROLLER_H
+#ifndef STRETCHINCONSTRAINTCONTROLLER_H
+#define STRETCHINCONSTRAINTCONTROLLER_H
 
 #include <sdf_tools/sdf.hpp>
 #include <smmap_utilities/visualization_tools.h>
@@ -10,10 +10,10 @@
 
 namespace smmap
 {
-    class StretchingAvoidanceController : public DeformableController
+    class StretchingConstraintController : public DeformableController
     {
         public:
-            StretchingAvoidanceController(
+            StretchingConstraintController(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
                     RobotInterface::Ptr robot,
@@ -21,7 +21,7 @@ namespace smmap
                     const DeformableModel::ConstPtr& deformable_model,
                     const sdf_tools::SignedDistanceField::ConstPtr sdf,
                     const std::shared_ptr<std::mt19937_64>& generator,
-                    const StretchingAvoidanceControllerSolverType gripper_controller_type,
+                    const StretchingConstraintControllerSolverType gripper_controller_type,
                     const int max_count);
 
         private:
@@ -140,7 +140,7 @@ namespace smmap
             const std::shared_ptr<std::mt19937_64> generator_;
             std::uniform_real_distribution<double> uniform_unit_distribution_;
 
-            StretchingAvoidanceControllerSolverType gripper_controller_type_;
+            StretchingConstraintControllerSolverType gripper_controller_type_;
             const DeformableType deformable_type_;
             const TaskType task_type_;
 

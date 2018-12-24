@@ -128,6 +128,8 @@ namespace smmap
             // Constraint violation and global planner data
             ////////////////////////////////////////////////////////////////////
 
+            // TODO: make it so that paramters that are not used are not looked up
+            // if stuck detection is not enbaled
             const bool enable_stuck_detection_;
             RubberBand::Ptr rubber_band_;
             std::vector<ssize_t> path_between_grippers_through_object_;

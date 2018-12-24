@@ -5,7 +5,7 @@
 #include <kinematics_toolbox/kinematics.h>
 #include <omp.h>
 
-#include "smmap/stretching_avoidance_controller.h"
+#include "smmap/stretching_constraint_controller.h"
 #include "smmap/ros_communication_helpers.hpp"
 #include "smmap/grippers.hpp"
 
@@ -25,61 +25,7 @@ using namespace EigenHelpers;
 
 
 
-
-inline std::string print(const AllGrippersSinglePoseDelta& delta)
-{
-    assert(delta.size() == 2);
-
-    ostringstream strm;
-    strm << "0th: " << delta[0].transpose() << "     1st: " << delta[1].transpose();
-
-    return strm.str();
-}
-
-
-void StretchingAvoidanceController::visualizeCone(const Vector3d& cone_direction, const double min_normalized_dot_product, const Isometry3d& pose, const int marker_id)
-{
-    // Build a vector that is garunteed to be perpendicular to cone_direction, and non-zero
-    auto tmp = VectorRejection(cone_direction, Vector3d::UnitX());
-    tmp += VectorRejection(cone_direction, Vector3d::UnitY());
-    tmp += VectorRejection(cone_direction, Vector3d::UnitZ());
-
-    assert(tmp.norm() > 1e-6);
-    tmp.normalize();
-
-//    std::cerr << "pose_" << marker_id << " = [\n" << pose.matrix() << "];\n";
-//    std::cerr << "cone_direction_" << marker_id << " = [" << cone_direction.transpose() << " 0.0]';\n";
-//    std::cerr << "perp_direction_" << marker_id << " = [" << tmp.transpose() << " 0.0]';\n";
-//    std::cerr << std::endl;
-
-    const Vector3d p1 = tmp;
-    const Vector3d p2 = cone_direction.cross(p1).normalized();
-    const Vector3d p3 = -p1;
-    const Vector3d p4 = -p2;
-
-    const double theta_max = std::acos(min_normalized_dot_product);
-    const double dist = std::tan(theta_max);
-
-    const Vector3d ray1 = cone_direction + dist * p1;
-    const Vector3d ray2 = cone_direction + dist * p2;
-    const Vector3d ray3 = cone_direction + dist * p3;
-    const Vector3d ray4 = cone_direction + dist * p4;
-
-    const VectorVector3d starts(4, pose.translation());
-    const VectorVector3d ends =
-    {
-        pose * (ray1.normalized() / 10.0),
-        pose * (ray2.normalized() / 10.0),
-        pose * (ray3.normalized() / 10.0),
-        pose * (ray4.normalized() / 10.0)
-    };
-
-    vis_->visualizeLines("stretching_cone", starts, ends, Visualizer::Magenta(), marker_id);
-}
-
-
-
-StretchingAvoidanceController::StretchingAvoidanceController(
+StretchingConstraintController::StretchingConstraintController(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
         RobotInterface::Ptr robot,
@@ -87,7 +33,7 @@ StretchingAvoidanceController::StretchingAvoidanceController(
         const DeformableModel::ConstPtr& model,
         const sdf_tools::SignedDistanceField::ConstPtr sdf,
         const std::shared_ptr<std::mt19937_64>& generator,
-        const StretchingAvoidanceControllerSolverType gripper_controller_type,
+        const StretchingConstraintControllerSolverType gripper_controller_type,
         const int max_count)
     : DeformableController(nh, ph, robot, vis, model)
     , gripper_collision_checker_(*nh_)
@@ -117,19 +63,19 @@ StretchingAvoidanceController::StretchingAvoidanceController(
 // deformable_type_ have been set already
 ////////////////////////////////////////////////////////////////////////////////
 
-DeformableController::OutputData StretchingAvoidanceController::getGripperMotion_impl(const InputData& input_data)
+DeformableController::OutputData StretchingConstraintController::getGripperMotion_impl(const InputData& input_data)
 {
     switch (gripper_controller_type_)
     {
-        case StretchingAvoidanceControllerSolverType::RANDOM_SAMPLING:
+        case StretchingConstraintControllerSolverType::RANDOM_SAMPLING:
             assert(false && "Not used or tested anymore");
             return solvedByRandomSampling(input_data);
 
-        case StretchingAvoidanceControllerSolverType::NOMAD_OPTIMIZATION:
+        case StretchingConstraintControllerSolverType::NOMAD_OPTIMIZATION:
             assert(false && "Not used or tested anymore");
             return solvedByNomad(input_data);
 
-        case StretchingAvoidanceControllerSolverType::GRADIENT_DESCENT:
+        case StretchingConstraintControllerSolverType::GRADIENT_DESCENT:
             return solvedByGradientDescentProjectionViaGurobiMethod(input_data);
 
         default:
@@ -143,7 +89,7 @@ DeformableController::OutputData StretchingAvoidanceController::getGripperMotion
 
 //#define USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER 1
 
-DeformableController::OutputData StretchingAvoidanceController::solvedByRandomSampling(const InputData& input_data)
+DeformableController::OutputData StretchingConstraintController::solvedByRandomSampling(const InputData& input_data)
 {
 //    assert(false && "Not updated to use new constraints etc. Verify that this whole function is doing what we want, for both simulation and live robot");
 
@@ -270,7 +216,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByRandomSa
 
 //#undef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
 
-DeformableController::OutputData StretchingAvoidanceController::solvedByNomad(const InputData& input_data)
+DeformableController::OutputData StretchingConstraintController::solvedByNomad(const InputData& input_data)
 {
     assert(false && "Not updated to use new constraints etc. Verify that this whole function is doing what we want, for both simulation and live robot");
 
@@ -814,7 +760,7 @@ inline AllGrippersSinglePoseDelta projectToCollisionAndMaxDeltaConstraints(
 
 
 
-DeformableController::OutputData StretchingAvoidanceController::solvedByGradientDescentProjectionViaGurobiMethod(const InputData& input_data)
+DeformableController::OutputData StretchingConstraintController::solvedByGradientDescentProjectionViaGurobiMethod(const InputData& input_data)
 {
     // Unpack the input data into its constituent parts
     const auto& world_state = input_data.world_current_state_;
@@ -1440,7 +1386,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 
 
 
-DeformableController::OutputData StretchingAvoidanceController::solvedByGradientDescentBarrierMethod(const InputData& input_data)
+DeformableController::OutputData StretchingConstraintController::solvedByGradientDescentBarrierMethod(const InputData& input_data)
 {
     assert(false && "Not tested in a long time");
     // Unpack the input data into its constituent parts
@@ -1707,7 +1653,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 
 
 #warning "Magic numbers all throughout this function"
-DeformableController::OutputData StretchingAvoidanceController::solvedByGradientDescentOld(const InputData& input_data)
+DeformableController::OutputData StretchingConstraintController::solvedByGradientDescentOld(const InputData& input_data)
 {
     assert(false && "Not tested in a long time");
     const WorldState& current_world_state = input_data.world_current_state_;
@@ -2110,7 +2056,7 @@ DeformableController::OutputData StretchingAvoidanceController::solvedByGradient
 // Helper functions
 //////////////////////////////////////////////////////////////////////////////////
 
-kinematics::Vector6d StretchingAvoidanceController::singleGripperPoseDeltaSampler(
+kinematics::Vector6d StretchingConstraintController::singleGripperPoseDeltaSampler(
         const double max_delta)
 {
     const double x_trans = Interpolate(-max_delta, max_delta, uniform_unit_distribution_(*generator_));
@@ -2145,7 +2091,7 @@ kinematics::Vector6d StretchingAvoidanceController::singleGripperPoseDeltaSample
     return ClampGripperPoseDeltas(random_sample, max_delta);
 }
 
-AllGrippersSinglePoseDelta StretchingAvoidanceController::allGripperPoseDeltaSampler(
+AllGrippersSinglePoseDelta StretchingConstraintController::allGripperPoseDeltaSampler(
         const ssize_t num_grippers,
         const double max_delta)
 {
@@ -2171,7 +2117,7 @@ AllGrippersSinglePoseDelta StretchingAvoidanceController::allGripperPoseDeltaSam
 }
 
 
-kinematics::Vector6d StretchingAvoidanceController::getConstraintAwareGripperDeltaSample(
+kinematics::Vector6d StretchingConstraintController::getConstraintAwareGripperDeltaSample(
                     const Isometry3d& gripper_pose,
                     const CollisionData& collision_data,
                     const double max_delta,
@@ -2223,7 +2169,7 @@ kinematics::Vector6d StretchingAvoidanceController::getConstraintAwareGripperDel
     return sample;
 }
 
-kinematics::Vector6d StretchingAvoidanceController::getFeasibleGripperDeltaGurobi(
+kinematics::Vector6d StretchingConstraintController::getFeasibleGripperDeltaGurobi(
         const Isometry3d& gripper_pose,
         const CollisionData& collision_data,
         const double max_delta,
@@ -2293,7 +2239,7 @@ kinematics::Vector6d StretchingAvoidanceController::getFeasibleGripperDeltaGurob
 
 
 
-double StretchingAvoidanceController::errorOfControlByPrediction(
+double StretchingConstraintController::errorOfControlByPrediction(
         const ObjectPointSet predicted_object_p_dot,
         const VectorXd& desired_object_p_dot,
         const VectorXd& desired_p_dot_weight) const
@@ -2304,7 +2250,7 @@ double StretchingAvoidanceController::errorOfControlByPrediction(
 }
 
 
-void StretchingAvoidanceController::visualize_stretching_vector(
+void StretchingConstraintController::visualize_stretching_vector(
         const ObjectPointSet& object_configuration)
 {
     switch (deformable_type_)
@@ -2327,7 +2273,7 @@ void StretchingAvoidanceController::visualize_stretching_vector(
     }
 }
 
-void StretchingAvoidanceController::visualize_rope_stretching_vector(
+void StretchingConstraintController::visualize_rope_stretching_vector(
         const ObjectPointSet& object_configuration)
 {
     const ssize_t num_nodes = object_configuration.cols();
@@ -2357,7 +2303,7 @@ void StretchingAvoidanceController::visualize_rope_stretching_vector(
                         Visualizer::Orange());
 }
 
-void StretchingAvoidanceController::visualize_cloth_stretching_vector(
+void StretchingConstraintController::visualize_cloth_stretching_vector(
         const ObjectPointSet& object_configuration)
 {
     // Assume knowing there are two grippers.
@@ -2403,7 +2349,7 @@ void StretchingAvoidanceController::visualize_cloth_stretching_vector(
                         Visualizer::Orange());
 }
 
-void StretchingAvoidanceController::visualize_gripper_motion(
+void StretchingConstraintController::visualize_gripper_motion(
         const AllGrippersSinglePose& current_gripper_pose,
         const AllGrippersSinglePoseDelta& gripper_motion)
 {
@@ -2423,7 +2369,7 @@ void StretchingAvoidanceController::visualize_gripper_motion(
                          Visualizer::Olive());
 }
 
-double StretchingAvoidanceController::gripperCollisionCheckHelper(
+double StretchingConstraintController::gripperCollisionCheckHelper(
         const AllGrippersSinglePose& current_gripper_pose,
         const AllGrippersSinglePoseDelta& test_gripper_motion) const
 {
@@ -2447,7 +2393,7 @@ double StretchingAvoidanceController::gripperCollisionCheckHelper(
     return min_collision_distance;
 }
 
-bool StretchingAvoidanceController::gripperCollisionCheckResult(
+bool StretchingConstraintController::gripperCollisionCheckResult(
         const AllGrippersSinglePose& current_gripper_pose,
         const AllGrippersSinglePoseDelta& test_gripper_motion) const
 {
@@ -2458,7 +2404,7 @@ bool StretchingAvoidanceController::gripperCollisionCheckResult(
 
 
 // Returns true if the constraint is violated
-bool StretchingAvoidanceController::stretchingDetection(
+bool StretchingConstraintController::stretchingDetection(
         const InputData& input_data,
         const AllGrippersSinglePoseDelta& test_gripper_motion)
 {
@@ -2468,7 +2414,7 @@ bool StretchingAvoidanceController::stretchingDetection(
 // Note that NOMAD wants all constraints in the form c(x) <= 0
 // If the calc'd value is larger than the threshold, then the gripper motion is sufficently pointed
 // in the direction needed to reduce/not cause more stretching
-double StretchingAvoidanceController::stretchingFunctionEvaluation(
+double StretchingConstraintController::stretchingFunctionEvaluation(
         const InputData& input_data,
         const AllGrippersSinglePoseDelta& test_gripper_motion)
 {
@@ -2496,7 +2442,7 @@ double StretchingAvoidanceController::stretchingFunctionEvaluation(
     }
 }
 
-double StretchingAvoidanceController::ropeTwoGripperStretchingHelper(
+double StretchingConstraintController::ropeTwoGripperStretchingHelper(
         const InputData& input_data,
         const AllGrippersSinglePoseDelta& test_gripper_motion)
 {
@@ -2533,7 +2479,7 @@ double StretchingAvoidanceController::ropeTwoGripperStretchingHelper(
 
         switch (gripper_controller_type_)
         {
-            case StretchingAvoidanceControllerSolverType::RANDOM_SAMPLING:
+            case StretchingConstraintControllerSolverType::RANDOM_SAMPLING:
             {
                 if (sample_count_ > -1)
                 {
@@ -2587,7 +2533,7 @@ double StretchingAvoidanceController::ropeTwoGripperStretchingHelper(
 
 }
 
-double StretchingAvoidanceController::clothTwoGripperStretchingHelper(
+double StretchingConstraintController::clothTwoGripperStretchingHelper(
         const InputData& input_data,
         const AllGrippersSinglePoseDelta& test_gripper_motion)
 {
@@ -2688,7 +2634,7 @@ double StretchingAvoidanceController::clothTwoGripperStretchingHelper(
 
     double stretching_cos = 0.0;
     // sample_count_ > -1 means only sample one gripper each time
-    if ((sample_count_ > -1) && (gripper_controller_type_ == StretchingAvoidanceControllerSolverType::RANDOM_SAMPLING))
+    if ((sample_count_ > -1) && (gripper_controller_type_ == StretchingConstraintControllerSolverType::RANDOM_SAMPLING))
     {
         assert(sample_count_ < (int)(per_gripper_stretching_correction_vector.size()));
         const Vector3d& point_movement_direction = point_motion_vector[sample_count_];
@@ -2732,7 +2678,7 @@ double StretchingAvoidanceController::clothTwoGripperStretchingHelper(
 
 
 
-double StretchingAvoidanceController::evaluateStretchingConstraint(const std::pair<Vector3d, Vector3d>& stretching_constraint_data, const kinematics::Vector6d& gripper_delta) const
+double StretchingConstraintController::evaluateStretchingConstraint(const std::pair<Vector3d, Vector3d>& stretching_constraint_data, const kinematics::Vector6d& gripper_delta) const
 {
     const auto& stretching_reduction_vector              = stretching_constraint_data.first;
     const auto& vector_from_gripper_to_translation_point = stretching_constraint_data.second;
@@ -2760,7 +2706,7 @@ double StretchingAvoidanceController::evaluateStretchingConstraint(const std::pa
 // Note that the returned vectors and points are in gripper frame
 // result.first is the direction that we want to move the point
 // result.second is the point that we are constrainting the motion of
-std::vector<std::pair<Vector3d, Vector3d>> StretchingAvoidanceController::stretchingCorrectionVectorsAndPoints(const InputData& input_data) const
+std::vector<std::pair<Vector3d, Vector3d>> StretchingConstraintController::stretchingCorrectionVectorsAndPoints(const InputData& input_data) const
 {
     switch (deformable_type_)
     {
@@ -2779,7 +2725,7 @@ std::vector<std::pair<Vector3d, Vector3d>> StretchingAvoidanceController::stretc
     }
 }
 
-std::vector<std::pair<Vector3d, Vector3d>> StretchingAvoidanceController::ropeTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const
+std::vector<std::pair<Vector3d, Vector3d>> StretchingConstraintController::ropeTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const
 {
     assert(grippers_data_.size() == 2 || "grippers size is not 2, stretching vectors not defined");
 
@@ -2818,7 +2764,7 @@ std::vector<std::pair<Vector3d, Vector3d>> StretchingAvoidanceController::ropeTw
     return result;
 }
 
-std::vector<std::pair<Vector3d, Vector3d>> StretchingAvoidanceController::clothTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const
+std::vector<std::pair<Vector3d, Vector3d>> StretchingConstraintController::clothTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const
 {
     // Assume knowing there are two grippers.
     assert(grippers_data_.size() == 2 || "grippers size is not 2, stretching vectors not defined");
@@ -2888,4 +2834,44 @@ std::vector<std::pair<Vector3d, Vector3d>> StretchingAvoidanceController::clothT
     result[1].second = second_gripper_pose.inverse() * result[1].second;
 
     return result;
+}
+
+void StretchingConstraintController::visualizeCone(const Vector3d& cone_direction, const double min_normalized_dot_product, const Isometry3d& pose, const int marker_id)
+{
+    // Build a vector that is garunteed to be perpendicular to cone_direction, and non-zero
+    auto tmp = VectorRejection(cone_direction, Vector3d::UnitX());
+    tmp += VectorRejection(cone_direction, Vector3d::UnitY());
+    tmp += VectorRejection(cone_direction, Vector3d::UnitZ());
+
+    assert(tmp.norm() > 1e-6);
+    tmp.normalize();
+
+//    std::cerr << "pose_" << marker_id << " = [\n" << pose.matrix() << "];\n";
+//    std::cerr << "cone_direction_" << marker_id << " = [" << cone_direction.transpose() << " 0.0]';\n";
+//    std::cerr << "perp_direction_" << marker_id << " = [" << tmp.transpose() << " 0.0]';\n";
+//    std::cerr << std::endl;
+
+    const Vector3d p1 = tmp;
+    const Vector3d p2 = cone_direction.cross(p1).normalized();
+    const Vector3d p3 = -p1;
+    const Vector3d p4 = -p2;
+
+    const double theta_max = std::acos(min_normalized_dot_product);
+    const double dist = std::tan(theta_max);
+
+    const Vector3d ray1 = cone_direction + dist * p1;
+    const Vector3d ray2 = cone_direction + dist * p2;
+    const Vector3d ray3 = cone_direction + dist * p3;
+    const Vector3d ray4 = cone_direction + dist * p4;
+
+    const VectorVector3d starts(4, pose.translation());
+    const VectorVector3d ends =
+    {
+        pose * (ray1.normalized() / 10.0),
+        pose * (ray2.normalized() / 10.0),
+        pose * (ray3.normalized() / 10.0),
+        pose * (ray4.normalized() / 10.0)
+    };
+
+    vis_->visualizeLines("stretching_cone", starts, ends, Visualizer::Magenta(), marker_id);
 }
