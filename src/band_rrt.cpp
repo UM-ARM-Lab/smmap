@@ -2686,7 +2686,7 @@ void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
                 visualizeBothTrees();
                 visualizeBlacklist();
                 std::cout << "Waiting for keypress: " << std::flush;
-                arc_helpers::GetSingleCharacterNoEnter();
+                arc_helpers::GetChar();
                 std::cout << std::endl;
             }
         }
