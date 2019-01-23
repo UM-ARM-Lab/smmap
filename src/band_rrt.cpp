@@ -2682,7 +2682,7 @@ void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
             if (forward_tree_[idx].pReachability() < 1.0)
             {
                 ROS_INFO_STREAM_NAMED("rrt", "Goal reached, pReachability:         " << forward_tree_[idx].pReachability());
-                ROS_INFO_STREAM_NAMED("rrt", "            , pGoalReachable[root]:  " << forward_tree_[0].pGoalReachable());
+                ROS_INFO_STREAM_NAMED("rrt", "            , pGoalReachable[root]:  " << forward_tree_[0].getpGoalReachable());
                 visualizeBothTrees();
                 visualizeBlacklist();
                 std::cout << "Waiting for keypress: " << std::flush;
