@@ -101,18 +101,30 @@ namespace smmap
         ROS_INFO_NAMED("ros_comms_helpers" , "Getting object initial configuration");
 
         // Get the initial configuration of the object
-        ros::ServiceClient object_initial_configuration_client =
+        ros::ServiceClient client =
             nh.serviceClient<deformable_manipulation_msgs::GetPointSet>(GetObjectInitialConfigurationTopic(nh));
-
-        object_initial_configuration_client.waitForExistence();
-
+        client.waitForExistence();
         deformable_manipulation_msgs::GetPointSet srv_data;
-        object_initial_configuration_client.call(srv_data);
+        client.call(srv_data);
 
         ROS_INFO_NAMED("ros_comms_helpers" , "Number of points on object: %zu", srv_data.response.points.size());
         CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), srv_data.response.header.frame_id);
 
         return EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(srv_data.response.points);
+    }
+
+    inline std::vector<geometry_msgs::Pose> GetRopeNodeTransforms(ros::NodeHandle& nh)
+    {
+        ros::ServiceClient client =
+            nh.serviceClient<deformable_manipulation_msgs::GetPoseSet>(GetRopeCurrentNodeTransformsTopic(nh));
+        client.waitForExistence();
+        deformable_manipulation_msgs::GetPoseSet srv_data;
+        client.call(srv_data);
+
+        ROS_INFO_NAMED("ros_comms_helpers" , "Number of poses on object: %zu", srv_data.response.poses.size());
+        CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), srv_data.response.header.frame_id);
+
+        return srv_data.response.poses;
     }
 
     inline ObjectPointSet GetCoverPoints(ros::NodeHandle& nh)

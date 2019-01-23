@@ -18,10 +18,10 @@ namespace smmap
         struct State
         {
         public:
-            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
             ObjectPointSet deform_config_;
             RubberBand::Ptr rubber_band_;
             RubberBand::Ptr planned_rubber_band_;
+            EigenHelpers::VectorIsometry3d rope_node_transforms_;
 
             uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
 
@@ -38,7 +38,6 @@ namespace smmap
                     const uint64_t current,
                     const RubberBand& template_band);
         };
-        typedef Eigen::aligned_allocator<State> StateAllocator;
 
         typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> GripperPositions;
         static uint64_t SerializeGrippers(
@@ -51,7 +50,6 @@ namespace smmap
         struct StateTransition
         {
         public:
-            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
             State starting_state_;
             State ending_state_;
             // This is the target position of the grippers.
@@ -60,6 +58,7 @@ namespace smmap
             // "state, action, next state" framework
             GripperPositions starting_gripper_positions_;
             GripperPositions ending_gripper_positions_;
+            std::vector<WorldState> microstep_state_history_;
 
             uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
 
@@ -78,7 +77,6 @@ namespace smmap
 
             std::string toString() const;
         };
-        typedef Eigen::aligned_allocator<StateTransition> StateTransitionAllocator;
 
         ////////////////////////////////////////////////////////////////////////
         // Constructor
@@ -109,7 +107,7 @@ namespace smmap
         ////////////////////////////////////////////////////////////////////////
 
         Maybe::Maybe<StateTransition> findMostRecentBadTransition(
-                const std::vector<State, StateAllocator>& trajectory) const;
+                const std::vector<std::pair<State, std::vector<WorldState>>>& trajectory) const;
 
         void learnTransition(const StateTransition& transition);
 
@@ -124,10 +122,10 @@ namespace smmap
                 const StateTransition& transition) const;
 
         // Returns vector of potential outcomes of the action, and a relative
-        // confidence from 0 (not likely) to 1 (input data exactly matched a stored transition)
-        // in the possibility that the transition is possible.
-        // I.e.; confidence 1 does not mean that the transition will happen, but rather
-        // that it *could* happen.
+        // confidence from 0 (not likely) to 1 (input data exactly matched a
+        // stored transition) in the possibility that the transition is possible.
+        // I.e.; confidence 1 does not mean that the transition will happen, but
+        // rather that it *could* happen.
         std::vector<std::pair<RubberBand::Ptr, double>> applyLearnedTransitions(
                 const RubberBand::ConstPtr& band,
                 const GripperPositions& ending_gripper_positions) const;
@@ -165,7 +163,7 @@ namespace smmap
 
         const DijkstrasCoverageTask::ConstPtr task_;
         const smmap_utilities::Visualizer::ConstPtr vis_;
-        std::vector<StateTransition, StateTransitionAllocator> learned_transitions_;
+        std::vector<StateTransition> learned_transitions_;
 
 //        const double action_dist_threshold_;
 //        const double action_dist_scale_factor;
@@ -182,7 +180,9 @@ namespace smmap
         const RubberBand& template_band_;
     };
 
-    std::ostream& operator<<(std::ostream& out, const TransitionEstimation::StateTransition& t);
+    std::ostream& operator<<(
+            std::ostream& out,
+            const TransitionEstimation::StateTransition& t);
 }
 
 #endif

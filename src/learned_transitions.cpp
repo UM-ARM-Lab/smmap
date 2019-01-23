@@ -27,6 +27,7 @@ uint64_t TransitionEstimation::State::serializeSelf(
     arc_utilities::SerializeEigen(deform_config_, buffer);
     rubber_band_->serialize(buffer);
     planned_rubber_band_->serialize(buffer);
+    arc_utilities::SerializeVector(rope_node_transforms_, buffer, arc_utilities::SerializeEigen<Eigen::Isometry3d>);
     return buffer.size() - starting_size;
 }
 
@@ -42,6 +43,11 @@ uint64_t TransitionEstimation::State::deserializeIntoSelf(
     bytes_read += deform_config_deserialized.second;
     bytes_read += rubber_band_->deserializeIntoSelf(buffer, current + bytes_read);
     bytes_read += planned_rubber_band_->deserializeIntoSelf(buffer, current + bytes_read);
+    const auto rope_node_transforms_deserialized =
+            arc_utilities::DeserializeVector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d>>(
+                buffer, current + bytes_read, arc_utilities::DeserializeEigen<Eigen::Isometry3d>);
+    rope_node_transforms_ = rope_node_transforms_deserialized.first;
+    bytes_read += rope_node_transforms_deserialized.second;
     return bytes_read;
 }
 
@@ -104,10 +110,13 @@ uint64_t TransitionEstimation::StateTransition::serializeSelf(
     ending_state_.serializeSelf(buffer);
     SerializeGrippers(starting_gripper_positions_, buffer);
     SerializeGrippers(ending_gripper_positions_, buffer);
+    arc_utilities::SerializeVector<WorldState>(microstep_state_history_, buffer, &WorldState::Serialize);
+    const uint64_t bytes_written = buffer.size() - starting_bytes;
 
     // Verify no mistakes were made
     {
-        auto deserialized = Deserialize(buffer, starting_bytes, *starting_state_.rubber_band_);
+        const auto deserialized = Deserialize(buffer, starting_bytes, *starting_state_.rubber_band_);
+        assert(deserialized.second == bytes_written);
         assert(deserialized.first.starting_gripper_positions_                                       == starting_gripper_positions_);
         assert(deserialized.first.starting_state_.deform_config_                                    == starting_state_.deform_config_);
         assert(deserialized.first.starting_state_.rubber_band_->getVectorRepresentation()           == starting_state_.rubber_band_->getVectorRepresentation());
@@ -117,9 +126,11 @@ uint64_t TransitionEstimation::StateTransition::serializeSelf(
         assert(deserialized.first.ending_state_.deform_config_                                      == ending_state_.deform_config_);
         assert(deserialized.first.ending_state_.rubber_band_->getVectorRepresentation()             == ending_state_.rubber_band_->getVectorRepresentation());
         assert(deserialized.first.ending_state_.planned_rubber_band_->getVectorRepresentation()     == ending_state_.planned_rubber_band_->getVectorRepresentation());
+
+        assert(deserialized.first.microstep_state_history_                                          == microstep_state_history_);
     }
 
-    return buffer.size() - starting_bytes;
+    return bytes_written;
 }
 
 uint64_t TransitionEstimation::StateTransition::deserializeIntoSelf(
@@ -138,6 +149,10 @@ uint64_t TransitionEstimation::StateTransition::deserializeIntoSelf(
     const auto ending_grippers_deserialized = DeserializeGrippers(buffer, current + bytes_read);
     ending_gripper_positions_ = ending_grippers_deserialized.first;
     bytes_read += ending_grippers_deserialized.second;
+
+    const auto microsteps_deserialized = arc_utilities::DeserializeVector<WorldState>(buffer, current + bytes_read, &WorldState::Deserialize);
+    microstep_state_history_ = microsteps_deserialized.first;
+    bytes_read += microsteps_deserialized.second;
 
     return bytes_read;
 }
@@ -253,7 +268,7 @@ bool TransitionEstimation::checkFirstOrderHomotopy(
 /////// Learning transitions ///////////////////////////////////////////////////////////////////////////////////////////
 
 Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMostRecentBadTransition(
-        const std::vector<State, StateAllocator>& trajectory) const
+        const std::vector<std::pair<TransitionEstimation::State, std::vector<WorldState>>>& trajectory) const
 {
     // We can only learn a transition if there are at least states
     if (trajectory.size() < 2)
@@ -268,8 +283,8 @@ Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMo
     // First, check to make sure that the last state is in a different
     // first order homotopy class for the planned vs actual band
     if (checkFirstOrderHomotopy(
-            *trajectory.back().rubber_band_,
-            *trajectory.back().planned_rubber_band_))
+            *trajectory.back().first.rubber_band_,
+            *trajectory.back().first.planned_rubber_band_))
     {
         ROS_WARN_STREAM_NAMED("transitions",
                               "Finding most recent bad transition. "
@@ -286,14 +301,22 @@ Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMo
         // If the first order homotopy check passes, then the actual rubber band
         // and the planned rubber band are in the same first order homotopy class
         if (checkFirstOrderHomotopy(
-                *trajectory[idx - 1].rubber_band_,
-                *trajectory[idx - 1].planned_rubber_band_))
+                *trajectory[idx - 1].first.rubber_band_,
+                *trajectory[idx - 1].first.planned_rubber_band_))
         {
-            const auto& start_state = trajectory[idx - 1];
-            const auto& end_state = trajectory[idx];
+            const auto& start_state = trajectory[idx - 1].first;
+            const auto& end_state = trajectory[idx].first;
             const GripperPositions starting_gripper_positions = start_state.planned_rubber_band_->getEndpoints();
             const GripperPositions ending_gripper_positions = end_state.planned_rubber_band_->getEndpoints();
-            return Maybe::Maybe<StateTransition>({start_state, end_state, starting_gripper_positions, ending_gripper_positions});
+            StateTransition transition =
+            {
+                start_state,
+                end_state,
+                starting_gripper_positions,
+                ending_gripper_positions,
+                trajectory[idx].second
+            };
+            return Maybe::Maybe<StateTransition>(transition);
         }
     }
 
@@ -423,11 +446,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::applyLearn
             visualizeTransition(transition, (int32_t)(3 * idx + 1));
             test_band->visualize(MDP_TESTING_STATE_NS + std::string("_pre"), Visualizer::White(), Visualizer::White(), (int32_t)idx + 1);
             possible_transitions.back().first->visualize(MDP_TESTING_STATE_NS + std::string("_post"), Visualizer::Silver(), Visualizer::Silver(), (int32_t)idx + 2);
-
             vis_->forcePublishNow(0.02);
-//            std::cerr << "    Useful transition followed" << std::endl;
-//            std::cerr << "    Waiting for getchar() input " << std::endl;
-//            std::getchar();
         }
     }
 
@@ -511,7 +530,7 @@ void TransitionEstimation::storeTransitions() const
         ROS_INFO_STREAM_NAMED("transitions", "Saving learned_transitions to " << full_path);
 
         std::vector<uint8_t> buffer;
-        arc_utilities::SerializeVector<StateTransition>(learned_transitions_, buffer, StateTransition::Serialize);
+        arc_utilities::SerializeVector<StateTransition>(learned_transitions_, buffer, &StateTransition::Serialize);
         ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
     }
     catch (const std::exception& e)

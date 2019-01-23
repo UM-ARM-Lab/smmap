@@ -218,7 +218,7 @@ TaskFramework::TaskFramework(
 void TaskFramework::execute()
 {
     WorldState world_feedback = robot_->start();
-    const double start_time = world_feedback.sim_time_;
+    double start_time = world_feedback.sim_time_;
     initializeModelAndControllerSet(world_feedback);
 
     if (enable_stuck_detection_)
@@ -229,42 +229,7 @@ void TaskFramework::execute()
         assert(robot_->getGrippersData().size() == 2);
         assert(model_list_.size() == 1);
 
-        // Extract the maximum distance between the grippers
-        // This assumes that the starting position of the grippers is at the maximum "unstretched" distance
-        const auto& grippers_starting_poses = world_feedback.all_grippers_single_pose_;
-        const double max_calced_band_length =
-                (grippers_starting_poses[0].translation() - grippers_starting_poses[1].translation()).norm()
-                * dijkstras_task_->maxStretchFactor();
-        ROS_ERROR_STREAM_COND_NAMED(!CloseEnough(max_calced_band_length, dijkstras_task_->maxBandLength(), 1e-3),
-                                    "task_framework",
-                                    "Calc'd max band distance is: " << max_calced_band_length <<
-                                    " but the ros param saved distance is " << dijkstras_task_->maxBandLength() <<
-                                    ". Double check the stored value in the roslaunch file.");
-
-        // Find the shortest path through the object, between the grippers, while follow nodes of the object.
-        // Used to determine the starting position of the rubber band at each timestep
-        const auto neighbour_fn = [&] (const ssize_t& node)
-        {
-            return dijkstras_task_->getNodeNeighbours(node);
-        };
-        path_between_grippers_through_object_ = getShortestPathBetweenGrippersThroughObject(
-                    robot_->getGrippersData(), GetObjectInitialConfiguration(*nh_), neighbour_fn);
-
-        // Create the initial rubber band
-        const double resampled_band_max_pointwise_dist = dijkstras_task_->work_space_grid_.minStepDimension() / 2.0;
-        const size_t upsampled_band_num_points = GetRRTBandMaxPoints(*ph_);
-
-        const auto starting_band_points = getPathBetweenGrippersThroughObject(
-                    world_feedback, path_between_grippers_through_object_);
-        rubber_band_ = std::make_shared<RubberBand>(
-                    nh_,
-                    ph_,
-                    vis_,
-                    dijkstras_task_,
-                    starting_band_points,
-                    resampled_band_max_pointwise_dist,
-                    upsampled_band_num_points,
-                    dijkstras_task_->maxBandLength());
+        initializeBand(world_feedback);
 
 #if ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE
         if (useStoredWorldState())
@@ -286,98 +251,8 @@ void TaskFramework::execute()
 
         // Initialize the MDP transition learner
         transition_estimator_ = std::make_shared<TransitionEstimation>(nh_, ph_, dijkstras_task_, vis_, *rubber_band_);
-
-        // "World" params used by planning
-        BandRRT::WorldParams world_params =
-        {
-            robot_,
-            world_feedback.robot_configuration_valid_,
-            dijkstras_task_->sdf_,
-            dijkstras_task_->work_space_grid_,
-            transition_estimator_,
-            generator_
-        };
-
-        // Algorithm parameters
-        const auto use_cbirrt_style_projection      = GetUseCBiRRTStyleProjection(*ph_);
-        const auto forward_tree_extend_iterations   = GetRRTForwardTreeExtendIterations(*ph_);
-        const auto backward_tree_extend_iterations  = GetRRTBackwardTreeExtendIterations(*ph_);
-        const auto kd_tree_grow_threshold           = GetKdTreeGrowThreshold(*ph_);
-        const auto use_brute_force_nn               = GetUseBruteForceNN(*ph_);
-        const auto goal_bias                        = GetRRTGoalBias(*ph_);
-        const auto best_near_radius                 = GetRRTBestNearRadius(*ph_);
-        const auto feasibility_dist_scale_factor    = GetRRTFeasibilityDistanceScaleFactor(*ph_);
-        const auto default_propogation_confidence   = GetRRTDefaultPropagationConfidence(*ph_);
-        assert(!use_cbirrt_style_projection && "CBiRRT style projection is no longer supported");
-        BandRRT::PlanningParams planning_params =
-        {
-            forward_tree_extend_iterations,
-            backward_tree_extend_iterations,
-            use_brute_force_nn,
-            kd_tree_grow_threshold,
-            best_near_radius * best_near_radius,
-            goal_bias,
-            feasibility_dist_scale_factor,
-            default_propogation_confidence
-        };
-
-        // Smoothing parameters
-        const auto max_shortcut_index_distance = GetRRTMaxShortcutIndexDistance(*ph_);
-        const auto max_smoothing_iterations = GetRRTMaxSmoothingIterations(*ph_);
-        const auto max_failed_smoothing_iterations = GetRRTMaxFailedSmoothingIterations(*ph_);
-        const auto smoothing_band_dist_threshold = GetRRTSmoothingBandDistThreshold(*ph_);
-        BandRRT::SmoothingParams smoothing_params =
-        {
-            max_shortcut_index_distance,
-            max_smoothing_iterations,
-            max_failed_smoothing_iterations,
-            smoothing_band_dist_threshold
-        };
-
-        // Task defined parameters
-        const auto task_aligned_frame = robot_->getWorldToTaskFrameTf();
-        const auto task_frame_lower_limits = Vector3d(
-                    GetRRTPlanningXMinBulletFrame(*ph_),
-                    GetRRTPlanningYMinBulletFrame(*ph_),
-                    GetRRTPlanningZMinBulletFrame(*ph_));
-        const auto task_frame_upper_limits = Vector3d(
-                    GetRRTPlanningXMaxBulletFrame(*ph_),
-                    GetRRTPlanningYMaxBulletFrame(*ph_),
-                    GetRRTPlanningZMaxBulletFrame(*ph_));
-        const auto max_gripper_step_size = dijkstras_task_->work_space_grid_.minStepDimension();
-        const auto max_robot_step_size = GetRRTMaxRobotDOFStepSize(*ph_);
-        const auto min_robot_step_size = GetRRTMinRobotDOFStepSize(*ph_);
-        const auto max_gripper_rotation = GetRRTMaxGripperRotation(*ph_); // only matters for real robot
-        const auto goal_reached_radius = dijkstras_task_->work_space_grid_.minStepDimension();
-        const auto min_gripper_distance_to_obstacles = GetRRTMinGripperDistanceToObstacles(*ph_); // only matters for simulation
-        const auto band_distance2_scaling_factor = GetRRTBandDistance2ScalingFactor(*ph_);
-        BandRRT::TaskParams task_params = {
-            task_aligned_frame,
-            task_frame_lower_limits,
-            task_frame_upper_limits,
-            max_gripper_step_size,
-            max_robot_step_size,
-            min_robot_step_size,
-            max_gripper_rotation,
-            goal_reached_radius,
-            min_gripper_distance_to_obstacles,
-            band_distance2_scaling_factor,
-            upsampled_band_num_points
-        };
-
-        // Visualization
-        const auto enable_rrt_visualizations = GetVisualizeRRT(*ph_);
-
-        // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
-        band_rrt_ = std::make_shared<BandRRT>(
-                    nh_,
-                    ph_,
-                    world_params,
-                    planning_params,
-                    smoothing_params,
-                    task_params,
-                    vis_,
-                    enable_rrt_visualizations);
+        // Initialize the BandRRT structure
+        initializeBandRRT(world_feedback.robot_configuration_valid_);
     }
 
     while (robot_->ok())
@@ -387,8 +262,8 @@ void TaskFramework::execute()
         const WorldState world_state = world_feedback;
         world_feedback = sendNextCommand(world_state);
 
-         if (unlikely(world_feedback.sim_time_ - start_time >= task_specification_->maxTime()
-                     || task_specification_->taskDone(world_feedback)))
+        if (world_feedback.sim_time_ - start_time >= task_specification_->maxTime()
+            || task_specification_->taskDone(world_feedback))
         {
             ROS_INFO_NAMED("task_framework", "------------------------------- End of Task -------------------------------------------");
             const double current_error = task_specification_->calculateError(world_feedback);
@@ -411,7 +286,24 @@ void TaskFramework::execute()
             {
                 ROS_INFO("Terminating task as the task has been completed");
             }
-            robot_->shutdown();
+//            robot_->shutdown();
+
+            ROS_INFO_NAMED("task_framework", "------------------------------- RESETING RESETING -------------------------------------");
+            robot_->reset();
+            world_feedback = robot_->start();
+            start_time = world_feedback.sim_time_;
+            if (enable_stuck_detection_)
+            {
+                initializeBand(world_feedback);
+                initializeBandRRT(world_feedback.robot_configuration_valid_);
+
+                executing_global_trajectory_ = false;
+                policy_current_idx_ = -1;
+                policy_segment_next_idx_ = -1;
+                grippers_pose_history_.clear();
+                error_history_.clear();
+                microstep_history_buffer_.clear();
+            }
         }
     }
 }
@@ -484,9 +376,6 @@ WorldState TaskFramework::sendNextCommand(
                     transition_estimator_->learnTransition(last_bad_transition.GetImmutable());
                     transition_estimator_->visualizeTransition(last_bad_transition.GetImmutable());
                     vis_->forcePublishNow(0.5);
-//                    std::cout << "Waiting for string " << std::endl;
-//                    std::string tmp;
-//                    std::cin >> tmp;
                 }
                 else
                 {
@@ -526,9 +415,6 @@ WorldState TaskFramework::sendNextCommand(
         // If we need to (re)plan due to the local controller getting stuck, or the gobal plan failing, then do so
         if (planning_needed)
         {
-//            std::cout << "Waiting for keystroke before planning" << std::endl;
-//            std::getchar();
-
             vis_->purgeMarkerList();
             visualization_msgs::Marker marker;
             marker.ns = "delete_markers";
@@ -540,9 +426,6 @@ WorldState TaskFramework::sendNextCommand(
             vis_->purgeMarkerList();
 
             planGlobalGripperTrajectory(world_state);
-
-//            std::cout << "Waiting for keystroke after planning" << std::endl;
-//            std::getchar();
         }
 
         // Execute a single step in the global plan, or use the local controller if we have no plan to follow
@@ -717,7 +600,7 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
     const WorldState world_feedback = robot_->commandRobotMotion(
                 all_grippers_single_pose,
                 robot_configuration,
-                current_world_state.robot_configuration_valid_);
+                current_world_state.robot_configuration_valid_).first;
     arc_helpers::DoNotOptimize(world_feedback);
     const double robot_execution_time = stopwatch(READ);
 
@@ -859,10 +742,12 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
         }
     }
 
-    const WorldState world_feedback =
+    const std::pair<WorldState, std::vector<WorldState>> command_result =
             robot_->commandRobotMotion(next_grippers_target,
                                        next_dof_target,
                                        current_world_state.robot_configuration_valid_);
+    const WorldState& world_feedback = command_result.first;
+    microstep_history_buffer_.insert(microstep_history_buffer_.end(), command_result.second.begin(), command_result.second.end());
     // Update the band with the new position of the deformable object
     const auto band_points = getPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
     rubber_band_->setPointsAndSmooth(band_points);
@@ -880,12 +765,22 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     // the "path actually taken" list
     if (next_waypoint_targetted && !split_in_policy)
     {
-        rrt_executed_path_.push_back({
-                    world_feedback.object_configuration_,
-                    std::make_shared<RubberBand>(*rubber_band_),
-                    std::make_shared<RubberBand>(*current_segment[policy_segment_next_idx_].band())});
+        TransitionEstimation::State tes =
+        {
+            world_feedback.object_configuration_,
+            std::make_shared<RubberBand>(*rubber_band_),
+            std::make_shared<RubberBand>(*current_segment[policy_segment_next_idx_].band()),
+            world_feedback.rope_node_transforms_
+        };
+        rrt_executed_path_.push_back({tes, microstep_history_buffer_});
 
         ++policy_segment_next_idx_;
+        microstep_history_buffer_.clear();
+    }
+    else if (next_waypoint_targetted && split_in_policy)
+    {
+        std::cerr << "Unhandled edge condition!!!!" << std::endl;
+        assert(false);
     }
 
     if (last_waypoint_targetted && split_in_policy)
@@ -902,6 +797,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
         policy_segment_next_idx_ = -1;
         grippers_pose_history_.clear();
         error_history_.clear();
+        assert(microstep_history_buffer_.size() == 0);
 
         vis_->purgeMarkerList();
         visualization_msgs::Marker marker;
@@ -1268,6 +1164,143 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Global gripper planner functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void TaskFramework::initializeBand(const WorldState& world_state)
+{
+    // Extract the maximum distance between the grippers
+    // This assumes that the starting position of the grippers is at the maximum "unstretched" distance
+    const auto& grippers_starting_poses = world_state.all_grippers_single_pose_;
+    const double max_calced_band_length =
+            (grippers_starting_poses[0].translation() - grippers_starting_poses[1].translation()).norm()
+            * dijkstras_task_->maxStretchFactor();
+    ROS_ERROR_STREAM_COND_NAMED(!CloseEnough(max_calced_band_length, dijkstras_task_->maxBandLength(), 1e-3),
+                                "task_framework",
+                                "Calc'd max band distance is: " << max_calced_band_length <<
+                                " but the ros param saved distance is " << dijkstras_task_->maxBandLength() <<
+                                ". Double check the stored value in the roslaunch file.");
+
+    // Find the shortest path through the object, between the grippers, while follow nodes of the object.
+    // Used to determine the starting position of the rubber band at each timestep
+    const auto neighbour_fn = [&] (const ssize_t& node)
+    {
+        return dijkstras_task_->getNodeNeighbours(node);
+    };
+    path_between_grippers_through_object_ = getShortestPathBetweenGrippersThroughObject(
+                robot_->getGrippersData(), GetObjectInitialConfiguration(*nh_), neighbour_fn);
+
+    // Create the initial rubber band
+    const double resampled_band_max_pointwise_dist = dijkstras_task_->work_space_grid_.minStepDimension() / 2.0;
+    const size_t upsampled_band_num_points = GetRRTBandMaxPoints(*ph_);
+
+    const auto starting_band_points = getPathBetweenGrippersThroughObject(
+                world_state, path_between_grippers_through_object_);
+    rubber_band_ = std::make_shared<RubberBand>(
+                nh_,
+                ph_,
+                vis_,
+                dijkstras_task_,
+                starting_band_points,
+                resampled_band_max_pointwise_dist,
+                upsampled_band_num_points,
+                dijkstras_task_->maxBandLength());
+}
+
+void TaskFramework::initializeBandRRT(const bool planning_for_whole_robot)
+{
+    // "World" params used by planning
+    BandRRT::WorldParams world_params =
+    {
+        robot_,
+        planning_for_whole_robot,
+        dijkstras_task_->sdf_,
+        dijkstras_task_->work_space_grid_,
+        transition_estimator_,
+        generator_
+    };
+
+    // Algorithm parameters
+    const auto use_cbirrt_style_projection      = GetUseCBiRRTStyleProjection(*ph_);
+    const auto forward_tree_extend_iterations   = GetRRTForwardTreeExtendIterations(*ph_);
+    const auto backward_tree_extend_iterations  = GetRRTBackwardTreeExtendIterations(*ph_);
+    const auto kd_tree_grow_threshold           = GetKdTreeGrowThreshold(*ph_);
+    const auto use_brute_force_nn               = GetUseBruteForceNN(*ph_);
+    const auto goal_bias                        = GetRRTGoalBias(*ph_);
+    const auto best_near_radius                 = GetRRTBestNearRadius(*ph_);
+    const auto feasibility_dist_scale_factor    = GetRRTFeasibilityDistanceScaleFactor(*ph_);
+    const auto default_propogation_confidence   = GetRRTDefaultPropagationConfidence(*ph_);
+    assert(!use_cbirrt_style_projection && "CBiRRT style projection is no longer supported");
+    BandRRT::PlanningParams planning_params =
+    {
+        forward_tree_extend_iterations,
+        backward_tree_extend_iterations,
+        use_brute_force_nn,
+        kd_tree_grow_threshold,
+        best_near_radius * best_near_radius,
+        goal_bias,
+        feasibility_dist_scale_factor,
+        default_propogation_confidence
+    };
+
+    // Smoothing parameters
+    const auto max_shortcut_index_distance = GetRRTMaxShortcutIndexDistance(*ph_);
+    const auto max_smoothing_iterations = GetRRTMaxSmoothingIterations(*ph_);
+    const auto max_failed_smoothing_iterations = GetRRTMaxFailedSmoothingIterations(*ph_);
+    const auto smoothing_band_dist_threshold = GetRRTSmoothingBandDistThreshold(*ph_);
+    BandRRT::SmoothingParams smoothing_params =
+    {
+        max_shortcut_index_distance,
+        max_smoothing_iterations,
+        max_failed_smoothing_iterations,
+        smoothing_band_dist_threshold
+    };
+
+    // Task defined parameters
+    const auto task_aligned_frame = robot_->getWorldToTaskFrameTf();
+    const auto task_frame_lower_limits = Vector3d(
+                GetRRTPlanningXMinBulletFrame(*ph_),
+                GetRRTPlanningYMinBulletFrame(*ph_),
+                GetRRTPlanningZMinBulletFrame(*ph_));
+    const auto task_frame_upper_limits = Vector3d(
+                GetRRTPlanningXMaxBulletFrame(*ph_),
+                GetRRTPlanningYMaxBulletFrame(*ph_),
+                GetRRTPlanningZMaxBulletFrame(*ph_));
+    const auto max_gripper_step_size = dijkstras_task_->work_space_grid_.minStepDimension();
+    const auto max_robot_step_size = GetRRTMaxRobotDOFStepSize(*ph_);
+    const auto min_robot_step_size = GetRRTMinRobotDOFStepSize(*ph_);
+    const auto max_gripper_rotation = GetRRTMaxGripperRotation(*ph_); // only matters for real robot
+    const auto goal_reached_radius = dijkstras_task_->work_space_grid_.minStepDimension();
+    const auto min_gripper_distance_to_obstacles = GetRRTMinGripperDistanceToObstacles(*ph_); // only matters for simulation
+    const auto band_distance2_scaling_factor = GetRRTBandDistance2ScalingFactor(*ph_);
+    const auto upsampled_band_num_points = GetRRTBandMaxPoints(*ph_);
+    BandRRT::TaskParams task_params =
+    {
+        task_aligned_frame,
+        task_frame_lower_limits,
+        task_frame_upper_limits,
+        max_gripper_step_size,
+        max_robot_step_size,
+        min_robot_step_size,
+        max_gripper_rotation,
+        goal_reached_radius,
+        min_gripper_distance_to_obstacles,
+        band_distance2_scaling_factor,
+        upsampled_band_num_points
+    };
+
+    // Visualization
+    const auto enable_rrt_visualizations = GetVisualizeRRT(*ph_);
+
+    // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
+    band_rrt_ = std::make_shared<BandRRT>(
+                nh_,
+                ph_,
+                world_params,
+                planning_params,
+                smoothing_params,
+                task_params,
+                vis_,
+                enable_rrt_visualizations);
+}
 
 AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_state)
 {
@@ -1685,16 +1718,19 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     policy_current_idx_ = 0;
     policy_segment_next_idx_ = 1;
     executing_global_trajectory_ = true;
+    microstep_history_buffer_.clear();
 
     rrt_executed_path_.clear();
-    rrt_executed_path_.push_back({
-                world_state.object_configuration_,
-                std::make_shared<RubberBand>(*rubber_band_),
-                std::make_shared<RubberBand>(*rubber_band_)});
-
-//    assert(false && "Terminating as this is just a planning test");
-//    std::cout << "Waiting on keystroke before executing trajectory" << std::endl;
-//    std::getchar();
+    TransitionEstimation::State tes =
+    {
+        world_state.object_configuration_,
+        std::make_shared<RubberBand>(*rubber_band_),
+        std::make_shared<RubberBand>(*rubber_band_),
+        world_state.rope_node_transforms_
+    };
+    // The first state does not get any microstep history because this history is
+    // how we got to the state, which does not make sense to have for the first state
+    rrt_executed_path_.push_back({tes, std::vector<WorldState>(0)});
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2556,7 +2592,7 @@ void TaskFramework::storeWorldState(const WorldState& world_state, const RubberB
         ROS_DEBUG_STREAM_NAMED("task_framework", "Saving world_state to " << full_path);
 
         std::vector<uint8_t> buffer;
-        world_state.serialize(buffer);
+        world_state.serializeSelf(buffer);
         band->serialize(buffer);
         ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
 

@@ -803,7 +803,6 @@ RRTPolicy BandRRT::plan(
 
         vis_->visualizeGrippers("weird_gripper_goals", {grippers_goal_poses_.first, grippers_goal_poses_.second}, Visualizer::Red(), 1);
         std::getchar();
-
         assert(false && "Unfeasible goal location");
     }
 
@@ -1633,9 +1632,6 @@ void BandRRT::planningMainLoop()
         if (forward_tree_.back().splitIndex() >= 0)
         {
             ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Split happened during connect to random operation");
-            std::cerr << "Waiting for input " << std::flush;
-            std::getchar();
-
             transition_estimator_->clearVisualizations();
         }
         checkNewStatesForGoal(num_random_nodes_created);
@@ -1661,8 +1657,6 @@ void BandRRT::planningMainLoop()
                 if (forward_tree_.back().splitIndex() >= 0)
                 {
                     ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Split happened during connect to backwards tree");
-                    std::cerr << "Waiting for input " << std::flush;
-                    std::getchar();
                 }
                 checkNewStatesForGoal(num_goal_directed_nodes_created);
             }
@@ -2613,15 +2607,6 @@ size_t BandRRT::forwardPropogationFunction(
         }
     }
 
-//    if (split_happened)
-//    {
-//        vis_->forcePublishNow(0.05);
-//        std::cout << "Split happend\n";
-//        std::cout << "Waiting for string input " << std::endl;
-//        std::string tmp;
-//        std::cin >> tmp;
-//    }
-
     arc_helpers::DoNotOptimize(nodes_created);
     const double everything_included_forward_propogation_time = function_wide_stopwatch(READ);
     total_everything_included_forward_propogation_time_ += everything_included_forward_propogation_time;
@@ -2694,14 +2679,15 @@ void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
         {
             forward_tree_[idx].setpGoalReachable(1.0);
             goalReachedCallback(idx);
-            if (forward_tree_[0].getpGoalReachable() < 1.0)
+            if (forward_tree_[idx].pReachability() < 1.0)
             {
-                ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Goal reached, pGoalReachable < 1.0");
+                ROS_INFO_STREAM_NAMED("rrt", "Goal reached, pReachability:         " << forward_tree_[idx].pReachability());
+                ROS_INFO_STREAM_NAMED("rrt", "            , pGoalReachable[root]:  " << forward_tree_[0].pGoalReachable());
                 visualizeBothTrees();
                 visualizeBlacklist();
-                std::cout << "Waiting for string input " << std::endl;
-                std::string tmp;
-                std::cin >> tmp;
+                std::cout << "Waiting for keypress: " << std::flush;
+                arc_helpers::GetSingleCharacterNoEnter();
+                std::cout << std::endl;
             }
         }
     }
@@ -3335,11 +3321,6 @@ void BandRRT::shortcutSmoothPath(
             if (smoothed_segment.back().splitIndex() >= 0)
             {
                 ROS_WARN_NAMED("rrt.smoothing", "Shortcut failed, split happened during smoothing");
-//                std::cout << "Waiting for string input " << std::endl;
-//                std::string tmp;
-//                std::cin >> tmp;
-//                ++failed_iterations;
-//                transition_estimator_->clearVisualizations();
                 continue;
             }
 

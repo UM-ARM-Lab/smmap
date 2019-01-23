@@ -42,54 +42,74 @@ namespace smmap
     struct WorldState
     {
         ObjectPointSet object_configuration_;
+        EigenHelpers::VectorIsometry3d rope_node_transforms_;
         AllGrippersSinglePose all_grippers_single_pose_;
         Eigen::VectorXd robot_configuration_;
         bool robot_configuration_valid_;
         std::vector<CollisionData> gripper_collision_data_;
         double sim_time_;
 
-        inline uint64_t serialize(std::vector<uint8_t>& buffer) const
+        inline uint64_t serializeSelf(std::vector<uint8_t>& buffer) const
         {
             const size_t starting_bytes = buffer.size();
             arc_utilities::SerializeEigen(object_configuration_, buffer);
+            arc_utilities::SerializeVector(rope_node_transforms_, buffer, arc_utilities::SerializeEigen<Eigen::Isometry3d>);
             SerializeAllGrippersSinglePose(all_grippers_single_pose_, buffer);
             arc_utilities::SerializeEigen(robot_configuration_, buffer);
             arc_utilities::SerializeFixedSizePOD(robot_configuration_valid_, buffer);
             SerializeCollisionDataVector(gripper_collision_data_, buffer);
             arc_utilities::SerializeFixedSizePOD(sim_time_, buffer);
-            const size_t ending_bytes = buffer.size();
-            return ending_bytes - starting_bytes;
+            const size_t bytes_written = buffer.size() - starting_bytes;
+
+            // Test the result
+            {
+                const auto deserialized = Deserialize(buffer, starting_bytes);
+                assert(deserialized.second == bytes_written);
+                assert(deserialized.first == *this);
+            }
+            return bytes_written;
+        }
+
+        static inline uint64_t Serialize(const WorldState& state, std::vector<uint8_t>& buffer)
+        {
+            return state.serializeSelf(buffer);
         }
 
         static inline std::pair<WorldState, uint64_t> Deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
         {
             uint64_t bytes_read = 0;
-            WorldState result;
 
             const auto deserialized_object = arc_utilities::DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
-            result.object_configuration_ = deserialized_object.first;
             bytes_read += deserialized_object.second;
 
+            const auto deserialized_rope_node_transforms = arc_utilities::DeserializeVector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d>>(buffer, current + bytes_read, arc_utilities::DeserializeEigen<Eigen::Isometry3d>);
+            bytes_read += deserialized_rope_node_transforms.second;
+
             const auto deserialized_grippers = DeserializeAllGrippersSinglePose(buffer, current + bytes_read);
-            result.all_grippers_single_pose_ = deserialized_grippers.first;
             bytes_read += deserialized_grippers.second;
 
             const auto deserialized_robot_config = arc_utilities::DeserializeEigen<Eigen::VectorXd>(buffer, current + bytes_read);
-            result.robot_configuration_ = deserialized_robot_config.first;
             bytes_read += deserialized_robot_config.second;
 
             const auto deserialized_robot_config_valid = arc_utilities::DeserializeFixedSizePOD<bool>(buffer, current + bytes_read);
-            result.robot_configuration_valid_ = deserialized_robot_config_valid.first;
             bytes_read += deserialized_robot_config_valid.second;
 
             const auto deserialized_collision_data = DeserializeCollisionDataVector(buffer, current + bytes_read);
-            result.gripper_collision_data_ = deserialized_collision_data.first;
             bytes_read += deserialized_collision_data.second;
 
             const auto deserialized_sim_time = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current + bytes_read);
-            result.sim_time_ = deserialized_sim_time.first;
             bytes_read += deserialized_sim_time.second;
 
+            const WorldState result =
+            {
+                deserialized_object.first,
+                deserialized_rope_node_transforms.first,
+                deserialized_grippers.first,
+                deserialized_robot_config.first,
+                deserialized_robot_config_valid.first,
+                deserialized_collision_data.first,
+                deserialized_sim_time.first
+            };
             return {result, bytes_read};
         }
 
@@ -100,11 +120,27 @@ namespace smmap
                 return false;
             }
 
+            if (rope_node_transforms_.size() != other.rope_node_transforms_.size())
+            {
+                return false;
+            }
+            for (size_t idx = 0; idx < rope_node_transforms_.size(); ++idx)
+            {
+                if (rope_node_transforms_[idx].matrix().cwiseNotEqual(other.rope_node_transforms_[idx].matrix()).any())
+                {
+                    return false;
+                }
+            }
+
             if (all_grippers_single_pose_.size() != other.all_grippers_single_pose_.size())
             {
                 return false;
             }
 
+            if (all_grippers_single_pose_.size() != other.all_grippers_single_pose_.size())
+            {
+                return false;
+            }
             for (size_t idx = 0; idx < all_grippers_single_pose_.size(); ++ idx)
             {
                 if (all_grippers_single_pose_[idx].matrix().cwiseNotEqual(other.all_grippers_single_pose_[idx].matrix()).any())
@@ -128,12 +164,9 @@ namespace smmap
                 return false;
             }
 
-            for (size_t idx = 0; idx < gripper_collision_data_.size(); ++idx)
+            if (gripper_collision_data_ != other.gripper_collision_data_)
             {
-                if (gripper_collision_data_[idx] != other.gripper_collision_data_[idx])
-                {
-                    return false;
-                }
+                return false;
             }
 
             if (sim_time_ != other.sim_time_)
@@ -142,11 +175,6 @@ namespace smmap
             }
 
             return true;
-        }
-
-        bool operator!=(const WorldState& other) const
-        {
-            return !(*this == other);
         }
     };
 
@@ -162,6 +190,9 @@ namespace smmap
 
         feedback_eigen.object_configuration_ =
                 EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(feedback_ros.object_configuration);
+
+        feedback_eigen.rope_node_transforms_ =
+                EigenHelpersConversions::VectorGeometryPoseToVectorIsometry3d(feedback_ros.rope_node_transforms);
 
         feedback_eigen.all_grippers_single_pose_ =
                 EigenHelpersConversions::VectorGeometryPoseToVectorIsometry3d(feedback_ros.gripper_poses);
@@ -185,6 +216,18 @@ namespace smmap
 
         feedback_eigen.sim_time_ = feedback_ros.sim_time;
 
+        return feedback_eigen;
+    }
+
+    inline std::vector<WorldState> ConvertToEigenFeedback(
+            const std::vector<deformable_manipulation_msgs::WorldState>& feedback_ros)
+    {
+        std::vector<WorldState> feedback_eigen;
+        feedback_eigen.reserve(feedback_ros.size());
+        for (size_t idx = 0; idx < feedback_ros.size(); ++idx)
+        {
+            feedback_eigen.push_back(ConvertToEigenFeedback(feedback_ros[idx]));
+        }
         return feedback_eigen;
     }
 

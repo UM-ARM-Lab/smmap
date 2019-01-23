@@ -31,6 +31,7 @@ namespace smmap
 
             bool ok() const;
             void shutdown();
+            void reset();
 
             const std::vector<GripperData>& getGrippersData() const;
 
@@ -39,7 +40,7 @@ namespace smmap
             // This function assumes only 2 grippers, and it is called before the grippers are moved by sendGrippersPoses
             double getGrippersInitialDistance();
 
-            WorldState commandRobotMotion(
+            std::pair<WorldState, std::vector<WorldState>> commandRobotMotion(
                     const AllGrippersSinglePose& target_grippers_poses,
                     const Eigen::VectorXd& target_robot_configuration,
                     const bool robot_configuration_valid);
@@ -177,7 +178,7 @@ namespace smmap
             std::function<std::pair<bool, Eigen::VectorXd>  (const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn_;
             std::function<bool                              (const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn_;
 
-            WorldState commandRobotMotion_impl(
+            std::pair<WorldState, std::vector<WorldState>> commandRobotMotion_impl(
                     const deformable_manipulation_msgs::ExecuteRobotMotionRequest& movement);
 
             deformable_manipulation_msgs::ExecuteRobotMotionRequest noOpGripperMovement();

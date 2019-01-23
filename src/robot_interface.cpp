@@ -48,10 +48,6 @@ namespace smmap
 
     WorldState RobotInterface::start()
     {
-    //    assert(get_grippers_jacobian_fn_ != nullptr && "Function pointers must be initialized");
-    //    assert(get_collision_points_of_interest_fn_ != nullptr && "Function pointers must be initialized");
-    //    assert(get_collision_points_of_interest_jacobians_fn_ != nullptr && "Function pointers must be initialized");
-
         const double timeout = 5.0;
         ROS_INFO_STREAM("Waiting for tf from world to bullet frame for at most " << timeout << " seconds");
         try
@@ -73,7 +69,7 @@ namespace smmap
         test_grippers_poses_client_.waitForServer();
 
         ROS_INFO_NAMED("robot_interface", "Kickstarting the planner with a no-op");
-        return commandRobotMotion_impl(noOpGripperMovement());
+        return commandRobotMotion_impl(noOpGripperMovement()).first;
     }
 
     bool RobotInterface::ok() const
@@ -83,11 +79,19 @@ namespace smmap
 
     void RobotInterface::shutdown()
     {
-        ros::ServiceClient shutdown_sim_client_ = nh_->serviceClient<std_srvs::Empty>(GetTerminateSimulationTopic(*nh_));
+        ros::ServiceClient client = nh_->serviceClient<std_srvs::Empty>(GetTerminateSimulationTopic(*nh_));
+        client.waitForExistence();
         std_srvs::Empty empty;
-        shutdown_sim_client_.call(empty);
-
+        client.call(empty);
         ros::shutdown();
+    }
+
+    void RobotInterface::reset()
+    {
+        ros::ServiceClient client = nh_->serviceClient<std_srvs::Empty>(GetRestartSimulationTopic(*nh_));
+        client.waitForExistence();
+        std_srvs::Empty empty;
+        client.call(empty);
     }
 
     const std::vector<GripperData>& RobotInterface::getGrippersData() const
@@ -135,7 +139,7 @@ namespace smmap
         }
     }
 
-    WorldState RobotInterface::commandRobotMotion(
+    std::pair<WorldState, std::vector<WorldState>> RobotInterface::commandRobotMotion(
             const AllGrippersSinglePose& target_grippers_poses,
             const Eigen::VectorXd& target_robot_configuration,
             const bool robot_configuration_valid)
@@ -533,7 +537,7 @@ namespace smmap
         return goal;
     }
 
-    WorldState RobotInterface::commandRobotMotion_impl(
+    std::pair<WorldState, std::vector<WorldState>> RobotInterface::commandRobotMotion_impl(
             const deformable_manipulation_msgs::ExecuteRobotMotionRequest& movement)
     {
         deformable_manipulation_msgs::ExecuteRobotMotionResponse result;
@@ -545,7 +549,7 @@ namespace smmap
             execute_gripper_movement_client_.waitForExistence();
         }
         CHECK_FRAME_NAME("robot_interface", world_frame_name_, result.world_state.header.frame_id);
-        return ConvertToEigenFeedback(result.world_state);
+        return {ConvertToEigenFeedback(result.world_state), ConvertToEigenFeedback(result.microstep_state_history)};
     }
 
 

@@ -84,6 +84,10 @@ namespace smmap
             // Global gripper planner functions
             ////////////////////////////////////////////////////////////////////
 
+            void initializeBand(const WorldState& world_state);
+
+            void initializeBandRRT(const bool planning_for_whole_robot);
+
             AllGrippersSinglePose getGripperTargets(
                     const WorldState& world_state);
 
@@ -142,8 +146,14 @@ namespace smmap
             std::shared_ptr<BandRRT> band_rrt_;
             RRTPolicy rrt_planned_policy_;
             size_t policy_current_idx_;
-            size_t policy_segment_next_idx_;
-            std::vector<TransitionEstimation::State, TransitionEstimation::StateAllocator> rrt_executed_path_;
+            size_t policy_segment_next_idx_;            
+            // Stores the microstep history of the deformable object trajectory
+            // between waypoints
+            std::vector<WorldState> microstep_history_buffer_;
+
+            // Stores the transition estimator version of state,
+            // and the trajectory of world states in microsteps
+            std::vector<std::pair<TransitionEstimation::State, std::vector<WorldState>>> rrt_executed_path_;
             TransitionEstimation::Ptr transition_estimator_;
 
             // These are both intended only for logging purposes, the individual
