@@ -58,8 +58,8 @@ include_directories(include
     ${FLANN_INCLUDE_DIRS}
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O3")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O0")# -fsanitize=address -fno-omit-frame-pointer")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -Og")# -fsanitize=address -fno-omit-frame-pointer")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -Wextra -Wpedantic -Wconversion -Werror=return-type -Werror=missing-field-initializers -DEIGEN_DONT_PARALLELIZE")
 
 unset(USE_OPEN_MP CACHE)
@@ -73,7 +73,7 @@ else(USE_OPEN_MP)
 endif(USE_OPEN_MP)
 
 
-## Library file for the whole project
+## Library file for the whole project`
 FILE(GLOB hpp_SRC "include/${PROJECT_NAME}/*.hpp")
 FILE(GLOB h_SRC "include/${PROJECT_NAME}/*.h")
 FILE(GLOB cpp_SRC "src/*.cpp")
@@ -86,6 +86,10 @@ set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAG
 add_executable(planner_test_node nodes/planner_test_node.cpp)
 add_dependencies(planner_test_node ${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(planner_test_node ${PROJECT_NAME} ${catkin_LIBRARIES})
+
+add_executable(transition_learning_data_generation_node nodes/transition_learning_data_generation_node.cpp)
+add_dependencies(transition_learning_data_generation_node ${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(transition_learning_data_generation_node ${PROJECT_NAME} ${catkin_LIBRARIES})
 
 ## Synthethic trials
 #add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp src/cvxopt_solvers.cpp src/gurobi_solvers.cpp)

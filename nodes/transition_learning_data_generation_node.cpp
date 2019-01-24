@@ -1,4 +1,6 @@
-#include "smmap/task_framework.h"
+#include <smmap_utilities/visualization_tools.h>
+#include "smmap/transition_learning_data_generation.h"
+#include "smmap/robot_interface.hpp"
 
 std::vector<Eigen::VectorXd> getJointInfo()
 {
@@ -11,7 +13,7 @@ std::vector<Eigen::VectorXd> getJointInfo()
 int main(int argc, char* argv[])
 {
     // Read in all ROS parameters
-    ros::init(argc, argv, "smmap_planner_node", ros::init_options::NoSigintHandler);
+    ros::init(argc, argv, "transition_learning_data_generation_node", ros::init_options::NoSigintHandler);
 
     auto nh = std::make_shared<ros::NodeHandle>();
     auto ph = std::make_shared<ros::NodeHandle>("~");
@@ -33,13 +35,6 @@ int main(int argc, char* argv[])
                 nullptr,
                 nullptr);
     auto vis = std::make_shared<smmap_utilities::Visualizer>(nh, ph, true);
-    auto task_specification(smmap::TaskSpecification::MakeTaskSpecification(nh, ph, vis));
-
-    ROS_INFO("Creating and executing planner");
-    smmap::TaskFramework planner(nh, ph, robot, vis, task_specification);
-    planner.execute();
-
-    ROS_INFO("Disposing planner...");
 
     return EXIT_SUCCESS;
 }

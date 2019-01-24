@@ -178,7 +178,6 @@ namespace smmap
         bool initialized_;
 
     public:
-
         bool already_extended_towards_goal_set_;
         bool blacklisted_from_nn_search_;
     };

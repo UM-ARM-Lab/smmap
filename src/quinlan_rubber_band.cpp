@@ -21,6 +21,15 @@
 #define ENABALE_SMOOTHING_DEBUGGING 0
 //#define ENABALE_SMOOTHING_DEBUGGING 1
 
+#pragma message "Band propagation and smoothing params"
+#define BAND_SMOOTHING_CLOSE_ENGOUGH_DIST 1e-4
+#define BAND_MAX_DELTA_SCALE_FACTOR 0.9
+#define BAND_MIN_OVERLAP_SCALE_FACTOR 0.05
+#define BAND_MIN_DIST_TO_OBSTACLES_SCALE_FACTOR 0.1
+#define BAND_NODE_REMOVAL_OVERLAP_FACTOR 1.2
+#define BAND_BACKTRACKING_THRESHOLD 0.1
+#define BAND_SMOOTHING_ITERATIONS
+
 using namespace smmap;
 using namespace smmap_utilities;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
@@ -49,12 +58,11 @@ QuinlanRubberBand::QuinlanRubberBand(
     , upsample_num_points_(upsample_num_points)
 
     , max_safe_band_length_(max_safe_band_length)
-    #warning "Magic numbers in band smoothing code"
-    , min_overlap_distance_(task_->work_space_grid_.minStepDimension() * 0.05)
-    , min_distance_to_obstacle_(task_->work_space_grid_.minStepDimension() * 0.1)
-    , node_removal_overlap_factor_(1.2)
-    , backtrack_threshold_(0.1)
-    , smoothing_iterations_(100)
+    , min_overlap_distance_(task_->work_space_grid_.minStepDimension() * BAND_MIN_OVERLAP_SCALE_FACTOR)
+    , min_distance_to_obstacle_(task_->work_space_grid_.minStepDimension() * BAND_MIN_DIST_TO_OBSTACLES_SCALE_FACTOR)
+    , node_removal_overlap_factor_(BAND_NODE_REMOVAL_OVERLAP_FACTOR)
+    , backtrack_threshold_(BAND_BACKTRACKING_THRESHOLD)
+    , smoothing_iterations_(BAND_SMOOTHING_ITERATIONS)
 {
     setPointsAndSmooth(starting_points);
     assert(bandIsValidWithVisualization());
@@ -897,12 +905,9 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
             const Eigen::Vector3d midpoint = prev + (next - prev) / 2.0;
             const Eigen::Vector3d delta_raw = midpoint - curr;
             const Eigen::Vector3d delta = EigenHelpers::VectorRejection(rejected_movement_direction, delta_raw);
-//            const Eigen::Vector3d delta = EigenHelpers::VectorProjection(allowed_movement_direction, delta_raw);
             // Determine if the projection is within the bubble at the current point, and if not only move part way
             // Only step at most part way there in order to try and avoid oscillations - too large of a step size can be bad due to errors in sdf->EstiamteDistance
-#warning "Magic numbers in band smoothing code"
-//            const double max_delta_norm = std::max(0.0, (curr_bubble_size - min_distance_to_obstacle_ * 1.00001) * 0.9);
-            const double max_delta_norm = curr_bubble_size  * 0.9;
+            const double max_delta_norm = curr_bubble_size  * BAND_MAX_DELTA_SCALE_FACTOR;
             const bool curr_plus_delta_inside_bubble = delta.norm() <= max_delta_norm;
             const Eigen::Vector3d prime =  curr_plus_delta_inside_bubble ? Eigen::Vector3d(curr + delta) : Eigen::Vector3d(curr + max_delta_norm * delta.normalized());
             // Ensure that the resulting point is not in collision even with numerical rounding (and weirdness in the SDF)
@@ -1006,9 +1011,7 @@ void QuinlanRubberBand::smoothBandPoints(const bool verbose)
         next_band.push_back(band_.back());
 
         // Shortcut the process if there has been no meaningful change in the band
-        // TODO: remove magic number
-#warning "Magic number in band smoothing code"
-        if (EigenHelpers::CloseEnough(band_, next_band, 1e-4))
+        if (EigenHelpers::CloseEnough(band_, next_band, BAND_SMOOTHING_CLOSE_ENGOUGH_DIST))
         {
             return;
         }

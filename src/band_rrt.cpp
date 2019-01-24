@@ -1331,13 +1331,23 @@ void BandRRT::visualizeTree(
     {
         assert(start_idx < tree.size());
 
+        std_msgs::ColorRGBA color_a_dull = color_a;
+        color_a_dull.a = 0.5;
+        std_msgs::ColorRGBA color_b_dull = color_b;
+        color_b_dull.a = 0.5;
+        std_msgs::ColorRGBA color_band_dull = color_band;
+        color_band_dull.a = 0.5;
+
         VectorVector3d band_line_start_points;
         VectorVector3d band_line_end_points;
+        std::vector<std_msgs::ColorRGBA> band_line_colors;
 
         VectorVector3d gripper_a_tree_start_points;
         VectorVector3d gripper_a_tree_end_points;
+        std::vector<std_msgs::ColorRGBA> gripper_a_line_colors;
         VectorVector3d gripper_b_tree_start_points;
         VectorVector3d gripper_b_tree_end_points;
+        std::vector<std_msgs::ColorRGBA> gripper_b_line_colors;
 
         gripper_a_tree_start_points.reserve(tree.size() - start_idx);
         gripper_b_tree_start_points.reserve(tree.size() - start_idx);
@@ -1347,6 +1357,7 @@ void BandRRT::visualizeTree(
         for (size_t idx = start_idx; idx < tree.size(); ++idx)
         {
             const RRTNode& curr = tree[idx];
+            assert(curr.initialized());
 
             if (draw_band)
             {
@@ -1355,6 +1366,14 @@ void BandRRT::visualizeTree(
                 {
                     band_line_start_points.push_back(band_vec[band_idx]);
                     band_line_end_points.push_back(band_vec[band_idx + 1]);
+                    if (curr.blacklisted_from_nn_search_)
+                    {
+                        band_line_colors.push_back(color_band_dull);
+                    }
+                    else
+                    {
+                        band_line_colors.push_back(color_band);
+                    }
                 }
             }
 
@@ -1368,14 +1387,26 @@ void BandRRT::visualizeTree(
 
                 gripper_a_tree_end_points.push_back(curr.grippers().first.translation());
                 gripper_b_tree_end_points.push_back(curr.grippers().second.translation());
+
+                // Add colors to match the blacklisted status
+                if (curr.blacklisted_from_nn_search_)
+                {
+                    gripper_a_line_colors.push_back(color_a_dull);
+                    gripper_b_line_colors.push_back(color_b_dull);
+                }
+                else
+                {
+                    gripper_a_line_colors.push_back(color_a);
+                    gripper_b_line_colors.push_back(color_b);
+                }
             }
         }
 
-        vis_->visualizeLines(ns_a, gripper_a_tree_start_points, gripper_a_tree_end_points, color_a, id_a);
-        vis_->visualizeLines(ns_b, gripper_b_tree_start_points, gripper_b_tree_end_points, color_b, id_b);
+        vis_->visualizeLines(ns_a, gripper_a_tree_start_points, gripper_a_tree_end_points, gripper_a_line_colors, id_a);
+        vis_->visualizeLines(ns_b, gripper_b_tree_start_points, gripper_b_tree_end_points, gripper_b_line_colors, id_b);
         if (draw_band)
         {
-            vis_->visualizeLines(ns_band, band_line_start_points, band_line_end_points, color_band, id_band);
+            vis_->visualizeLines(ns_band, band_line_start_points, band_line_end_points, band_line_colors, id_band);
         }
     }
 }
@@ -2681,13 +2712,10 @@ void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
             goalReachedCallback(idx);
             if (forward_tree_[idx].pReachability() < 1.0)
             {
-                ROS_INFO_STREAM_NAMED("rrt", "Goal reached, pReachability:         " << forward_tree_[idx].pReachability());
-                ROS_INFO_STREAM_NAMED("rrt", "            , pGoalReachable[root]:  " << forward_tree_[0].getpGoalReachable());
+                ROS_INFO_STREAM_NAMED("rrt", "Goal reached idx[" << idx << "]" <<", pReachability:         " << forward_tree_[idx].pReachability());
+                ROS_INFO_STREAM_NAMED("rrt", "                       , pGoalReachable[root]:  " << forward_tree_[0].getpGoalReachable());
                 visualizeBothTrees();
                 visualizeBlacklist();
-                std::cout << "Waiting for keypress: " << std::flush;
-                arc_helpers::GetChar();
-                std::cout << std::endl;
             }
         }
     }
@@ -2764,6 +2792,30 @@ void BandRRT::goalReachedCallback(const int64_t node_idx)
     }
     assert(current_index >= 0 && current_index < (int64_t)forward_tree_.size());
     const int64_t root_index = current_index;
+
+
+
+//    if (root_index != 0)
+//    {
+//        const auto log_folder = ROSHelpers::GetParamRequiredDebugLog<std::string>(*nh_, "log_folder", __func__);
+//        if (!log_folder.Valid())
+//        {
+//            throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
+//        }
+//        arc_utilities::CreateDirectory(log_folder.GetImmutable());
+//        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "path_file_name_prefix", __func__);
+//        if (!file_name_prefix.Valid())
+//        {
+//            throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_prefix from parameter server");
+//        }
+
+//        const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsString();
+//        const std::string file_name = file_name_prefix.GetImmutable() + "__before_blacklisting_root_idx_" + std::to_string(root_index) + "__" + file_name_suffix + ".compressed";
+//        std::string file_path = log_folder.GetImmutable() + file_name;
+//        storeTree(forward_tree_, file_path);
+//    }
+
+
 
     // First, blacklist the root and all children thereof
     blacklistGoalBranch(root_index);
