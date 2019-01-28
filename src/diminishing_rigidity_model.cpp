@@ -4,6 +4,7 @@
 #include <arc_utilities/arc_exceptions.hpp>
 
 using namespace smmap;
+using namespace smmap_utilities;
 using namespace Eigen;
 
 ////////////////////////////////////////////////////////////////////////////////

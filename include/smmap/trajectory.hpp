@@ -6,12 +6,11 @@
 #include <arc_utilities/serialization_eigen.hpp>
 #include <kinematics_toolbox/kinematics.h>
 #include <deformable_manipulation_msgs/messages.h>
-
-#include "smmap/grippers.hpp"
+#include <smmap_utilities/grippers.h>
 
 namespace smmap
 {
-    typedef std::vector<ObjectPointSet> ObjectTrajectory;
+    typedef std::vector<smmap_utilities::ObjectPointSet> ObjectTrajectory;
     typedef std::vector<ObjectTrajectory> VectorObjectTrajectory;
 
     struct ObjectDeltaAndWeight
@@ -40,12 +39,12 @@ namespace smmap
     /// World state structure for a single time step
     struct WorldState
     {
-        ObjectPointSet object_configuration_;
+        smmap_utilities::ObjectPointSet object_configuration_;
         EigenHelpers::VectorIsometry3d rope_node_transforms_;
-        AllGrippersSinglePose all_grippers_single_pose_;
+        smmap_utilities::AllGrippersSinglePose all_grippers_single_pose_;
         Eigen::VectorXd robot_configuration_;
         bool robot_configuration_valid_;
-        std::vector<CollisionData> gripper_collision_data_;
+        std::vector<smmap_utilities::CollisionData> gripper_collision_data_;
         double sim_time_;
 
         inline uint64_t serializeSelf(std::vector<uint8_t>& buffer) const
@@ -53,10 +52,10 @@ namespace smmap
             const size_t starting_bytes = buffer.size();
             arc_utilities::SerializeEigen(object_configuration_, buffer);
             arc_utilities::SerializeVector(rope_node_transforms_, buffer, arc_utilities::SerializeEigen<Eigen::Isometry3d>);
-            SerializeAllGrippersSinglePose(all_grippers_single_pose_, buffer);
+            smmap_utilities::SerializeAllGrippersSinglePose(all_grippers_single_pose_, buffer);
             arc_utilities::SerializeEigen(robot_configuration_, buffer);
             arc_utilities::SerializeFixedSizePOD(robot_configuration_valid_, buffer);
-            SerializeCollisionDataVector(gripper_collision_data_, buffer);
+            smmap_utilities::SerializeCollisionDataVector(gripper_collision_data_, buffer);
             arc_utilities::SerializeFixedSizePOD(sim_time_, buffer);
             const size_t bytes_written = buffer.size() - starting_bytes;
 
@@ -78,13 +77,13 @@ namespace smmap
         {
             uint64_t bytes_read = 0;
 
-            const auto deserialized_object = arc_utilities::DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
+            const auto deserialized_object = arc_utilities::DeserializeEigen<smmap_utilities::ObjectPointSet>(buffer, current + bytes_read);
             bytes_read += deserialized_object.second;
 
             const auto deserialized_rope_node_transforms = arc_utilities::DeserializeVector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d>>(buffer, current + bytes_read, arc_utilities::DeserializeEigen<Eigen::Isometry3d>);
             bytes_read += deserialized_rope_node_transforms.second;
 
-            const auto deserialized_grippers = DeserializeAllGrippersSinglePose(buffer, current + bytes_read);
+            const auto deserialized_grippers = smmap_utilities::DeserializeAllGrippersSinglePose(buffer, current + bytes_read);
             bytes_read += deserialized_grippers.second;
 
             const auto deserialized_robot_config = arc_utilities::DeserializeEigen<Eigen::VectorXd>(buffer, current + bytes_read);
@@ -93,7 +92,7 @@ namespace smmap
             const auto deserialized_robot_config_valid = arc_utilities::DeserializeFixedSizePOD<bool>(buffer, current + bytes_read);
             bytes_read += deserialized_robot_config_valid.second;
 
-            const auto deserialized_collision_data = DeserializeCollisionDataVector(buffer, current + bytes_read);
+            const auto deserialized_collision_data = smmap_utilities::DeserializeCollisionDataVector(buffer, current + bytes_read);
             bytes_read += deserialized_collision_data.second;
 
             const auto deserialized_sim_time = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current + bytes_read);
@@ -205,7 +204,7 @@ namespace smmap
         for (size_t gripper_ind = 0; gripper_ind < num_grippers; gripper_ind++)
         {
             feedback_eigen.gripper_collision_data_.push_back(
-                        CollisionData(
+                        smmap_utilities::CollisionData(
                             EigenHelpersConversions::GeometryPointToEigenVector3d(
                                 feedback_ros.gripper_nearest_point_to_obstacle[gripper_ind]),
                             EigenHelpersConversions::GeometryVector3ToEigenVector3d(
@@ -235,10 +234,10 @@ namespace smmap
      * @param feedback
      * @return
      */
-    inline AllGrippersPoseTrajectory GetGripperTrajectories(
+    inline smmap_utilities::AllGrippersPoseTrajectory GetGripperTrajectories(
             const std::vector<WorldState>& feedback)
     {
-        AllGrippersPoseTrajectory grippers_trajectories(feedback.size());
+        smmap_utilities::AllGrippersPoseTrajectory grippers_trajectories(feedback.size());
 
         for (size_t time_ind = 0; time_ind < feedback.size(); time_ind++)
         {
@@ -250,16 +249,16 @@ namespace smmap
     }
 
     inline Eigen::VectorXd CalculateObjectDeltaAsVector(
-            const ObjectPointSet& start,
-            const ObjectPointSet& end)
+            const smmap_utilities::ObjectPointSet& start,
+            const smmap_utilities::ObjectPointSet& end)
     {
         Eigen::MatrixXd diff = end - start;
         diff.resize(diff.rows() * diff.cols(), 1);
         return diff;
     }
 
-    inline ObjectPointSet AddObjectDelta(
-            ObjectPointSet start,
+    inline smmap_utilities::ObjectPointSet AddObjectDelta(
+            smmap_utilities::ObjectPointSet start,
             const Eigen::VectorXd& delta)
     {
         assert(delta.rows() == start.cols() * 3);

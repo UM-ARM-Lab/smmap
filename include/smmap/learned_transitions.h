@@ -18,7 +18,7 @@ namespace smmap
         struct State
         {
         public:
-            ObjectPointSet deform_config_;
+            smmap_utilities::ObjectPointSet deform_config_;
             RubberBand::Ptr rubber_band_;
             RubberBand::Ptr planned_rubber_band_;
             EigenHelpers::VectorIsometry3d rope_node_transforms_;

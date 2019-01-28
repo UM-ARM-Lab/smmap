@@ -6,8 +6,7 @@
 #include <omp.h>
 
 #include "smmap/stretching_constraint_controller.h"
-#include "smmap/ros_communication_helpers.hpp"
-#include "smmap/grippers.hpp"
+#include "smmap/ros_communication_helpers.h"
 
 // Needed due to rounding problems
 #define GRIPPER_COLLISION_REPULSION_MARGIN 0.000001
@@ -22,7 +21,6 @@ using namespace smmap;
 using namespace smmap_utilities;
 using namespace Eigen;
 using namespace EigenHelpers;
-
 
 
 StretchingConstraintController::StretchingConstraintController(

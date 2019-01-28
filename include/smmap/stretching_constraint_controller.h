@@ -5,8 +5,7 @@
 #include <smmap_utilities/visualization_tools.h>
 
 #include "smmap/deformable_controller.h"
-#include "smmap/grippers.hpp"
-#include "smmap/robot_interface.hpp"
+#include "smmap/robot_interface.h"
 
 namespace smmap
 {
@@ -45,45 +44,45 @@ namespace smmap
 
             kinematics::Vector6d singleGripperPoseDeltaSampler(const double max_delta);
 
-            AllGrippersSinglePoseDelta allGripperPoseDeltaSampler(const ssize_t num_grippers, const double max_delta);
+            smmap_utilities::AllGrippersSinglePoseDelta allGripperPoseDeltaSampler(const ssize_t num_grippers, const double max_delta);
 
             kinematics::Vector6d getConstraintAwareGripperDeltaSample(
                     const Eigen::Isometry3d& gripper_pose,
-                    const CollisionData& collision_data,
+                    const smmap_utilities::CollisionData& collision_data,
                     const double max_delta,
                     const std::pair<Eigen::Vector3d, Eigen::Vector3d>& stretching_correction_data);
 
             kinematics::Vector6d getFeasibleGripperDeltaGurobi(
                     const Eigen::Isometry3d& gripper_pose,
-                    const CollisionData& collision_data,
+                    const smmap_utilities::CollisionData& collision_data,
                     const double max_delta,
                     const std::pair<Eigen::Vector3d, Eigen::Vector3d>& stretching_correction_data) const;
 
-            double errorOfControlByPrediction(const ObjectPointSet predicted_object_p_dot,
+            double errorOfControlByPrediction(const smmap_utilities::ObjectPointSet predicted_object_p_dot,
                                               const Eigen::VectorXd &desired_object_p_dot,
                                               const Eigen::VectorXd &desired_p_dot_weight) const;
 
-            void visualize_stretching_vector(const ObjectPointSet& object_configuration);
+            void visualize_stretching_vector(const smmap_utilities::ObjectPointSet& object_configuration);
 
-            void visualize_rope_stretching_vector(const ObjectPointSet& object_configuration);
+            void visualize_rope_stretching_vector(const smmap_utilities::ObjectPointSet& object_configuration);
 
-            void visualize_cloth_stretching_vector(const ObjectPointSet& object_configuration);
+            void visualize_cloth_stretching_vector(const smmap_utilities::ObjectPointSet& object_configuration);
 
             void visualize_gripper_motion(
-                    const AllGrippersSinglePose& current_gripper_pose,
-                    const AllGrippersSinglePoseDelta& gripper_motion);
+                    const smmap_utilities::AllGrippersSinglePose& current_gripper_pose,
+                    const smmap_utilities::AllGrippersSinglePoseDelta& gripper_motion);
 
             /////////////////////////////////////////////////////////////////////////////////////////
             // Collision constraint related function
             /////////////////////////////////////////////////////////////////////////////////////////
 
             double gripperCollisionCheckHelper(
-                    const AllGrippersSinglePose& current_gripper_pose,
-                    const AllGrippersSinglePoseDelta& test_gripper_motion) const;
+                    const smmap_utilities::AllGrippersSinglePose& current_gripper_pose,
+                    const smmap_utilities::AllGrippersSinglePoseDelta& test_gripper_motion) const;
 
             bool gripperCollisionCheckResult(
-                    const AllGrippersSinglePose& current_gripper_pose,
-                    const AllGrippersSinglePoseDelta &test_gripper_motion) const;
+                    const smmap_utilities::AllGrippersSinglePose& current_gripper_pose,
+                    const smmap_utilities::AllGrippersSinglePoseDelta &test_gripper_motion) const;
 
             /////////////////////////////////////////////////////////////////////////////////////////
             // Stretching constraint related function
@@ -91,27 +90,27 @@ namespace smmap
 
             bool stretchingDetection(
                     const InputData& input_data,
-                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+                    const smmap_utilities::AllGrippersSinglePoseDelta& test_gripper_motion);
 
             double stretchingFunctionEvaluation(
                     const InputData& input_data,
-                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+                    const smmap_utilities::AllGrippersSinglePoseDelta& test_gripper_motion);
 
             double ropeTwoGripperStretchingHelper(
                     const InputData& input_data,
-                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+                    const smmap_utilities::AllGrippersSinglePoseDelta& test_gripper_motion);
 
             bool ropeTwoGrippersStretchingDetection(
                     const InputData& input_data,
-                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+                    const smmap_utilities::AllGrippersSinglePoseDelta& test_gripper_motion);
 
             double clothTwoGripperStretchingHelper(
                     const InputData& input_data,
-                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+                    const smmap_utilities::AllGrippersSinglePoseDelta& test_gripper_motion);
 
             bool clothTwoGrippersStretchingDetection(
                     const InputData& input_data,
-                    const AllGrippersSinglePoseDelta& test_gripper_motion);
+                    const smmap_utilities::AllGrippersSinglePoseDelta& test_gripper_motion);
 
             double evaluateStretchingConstraint(
                     const std::pair<Eigen::Vector3d, Eigen::Vector3d>& stretching_constraint_data,
@@ -132,9 +131,8 @@ namespace smmap
                     const int marker_id);
 
         private:	    
-            GripperCollisionChecker gripper_collision_checker_;
-
-            const std::vector<GripperData> grippers_data_;
+            smmap_utilities::GripperCollisionChecker gripper_collision_checker_;
+            const std::vector<smmap_utilities::GripperData> grippers_data_;
 
             const sdf_tools::SignedDistanceField::ConstPtr environment_sdf_;
             const std::shared_ptr<std::mt19937_64> generator_;

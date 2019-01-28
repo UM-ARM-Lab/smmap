@@ -36,9 +36,9 @@ namespace smmap
             // Virtual function overrides
             ////////////////////////////////////////////////////////////////////
 
-            virtual ObjectPointSet getObjectDelta_impl(
+            virtual smmap_utilities::ObjectPointSet getObjectDelta_impl(
                     const WorldState& world_state,
-                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const override final;
+                    const smmap_utilities::AllGrippersSinglePoseDelta& grippers_pose_delta) const override final;
     };
 }
 

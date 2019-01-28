@@ -7,7 +7,7 @@
 
 #include "smmap/task_function_pointer_types.h"
 #include "smmap/task_specification.h"
-#include "smmap/robot_interface.hpp"
+#include "smmap/robot_interface.h"
 #include "smmap/deformable_model.h"
 #include "smmap/deformable_controller.h"
 #include "smmap/quinlan_rubber_band.h"
@@ -88,7 +88,7 @@ namespace smmap
 
             void initializeBandRRT(const bool planning_for_whole_robot);
 
-            AllGrippersSinglePose getGripperTargets(
+            smmap_utilities::AllGrippersSinglePose getGripperTargets(
                     const WorldState& world_state);
 
             void planGlobalGripperTrajectory(
@@ -139,7 +139,7 @@ namespace smmap
             std::vector<ssize_t> path_between_grippers_through_object_;
             const size_t max_lookahead_steps_;
             const size_t max_grippers_pose_history_length_;
-            AllGrippersPoseTrajectory grippers_pose_history_;
+            smmap_utilities::AllGrippersPoseTrajectory grippers_pose_history_;
             std::vector<double> error_history_;
 
             bool executing_global_trajectory_;
@@ -173,8 +173,8 @@ namespace smmap
                     const bool visualization_enabled = true) const;
 
             void visualizeGripperMotion(
-                    const AllGrippersSinglePose& current_gripper_pose,
-                    const AllGrippersSinglePoseDelta& gripper_motion,
+                    const smmap_utilities::AllGrippersSinglePose& current_gripper_pose,
+                    const smmap_utilities::AllGrippersSinglePoseDelta& gripper_motion,
                     const ssize_t model_ind) const;
 
             void initializeBanditsLogging();

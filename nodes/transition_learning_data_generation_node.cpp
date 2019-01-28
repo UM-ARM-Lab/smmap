@@ -1,6 +1,6 @@
 #include <smmap_utilities/visualization_tools.h>
 #include "smmap/transition_learning_data_generation.h"
-#include "smmap/robot_interface.hpp"
+#include "smmap/robot_interface.h"
 
 std::vector<Eigen::VectorXd> getJointInfo()
 {

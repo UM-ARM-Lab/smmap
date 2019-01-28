@@ -1,29 +1,17 @@
-#ifndef ROS_COMMUNICATION_HELPERS_HPP
-#define ROS_COMMUNICATION_HELPERS_HPP
+#include "smmap/ros_communication_helpers.h"
 
 #include <mutex>
 
 #include <ros/ros.h>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
-#include <arc_utilities/dijkstras.hpp>
-#include <sdf_tools/sdf.hpp>
 #include <deformable_manipulation_experiment_params/task_enums.h>
 #include <deformable_manipulation_msgs/messages.h>
 
-#include "smmap/grippers.hpp"
-#include "smmap/trajectory.hpp"
-
-#define CHECK_FRAME_NAME(logger, expected, given)                                                       \
-    if ((given) != (expected))                                                                          \
-    {                                                                                                   \
-        ROS_FATAL_STREAM_NAMED((logger), __func__ << " response data in incorrect frame. Expecting '"   \
-                               << (expected) << "', got '" << (given) << "'.");                         \
-        throw_arc_exception(std::invalid_argument, "Invalid frame name");                               \
-    }
-
 namespace smmap
 {
-    inline std::vector<GripperData> GetGrippersData(ros::NodeHandle& nh)
+    using namespace smmap_utilities;
+
+    std::vector<GripperData> GetGrippersData(ros::NodeHandle& nh)
     {
         ROS_INFO_NAMED("ros_comms_helpers" , "Getting grippers data");
         std::vector<GripperData> grippers_data;
@@ -96,7 +84,7 @@ namespace smmap
         return grippers_data;
     }
 
-    inline ObjectPointSet GetObjectInitialConfiguration(ros::NodeHandle& nh)
+    ObjectPointSet GetObjectInitialConfiguration(ros::NodeHandle& nh)
     {
         ROS_INFO_NAMED("ros_comms_helpers" , "Getting object initial configuration");
 
@@ -113,7 +101,7 @@ namespace smmap
         return EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(srv_data.response.points);
     }
 
-    inline std::vector<geometry_msgs::Pose> GetRopeNodeTransforms(ros::NodeHandle& nh)
+    std::vector<geometry_msgs::Pose> GetRopeNodeTransforms(ros::NodeHandle& nh)
     {
         ros::ServiceClient client =
             nh.serviceClient<deformable_manipulation_msgs::GetPoseSet>(GetRopeCurrentNodeTransformsTopic(nh));
@@ -127,7 +115,7 @@ namespace smmap
         return srv_data.response.poses;
     }
 
-    inline ObjectPointSet GetCoverPoints(ros::NodeHandle& nh)
+    ObjectPointSet GetCoverPoints(ros::NodeHandle& nh)
     {
         ROS_INFO_NAMED("ros_comms_helpers" , "Getting cover points");
 
@@ -148,7 +136,7 @@ namespace smmap
         return cover_points;
     }
 
-    inline ObjectPointSet GetCoverPointNormals(ros::NodeHandle& nh)
+    ObjectPointSet GetCoverPointNormals(ros::NodeHandle& nh)
     {
         ROS_INFO_NAMED("ros_comms_helpers" , "Getting cover point normal vectors");
 
@@ -174,7 +162,7 @@ namespace smmap
     }
 
     // TODO: replace these out params with something else
-    inline void GetFreeSpaceGraph(
+    void GetFreeSpaceGraph(
             ros::NodeHandle& nh,
             arc_dijkstras::Graph<Eigen::Vector3d>& free_space_graph,
             std::vector<int64_t>& cover_ind_to_free_space_graph_ind)
@@ -224,7 +212,7 @@ namespace smmap
         cover_ind_to_free_space_graph_ind = srv_data.response.cover_point_ind_to_graph_ind;
     }
 
-    inline sdf_tools::SignedDistanceField::ConstPtr GetEnvironmentSDF(ros::NodeHandle& nh)
+    sdf_tools::SignedDistanceField::ConstPtr GetEnvironmentSDF(ros::NodeHandle& nh)
     {
         static sdf_tools::SignedDistanceField::Ptr sdf(nullptr);
         static std::mutex mtx;
@@ -253,5 +241,3 @@ namespace smmap
         return sdf;
     }
 }
-
-#endif // ROS_COMMUNICATION_HELPERS_HPP

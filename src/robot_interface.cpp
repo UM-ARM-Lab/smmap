@@ -1,11 +1,12 @@
-#include "smmap/robot_interface.hpp"
+#include "smmap/robot_interface.h"
 
 #include <std_srvs/Empty.h>
 #include <ros/callback_queue.h>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <tf2_eigen/tf2_eigen.h>
-#include "smmap/ros_communication_helpers.hpp"
+#include "smmap/ros_communication_helpers.h"
 
+using namespace smmap_utilities;
 
 namespace smmap
 {

@@ -5,14 +5,14 @@
 #include <sdf_tools/sdf.hpp>
 #include <deformable_manipulation_experiment_params/xyzgrid.h>
 #include <smmap_utilities/visualization_tools.h>
-#include "smmap/grippers.hpp"
+#include <smmap_utilities/grippers.h>
 #include "smmap/trajectory.hpp"
 
 namespace smmap
 {
     std::vector<ssize_t> GetShortestPathBetweenGrippersThroughObject(
-            const std::vector<GripperData>& grippers_data,
-            const ObjectPointSet& object,
+            const std::vector<smmap_utilities::GripperData>& grippers_data,
+            const smmap_utilities::ObjectPointSet& object,
             const std::function<std::vector<ssize_t>(const ssize_t& node)> neighbour_fn);
 
     EigenHelpers::VectorVector3d GetPathBetweenGrippersThroughObject(

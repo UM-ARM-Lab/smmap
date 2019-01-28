@@ -6,7 +6,7 @@
 #include <smmap_utilities/visualization_tools.h>
 #include "smmap/learned_transitions.h"
 #include "smmap/quinlan_rubber_band.h"
-#include "smmap/robot_interface.hpp"
+#include "smmap/robot_interface.h"
 
 namespace smmap
 {
@@ -30,7 +30,7 @@ namespace smmap
         const DeformableType deformable_type_;
         const TaskType task_type_;
 
-        const std::vector<GripperData> grippers_data_;
+        const std::vector<smmap_utilities::GripperData> grippers_data_;
         const Eigen::MatrixXd object_initial_node_distance_;
         const ssize_t num_nodes_;
         const double max_stretch_factor_;
@@ -52,13 +52,13 @@ namespace smmap
 
         void visualizeDeformableObject(
                 const std::string& marker_name,
-                const ObjectPointSet& object_configuration,
+                const smmap_utilities::ObjectPointSet& object_configuration,
                 const std_msgs::ColorRGBA& color,
                 const int32_t id = 1) const;
 
         void visualizeDeformableObject(
                 const std::string& marker_name,
-                const ObjectPointSet& object_configuration,
+                const smmap_utilities::ObjectPointSet& object_configuration,
                 const std::vector<std_msgs::ColorRGBA>& colors,
                 const int32_t id = 1) const;
     };

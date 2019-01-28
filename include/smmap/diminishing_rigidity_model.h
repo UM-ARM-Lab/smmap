@@ -26,7 +26,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             static void SetInitialObjectConfiguration(
-                    const ObjectPointSet& object_initial_configuration);
+                    const smmap_utilities::ObjectPointSet& object_initial_configuration);
 
         private:
 

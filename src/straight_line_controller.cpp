@@ -1,6 +1,7 @@
 #include "smmap/straight_line_controller.h"
 
 using namespace smmap;
+using namespace smmap_utilities;
 
 StraightLineController::StraightLineController(
         std::shared_ptr<ros::NodeHandle> nh,

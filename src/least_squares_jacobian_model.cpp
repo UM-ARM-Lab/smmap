@@ -4,7 +4,9 @@
 #include <ros/ros.h>
 
 using namespace smmap;
+using namespace smmap_utilities;
 using namespace Eigen;
+using namespace EigenHelpers;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Constructors and Destructor
@@ -12,7 +14,7 @@ using namespace Eigen;
 
 LeastSquaresJacobianModel::LeastSquaresJacobianModel(
         std::shared_ptr<ros::NodeHandle> nh,
-        const Eigen::MatrixXd& initial_jacobian,
+        const MatrixXd& initial_jacobian,
         const long extra_samples)
     : JacobianModel(nh)
     , current_jacobian_(initial_jacobian)
@@ -35,11 +37,13 @@ void LeastSquaresJacobianModel::updateModel_impl(const WorldState& previous, con
             CalculateGrippersPoseDelta(previous.all_grippers_single_pose_,
                                        next.all_grippers_single_pose_);
 
-    const VectorXd grippers_delta = EigenHelpers::VectorEigenVectorToEigenVectorX(grippers_pose_deltas);
+    const VectorXd grippers_delta = VectorEigenVectorToEigenVectorX(grippers_pose_deltas);
 
     if (grippers_delta.squaredNorm() < 1e-6)
     {
-        ROS_WARN_STREAM_NAMED("least_squares_jacobian", "Grippers did not move much, not updating: squared norm vel: " << grippers_delta.squaredNorm());
+        ROS_WARN_STREAM_NAMED("least_squares_jacobian",
+                              "Grippers did not move much, not updating: squared norm vel: "
+                              << grippers_delta.squaredNorm());
     }
     else
     {
@@ -66,7 +70,7 @@ void LeastSquaresJacobianModel::updateModel_impl(const WorldState& previous, con
     {
         ROS_INFO_NAMED("least_squares_jacobian", "Updating jacobian");
         current_jacobian_ = deformable_delta_wide_matrix_ *
-                EigenHelpers::Pinv(grippers_delta_wide_matrix_, EigenHelpers::SuggestedRcond());
+                Pinv(grippers_delta_wide_matrix_, SuggestedRcond());
     }
 }
 
@@ -74,7 +78,8 @@ void LeastSquaresJacobianModel::updateModel_impl(const WorldState& previous, con
 // Computation helpers
 ////////////////////////////////////////////////////////////////////
 
-Eigen::MatrixXd LeastSquaresJacobianModel::computeGrippersToDeformableObjectJacobian_impl(const WorldState& world_state) const
+Eigen::MatrixXd LeastSquaresJacobianModel::computeGrippersToDeformableObjectJacobian_impl(
+        const WorldState& world_state) const
 {
     (void)world_state;
     return current_jacobian_;

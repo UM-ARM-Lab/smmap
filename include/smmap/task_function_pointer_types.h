@@ -7,8 +7,8 @@
 
 namespace smmap
 {
-    typedef std::function<std::vector<CollisionData>(
-            const AllGrippersSinglePose& gripper_poses
+    typedef std::function<std::vector<smmap_utilities::CollisionData>(
+            const smmap_utilities::AllGrippersSinglePose& gripper_poses
             )>
     GripperCollisionCheckFunctionType;
 

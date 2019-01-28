@@ -34,7 +34,7 @@ namespace smmap
 
             // Task Data
             const DeformableType deformable_type_;
-            const std::vector<GripperData> grippers_data_;
+            const std::vector<smmap_utilities::GripperData> grippers_data_;
 
             // Model/Task Data
             const Eigen::MatrixXd nominal_distance_;
