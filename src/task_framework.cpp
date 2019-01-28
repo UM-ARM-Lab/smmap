@@ -8,7 +8,6 @@
 #include <arc_utilities/log.hpp>
 #include <arc_utilities/first_order_deformation.h>
 #include <arc_utilities/simple_kmeans_clustering.hpp>
-#include <arc_utilities/simple_astar_planner.hpp>
 #include <arc_utilities/get_neighbours.hpp>
 #include <arc_utilities/path_utils.hpp>
 #include <arc_utilities/timing.hpp>
@@ -46,63 +45,6 @@ const static std_msgs::ColorRGBA PREDICTION_RUBBER_BAND_VIOLATION_COLOR = ColorB
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal helpers
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/**
- * @brief GetShortestPathBetweenGrippersThroughObject
- * @param grippers_data
- * @param object
- * @param neighour_fn
- * @return The index of the nodes between the grippers, following the shortest path through the object
- */
-static std::vector<ssize_t> getShortestPathBetweenGrippersThroughObject(
-        const std::vector<GripperData>& grippers_data,
-        const ObjectPointSet& object,
-        const std::function<std::vector<ssize_t>(const ssize_t& node)> neighbour_fn)
-{
-    assert(grippers_data.size() == 2);
-    assert(grippers_data[0].node_indices_.size() > 0);
-    assert(grippers_data[1].node_indices_.size() > 0);
-
-    const auto start = grippers_data[0].node_indices_[0];
-    const auto goal = grippers_data[1].node_indices_[0];
-    const auto distance_fn = [&] (const ssize_t& first_node, const ssize_t& second_node)
-    {
-        return (object.col(first_node) - object.col(second_node)).norm();
-    };
-    const auto heuristic_fn = [&] (const ssize_t& node)
-    {
-        return distance_fn(node, goal);
-    };
-    const auto goal_reached_fn = [&] (const ssize_t& test_node)
-    {
-        return test_node == goal;
-    };
-    const auto astar_results = simple_astar_planner::SimpleAStarPlanner<ssize_t>::Plan(
-                start, neighbour_fn, distance_fn, heuristic_fn, goal_reached_fn);
-
-    const auto plan = astar_results.first;
-    assert(plan.size() > 0);
-    return plan;
-}
-
-static EigenHelpers::VectorVector3d getPathBetweenGrippersThroughObject(
-        const WorldState& world_state,
-        const std::vector<ssize_t>& object_node_idxs_between_grippers)
-{
-    assert(world_state.all_grippers_single_pose_.size() == 2);
-    EigenHelpers::VectorVector3d nodes;
-    nodes.reserve(object_node_idxs_between_grippers.size() + 2);
-
-    nodes.push_back(world_state.all_grippers_single_pose_[0].translation());
-    for (size_t path_idx = 0; path_idx < object_node_idxs_between_grippers.size(); ++path_idx)
-    {
-        const ssize_t node_idx = object_node_idxs_between_grippers[path_idx];
-        nodes.push_back(world_state.object_configuration_.col(node_idx));
-    }
-    nodes.push_back(world_state.all_grippers_single_pose_[1].translation());
-
-    return nodes;
-}
 
 template <typename T, typename Alloc = std::allocator<T>>
 static size_t sizeOfLargestVector(const std::vector<T, Alloc>& vectors)
@@ -203,7 +145,7 @@ TaskFramework::TaskFramework(
     , controller_logging_enabled_(GetControllerLoggingEnabled(*ph_))
     , vis_(vis)
     , visualize_desired_motion_(!GetDisableAllVisualizations(*ph_) && GetVisualizeObjectDesiredMotion(*ph_))
-    , visualize_gripper_motion_(!GetDisableAllVisualizations(*ph_) && GetVisualizerGripperMotion(*ph_))
+    , visualize_gripper_motion_(!GetDisableAllVisualizations(*ph_) && GetVisualizeGripperMotion(*ph_))
     , visualize_predicted_motion_(!GetDisableAllVisualizations(*ph_) && GetVisualizeObjectPredictedMotion(*ph_))
 {
     ROS_INFO_STREAM_NAMED("task_framework", "Using seed " << std::hex << seed_ );
@@ -250,7 +192,8 @@ void TaskFramework::execute()
 #endif
 
         // Initialize the MDP transition learner
-        transition_estimator_ = std::make_shared<TransitionEstimation>(nh_, ph_, dijkstras_task_, vis_, *rubber_band_);
+        transition_estimator_ = std::make_shared<TransitionEstimation>(
+                    nh_, ph_, dijkstras_task_->sdf_, dijkstras_task_->work_space_grid_, vis_, *rubber_band_);
         // Initialize the BandRRT structure
         initializeBandRRT(world_feedback.robot_configuration_valid_);
     }
@@ -441,7 +384,7 @@ WorldState TaskFramework::sendNextCommand(
             world_feedback = sendNextCommandUsingLocalController(world_state);
 
             // Update the band with the new position of the deformable object
-            const auto band_points = getPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
+            const auto band_points = GetPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
             rubber_band_->setPointsAndSmooth(band_points);
         }
 
@@ -749,7 +692,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     const WorldState& world_feedback = command_result.first;
     microstep_history_buffer_.insert(microstep_history_buffer_.end(), command_result.second.begin(), command_result.second.end());
     // Update the band with the new position of the deformable object
-    const auto band_points = getPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
+    const auto band_points = GetPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
     rubber_band_->setPointsAndSmooth(band_points);
 
     // If we targetted the last node of the current path segment, then we need to handle
@@ -1185,20 +1128,21 @@ void TaskFramework::initializeBand(const WorldState& world_state)
     {
         return dijkstras_task_->getNodeNeighbours(node);
     };
-    path_between_grippers_through_object_ = getShortestPathBetweenGrippersThroughObject(
+    path_between_grippers_through_object_ = GetShortestPathBetweenGrippersThroughObject(
                 robot_->getGrippersData(), GetObjectInitialConfiguration(*nh_), neighbour_fn);
 
     // Create the initial rubber band
     const double resampled_band_max_pointwise_dist = dijkstras_task_->work_space_grid_.minStepDimension() / 2.0;
     const size_t upsampled_band_num_points = GetRRTBandMaxPoints(*ph_);
 
-    const auto starting_band_points = getPathBetweenGrippersThroughObject(
+    const auto starting_band_points = GetPathBetweenGrippersThroughObject(
                 world_state, path_between_grippers_through_object_);
     rubber_band_ = std::make_shared<RubberBand>(
                 nh_,
                 ph_,
                 vis_,
-                dijkstras_task_,
+                dijkstras_task_->sdf_,
+                dijkstras_task_->work_space_grid_,
                 starting_band_points,
                 resampled_band_max_pointwise_dist,
                 upsampled_band_num_points,

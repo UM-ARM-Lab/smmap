@@ -1,6 +1,7 @@
 #ifndef TASK_SPECIFICATION_IMPLEMENTIONS_H
 #define TASK_SPECIFICATION_IMPLEMENTIONS_H
 
+#include <smmap_utilities/neighbours.h>
 #include "smmap/task_specification.h"
 #include "smmap/point_reflector.hpp"
 
@@ -29,7 +30,7 @@ namespace smmap
             virtual bool taskDone_impl(
                     const WorldState& world_state) override final;
 
-            const Grid4Neighbours neighbours_;
+            const smmap_utilities::Grid4Neighbours neighbours_;
 
         private:
             const PointReflector point_reflector_;
@@ -57,7 +58,7 @@ namespace smmap
             virtual bool taskDone_impl(
                     const WorldState& world_state) override final;
 
-            const LineNeighbours neighbours_;
+            const smmap_utilities::LineNeighbours neighbours_;
     };
 
     /**
@@ -77,7 +78,7 @@ namespace smmap
             virtual bool taskDone_impl(
                     const WorldState& world_state) override final;
 
-            const Grid4Neighbours neighbours_;
+            const smmap_utilities::Grid4Neighbours neighbours_;
     };
 
 
@@ -101,7 +102,7 @@ namespace smmap
             virtual bool taskDone_impl(
                     const WorldState& world_state) override final;
 
-            const Grid4Neighbours neighbours_;
+            const smmap_utilities::Grid4Neighbours neighbours_;
     };
 
     /**
@@ -123,7 +124,7 @@ namespace smmap
             virtual bool taskDone_impl(
                     const WorldState& world_state) override final;
 
-            const LineNeighbours neighbours_;
+            const smmap_utilities::LineNeighbours neighbours_;
     };
 
     /**
@@ -146,7 +147,7 @@ namespace smmap
                     const WorldState& world_state) override final;
 
             // TODO: Not clear that this will be the case moving forward - are all nodes in a grid?
-            const Grid4Neighbours neighbours_;
+            const smmap_utilities::Grid4Neighbours neighbours_;
     };
 }
 

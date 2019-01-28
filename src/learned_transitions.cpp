@@ -198,12 +198,14 @@ std::string TransitionEstimation::StateTransition::toString() const
 TransitionEstimation::TransitionEstimation(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
-        const DijkstrasCoverageTask::ConstPtr &task,
+        const sdf_tools::SignedDistanceField::ConstPtr& sdf,
+        const XYZGrid work_space_grid,
         const smmap_utilities::Visualizer::ConstPtr& vis,
         const RubberBand& template_band)
     : nh_(nh)
     , ph_(ph)
-    , task_(task)
+    , sdf_(sdf)
+    , work_space_grid_(work_space_grid)
     , vis_(vis)
 //    , action_dist_threshold_(GetTransitionActionDistThreshold(*ph_))
 //    , action_dist_scale_factor(GetTransitionActionDistScaleFactor(*ph_))
@@ -233,14 +235,14 @@ bool TransitionEstimation::checkFirstOrderHomotopy(
         const auto& b1_node = b1[b1_ind];
         const auto& b2_node = b2[b2_ind];
 
-        const ssize_t num_steps = (ssize_t)std::ceil((b2_node - b1_node).norm() / (task_->work_space_grid_.minStepDimension() * 0.5));
+        const ssize_t num_steps = (ssize_t)std::ceil((b2_node - b1_node).norm() / (work_space_grid_.minStepDimension() * 0.5));
 
         // Checking 0 and num_steps to catch the endpoints of each band
         for (ssize_t ind = 0; ind <= num_steps; ++ind)
         {
             const double ratio = (double)ind / (double)num_steps;
             const auto interpolated_point = EigenHelpers::Interpolate(b1_node, b2_node, ratio);
-            if (task_->sdf_->GetImmutable3d(interpolated_point).first < 0.0)
+            if (sdf_->GetImmutable3d(interpolated_point).first < 0.0)
             {
                 return false;
             }
@@ -345,7 +347,7 @@ Maybe::Maybe<double> TransitionEstimation::transitionUseful(
     // within 1 work space grid cell. This tries to ensure that when propagating, we don't
     // "hop over" any obstacles
     {
-        static const double max_dist = task_->work_space_grid_.minStepDimension() * std::sqrt(2.0);
+        static const double max_dist = work_space_grid_.minStepDimension() * std::sqrt(2.0);
         const auto& test_starting_gripper_positions = test_band->getEndpoints();
 
 //        static double smallest_dist_starting_first = std::numeric_limits<double>::infinity();
@@ -480,11 +482,11 @@ void TransitionEstimation::visualizeTransition(
         const int32_t id,
         const std::string& ns_prefix) const
 {
-//    task_->visualizeDeformableObject(ns_prefix + MDP_PRE_STATE_NS, transition.starting_state.deform_config_, Visualizer::Red(), id);
+//    visualizeDeformableObject(ns_prefix + MDP_PRE_STATE_NS, transition.starting_state.deform_config_, Visualizer::Red(), id);
     transition.starting_state_.rubber_band_->visualize(ns_prefix + MDP_PRE_STATE_NS, Visualizer::Yellow(), Visualizer::Yellow(), id + 1);
     transition.starting_state_.planned_rubber_band_->visualize(ns_prefix + MDP_PRE_STATE_NS, Visualizer::Green(), Visualizer::Green(), id + 2);
 
-//    task_->visualizeDeformableObject(ns_prefix + MDP_POST_STATE_NS, transition.ending_state.deform_config_, Visualizer::Red(0.4f), id);
+//    visualizeDeformableObject(ns_prefix + MDP_POST_STATE_NS, transition.ending_state.deform_config_, Visualizer::Red(0.4f), id);
     transition.ending_state_.rubber_band_->visualize(ns_prefix + MDP_POST_STATE_NS, Visualizer::Yellow(0.4f), Visualizer::Yellow(0.4f), id + 1);
     transition.ending_state_.planned_rubber_band_->visualize(ns_prefix + MDP_POST_STATE_NS, Visualizer::Green(0.4f), Visualizer::Green(0.4f), id + 2);
 }

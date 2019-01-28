@@ -85,7 +85,8 @@ namespace smmap
         TransitionEstimation(
                 std::shared_ptr<ros::NodeHandle> nh,
                 std::shared_ptr<ros::NodeHandle> ph,
-                const DijkstrasCoverageTask::ConstPtr& task,
+                const sdf_tools::SignedDistanceField::ConstPtr& sdf,
+                const XYZGrid work_space_grid,
                 const smmap_utilities::Visualizer::ConstPtr& vis,
                 const RubberBand& template_band);
 
@@ -161,7 +162,8 @@ namespace smmap
         const std::shared_ptr<ros::NodeHandle> nh_;
         const std::shared_ptr<ros::NodeHandle> ph_;
 
-        const DijkstrasCoverageTask::ConstPtr task_;
+        const sdf_tools::SignedDistanceField::ConstPtr sdf_;
+        const XYZGrid work_space_grid_;
         const smmap_utilities::Visualizer::ConstPtr vis_;
         std::vector<StateTransition> learned_transitions_;
 

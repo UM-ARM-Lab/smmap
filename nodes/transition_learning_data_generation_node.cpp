@@ -12,6 +12,9 @@ std::vector<Eigen::VectorXd> getJointInfo()
 
 int main(int argc, char* argv[])
 {
+    using namespace smmap;
+    using namespace smmap_utilities;
+
     // Read in all ROS parameters
     ros::init(argc, argv, "transition_learning_data_generation_node", ros::init_options::NoSigintHandler);
 
@@ -19,7 +22,7 @@ int main(int argc, char* argv[])
     auto ph = std::make_shared<ros::NodeHandle>("~");
 
     ROS_INFO("Creating utility objects");
-    auto robot = std::make_shared<smmap::RobotInterface>(nh, ph);
+    auto robot = std::make_shared<RobotInterface>(nh, ph);
     robot->setCallbackFunctions(
                 nullptr,
                 nullptr,
@@ -34,7 +37,11 @@ int main(int argc, char* argv[])
                 nullptr,
                 nullptr,
                 nullptr);
-    auto vis = std::make_shared<smmap_utilities::Visualizer>(nh, ph, true);
+    auto vis = std::make_shared<Visualizer>(nh, ph, true);
+//    auto task = std::dynamic_pointer_cast<DijkstrasCoverageTask>(
+//                TaskSpecification::MakeTaskSpecification(nh, ph, vis));
+//    assert(task != nullptr);
+    auto data_generator = DataGeneration(nh, ph, robot, vis);
 
     return EXIT_SUCCESS;
 }

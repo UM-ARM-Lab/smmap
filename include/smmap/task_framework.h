@@ -2,7 +2,7 @@
 #define SMMAP_PLANNER_H
 
 #include <arc_utilities/log.hpp>
-#include <smmap_utilities/multiarm_bandits.hpp>
+#include <smmap_utilities/multiarm_bandits.h>
 #include <smmap_utilities/visualization_tools.h>
 
 #include "smmap/task_function_pointer_types.h"

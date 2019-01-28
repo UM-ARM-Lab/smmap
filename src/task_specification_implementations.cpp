@@ -118,7 +118,7 @@ bool ClothColabFolding::taskDone_impl(
 RopeCylinderCoverage::RopeCylinderCoverage(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
-        smmap_utilities::Visualizer::Ptr vis)
+        Visualizer::Ptr vis)
     : DirectCoverageTask(nh, ph, vis)
     , neighbours_(num_nodes_)
 {}
@@ -141,7 +141,7 @@ bool RopeCylinderCoverage::taskDone_impl(
 ClothTableCoverage::ClothTableCoverage(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
-        smmap_utilities::Visualizer::Ptr vis)
+        Visualizer::Ptr vis)
     : DirectCoverageTask(nh, ph, vis)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(*nh_))
 {}
@@ -164,7 +164,7 @@ bool ClothTableCoverage::taskDone_impl(
 ClothDistanceBasedCorrespondences::ClothDistanceBasedCorrespondences(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
-        smmap_utilities::Visualizer::Ptr vis)
+        Visualizer::Ptr vis)
     : DistanceBasedCorrespondencesTask(nh, ph, vis)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(*nh_))
 {
@@ -200,7 +200,7 @@ bool ClothDistanceBasedCorrespondences::taskDone_impl(
 RopeFixedCorrespondences::RopeFixedCorrespondences(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
-        smmap_utilities::Visualizer::Ptr vis)
+        Visualizer::Ptr vis)
     : FixedCorrespondencesTask(nh, ph, vis)
     , neighbours_(num_nodes_)
 {
@@ -233,7 +233,7 @@ bool RopeFixedCorrespondences::taskDone_impl(
 ClothFixedCorrespondences::ClothFixedCorrespondences(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
-        smmap_utilities::Visualizer::Ptr vis)
+        Visualizer::Ptr vis)
     : FixedCorrespondencesTask(nh, ph, vis)
     , neighbours_(num_nodes_, GetClothNumControlPointsX(*nh_))
 {

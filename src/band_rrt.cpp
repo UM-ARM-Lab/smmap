@@ -19,6 +19,26 @@ using namespace EigenHelpers;
 #define SMMAP_RRT_VERBOSE false
 
 
+std_msgs::ColorRGBA operator*(const std_msgs::ColorRGBA& color, const float factor)
+{
+    std_msgs::ColorRGBA ret = color;
+    ret.r *= factor;
+    ret.g *= factor;
+    ret.b *= factor;
+    ret.a *= factor;
+    arc_helpers::ClampValueAndWarn(ret.r, 0.0f, 1.0f);
+    arc_helpers::ClampValueAndWarn(ret.g, 0.0f, 1.0f);
+    arc_helpers::ClampValueAndWarn(ret.b, 0.0f, 1.0f);
+    arc_helpers::ClampValueAndWarn(ret.a, 0.0f, 1.0f);
+    return ret;
+}
+
+std_msgs::ColorRGBA operator*(const float factor, const std_msgs::ColorRGBA& color)
+{
+    return color * factor;
+}
+
+
 RRTRobotRepresentation RRTDistance::joint_weights_;
 
 constexpr char BandRRT::RRT_BLACKLISTED_GOAL_BANDS_NS[];
@@ -295,9 +315,16 @@ void RRTNode::removeChildIndex(const int64_t child_index)
 std::string RRTNode::print() const
 {
     std::stringstream out;
-    out << parent_index_ << "    "
-//        << PrettyPrint::PrettyPrint(grippers_position_, true, " ") << "    "
-        << robot_configuration_.transpose();
+    out << "Initialized:            " << initialized_ << std::endl
+        << "Parent index:           " << parent_index_ << std::endl
+        << "State index:            " << state_index_ << std::endl
+        << "Transition index:       " << transition_index_ << std::endl
+        << "Split index:            " << split_index_ << std::endl
+        << "Child indices:          " << PrettyPrint::PrettyPrint(child_indices_, false, ", ") << std::endl
+        << "Already extended:       " << already_extended_towards_goal_set_ << std::endl
+        << "Blacklisted from NN:    " << blacklisted_from_nn_search_ << std::endl
+        << "Robot configuration:    " << robot_configuration_.transpose() << std::endl
+        << std::endl;
     return out.str();
 }
 
@@ -802,7 +829,9 @@ RRTPolicy BandRRT::plan(
         std::cerr << "Max allowable distance: " << max_grippers_distance_ << " Distance beteween goal grippers: " << dist_between_grippers << std::endl;
 
         vis_->visualizeGrippers("weird_gripper_goals", {grippers_goal_poses_.first, grippers_goal_poses_.second}, Visualizer::Red(), 1);
-        std::getchar();
+        std::cout << "Press any key to continue " << std::flush;
+        arc_helpers::GetChar();
+        std::cout << std::endl;
         assert(false && "Unfeasible goal location");
     }
 
@@ -863,9 +892,6 @@ RRTPolicy BandRRT::plan(
     backward_connection_attempts_useful_ = 0;
     backward_connection_attempts_useless_ = 0;
     backward_connections_made_ = 0;
-
-//    path_found_ = false;
-//    goal_idx_in_forward_tree_ = -1;
 
     ROS_INFO_NAMED("rrt", "Starting BandRRT");
     if (useStoredTree())
@@ -1331,12 +1357,9 @@ void BandRRT::visualizeTree(
     {
         assert(start_idx < tree.size());
 
-        std_msgs::ColorRGBA color_a_dull = color_a;
-        color_a_dull.a = 0.5;
-        std_msgs::ColorRGBA color_b_dull = color_b;
-        color_b_dull.a = 0.5;
-        std_msgs::ColorRGBA color_band_dull = color_band;
-        color_band_dull.a = 0.5;
+        const std_msgs::ColorRGBA color_a_dull = color_a * 0.5f;
+        const std_msgs::ColorRGBA color_b_dull = color_b * 0.5f;
+        const std_msgs::ColorRGBA color_band_dull = color_band * 0.5f;
 
         VectorVector3d band_line_start_points;
         VectorVector3d band_line_end_points;
@@ -1357,7 +1380,12 @@ void BandRRT::visualizeTree(
         for (size_t idx = start_idx; idx < tree.size(); ++idx)
         {
             const RRTNode& curr = tree[idx];
-            assert(curr.initialized());
+            if (!curr.initialized())
+            {
+                std::cout << "Node idx: " << idx << std::endl
+                          << curr.print() << std::endl;
+            }
+//            assert(curr.initialized());
 
             if (draw_band)
             {
@@ -1644,13 +1672,21 @@ void BandRRT::planningMainLoop()
     // Make sure the tree is properly linked
     assert(CheckTreeLinkage(forward_tree_));
 
-    #warning "Backwards tree linkage check disabled as backwards tree is not really used"
+    #pragma message "Backwards tree linkage check disabled as backwards tree is not really used"
 //    assert(CheckTreeLinkage(backward_tree_));
 
     // Plan
     ROS_INFO_NAMED("rrt", "Using single directional tree");
     std::chrono::duration<double> time_ellapsed = std::chrono::steady_clock::now() - start_time_;
+
+    // Check if we have a path already
     bool path_found = false;
+    if (forward_tree_.size() > 0 && forward_tree_[0].getpGoalReachable() == 1.0)
+    {
+        path_found = true;
+        ROS_INFO_NAMED("rrt", "Goal found with probability 1.0 before the main loop started");
+    }
+
     while (!path_found && time_ellapsed < time_limit_)
     {
         ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Starting forward iteration. Tree size: " << forward_tree_.size());
@@ -2717,6 +2753,10 @@ void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
                 visualizeBothTrees();
                 visualizeBlacklist();
             }
+
+//            std::cout << "Press any key to continue " << std::flush;
+//            arc_helpers::GetChar();
+//            std::cout << std::endl;
         }
     }
 }

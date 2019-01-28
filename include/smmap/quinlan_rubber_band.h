@@ -2,12 +2,23 @@
 #define QUINLAN_RUBBER_BAND
 
 #include <arc_utilities/eigen_helpers.hpp>
+#include <sdf_tools/sdf.hpp>
+#include <deformable_manipulation_experiment_params/xyzgrid.h>
 #include <smmap_utilities/visualization_tools.h>
-
-#include "smmap/task_specification.h"
+#include "smmap/grippers.hpp"
+#include "smmap/trajectory.hpp"
 
 namespace smmap
 {
+    std::vector<ssize_t> GetShortestPathBetweenGrippersThroughObject(
+            const std::vector<GripperData>& grippers_data,
+            const ObjectPointSet& object,
+            const std::function<std::vector<ssize_t>(const ssize_t& node)> neighbour_fn);
+
+    EigenHelpers::VectorVector3d GetPathBetweenGrippersThroughObject(
+            const WorldState& world_state,
+            const std::vector<ssize_t>& object_node_idxs_between_grippers);
+
     class QuinlanRubberBand
     {
     public:
@@ -19,12 +30,13 @@ namespace smmap
         QuinlanRubberBand(
                 std::shared_ptr<ros::NodeHandle> nh,
                 std::shared_ptr<ros::NodeHandle> ph,
-                smmap_utilities::Visualizer::Ptr vis,
-                const DijkstrasCoverageTask::ConstPtr& task,
-                EigenHelpers::VectorVector3d starting_points,
+                const smmap_utilities::Visualizer::ConstPtr vis,
+                const sdf_tools::SignedDistanceField::ConstPtr& sdf,
+                const XYZGrid& work_space_grid,
+                const EigenHelpers::VectorVector3d& starting_points,
                 const double resample_max_pointwise_dist,
                 const size_t upsample_num_points,
-                const double max_total_band_distance);
+                const double max_safe_band_length);
 
         QuinlanRubberBand& operator=(const QuinlanRubberBand& other);
 
@@ -93,9 +105,9 @@ namespace smmap
     private:
         const std::shared_ptr<ros::NodeHandle> nh_;
         const std::shared_ptr<ros::NodeHandle> ph_;
-        const DijkstrasCoverageTask::ConstPtr task_;
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
-        const smmap_utilities::Visualizer::Ptr vis_;
+        const XYZGrid work_space_grid_;
+        const smmap_utilities::Visualizer::ConstPtr vis_;
 
         EigenHelpers::VectorVector3d band_;
         // Not threadsafe: https://www.justsoftwaresolutions.co.uk/cplusplus/const-and-thread-safety.htm

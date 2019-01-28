@@ -11,7 +11,6 @@
 
 namespace smmap
 {
-    typedef Eigen::Matrix3Xd ObjectPointSet;
     typedef std::vector<ObjectPointSet> ObjectTrajectory;
     typedef std::vector<ObjectTrajectory> VectorObjectTrajectory;
 
