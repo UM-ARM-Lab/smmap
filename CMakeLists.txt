@@ -39,7 +39,7 @@ find_package(Flann REQUIRED)
 
 catkin_package(
     INCLUDE_DIRS    include
-    LIBRARIES       ${PROJECT_NAME}
+    LIBRARIES       ${PROJECT_NAME}_planning
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
     DEPENDS         Eigen3 FLANN
 )
@@ -72,75 +72,114 @@ else(USE_OPEN_MP)
     message(WARNING "Disabling OpenMP for SMMAP library")
 endif(USE_OPEN_MP)
 
+############# Infrastructure ###################################################
 
-## Library file for the whole project`
-FILE(GLOB hpp_SRC "include/${PROJECT_NAME}/*.hpp")
-FILE(GLOB h_SRC "include/${PROJECT_NAME}/*.h")
-FILE(GLOB cpp_SRC "src/*.cpp")
+add_library(${PROJECT_NAME}_infrastructure
+    include/${PROJECT_NAME}/point_reflector.hpp
+    include/${PROJECT_NAME}/robot_interface.h
+    include/${PROJECT_NAME}/ros_communication_helpers.h
+    include/${PROJECT_NAME}/task_function_pointer_types.h
+    include/${PROJECT_NAME}/task_specification.h
+    include/${PROJECT_NAME}/task_specification_implementions.h
+    include/${PROJECT_NAME}/trajectory.hpp
+    src/robot_interface.cpp
+    src/ros_communication_helpers.cpp
+    src/task_specification.cpp
+    src/task_specification_implementations.cpp
+)
+add_dependencies(${PROJECT_NAME}_infrastructure ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_infrastructure ${catkin_LIBRARIES})
 
-add_library(${PROJECT_NAME} ${hpp_SRC} ${h_SRC} ${cpp_SRC})
-add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${FLANN_LIBRARIES})
-set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${FLANN_DEFINITIONS}")
+############# Models ###########################################################
+
+add_library(${PROJECT_NAME}_models
+    include/${PROJECT_NAME}/deformable_model.h
+    include/${PROJECT_NAME}/jacobian_model.h
+    include/${PROJECT_NAME}/adaptive_jacobian_model.h
+    include/${PROJECT_NAME}/constraint_jacobian_model.h
+    include/${PROJECT_NAME}/diminishing_rigidity_model.h
+    include/${PROJECT_NAME}/least_squares_jacobian_model.h
+    src/deformable_model.cpp
+    src/jacobian_model.cpp
+    src/adaptive_jacobian_model.cpp
+    src/constraint_jacobian_model.cpp
+    src/diminishing_rigidity_model.cpp
+    src/least_squares_jacobian_model.cpp
+)
+add_dependencies(${PROJECT_NAME}_models ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_models ${catkin_LIBRARIES})
+
+add_library(${PROJECT_NAME}_controllers
+    include/${PROJECT_NAME}/deformable_controller.h
+    include/${PROJECT_NAME}/least_squares_stretching_constraint_controller.h
+    include/${PROJECT_NAME}/straight_line_controller.h
+    include/${PROJECT_NAME}/stretching_constraint_controller.h
+    include/${PROJECT_NAME}/least_squares_controller_with_object_avoidance.h
+    src/least_squares_controller_with_object_avoidance.cpp
+    src/stretching_constraint_controller.cpp
+    src/straight_line_controller.cpp
+    src/least_squares_stretching_constraint_controller.cpp
+)
+add_dependencies(${PROJECT_NAME}_controllers ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_controllers ${catkin_LIBRARIES})
+
+############# Transitions ######################################################
+
+add_library(${PROJECT_NAME}_transitions
+    include/${PROJECT_NAME}/learned_transitions.h
+    include/${PROJECT_NAME}/quinlan_rubber_band.h
+    src/learned_transitions.cpp
+    src/quinlan_rubber_band.cpp
+)
+add_dependencies(${PROJECT_NAME}_transitions ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME}_transitions ${catkin_LIBRARIES})
+
+############# Planning #########################################################
+
+add_library(${PROJECT_NAME}_planning
+    include/${PROJECT_NAME}/band_rrt.h
+    include/${PROJECT_NAME}/task_framework.h
+    src/band_rrt.cpp
+    src/task_framework.cpp
+)
+add_dependencies(${PROJECT_NAME}_planning
+    ${PROJECT_NAME}_infrastructure
+    ${PROJECT_NAME}_models
+    ${PROJECT_NAME}_controllers
+    ${PROJECT_NAME}_transitions
+    ${catkin_EXPORTED_TARGETS}
+)
+target_link_libraries(${PROJECT_NAME}_planning
+    ${PROJECT_NAME}_infrastructure
+    ${PROJECT_NAME}_models
+    ${PROJECT_NAME}_controllers
+    ${PROJECT_NAME}_transitions
+    ${catkin_LIBRARIES}
+    ${FLANN_LIBRARIES}
+)
+set_target_properties(${PROJECT_NAME}_planning PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${FLANN_DEFINITIONS}")
 
 add_executable(planner_test_node nodes/planner_test_node.cpp)
-add_dependencies(planner_test_node ${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(planner_test_node ${PROJECT_NAME} ${catkin_LIBRARIES})
+add_dependencies(planner_test_node ${PROJECT_NAME}_planning ${catkin_EXPORTED_TARGETS})
+target_link_libraries(planner_test_node ${PROJECT_NAME}_planning ${catkin_LIBRARIES})
+
+############# Learning Testing #################################################
+
+add_library(${PROJECT_NAME}_learning_testing
+    include/${PROJECT_NAME}/transition_learning_data_generation.h
+    src/transition_learning_data_generation.cpp
+)
+add_dependencies(${PROJECT_NAME}_learning_testing
+    ${PROJECT_NAME}_infrastructure
+    ${PROJECT_NAME}_transitions
+    ${catkin_EXPORTED_TARGETS}
+)
+target_link_libraries(${PROJECT_NAME}_learning_testing
+    ${PROJECT_NAME}_infrastructure
+    ${PROJECT_NAME}_transitions
+    ${catkin_LIBRARIES}
+)
 
 add_executable(transition_learning_data_generation_node nodes/transition_learning_data_generation_node.cpp)
-add_dependencies(transition_learning_data_generation_node ${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(transition_learning_data_generation_node ${PROJECT_NAME} ${catkin_LIBRARIES})
-
-## Synthethic trials
-#add_executable(kalman_filter_synthetic_trials nodes/kalman_filter_synthetic_trials.cpp src/cvxopt_solvers.cpp src/gurobi_solvers.cpp)
-#add_dependencies(kalman_filter_synthetic_trials ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(kalman_filter_synthetic_trials ${catkin_LIBRARIES} ${PYTHON_LIBRARIES} ${GUROBI_LIBRARIES})
-#set_target_properties(kalman_filter_synthetic_trials PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS}")
-
-#############
-## Install ##
-#############
-
-# all install targets should use catkin DESTINATION variables
-# See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
-
-## Mark executable scripts (Python etc.) for installation
-## in contrast to setup.py, you can choose the destination
-# install(PROGRAMS
-#     scripts/my_python_script
-#     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
-
-## Mark executables and/or libraries for installation
-# install(TARGETS smmap smmap_node
-#     ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#     LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#     RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
-
-## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#     DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#     FILES_MATCHING PATTERN "*.h"
-#     PATTERN ".svn" EXCLUDE
-# )
-
-## Mark other files for installation (e.g. launch and bag files, etc.)
-# install(FILES
-#     # myfile1
-#     # myfile2
-#     DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-# )
-
-#############
-## Testing ##
-#############
-
-## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_smmap.cpp)
-# if(TARGET ${PROJECT_NAME}-test)
-#     target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
-# endif()
-
-## Add folders to be run by python nosetests
-# catkin_add_nosetests(test)
+add_dependencies(transition_learning_data_generation_node ${PROJECT_NAME}_learning_testing ${catkin_EXPORTED_TARGETS})
+target_link_libraries(transition_learning_data_generation_node ${PROJECT_NAME}_learning_testing ${catkin_LIBRARIES})
