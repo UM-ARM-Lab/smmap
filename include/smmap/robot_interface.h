@@ -51,7 +51,14 @@ namespace smmap
                     const bool robot_configuration_valid,
                     const TestRobotMotionFeedbackCallbackFunctionType& feedback_callback);
 
-            std::vector<smmap_utilities::CollisionData> checkGripperCollision(const smmap_utilities::AllGrippersSinglePose& grippers_pose);
+            std::vector<WorldState> testRobotMotionMicrosteps(
+                    const EigenHelpers::VectorIsometry3d& starting_rope_configuration,
+                    const smmap_utilities::AllGrippersSinglePose& starting_grippers_poses,
+                    const smmap_utilities::AllGrippersSinglePose& target_grippers_poses,
+                    const int num_substeps);
+
+            std::vector<smmap_utilities::CollisionData> checkGripperCollision(
+                    const smmap_utilities::AllGrippersSinglePose& grippers_pose);
 
             void resetRandomSeeds(const unsigned long seed, const unsigned long num_discards);
             void lockEnvironment() const;
@@ -205,6 +212,19 @@ namespace smmap
                     const std::vector<smmap_utilities::AllGrippersSinglePose>& grippers_poses,
                     const std::vector<Eigen::VectorXd>& robot_configurations,
                     const bool robot_configurations_valid) const;
+
+            ////////////////////////////////////////////////////////////////////
+            // Transition testing framework
+            ////////////////////////////////////////////////////////////////////
+
+            std::vector<WorldState> testRobotMotionMicrosteps_impl(
+                    const deformable_manipulation_msgs::TestRobotMotionMicrostepsRequest& request);
+
+            deformable_manipulation_msgs::TestRobotMotionMicrostepsRequest toRosMicrostepsRequest(
+                    const EigenHelpers::VectorIsometry3d& starting_rope_configuration,
+                    const smmap_utilities::AllGrippersSinglePose& starting_grippers_poses,
+                    const smmap_utilities::AllGrippersSinglePose& target_grippers_poses,
+                    const int num_substeps) const;
     };
 }
 

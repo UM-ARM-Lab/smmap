@@ -27,6 +27,9 @@ namespace smmap
         typedef std::shared_ptr<QuinlanRubberBand> Ptr;
         typedef std::shared_ptr<const QuinlanRubberBand> ConstPtr;
 
+        static smmap_utilities::ObjectPointSet AggregateBandPoints(
+                const std::vector<QuinlanRubberBand::Ptr>& bands);
+
         QuinlanRubberBand(
                 std::shared_ptr<ros::NodeHandle> nh,
                 std::shared_ptr<ros::NodeHandle> ph,

@@ -1,8 +1,11 @@
 #include "smmap/transition_learning_data_generation.h"
+#include <arc_utilities/arc_helpers.hpp>
 #include <smmap_utilities/neighbours.h>
 
 using namespace smmap;
 using namespace smmap_utilities;
+using namespace arc_utilities;
+using namespace arc_helpers;
 using namespace EigenHelpers;
 
 DataGeneration::DataGeneration(
@@ -37,6 +40,7 @@ DataGeneration::DataGeneration(
     , max_stretch_factor_(GetMaxStretchFactor(*ph_))
     , max_band_length_(GetMaxBandLength(*ph_))
 {
+    initialize(robot_->start());
 }
 
 void DataGeneration::initialize(const WorldState& world_state)
@@ -106,6 +110,87 @@ void DataGeneration::initializeBand(const WorldState& world_state)
                 resampled_band_max_pointwise_dist,
                 upsampled_band_num_points,
                 max_band_length_);
+}
+
+void DataGeneration::runTests()
+{
+    const auto& transitions = transition_estimator_->transitions();
+
+    ROS_INFO_STREAM("Visualizing " << transitions.size() << " transitions");
+    for (size_t idx = 0; idx < transitions.size(); ++idx)
+    {
+        const TransitionEstimation::StateTransition& trans = transitions[idx];
+
+        // Stored transition
+        {
+            auto bands = transition_estimator_->reduceMicrostepsToBands(
+                        trans.microstep_state_history_,
+                        path_between_grippers_through_object_);
+            bands.insert(bands.begin(), trans.starting_state_.rubber_band_);
+
+            // Add each band with a different color, ranging from
+            // blue (early in the history) to red (late in the history)
+            std::vector<std_msgs::ColorRGBA> colors;
+            for (size_t band_idx = 0; band_idx < bands.size(); ++band_idx)
+            {
+                const float ratio = (float)(band_idx) / (float)(bands.size() - 1) ;
+                const auto color = InterpolateColor(Visualizer::Blue(), Visualizer::Red(), ratio);
+                colors.insert(colors.end(), bands[band_idx]->upsampleBand().size(), color);
+            }
+
+            const auto band_surface = RubberBand::AggregateBandPoints(bands);
+            vis_->visualizePoints("band_surface", band_surface, colors, 1, 0.002);
+            transition_estimator_->visualizeTransition(trans, 1, "transition_testing_");
+        }
+
+        // Test transition
+        {
+            AllGrippersSinglePose starting_gripper_poses(2);
+            starting_gripper_poses[0] = trans.starting_state_.rope_node_transforms_.front();
+            starting_gripper_poses[0].translation() = trans.starting_gripper_positions_.first;
+            starting_gripper_poses[1] = trans.starting_state_.rope_node_transforms_.back();
+            starting_gripper_poses[1].translation() = trans.starting_gripper_positions_.second;
+            AllGrippersSinglePose target_gripper_poses = starting_gripper_poses;
+            target_gripper_poses[0].translation() = trans.ending_gripper_positions_.first;
+            target_gripper_poses[1].translation() = trans.ending_gripper_positions_.second;
+
+
+            const std::vector<WorldState> test_result = robot_->testRobotMotionMicrosteps(
+                        trans.starting_state_.rope_node_transforms_,
+                        starting_gripper_poses,
+                        target_gripper_poses,
+                        (int)trans.microstep_state_history_.size() / 4);
+            auto test_bands = transition_estimator_->reduceMicrostepsToBands(
+                        test_result,
+                        path_between_grippers_through_object_);
+            test_bands.insert(test_bands.begin(), trans.starting_state_.rubber_band_);
+
+            // Add each band with a different color, ranging from
+            // cyan (early in the history) to magenta (late in the history)
+            std::vector<std_msgs::ColorRGBA> colors;
+            for (size_t band_idx = 0; band_idx < test_bands.size(); ++band_idx)
+            {
+                const float ratio = (float)(band_idx) / (float)(test_bands.size() - 1) ;
+                const auto color = InterpolateColor(Visualizer::Cyan(), Visualizer::Magenta(), ratio);
+                colors.insert(colors.end(), test_bands[band_idx]->upsampleBand().size(), color);
+            }
+
+            const auto band_surface = RubberBand::AggregateBandPoints(test_bands);
+            vis_->visualizePoints("band_surface_test", band_surface, colors, 1, 0.002);
+        }
+
+
+        const auto delta =
+                Sub(trans.ending_gripper_positions_,
+                    trans.starting_gripper_positions_);
+        std::cout << "Number of bands: " << trans.microstep_state_history_.size() + 1
+                  << "  Gripper endpoint distances: " << delta.first.norm() << "  " << delta.second.norm()
+                  << "  Net norm: " << std::sqrt(delta.first.squaredNorm() + delta.second.squaredNorm())
+                  << "    Press any key to continue " << std::flush;
+        GetChar();
+        std::cout << std::endl;
+
+    }
 }
 
 void DataGeneration::visualizeDeformableObject(

@@ -10,6 +10,7 @@
 using namespace smmap;
 using namespace smmap_utilities;
 using namespace arc_utilities;
+using namespace arc_helpers;
 using namespace Eigen;
 using namespace EigenHelpers;
 
@@ -17,26 +18,6 @@ using namespace EigenHelpers;
 #define GRIPPER_TRANSLATION_IS_APPROX_DIST 0.001
 //#define SMMAP_RRT_VERBOSE true
 #define SMMAP_RRT_VERBOSE false
-
-
-std_msgs::ColorRGBA operator*(const std_msgs::ColorRGBA& color, const float factor)
-{
-    std_msgs::ColorRGBA ret = color;
-    ret.r *= factor;
-    ret.g *= factor;
-    ret.b *= factor;
-    ret.a *= factor;
-    arc_helpers::ClampValueAndWarn(ret.r, 0.0f, 1.0f);
-    arc_helpers::ClampValueAndWarn(ret.g, 0.0f, 1.0f);
-    arc_helpers::ClampValueAndWarn(ret.b, 0.0f, 1.0f);
-    arc_helpers::ClampValueAndWarn(ret.a, 0.0f, 1.0f);
-    return ret;
-}
-
-std_msgs::ColorRGBA operator*(const float factor, const std_msgs::ColorRGBA& color)
-{
-    return color * factor;
-}
 
 
 RRTRobotRepresentation RRTDistance::joint_weights_;
@@ -1357,9 +1338,9 @@ void BandRRT::visualizeTree(
     {
         assert(start_idx < tree.size());
 
-        const std_msgs::ColorRGBA color_a_dull = color_a * 0.5f;
-        const std_msgs::ColorRGBA color_b_dull = color_b * 0.5f;
-        const std_msgs::ColorRGBA color_band_dull = color_band * 0.5f;
+        const std_msgs::ColorRGBA color_a_dull = Multiply(color_a, 0.5f);
+        const std_msgs::ColorRGBA color_b_dull = Multiply(color_b, 0.5f);
+        const std_msgs::ColorRGBA color_band_dull = Multiply(color_band, 0.5f);
 
         VectorVector3d band_line_start_points;
         VectorVector3d band_line_end_points;

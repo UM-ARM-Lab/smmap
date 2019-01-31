@@ -181,13 +181,11 @@ std::pair<TransitionEstimation::StateTransition, uint64_t> TransitionEstimation:
 std::string TransitionEstimation::StateTransition::toString() const
 {
     std::stringstream ss;
-    ss << PrettyPrint::PrettyPrint(starting_state_.rubber_band_->getEndpoints(), true, " ") << std::endl;
-    ss << PrettyPrint::PrettyPrint(starting_state_.planned_rubber_band_->getEndpoints(), true, " ") << std::endl;
-    ss << PrettyPrint::PrettyPrint(starting_gripper_positions_, true, " ") << std::endl;
+    ss << "Ending state rope node transforms:\n"
+       << PrettyPrint::PrettyPrint(ending_state_.rope_node_transforms_, true, "\n") << "\n"
+       << "Microstep last state rope node transforms:\n"
+       << PrettyPrint::PrettyPrint(microstep_state_history_.back().rope_node_transforms_, true, "\n") << "\n";
 
-    ss << PrettyPrint::PrettyPrint(ending_state_.rubber_band_->getEndpoints(), true, " ") << std::endl;
-    ss << PrettyPrint::PrettyPrint(ending_state_.planned_rubber_band_->getEndpoints(), true, " ") << std::endl;
-    ss << PrettyPrint::PrettyPrint(ending_gripper_positions_, true, " ") << std::endl;
     return ss.str();
 }
 
@@ -267,6 +265,26 @@ bool TransitionEstimation::checkFirstOrderHomotopy(
     return checkFirstOrderHomotopy(b1_points, b2_points);
 }
 
+std::vector<RubberBand::Ptr> TransitionEstimation::reduceMicrostepsToBands(
+        const std::vector<WorldState>& microsteps,
+        const std::vector<ssize_t>& path_between_grippers_through_object) const
+{
+    std::vector<RubberBand::Ptr> bands;
+    bands.reserve(microsteps.size());
+    for (size_t idx = 0; idx < microsteps.size(); ++idx)
+    {
+        if (microsteps[idx].all_grippers_single_pose_.size() == 0)
+        {
+            continue;
+        }
+        bands.push_back(std::make_shared<RubberBand>(template_band_));
+        const auto band_points = GetPathBetweenGrippersThroughObject(microsteps[idx], path_between_grippers_through_object);
+        bands.back()->setPointsAndSmooth(band_points);
+    }
+
+    return bands;
+}
+
 /////// Learning transitions ///////////////////////////////////////////////////////////////////////////////////////////
 
 Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMostRecentBadTransition(
@@ -337,6 +355,11 @@ void TransitionEstimation::learnTransition(const StateTransition& transition)
 }
 
 //////// Using transitions /////////////////////////////////////////////////////////////////////////////////////////////
+
+const std::vector<TransitionEstimation::StateTransition>& TransitionEstimation::transitions() const
+{
+    return learned_transitions_;
+}
 
 Maybe::Maybe<double> TransitionEstimation::transitionUseful(
         const RubberBand::ConstPtr& test_band,
@@ -578,10 +601,10 @@ void TransitionEstimation::loadSavedTransitions()
         }
         ROS_INFO_STREAM_NAMED("transitions", "Loaded " << learned_transitions_.size() << " transitions from file");
 
-        for (const auto& t : learned_transitions_)
-        {
-            std::cout << t << std::endl;
-        }
+//        for (const auto& t : learned_transitions_)
+//        {
+//            std::cout << t << std::endl;
+//        }
     }
     catch (const std::exception& e)
     {

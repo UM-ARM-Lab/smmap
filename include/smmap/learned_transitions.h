@@ -103,6 +103,10 @@ namespace smmap
                 const RubberBand& b1,
                 const RubberBand& b2) const;
 
+        std::vector<RubberBand::Ptr> reduceMicrostepsToBands(
+                const std::vector<WorldState>& microsteps,
+                const std::vector<ssize_t>& path_between_grippers_through_object) const;
+
         ////////////////////////////////////////////////////////////////////////
         // Learning
         ////////////////////////////////////////////////////////////////////////
@@ -115,6 +119,8 @@ namespace smmap
         ////////////////////////////////////////////////////////////////////////
         // Using transitions
         ////////////////////////////////////////////////////////////////////////
+
+        const std::vector<StateTransition>& transitions() const;
 
         // If the transition could be applicable, then it returns the distance
         Maybe::Maybe<double> transitionUseful(

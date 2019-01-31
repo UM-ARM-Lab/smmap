@@ -100,13 +100,33 @@ namespace smmap
         return nodes;
     }
 
-
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
     ////                QuinlanRubberBand                                   ////
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
 
+    ObjectPointSet QuinlanRubberBand::AggregateBandPoints(
+            const std::vector<QuinlanRubberBand::Ptr>& bands)
+    {
+        if (bands.size() == 0)
+        {
+            return ObjectPointSet();
+        }
+
+        const size_t points_per_band = bands[0]->upsampleBand().size();
+        ObjectPointSet points(3, points_per_band * bands.size());
+        for (size_t band_idx = 0; band_idx < bands.size(); ++band_idx)
+        {
+            const auto band_points = bands[band_idx]->upsampleBand();
+            for (size_t point_idx = 0; point_idx < band_points.size(); ++point_idx)
+            {
+                points.col(band_idx * points_per_band + point_idx) =
+                        band_points[point_idx];
+            }
+        }
+        return points;
+    }
 
     QuinlanRubberBand::QuinlanRubberBand(
             std::shared_ptr<ros::NodeHandle> nh,
@@ -1107,7 +1127,6 @@ namespace smmap
         assert(bandIsValidWithVisualization());
     #endif
     }
-
 
 
     void QuinlanRubberBand::printBandData(const EigenHelpers::VectorVector3d& test_band) const

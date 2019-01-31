@@ -47,8 +47,12 @@ namespace smmap
                 RobotInterface::Ptr robot,
                 const smmap_utilities::Visualizer::ConstPtr& vis);
 
+    private:
         void initialize(const WorldState& world_state);
         void initializeBand(const WorldState& world_state);
+
+    public:
+        void runTests();
 
         void visualizeDeformableObject(
                 const std::string& marker_name,

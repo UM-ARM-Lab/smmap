@@ -38,10 +38,8 @@ int main(int argc, char* argv[])
                 nullptr,
                 nullptr);
     auto vis = std::make_shared<Visualizer>(nh, ph, true);
-//    auto task = std::dynamic_pointer_cast<DijkstrasCoverageTask>(
-//                TaskSpecification::MakeTaskSpecification(nh, ph, vis));
-//    assert(task != nullptr);
     auto data_generator = DataGeneration(nh, ph, robot, vis);
+    data_generator.runTests();
 
     return EXIT_SUCCESS;
 }
