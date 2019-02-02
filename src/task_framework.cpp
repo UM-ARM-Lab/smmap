@@ -376,16 +376,12 @@ WorldState TaskFramework::sendNextCommand(
         if (executing_global_trajectory_)
         {
             world_feedback = sendNextCommandUsingGlobalPlannerResults(world_state);
-
             // Band is updated internally in sendNextCommandUsingGlobalPlannerResults
         }
         else
         {
             world_feedback = sendNextCommandUsingLocalController(world_state);
-
-            // Update the band with the new position of the deformable object
-            const auto band_points = GetPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
-            rubber_band_->setPointsAndSmooth(band_points);
+            rubber_band_->resetBand(world_feedback);
         }
 
         // Keep the last N grippers positions recorded to detect if the grippers are stuck
@@ -692,8 +688,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     const WorldState& world_feedback = command_result.first;
     microstep_history_buffer_.insert(microstep_history_buffer_.end(), command_result.second.begin(), command_result.second.end());
     // Update the band with the new position of the deformable object
-    const auto band_points = GetPathBetweenGrippersThroughObject(world_feedback, path_between_grippers_through_object_);
-    rubber_band_->setPointsAndSmooth(band_points);
+    rubber_band_->resetBand(world_feedback);
 
     // If we targetted the last node of the current path segment, then we need to handle
     // recording data differently and determine which path segment to follow next
@@ -1128,22 +1123,19 @@ void TaskFramework::initializeBand(const WorldState& world_state)
     {
         return dijkstras_task_->getNodeNeighbours(node);
     };
-    path_between_grippers_through_object_ = GetShortestPathBetweenGrippersThroughObject(
-                robot_->getGrippersData(), GetObjectInitialConfiguration(*nh_), neighbour_fn);
 
     // Create the initial rubber band
     const double resampled_band_max_pointwise_dist = dijkstras_task_->work_space_grid_.minStepDimension() / 2.0;
     const size_t upsampled_band_num_points = GetRRTBandMaxPoints(*ph_);
 
-    const auto starting_band_points = GetPathBetweenGrippersThroughObject(
-                world_state, path_between_grippers_through_object_);
     rubber_band_ = std::make_shared<RubberBand>(
                 nh_,
                 ph_,
                 vis_,
                 dijkstras_task_->sdf_,
                 dijkstras_task_->work_space_grid_,
-                starting_band_points,
+                neighbour_fn,
+                world_state,
                 resampled_band_max_pointwise_dist,
                 upsampled_band_num_points,
                 dijkstras_task_->maxBandLength());

@@ -136,7 +136,6 @@ namespace smmap
             // if stuck detection is not enbaled
             const bool enable_stuck_detection_;
             RubberBand::Ptr rubber_band_;
-            std::vector<ssize_t> path_between_grippers_through_object_;
             const size_t max_lookahead_steps_;
             const size_t max_grippers_pose_history_length_;
             smmap_utilities::AllGrippersPoseTrajectory grippers_pose_history_;

@@ -6,6 +6,7 @@
 #include <arc_utilities/path_utils.hpp>
 #include <arc_utilities/simple_astar_planner.hpp>
 
+#include "smmap/ros_communication_helpers.h"
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/trajectory.hpp"
 
@@ -50,10 +51,10 @@ namespace smmap
      * @param neighour_fn
      * @return The index of the nodes between the grippers, following the shortest path through the object
      */
-    std::vector<ssize_t> GetShortestPathBetweenGrippersThroughObject(
+    static std::vector<ssize_t> GetShortestPathBetweenGrippersThroughObject(
             const std::vector<GripperData>& grippers_data,
             const ObjectPointSet& object,
-            const std::function<std::vector<ssize_t>(const ssize_t& node)> neighbour_fn)
+            const std::function<std::vector<ssize_t>(const ssize_t& node)>& neighbour_fn)
     {
         assert(grippers_data.size() == 2);
         assert(grippers_data[0].node_indices_.size() > 0);
@@ -79,25 +80,6 @@ namespace smmap
         const auto plan = astar_results.first;
         assert(plan.size() > 0);
         return plan;
-    }
-
-    EigenHelpers::VectorVector3d GetPathBetweenGrippersThroughObject(
-            const WorldState& world_state,
-            const std::vector<ssize_t>& object_node_idxs_between_grippers)
-    {
-        assert(world_state.all_grippers_single_pose_.size() == 2);
-        EigenHelpers::VectorVector3d nodes;
-        nodes.reserve(object_node_idxs_between_grippers.size() + 2);
-
-        nodes.push_back(world_state.all_grippers_single_pose_[0].translation());
-        for (size_t path_idx = 0; path_idx < object_node_idxs_between_grippers.size(); ++path_idx)
-        {
-            const ssize_t node_idx = object_node_idxs_between_grippers[path_idx];
-            nodes.push_back(world_state.object_configuration_.col(node_idx));
-        }
-        nodes.push_back(world_state.all_grippers_single_pose_[1].translation());
-
-        return nodes;
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -134,7 +116,8 @@ namespace smmap
             const Visualizer::ConstPtr vis,
             const sdf_tools::SignedDistanceField::ConstPtr& sdf,
             const XYZGrid& work_space_grid,
-            const EigenHelpers::VectorVector3d& starting_points,
+            const std::function<std::vector<ssize_t>(const ssize_t node)>& node_neighbours_fn,
+            const WorldState& world_state,
             const double resample_max_pointwise_dist,
             const size_t upsample_num_points,
             const double max_safe_band_length)
@@ -144,6 +127,10 @@ namespace smmap
         , work_space_grid_(work_space_grid)
         , vis_(vis)
 
+        , path_between_grippers_through_object_(GetShortestPathBetweenGrippersThroughObject(
+                                                    GetGrippersData(*nh_),
+                                                    GetObjectInitialConfiguration(*nh),
+                                                    node_neighbours_fn))
         , band_()
         , resampled_band_()
         , resample_max_pointwise_dist_(resample_max_pointwise_dist)
@@ -158,7 +145,7 @@ namespace smmap
         , backtrack_threshold_(BAND_BACKTRACKING_THRESHOLD)
         , smoothing_iterations_(BAND_SMOOTHING_ITERATIONS)
     {
-        setPointsAndSmooth(starting_points);
+        resetBand(world_state);
         assert(bandIsValidWithVisualization());
     }
 
@@ -167,6 +154,7 @@ namespace smmap
         assert(sdf_.get() == other.sdf_.get());
         assert(work_space_grid_ == other.work_space_grid_);
         assert(vis_.get() == (other.vis_.get()));
+        assert(path_between_grippers_through_object_ == other.path_between_grippers_through_object_);
 
         assert(max_safe_band_length_ == other.max_safe_band_length_);
 
@@ -233,6 +221,34 @@ namespace smmap
         const bool verbose = true;
         smoothBandPoints(verbose);
         assert(bandIsValidWithVisualization());
+    }
+
+    void QuinlanRubberBand::resetBand(const WorldState& world_state)
+    {
+        assert(world_state.all_grippers_single_pose_.size() == 2);
+        resetBand(world_state.object_configuration_,
+                  world_state.all_grippers_single_pose_[0].translation(),
+                  world_state.all_grippers_single_pose_[1].translation());
+    }
+
+    void QuinlanRubberBand::resetBand(
+            const smmap_utilities::ObjectPointSet& object_config,
+            const Eigen::Vector3d& first_gripper_position,
+            const Eigen::Vector3d& second_gripper_position)
+    {
+        EigenHelpers::VectorVector3d points;
+        points.reserve(path_between_grippers_through_object_.size() + 2);
+        points.push_back(first_gripper_position);
+
+        // Extract the correct points from the deformable object
+        for (size_t path_idx = 0; path_idx < path_between_grippers_through_object_.size(); ++path_idx)
+        {
+            const ssize_t node_idx = path_between_grippers_through_object_[path_idx];
+            points.push_back(object_config.col(node_idx));
+        }
+
+        points.push_back(second_gripper_position);
+        setPointsAndSmooth(points);
     }
 
     void QuinlanRubberBand::overridePoints(const EigenHelpers::VectorVector3d& points)
@@ -1261,6 +1277,64 @@ namespace smmap
     bool QuinlanRubberBand::useStoredBand() const
     {
         return ROSHelpers::GetParamRequired<bool>(*ph_, "use_stored_band", __func__).GetImmutable();
+    }
+
+
+    bool QuinlanRubberBand::operator==(const QuinlanRubberBand& other) const
+    {
+        if (sdf_.get() != other.sdf_.get())
+        {
+            return false;
+        }
+        if (work_space_grid_ == other.work_space_grid_)
+        {
+            return false;
+        }
+        if (path_between_grippers_through_object_ != other.path_between_grippers_through_object_)
+        {
+            return false;
+        }
+        if (band_.size() != other.band_.size())
+        {
+            return false;
+        }
+        for (size_t idx = 0; idx < band_.size(); ++idx)
+        {
+            if ((band_[idx].array() != other.band_[idx].array()).any())
+            {
+                return false;
+            }
+        }
+        if (max_safe_band_length_ != other.max_safe_band_length_)
+        {
+            return false;
+        }
+        if (min_overlap_distance_ != other.min_overlap_distance_)
+        {
+            return false;
+        }
+        if (min_distance_to_obstacle_ != other.min_distance_to_obstacle_)
+        {
+            return false;
+        }
+        if (node_removal_overlap_factor_ != other.node_removal_overlap_factor_)
+        {
+            return false;
+        }
+        if (backtrack_threshold_ != other.backtrack_threshold_)
+        {
+            return false;
+        }
+        if (smoothing_iterations_ != other.smoothing_iterations_)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    bool QuinlanRubberBand::operator!=(const QuinlanRubberBand& other) const
+    {
+        return !(*this == other);
     }
 
 

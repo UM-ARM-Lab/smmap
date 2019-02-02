@@ -10,15 +10,6 @@
 
 namespace smmap
 {
-    std::vector<ssize_t> GetShortestPathBetweenGrippersThroughObject(
-            const std::vector<smmap_utilities::GripperData>& grippers_data,
-            const smmap_utilities::ObjectPointSet& object,
-            const std::function<std::vector<ssize_t>(const ssize_t& node)> neighbour_fn);
-
-    EigenHelpers::VectorVector3d GetPathBetweenGrippersThroughObject(
-            const WorldState& world_state,
-            const std::vector<ssize_t>& object_node_idxs_between_grippers);
-
     class QuinlanRubberBand
     {
     public:
@@ -36,7 +27,8 @@ namespace smmap
                 const smmap_utilities::Visualizer::ConstPtr vis,
                 const sdf_tools::SignedDistanceField::ConstPtr& sdf,
                 const XYZGrid& work_space_grid,
-                const EigenHelpers::VectorVector3d& starting_points,
+                const std::function<std::vector<ssize_t>(const ssize_t node)>& node_neighbours_fn,
+                const WorldState& world_state,
                 const double resample_max_pointwise_dist,
                 const size_t upsample_num_points,
                 const double max_safe_band_length);
@@ -46,6 +38,11 @@ namespace smmap
         void setPointsWithoutSmoothing(const EigenHelpers::VectorVector3d& points);
 
         void setPointsAndSmooth(const EigenHelpers::VectorVector3d& points);
+
+        void resetBand(const WorldState& world_state);
+        void resetBand(const smmap_utilities::ObjectPointSet& object_config,
+                       const Eigen::Vector3d& first_gripper_position,
+                       const Eigen::Vector3d& second_gripper_position);
 
         void overridePoints(const EigenHelpers::VectorVector3d& points);
 
@@ -100,6 +97,9 @@ namespace smmap
         uint64_t serialize(std::vector<uint8_t>& buffer) const;
         uint64_t deserializeIntoSelf(const std::vector<uint8_t>& buffer, const uint64_t current);
 
+        bool operator==(const QuinlanRubberBand& other) const;
+        bool operator!=(const QuinlanRubberBand& other) const;
+
         double distanceSq(const QuinlanRubberBand& other) const;
         double distance(const QuinlanRubberBand& other) const;
         static double DistanceSq(const QuinlanRubberBand& b1, const QuinlanRubberBand& b2);
@@ -112,6 +112,7 @@ namespace smmap
         const XYZGrid work_space_grid_;
         const smmap_utilities::Visualizer::ConstPtr vis_;
 
+        const std::vector<ssize_t> path_between_grippers_through_object_;
         EigenHelpers::VectorVector3d band_;
         // Not threadsafe: https://www.justsoftwaresolutions.co.uk/cplusplus/const-and-thread-safety.htm
         mutable EigenHelpers::VectorVector3d resampled_band_; // is cleared every time band_ is updated

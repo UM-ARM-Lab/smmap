@@ -37,6 +37,9 @@ namespace smmap
                     const std::vector<uint8_t>& buffer,
                     const uint64_t current,
                     const RubberBand& template_band);
+
+            bool operator==(const State& other) const;
+            bool operator!=(const State& other) const;
         };
 
         typedef std::pair<Eigen::Vector3d, Eigen::Vector3d> GripperPositions;
@@ -75,6 +78,9 @@ namespace smmap
                     const uint64_t current,
                     const RubberBand& template_band);
 
+            bool operator==(const StateTransition& other) const;
+            bool operator!=(const StateTransition& other) const;
+
             std::string toString() const;
         };
 
@@ -104,8 +110,7 @@ namespace smmap
                 const RubberBand& b2) const;
 
         std::vector<RubberBand::Ptr> reduceMicrostepsToBands(
-                const std::vector<WorldState>& microsteps,
-                const std::vector<ssize_t>& path_between_grippers_through_object) const;
+                const std::vector<WorldState>& microsteps) const;
 
         ////////////////////////////////////////////////////////////////////////
         // Learning

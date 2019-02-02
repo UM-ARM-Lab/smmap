@@ -70,6 +70,38 @@ std::pair<TransitionEstimation::State, uint64_t> TransitionEstimation::State::De
     return {state, bytes_read};
 }
 
+bool TransitionEstimation::State::operator==(const State& other) const
+{
+    if ((deform_config_.array() != other.deform_config_.array()).any())
+    {
+        return false;
+    }
+    if (*rubber_band_ != *other.rubber_band_)
+    {
+        return false;
+    }
+    if (*planned_rubber_band_ != *other.planned_rubber_band_)
+    {
+        return false;
+    }
+    if (rope_node_transforms_.size() != other.rope_node_transforms_.size())
+    {
+        for (size_t idx = 0; idx < rope_node_transforms_.size(); ++idx)
+        {
+            if ((rope_node_transforms_[idx].matrix().array() != other.rope_node_transforms_[idx].matrix().array()).any())
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool TransitionEstimation::State::operator!=(const State& other) const
+{
+    return !(*this == other);
+}
+
 //////// Grippers //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 uint64_t TransitionEstimation::SerializeGrippers(
@@ -178,6 +210,44 @@ std::pair<TransitionEstimation::StateTransition, uint64_t> TransitionEstimation:
     return {transition, bytes_read};
 }
 
+bool TransitionEstimation::StateTransition::operator==(const StateTransition& other) const
+{
+    if (starting_state_ != other.starting_state_)
+    {
+        return false;
+    }
+    if (ending_state_ != other.ending_state_)
+    {
+        return false;
+    }
+    if ((starting_gripper_positions_.first.array() != other.starting_gripper_positions_.first.array()).any())
+    {
+        return false;
+    }
+    if ((starting_gripper_positions_.second.array() != other.starting_gripper_positions_.second.array()).any())
+    {
+        return false;
+    }
+    if ((ending_gripper_positions_.first.array() != other.ending_gripper_positions_.first.array()).any())
+    {
+        return false;
+    }
+    if ((ending_gripper_positions_.second.array() != other.ending_gripper_positions_.second.array()).any())
+    {
+        return false;
+    }
+    if (microstep_state_history_ != other.microstep_state_history_)
+    {
+        return false;
+    }
+    return true;
+}
+
+bool TransitionEstimation::StateTransition::operator!=(const StateTransition& other) const
+{
+    return !(*this == other);
+}
+
 std::string TransitionEstimation::StateTransition::toString() const
 {
     std::stringstream ss;
@@ -266,8 +336,7 @@ bool TransitionEstimation::checkFirstOrderHomotopy(
 }
 
 std::vector<RubberBand::Ptr> TransitionEstimation::reduceMicrostepsToBands(
-        const std::vector<WorldState>& microsteps,
-        const std::vector<ssize_t>& path_between_grippers_through_object) const
+        const std::vector<WorldState>& microsteps) const
 {
     std::vector<RubberBand::Ptr> bands;
     bands.reserve(microsteps.size());
@@ -278,8 +347,7 @@ std::vector<RubberBand::Ptr> TransitionEstimation::reduceMicrostepsToBands(
             continue;
         }
         bands.push_back(std::make_shared<RubberBand>(template_band_));
-        const auto band_points = GetPathBetweenGrippersThroughObject(microsteps[idx], path_between_grippers_through_object);
-        bands.back()->setPointsAndSmooth(band_points);
+        bands.back()->resetBand(microsteps[idx]);
     }
 
     return bands;
