@@ -1,6 +1,7 @@
 #include "smmap/transition_learning_data_generation.h"
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/thin_plate_spline.hpp>
+#include <arc_utilities/zlib_helpers.hpp>
 #include <smmap_utilities/neighbours.h>
 
 using namespace smmap;
@@ -348,6 +349,16 @@ void DataGeneration::runTests()
 
                 transition_test_results.predicted_final_band_surface_ = tps_band_surface_prediction;
                 transition_test_results.final_band_surface_ = test_band_surface;
+
+
+
+                std::vector<uint8_t> buffer;
+                transition_test_results.serializeSelf(buffer);
+                std::stringstream path;
+                path << "/tmp/transition_learning_data_generation/trans_" << idx
+                     << "_random_test_" << i << "_results.compressed";
+                ZlibHelpers::CompressAndWriteToFile(buffer, path.str());
+
 
                 // Visualization
                 {

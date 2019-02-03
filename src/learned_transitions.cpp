@@ -28,7 +28,14 @@ uint64_t TransitionEstimation::State::serializeSelf(
     rubber_band_->serialize(buffer);
     planned_rubber_band_->serialize(buffer);
     arc_utilities::SerializeVector(rope_node_transforms_, buffer, arc_utilities::SerializeEigen<Eigen::Isometry3d>);
-    return buffer.size() - starting_size;
+    const auto bytes_written = buffer.size() - starting_size;
+    // Verify no mistakes were made
+    {
+        const auto deserialized = Deserialize(buffer, starting_size, *rubber_band_);
+        assert(deserialized.second == bytes_written);
+        assert(deserialized.first == *this);
+    }
+    return bytes_written;
 }
 
 uint64_t TransitionEstimation::State::deserializeIntoSelf(
@@ -149,17 +156,7 @@ uint64_t TransitionEstimation::StateTransition::serializeSelf(
     {
         const auto deserialized = Deserialize(buffer, starting_bytes, *starting_state_.rubber_band_);
         assert(deserialized.second == bytes_written);
-        assert(deserialized.first.starting_gripper_positions_                                       == starting_gripper_positions_);
-        assert(deserialized.first.starting_state_.deform_config_                                    == starting_state_.deform_config_);
-        assert(deserialized.first.starting_state_.rubber_band_->getVectorRepresentation()           == starting_state_.rubber_band_->getVectorRepresentation());
-        assert(deserialized.first.starting_state_.planned_rubber_band_->getVectorRepresentation()   == starting_state_.planned_rubber_band_->getVectorRepresentation());
-
-        assert(deserialized.first.ending_gripper_positions_                                         == ending_gripper_positions_);
-        assert(deserialized.first.ending_state_.deform_config_                                      == ending_state_.deform_config_);
-        assert(deserialized.first.ending_state_.rubber_band_->getVectorRepresentation()             == ending_state_.rubber_band_->getVectorRepresentation());
-        assert(deserialized.first.ending_state_.planned_rubber_band_->getVectorRepresentation()     == ending_state_.planned_rubber_band_->getVectorRepresentation());
-
-        assert(deserialized.first.microstep_state_history_                                          == microstep_state_history_);
+        assert(deserialized.first == *this);
     }
 
     return bytes_written;

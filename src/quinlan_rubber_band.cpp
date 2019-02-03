@@ -1188,7 +1188,17 @@ namespace smmap
     {
         // Note that we only serialize band_ because everything else is const,
         // or is derived from const properties and band_
-        return arc_utilities::SerializeVector(band_, buffer, arc_utilities::SerializeEigen<double, 3, 1>);
+        const auto starting_bytes = buffer.size();
+        const auto bytes_written =
+                arc_utilities::SerializeVector(band_, buffer, arc_utilities::SerializeEigen<double, 3, 1>);
+        // Verify no mistakes were made
+        {
+            auto tmp = *this;
+            const auto bytes_read = tmp.deserializeIntoSelf(buffer, starting_bytes);
+            assert(bytes_written == bytes_read);
+            assert(*this == tmp);
+        }
+        return bytes_written;
     }
 
     uint64_t QuinlanRubberBand::deserializeIntoSelf(const std::vector<uint8_t>& buffer, const uint64_t current)
@@ -1197,7 +1207,7 @@ namespace smmap
                 arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
                     buffer, current, arc_utilities::DeserializeEigen<Eigen::Vector3d>);
         band_ = deserialized_band_results.first;
-        auto bytes_read = deserialized_band_results.second;
+        const auto bytes_read = deserialized_band_results.second;
 
         // Reset internal versions of band_
         resampled_band_.clear();
@@ -1286,7 +1296,7 @@ namespace smmap
         {
             return false;
         }
-        if (work_space_grid_ == other.work_space_grid_)
+        if (work_space_grid_ != other.work_space_grid_)
         {
             return false;
         }
@@ -1294,16 +1304,9 @@ namespace smmap
         {
             return false;
         }
-        if (band_.size() != other.band_.size())
+        if (band_ != other.band_)
         {
             return false;
-        }
-        for (size_t idx = 0; idx < band_.size(); ++idx)
-        {
-            if ((band_[idx].array() != other.band_[idx].array()).any())
-            {
-                return false;
-            }
         }
         if (max_safe_band_length_ != other.max_safe_band_length_)
         {

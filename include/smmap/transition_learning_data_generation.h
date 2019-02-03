@@ -47,27 +47,31 @@ namespace smmap
             smmap_utilities::ObjectPointSet predicted_final_band_surface_;
             smmap_utilities::ObjectPointSet final_band_surface_;
 
-            uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
+            uint64_t serializeSelf(std::vector<uint8_t>& buffer) const
+            {
+                const auto starting_bytes = buffer.size();
+                uint64_t bytes_written = 0;
+                bytes_written += template_.serializeSelf(buffer);
+                bytes_written += arc_utilities::SerializeEigen(tps_control_points_, buffer);
+                bytes_written += arc_utilities::SerializeEigen(template_band_surface_, buffer);
+                bytes_written += tested_.serializeSelf(buffer);
+                bytes_written += arc_utilities::SerializeEigen(tps_target_points_, buffer);
+                bytes_written += arc_utilities::SerializeEigen(predicted_final_band_surface_, buffer);
+                bytes_written += arc_utilities::SerializeEigen(final_band_surface_, buffer);
+
+                const auto ending_bytes = buffer.size();
+                assert(ending_bytes - starting_bytes == bytes_written);
+                const auto deserialized = Deserialize(buffer, starting_bytes, *template_.starting_state_.rubber_band_);
+                assert(bytes_written = deserialized.second);
+                assert(*this == deserialized.first);
+                return bytes_written;;
+            }
 
             static uint64_t Serialize(
                     const TransitionTestResults& test_results,
                     std::vector<uint8_t>& buffer)
             {
-                const auto starting_bytes = buffer.size();
-                uint64_t bytes_written = 0;
-                bytes_written += test_results.template_.serializeSelf(buffer);
-                bytes_written += arc_utilities::SerializeEigen(test_results.tps_control_points_, buffer);
-                bytes_written += arc_utilities::SerializeEigen(test_results.template_band_surface_, buffer);
-                bytes_written += test_results.tested_.serializeSelf(buffer);
-                bytes_written += arc_utilities::SerializeEigen(test_results.tps_target_points_, buffer);
-                bytes_written += arc_utilities::SerializeEigen(test_results.predicted_final_band_surface_, buffer);
-                bytes_written += arc_utilities::SerializeEigen(test_results.final_band_surface_, buffer);
-                const auto ending_bytes = buffer.size();
-                assert(ending_bytes - starting_bytes == bytes_written);
-                const auto deserialized = Deserialize(buffer, starting_bytes, *test_results.template_.starting_state_.rubber_band_);
-                assert(test_results == deserialized.first);
-                assert(bytes_written = deserialized.second);
-                return bytes_written;;
+                return test_results.serializeSelf(buffer);
             }
 
             static std::pair<TransitionTestResults, uint64_t> Deserialize(
@@ -84,11 +88,11 @@ namespace smmap
 
                 const auto tps_control_points_deserialized = arc_utilities::DeserializeEigen<smmap_utilities::ObjectPointSet>(buffer, current + bytes_read);
                 result.tps_control_points_ = tps_control_points_deserialized.first;
-                bytes_read = tps_control_points_deserialized.second;
+                bytes_read += tps_control_points_deserialized.second;
 
                 const auto template_band_surface_deserialized = arc_utilities::DeserializeEigen<smmap_utilities::ObjectPointSet>(buffer, current + bytes_read);
                 result.template_band_surface_ = template_band_surface_deserialized.first;
-                bytes_read = template_band_surface_deserialized.second;
+                bytes_read += template_band_surface_deserialized.second;
 
                 const auto tested_deserialized = TransitionEstimation::StateTransition::Deserialize(buffer, current + bytes_read, template_band);
                 result.tested_ = tested_deserialized.first;
@@ -96,22 +100,22 @@ namespace smmap
 
                 const auto tps_target_points_deserialized = arc_utilities::DeserializeEigen<smmap_utilities::ObjectPointSet>(buffer, current + bytes_read);
                 result.tps_target_points_ = tps_target_points_deserialized.first;
-                bytes_read = tps_target_points_deserialized.second;
+                bytes_read += tps_target_points_deserialized.second;
 
                 const auto predicted_final_band_surface_deserialized = arc_utilities::DeserializeEigen<smmap_utilities::ObjectPointSet>(buffer, current + bytes_read);
                 result.predicted_final_band_surface_ = predicted_final_band_surface_deserialized.first;
-                bytes_read = predicted_final_band_surface_deserialized.second;
+                bytes_read += predicted_final_band_surface_deserialized.second;
 
                 const auto final_band_surface_deserialized = arc_utilities::DeserializeEigen<smmap_utilities::ObjectPointSet>(buffer, current + bytes_read);
                 result.final_band_surface_ = final_band_surface_deserialized.first;
-                bytes_read = final_band_surface_deserialized.second;
+                bytes_read += final_band_surface_deserialized.second;
 
                 return {result, bytes_read};
             }
 
             bool operator==(const TransitionTestResults& other) const
             {
-                if (template_ != other.template_)
+                if (template_ != template_)
                 {
                     return false;
                 }
