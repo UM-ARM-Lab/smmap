@@ -92,6 +92,15 @@ RubberBand::Ptr BandFromNodeTransformsAndGrippers(
     return band;
 }
 
+RubberBand::Ptr BandFromWorldState(
+        const WorldState& world_state,
+        const RubberBand& template_band)
+{
+    auto band = std::make_shared<RubberBand>(template_band);
+    band->resetBand(world_state);
+    return band;
+}
+
 TransitionEstimation::GripperPositions ToGripperPositions(const VectorIsometry3d& poses)
 {
     assert(poses.size() == 2);
@@ -266,26 +275,29 @@ void DataGeneration::runTests()
                 random_test_ending_gripper_poses[0].translation() += test_delta.first;
                 random_test_ending_gripper_poses[1].translation() += test_delta.first;
 
-                // For now, use the current transition to define the starting parameters
-                const auto random_test_rope_start                   = trans.starting_state_.rope_node_transforms_;
+                // Specify the starting configuration, and gripper movement
+                const auto random_test_rope_nodes_start             = trans.starting_state_.rope_node_transforms_;
                 const auto random_test_starting_gripper_poses       = starting_gripper_poses;
                 const auto random_test_starting_grippers_positions  = ToGripperPositions(starting_gripper_poses);
-                const auto random_test_band_start                   = BandFromNodeTransformsAndGrippers(random_test_rope_start,
-                                                                                                        random_test_starting_grippers_positions,
-                                                                                                        *trans.starting_state_.rubber_band_);
                 const auto random_test_ending_grippers_positions    = ToGripperPositions(random_test_ending_gripper_poses);
 
                 ////// Gather simulated results ////////////////////////////////////////////////////////////////////////
 
-                const std::vector<WorldState> test_result = robot_->testRobotMotionMicrosteps(
-                            random_test_rope_start,
+                const std::pair<WorldState, std::vector<WorldState>> test_result =
+                        robot_->testRobotMotionMicrosteps(
+                            random_test_rope_nodes_start,
                             random_test_starting_gripper_poses,
                             random_test_ending_gripper_poses,
                             (int)trans.microstep_state_history_.size() / 4);
-                auto test_bands = transition_estimator_->reduceMicrostepsToBands(test_result);
-                test_bands.insert(test_bands.begin(), trans.starting_state_.rubber_band_);
-                const auto test_band_surface = RubberBand::AggregateBandPoints(test_bands);
+                const auto& start_after_settling = test_result.first;
+                const auto& microsteps = test_result.second;
 
+                const auto random_test_band_start = BandFromWorldState(
+                            start_after_settling,
+                            *trans.starting_state_.rubber_band_);
+                auto test_bands = transition_estimator_->reduceMicrostepsToBands(microsteps);
+                test_bands.insert(test_bands.begin(), random_test_band_start);
+                const auto test_band_surface = RubberBand::AggregateBandPoints(test_bands);
 
                 ////// Gather tps predicted results ////////////////////////////////////////////////////////////////////
 
@@ -327,12 +339,12 @@ void DataGeneration::runTests()
 
                 transition_test_results.tested_.starting_state_ = trans.starting_state_;
                                 transition_test_results.tested_.starting_gripper_positions_ = trans.starting_gripper_positions_;
-                transition_test_results.tested_.ending_state_.deform_config_ = test_result.back().object_configuration_;
+                transition_test_results.tested_.ending_state_.deform_config_ = microsteps.back().object_configuration_;
                 transition_test_results.tested_.ending_state_.rubber_band_ = test_bands.back();
                 transition_test_results.tested_.ending_state_.planned_rubber_band_ = std::make_shared<RubberBand>(*test_bands.back());
-                transition_test_results.tested_.ending_state_.rope_node_transforms_ = test_result.back().rope_node_transforms_;
-                transition_test_results.tested_.ending_gripper_positions_ = {random_test_starting_gripper_poses[0].translation(), random_test_starting_gripper_poses[1].translation()};
-                transition_test_results.tested_.microstep_state_history_ = test_result;
+                transition_test_results.tested_.ending_state_.rope_node_transforms_ = microsteps.back().rope_node_transforms_;
+                transition_test_results.tested_.ending_gripper_positions_ = ToGripperPositions(random_test_starting_gripper_poses);
+                transition_test_results.tested_.microstep_state_history_ = microsteps;
 
                 transition_test_results.predicted_final_band_surface_ = tps_band_surface_prediction;
                 transition_test_results.final_band_surface_ = test_band_surface;
@@ -352,20 +364,20 @@ void DataGeneration::runTests()
                     vis_->visualizePoints("band_surface_test", test_band_surface, colors, 1, 0.002);
                 }
 
-                std::cout << "    Press any key to continue " << std::flush;
-                GetChar();
-                std::cout << std::endl;
+//                std::cout << "    Press any key to continue " << std::flush;
+//                GetChar();
+//                std::cout << std::endl;
             }
         }
 
 
 
-        std::cout << "Number of bands: " << trans.microstep_state_history_.size() + 1
-                  << "  Gripper endpoint distances: " << delta.first.norm() << "  " << delta.second.norm()
-                  << "  Net norm: " << delta_norm << "  Max norm:  " << max_gripper_step_size
-                  << "    Press any key to continue " << std::flush;
-        GetChar();
-        std::cout << std::endl;
+//        std::cout << "Number of bands: " << trans.microstep_state_history_.size() + 1
+//                  << "  Gripper endpoint distances: " << delta.first.norm() << "  " << delta.second.norm()
+//                  << "  Net norm: " << delta_norm << "  Max norm:  " << max_gripper_step_size
+//                  << "    Press any key to continue " << std::flush;
+//        GetChar();
+//        std::cout << std::endl;
 
     }
 }

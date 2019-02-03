@@ -168,7 +168,7 @@ namespace smmap
                     feedback_callback);
     }
 
-    std::vector<WorldState> RobotInterface::testRobotMotionMicrosteps(
+    std::pair<WorldState, std::vector<WorldState>> RobotInterface::testRobotMotionMicrosteps(
             const VectorIsometry3d& starting_rope_configuration,
             const AllGrippersSinglePose& starting_grippers_poses,
             const AllGrippersSinglePose& target_grippers_poses,
@@ -620,10 +620,11 @@ namespace smmap
 
 
 
-    std::vector<WorldState> RobotInterface::testRobotMotionMicrosteps_impl(
+    std::pair<WorldState, std::vector<WorldState>> RobotInterface::testRobotMotionMicrosteps_impl(
             const TestRobotMotionMicrostepsRequest& request)
     {
-        auto client = nh_->serviceClient<TestRobotMotionMicrosteps>(GetTestRobotMotionMicrostepsTopic(*nh_), true);
+        auto client = nh_->serviceClient<TestRobotMotionMicrosteps>(
+                    GetTestRobotMotionMicrostepsTopic(*nh_), true);
         client.waitForExistence();
 
         TestRobotMotionMicrostepsResponse result;
@@ -633,7 +634,8 @@ namespace smmap
             client = nh_->serviceClient<TestRobotMotionMicrosteps>(GetTestRobotMotionMicrostepsTopic(*nh_), true);
             client.waitForExistence();
         }
-        return ConvertToEigenFeedback(result.world_state);
+        return {ConvertToEigenFeedback(result.start_after_settling),
+                ConvertToEigenFeedback(result.microsteps)};
     }
 
     TestRobotMotionMicrostepsRequest RobotInterface::toRosMicrostepsRequest(

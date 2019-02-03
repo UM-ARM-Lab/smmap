@@ -51,7 +51,7 @@ namespace smmap
                     const bool robot_configuration_valid,
                     const TestRobotMotionFeedbackCallbackFunctionType& feedback_callback);
 
-            std::vector<WorldState> testRobotMotionMicrosteps(
+            std::pair<WorldState, std::vector<WorldState>> testRobotMotionMicrosteps(
                     const EigenHelpers::VectorIsometry3d& starting_rope_configuration,
                     const smmap_utilities::AllGrippersSinglePose& starting_grippers_poses,
                     const smmap_utilities::AllGrippersSinglePose& target_grippers_poses,
@@ -217,7 +217,7 @@ namespace smmap
             // Transition testing framework
             ////////////////////////////////////////////////////////////////////
 
-            std::vector<WorldState> testRobotMotionMicrosteps_impl(
+            std::pair<WorldState, std::vector<WorldState>> testRobotMotionMicrosteps_impl(
                     const deformable_manipulation_msgs::TestRobotMotionMicrostepsRequest& request);
 
             deformable_manipulation_msgs::TestRobotMotionMicrostepsRequest toRosMicrostepsRequest(
