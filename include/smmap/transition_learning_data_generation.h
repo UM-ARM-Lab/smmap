@@ -26,6 +26,7 @@ namespace smmap
         // resolutions due to the way the SDF is created in CustomScene
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
         const XYZGrid work_space_grid_;
+        const double gripper_min_distance_to_obstacles_;
 
         const DeformableType deformable_type_;
         const TaskType task_type_;
@@ -147,6 +148,8 @@ namespace smmap
             }
         };
 
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
         DataGeneration(
                 std::shared_ptr<ros::NodeHandle> nh,
                 std::shared_ptr<ros::NodeHandle> ph,
@@ -156,6 +159,13 @@ namespace smmap
     private:
         void initialize(const WorldState& world_state);
         void initializeBand(const WorldState& world_state);
+
+
+        // Stored here because Eigen + tuple = bad
+        EigenHelpers::VectorIsometry3d random_test_rope_nodes_start_;
+        smmap_utilities::AllGrippersSinglePose random_test_starting_gripper_poses_;
+        smmap_utilities::AllGrippersSinglePose random_test_ending_gripper_poses_;
+        void generateRandomTest(const TransitionEstimation::StateTransition& trans);
 
     public:
         void runTests();

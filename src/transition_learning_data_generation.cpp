@@ -81,6 +81,20 @@ ObjectPointSet ExtractPointSetFromPoses(const VectorIsometry3d& poses)
     return pointset;
 }
 
+std::pair<AllGrippersSinglePose, AllGrippersSinglePose> ExtractGripperPosesFromTransition(
+        const TransitionEstimation::StateTransition& trans)
+{
+    AllGrippersSinglePose starting_gripper_poses(2);
+    starting_gripper_poses[0] = trans.starting_state_.rope_node_transforms_.front();
+    starting_gripper_poses[0].translation() = trans.starting_gripper_positions_.first;
+    starting_gripper_poses[1] = trans.starting_state_.rope_node_transforms_.back();
+    starting_gripper_poses[1].translation() = trans.starting_gripper_positions_.second;
+    AllGrippersSinglePose target_gripper_poses = starting_gripper_poses;
+    target_gripper_poses[0].translation() = trans.ending_gripper_positions_.first;
+    target_gripper_poses[1].translation() = trans.ending_gripper_positions_.second;
+    return {starting_gripper_poses, target_gripper_poses};
+}
+
 RubberBand::Ptr BandFromNodeTransformsAndGrippers(
         const VectorIsometry3d& node_transforms,
         const TransitionEstimation::GripperPositions& grippers_position,
@@ -131,10 +145,12 @@ DataGeneration::DataGeneration(
                        GetWorldXNumSteps(*nh_),
                        GetWorldYNumSteps(*nh_),
                        GetWorldZNumSteps(*nh_))
+    , gripper_min_distance_to_obstacles_(GetRRTMinGripperDistanceToObstacles(*ph_))
 
     , deformable_type_(GetDeformableType(*nh))
     , task_type_(GetTaskType(*nh))
 {
+    std::srand((unsigned int)seed_);
     initialize(robot_->start());
 }
 
@@ -204,6 +220,125 @@ void DataGeneration::initializeBand(const WorldState& world_state)
                 max_band_length);
 }
 
+void DataGeneration::generateRandomTest(const TransitionEstimation::StateTransition& trans)
+{
+    using namespace ROSHelpers;
+
+    static const Vector3d world_min(
+                GetWorldXMinBulletFrame(*nh_),
+                GetWorldYMinBulletFrame(*nh_),
+                GetWorldZMinBulletFrame(*nh_));
+
+    static const Vector3d world_max(
+                GetWorldXMaxBulletFrame(*nh_),
+                GetWorldYMaxBulletFrame(*nh_),
+                GetWorldZMaxBulletFrame(*nh_));
+
+//    static const double wall_thickness = GetWorldResolution(*nh_) * 4.0;
+    static const Vector3d world_center = (world_max + world_min) / 2.0;
+//    static const Vector3d world_size = world_max - world_min;
+
+    static const double task_progress_wall_width =          GetParamRequired<double>(*nh_, "task_progress_wall_width", __func__).GetImmutable();
+    static const double task_progress_wall_x_com =          GetParamRequired<double>(*nh_, "task_progress_wall_x_com", __func__).GetImmutable();
+    static const double gripper_separator_lower_height =    GetParamRequired<double>(*nh_, "gripper_separator_lower_height", __func__).GetImmutable();
+
+    static double hook_length =                             GetParamRequired<double>(*nh_, "hook_length", __func__).GetImmutable();
+    static double hook_radius =                             GetParamRequired<double>(*nh_, "hook_radius", __func__).GetImmutable();
+    static double hook_com_offset_y =                       GetParamRequired<double>(*nh_, "hook_com_offset_y", __func__).GetImmutable();
+
+    static const Vector3d hook_half_extents(
+                hook_length / 2.0f,
+                hook_radius,
+                hook_radius);
+
+    static const Vector3d hook_com(
+                task_progress_wall_x_com - task_progress_wall_width / 2.0f - hook_half_extents.x(),
+                world_center.y() + hook_com_offset_y,
+                world_min.z() + gripper_separator_lower_height - hook_radius);
+
+    static const Isometry3d experiment_center_of_rotation(Translation3d(
+                hook_com.x() - hook_half_extents.x() + work_space_grid_.minStepDimension() / 4.0,
+                hook_com.y(),
+                hook_com.z()));
+
+    vis_->visualizeAxes("center_of_rotation", experiment_center_of_rotation, 0.1, 0.005);
+
+
+    static const double grippers_delta_random_max = 0.025;     // meters
+    static const double translation_delta_random_max = 0.1;    // meters
+    static const double rotation_delta_max = 0.1;              // radians
+    const auto max_gripper_step_size = work_space_grid_.minStepDimension();
+    static RandomRotationGenerator random_rotation_generator;
+
+    // Transform all the data by the random translation and rotation of the test frame
+    bool valid = false;
+    while (!valid)
+    {
+        const Translation3d band_translation_offset((Vector3d::Random() * translation_delta_random_max));
+        Quaterniond band_rotation_offset = random_rotation_generator.GetQuaternion(*generator_);
+        while (2* std::acos(band_rotation_offset.w()) > rotation_delta_max)
+        {
+            band_rotation_offset = random_rotation_generator.GetQuaternion(*generator_);
+        }
+        const Isometry3d random_test_transform = band_translation_offset * band_rotation_offset;
+        const Isometry3d transform_update =
+                experiment_center_of_rotation
+                * random_test_transform
+                * experiment_center_of_rotation.inverse();
+
+        random_test_rope_nodes_start_.resize(trans.starting_state_.rope_node_transforms_.size());
+        for (size_t idx = 0; idx < random_test_rope_nodes_start_.size(); ++ idx)
+        {
+            random_test_rope_nodes_start_[idx] = transform_update * trans.starting_state_.rope_node_transforms_[idx];
+        }
+        const auto template_gripper_poses = ExtractGripperPosesFromTransition(trans);
+
+        random_test_starting_gripper_poses_.resize(2);
+        random_test_starting_gripper_poses_[0] = transform_update * template_gripper_poses.first[0];
+        random_test_starting_gripper_poses_[1] = transform_update * template_gripper_poses.first[1];
+        random_test_ending_gripper_poses_.resize(2);
+        random_test_ending_gripper_poses_[0]   = transform_update * template_gripper_poses.second[0];
+        random_test_ending_gripper_poses_[1]   = transform_update * template_gripper_poses.second[1];
+
+        valid = true;
+        if (sdf_->EstimateDistance3d(random_test_starting_gripper_poses_[0].translation()).first < gripper_min_distance_to_obstacles_)
+        {
+            valid = false;
+        }
+        if (sdf_->EstimateDistance3d(random_test_starting_gripper_poses_[1].translation()).first < gripper_min_distance_to_obstacles_)
+        {
+            valid = false;
+        }
+        if (sdf_->EstimateDistance3d(random_test_ending_gripper_poses_[0].translation()).first < gripper_min_distance_to_obstacles_)
+        {
+            valid = false;
+        }
+        if (sdf_->EstimateDistance3d(random_test_ending_gripper_poses_[1].translation()).first < gripper_min_distance_to_obstacles_)
+        {
+            valid = false;
+        }
+    }
+
+    // Transform the target position of the grippers by some random amount
+    {
+        const auto delta =
+                Sub(ToGripperPositions(random_test_ending_gripper_poses_),
+                    ToGripperPositions(random_test_starting_gripper_poses_));
+
+        auto test_delta = delta;
+        test_delta.first += Vector3d::Random() * grippers_delta_random_max;
+        test_delta.second += Vector3d::Random() * grippers_delta_random_max;
+        const double test_delta_norm = std::sqrt(test_delta.first.squaredNorm() + test_delta.second.squaredNorm());
+        if (test_delta_norm > max_gripper_step_size)
+        {
+            test_delta.first *= (max_gripper_step_size / test_delta_norm);
+            test_delta.second *= (max_gripper_step_size / test_delta_norm);
+        }
+        random_test_ending_gripper_poses_[0].translation() += test_delta.first;
+        random_test_ending_gripper_poses_[1].translation() += test_delta.first;
+    }
+}
+
 void DataGeneration::runTests()
 {
     const auto& transitions = transition_estimator_->transitions();
@@ -235,80 +370,75 @@ void DataGeneration::runTests()
                 colors.insert(colors.end(), bands[band_idx]->upsampleBand().size(), color);
             }
 
-            vis_->visualizePoints("band_surface", band_surface, colors, 1, 0.002);
+            vis_->visualizePoints("band_surface_template", band_surface, colors, 1, 0.002);
             transition_estimator_->visualizeTransition(trans, 1, "transition_testing_");
+            vis_->visualizePoints("tps_template", tps_template_points, Visualizer::Blue(), 1, 0.002);
         }
-
-        AllGrippersSinglePose starting_gripper_poses(2);
-        starting_gripper_poses[0] = trans.starting_state_.rope_node_transforms_.front();
-        starting_gripper_poses[0].translation() = trans.starting_gripper_positions_.first;
-        starting_gripper_poses[1] = trans.starting_state_.rope_node_transforms_.back();
-        starting_gripper_poses[1].translation() = trans.starting_gripper_positions_.second;
-        AllGrippersSinglePose target_gripper_poses = starting_gripper_poses;
-        target_gripper_poses[0].translation() = trans.ending_gripper_positions_.first;
-        target_gripper_poses[1].translation() = trans.ending_gripper_positions_.second;
-
-        const auto delta =
-                Sub(trans.ending_gripper_positions_,
-                    trans.starting_gripper_positions_);
-        const double delta_norm = std::sqrt(delta.first.squaredNorm() + delta.second.squaredNorm());
-        const auto max_gripper_step_size = work_space_grid_.minStepDimension();
 
         // Test transitions with random changes
         {
-            const int num_random_tests = 100;
-            const double random_max = 0.025;
+            const int num_random_tests = 5000;
             for (int i = 0; i < num_random_tests; ++i)
             {
-                ////// Generate a random test based on the recorded transition /////////////////////////////////////////
-
-                auto test_delta = delta;
-                test_delta.first += Vector3d::Random() * random_max;
-                test_delta.second += Vector3d::Random() * random_max;
-                const double test_delta_norm = std::sqrt(test_delta.first.squaredNorm() + test_delta.second.squaredNorm());
-                if (test_delta_norm > max_gripper_step_size)
-                {
-                    test_delta.first *= (max_gripper_step_size / test_delta_norm);
-                    test_delta.second *= (max_gripper_step_size / test_delta_norm);
-                }
-
-                AllGrippersSinglePose random_test_ending_gripper_poses = starting_gripper_poses;
-                random_test_ending_gripper_poses[0].translation() += test_delta.first;
-                random_test_ending_gripper_poses[1].translation() += test_delta.first;
-
-                // Specify the starting configuration, and gripper movement
-                const auto random_test_rope_nodes_start             = trans.starting_state_.rope_node_transforms_;
-                const auto random_test_starting_gripper_poses       = starting_gripper_poses;
-                const auto random_test_starting_grippers_positions  = ToGripperPositions(starting_gripper_poses);
-                const auto random_test_ending_grippers_positions    = ToGripperPositions(random_test_ending_gripper_poses);
+                // Stores the test parameters in class variables
+                generateRandomTest(trans);
 
                 ////// Gather simulated results ////////////////////////////////////////////////////////////////////////
 
                 const std::pair<WorldState, std::vector<WorldState>> test_result =
                         robot_->testRobotMotionMicrosteps(
-                            random_test_rope_nodes_start,
-                            random_test_starting_gripper_poses,
-                            random_test_ending_gripper_poses,
+                            random_test_rope_nodes_start_,
+                            random_test_starting_gripper_poses_,
+                            random_test_ending_gripper_poses_,
                             (int)trans.microstep_state_history_.size() / 4);
                 const auto& start_after_settling = test_result.first;
                 const auto& microsteps = test_result.second;
 
+                // Rejection sampling
+                if (microsteps.size() == 0)
+                {
+                    --i;
+                    ROS_INFO("Rejecting sample, band starts overstretched");
+                    continue;
+                }
+
                 const auto random_test_band_start = BandFromWorldState(
                             start_after_settling,
                             *trans.starting_state_.rubber_band_);
+                // More rejection sampling
+                if (random_test_band_start->isOverstretched())
+                {
+                    --i;
+                    ROS_INFO("Rejecting sample, rope starts in collision");
+                    continue;
+                }
                 auto test_bands = transition_estimator_->reduceMicrostepsToBands(microsteps);
                 test_bands.insert(test_bands.begin(), random_test_band_start);
                 const auto test_band_surface = RubberBand::AggregateBandPoints(test_bands);
+
+                // Visualization
+                {
+                    // Add each band with a different color, ranging from
+                    // cyan (early in the history) to magenta (late in the history)
+                    std::vector<std_msgs::ColorRGBA> colors;
+                    for (size_t band_idx = 0; band_idx < test_bands.size(); ++band_idx)
+                    {
+                        const float ratio = (float)(band_idx) / (float)(test_bands.size() - 1) ;
+                        const auto color = InterpolateColor(Visualizer::Cyan(), Visualizer::Magenta(), ratio);
+                        colors.insert(colors.end(), test_bands[band_idx]->upsampleBand().size(), color);
+                    }
+
+                    vis_->visualizePoints("band_surface_simulation", test_band_surface, colors, 1, 0.002);
+                }
 
                 ////// Gather tps predicted results ////////////////////////////////////////////////////////////////////
 
                 const auto tps_target_points = TpsPointsFromBandAndGrippers(
                             random_test_band_start,
-                            random_test_starting_grippers_positions,
-                            random_test_ending_grippers_positions);
+                            ToGripperPositions(random_test_starting_gripper_poses_),
+                            ToGripperPositions(random_test_ending_gripper_poses_));
 
-                vis_->visualizePoints("tps_template", tps_template_points, Visualizer::Red(), 1, 0.002);
-                vis_->visualizePoints("tps_target", tps_target_points, Visualizer::Blue(), 1, 0.002);
+                vis_->visualizePoints("tps_target", tps_target_points, Visualizer::Green(), 1, 0.002);
 
                 ThinPlateSpline<3> tps_warp(tps_template_points, tps_target_points);
                 const auto tps_band_surface_prediction = tps_warp.interpolate(band_surface);
@@ -328,68 +458,41 @@ void DataGeneration::runTests()
                     vis_->visualizePoints("band_surface_tps_prediction", tps_band_surface_prediction, colors, 1, 0.002);
                 }
 
-                ////// Compile the results into a single structure /////////////////////////////////////////////////////
-
-                TransitionTestResults transition_test_results;
-                transition_test_results.template_ = trans;
-                transition_test_results.tps_control_points_ = TpsPointsFromBandAndGrippers(
-                            trans.starting_state_.rubber_band_,
-                            trans.starting_gripper_positions_,
-                            trans.ending_gripper_positions_);
-                transition_test_results.template_band_surface_ = band_surface;
-
-                transition_test_results.tested_.starting_state_ = trans.starting_state_;
-                                transition_test_results.tested_.starting_gripper_positions_ = trans.starting_gripper_positions_;
-                transition_test_results.tested_.ending_state_.deform_config_ = microsteps.back().object_configuration_;
-                transition_test_results.tested_.ending_state_.rubber_band_ = test_bands.back();
-                transition_test_results.tested_.ending_state_.planned_rubber_band_ = std::make_shared<RubberBand>(*test_bands.back());
-                transition_test_results.tested_.ending_state_.rope_node_transforms_ = microsteps.back().rope_node_transforms_;
-                transition_test_results.tested_.ending_gripper_positions_ = ToGripperPositions(random_test_starting_gripper_poses);
-                transition_test_results.tested_.microstep_state_history_ = microsteps;
-
-                transition_test_results.predicted_final_band_surface_ = tps_band_surface_prediction;
-                transition_test_results.final_band_surface_ = test_band_surface;
-
-
-
-                std::vector<uint8_t> buffer;
-                transition_test_results.serializeSelf(buffer);
-                std::stringstream path;
-                path << "/tmp/transition_learning_data_generation/trans_" << idx
-                     << "_random_test_" << i << "_results.compressed";
-                ZlibHelpers::CompressAndWriteToFile(buffer, path.str());
-
-
-                // Visualization
+                ////// Compile the results into a single structure and save to file ////////////////////////////////////
                 {
-                    // Add each band with a different color, ranging from
-                    // cyan (early in the history) to magenta (late in the history)
-                    std::vector<std_msgs::ColorRGBA> colors;
-                    for (size_t band_idx = 0; band_idx < test_bands.size(); ++band_idx)
-                    {
-                        const float ratio = (float)(band_idx) / (float)(test_bands.size() - 1) ;
-                        const auto color = InterpolateColor(Visualizer::Cyan(), Visualizer::Magenta(), ratio);
-                        colors.insert(colors.end(), test_bands[band_idx]->upsampleBand().size(), color);
-                    }
+                    TransitionTestResults transition_test_results;
+                    transition_test_results.template_ = trans;
+                    transition_test_results.tps_control_points_ = TpsPointsFromBandAndGrippers(
+                                trans.starting_state_.rubber_band_,
+                                trans.starting_gripper_positions_,
+                                trans.ending_gripper_positions_);
+                    transition_test_results.template_band_surface_ = band_surface;
 
-                    vis_->visualizePoints("band_surface_test", test_band_surface, colors, 1, 0.002);
+                    transition_test_results.tested_.starting_state_ = trans.starting_state_;
+                                    transition_test_results.tested_.starting_gripper_positions_ = trans.starting_gripper_positions_;
+                    transition_test_results.tested_.ending_state_.deform_config_ = microsteps.back().object_configuration_;
+                    transition_test_results.tested_.ending_state_.rubber_band_ = test_bands.back();
+                    transition_test_results.tested_.ending_state_.planned_rubber_band_ = std::make_shared<RubberBand>(*test_bands.back());
+                    transition_test_results.tested_.ending_state_.rope_node_transforms_ = microsteps.back().rope_node_transforms_;
+                    transition_test_results.tested_.ending_gripper_positions_ = ToGripperPositions(random_test_starting_gripper_poses_);
+                    transition_test_results.tested_.microstep_state_history_ = microsteps;
+
+                    transition_test_results.predicted_final_band_surface_ = tps_band_surface_prediction;
+                    transition_test_results.final_band_surface_ = test_band_surface;
+
+
+
+                    std::vector<uint8_t> buffer;
+                    transition_test_results.serializeSelf(buffer);
+                    std::stringstream path;
+                    path << "/tmp/transition_learning_data_generation/trans_" << idx
+                         << "_random_test_" << i << "_results.compressed";
+                    ZlibHelpers::CompressAndWriteToFile(buffer, path.str());
                 }
 
-//                std::cout << "    Press any key to continue " << std::flush;
-//                GetChar();
-//                std::cout << std::endl;
+//                std::cout << "    Press any key to continue " << std::flush; GetChar(); std::cout << std::endl;
             }
         }
-
-
-
-//        std::cout << "Number of bands: " << trans.microstep_state_history_.size() + 1
-//                  << "  Gripper endpoint distances: " << delta.first.norm() << "  " << delta.second.norm()
-//                  << "  Net norm: " << delta_norm << "  Max norm:  " << max_gripper_step_size
-//                  << "    Press any key to continue " << std::flush;
-//        GetChar();
-//        std::cout << std::endl;
-
     }
 }
 
