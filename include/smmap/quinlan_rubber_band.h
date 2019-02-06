@@ -41,14 +41,12 @@ namespace smmap
 
         void resetBand(const WorldState& world_state);
         void resetBand(const smmap_utilities::ObjectPointSet& object_config,
-                       const Eigen::Vector3d& first_gripper_position,
-                       const Eigen::Vector3d& second_gripper_position);
+                       const smmap_utilities::PairGripperPositions& gripper_positions);
 
         void overridePoints(const EigenHelpers::VectorVector3d& points);
 
-        const EigenHelpers::VectorVector3d& forwardPropagateRubberBandToEndpointTargets(
-                const Eigen::Vector3d first_endpoint_target,
-                const Eigen::Vector3d second_endpoint_target,
+        const EigenHelpers::VectorVector3d& forwardPropagate(
+                const smmap_utilities::PairGripperPositions& gripper_positions,
                 bool verbose);
 
         const EigenHelpers::VectorVector3d& getVectorRepresentation() const;
@@ -58,7 +56,7 @@ namespace smmap
         const EigenHelpers::VectorVector3d& upsampleBand() const;
         const Eigen::VectorXd& upsampleBandSingleVector() const;
 
-        std::pair<Eigen::Vector3d, Eigen::Vector3d> getEndpoints() const;
+        smmap_utilities::Pair3dPositions getEndpoints() const;
 
         double maxSafeLength() const;
         double totalLength() const;

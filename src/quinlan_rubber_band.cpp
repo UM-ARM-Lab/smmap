@@ -227,18 +227,16 @@ namespace smmap
     {
         assert(world_state.all_grippers_single_pose_.size() == 2);
         resetBand(world_state.object_configuration_,
-                  world_state.all_grippers_single_pose_[0].translation(),
-                  world_state.all_grippers_single_pose_[1].translation());
+                  ToGripperPositions(world_state.all_grippers_single_pose_));
     }
 
     void QuinlanRubberBand::resetBand(
-            const smmap_utilities::ObjectPointSet& object_config,
-            const Eigen::Vector3d& first_gripper_position,
-            const Eigen::Vector3d& second_gripper_position)
+            const ObjectPointSet& object_config,
+            const PairGripperPositions& gripper_positions)
     {
         EigenHelpers::VectorVector3d points;
         points.reserve(path_between_grippers_through_object_.size() + 2);
-        points.push_back(first_gripper_position);
+        points.push_back(gripper_positions.first);
 
         // Extract the correct points from the deformable object
         for (size_t path_idx = 0; path_idx < path_between_grippers_through_object_.size(); ++path_idx)
@@ -247,7 +245,7 @@ namespace smmap
             points.push_back(object_config.col(node_idx));
         }
 
-        points.push_back(second_gripper_position);
+        points.push_back(gripper_positions.second);
         setPointsAndSmooth(points);
     }
 
@@ -267,17 +265,16 @@ namespace smmap
      * @param verbose
      * @return
      */
-    const EigenHelpers::VectorVector3d& QuinlanRubberBand::forwardPropagateRubberBandToEndpointTargets(
-            const Eigen::Vector3d first_endpoint_target,
-            const Eigen::Vector3d second_endpoint_target,
+    const EigenHelpers::VectorVector3d& QuinlanRubberBand::forwardPropagate(
+            const PairGripperPositions& gripper_positions,
             bool verbose)
     {
         assert(bandIsValidWithVisualization());
 
         // Ensure that the new points are both in bounds, and are at least min_distance_to_obstacle_ from anything
         // Add the new endpoints, then let the interpolate and smooth process handle the propogation
-        band_.insert(band_.begin(), projectToValidBubble(first_endpoint_target));
-        band_.push_back(projectToValidBubble(second_endpoint_target));
+        band_.insert(band_.begin(), projectToValidBubble(gripper_positions.first));
+        band_.push_back(projectToValidBubble(gripper_positions.second));
         resampled_band_.clear();
         upsampled_band_.clear();
 
@@ -361,7 +358,7 @@ namespace smmap
         return upsampled_band_single_vector_;
     }
 
-    std::pair<Eigen::Vector3d, Eigen::Vector3d> QuinlanRubberBand::getEndpoints() const
+    Pair3dPositions QuinlanRubberBand::getEndpoints() const
     {
         return {band_.front(), band_.back()};
     }

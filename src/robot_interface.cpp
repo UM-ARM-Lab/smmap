@@ -134,9 +134,8 @@ namespace smmap
         const AllGrippersSinglePose poses = getGrippersPoses();
         if (poses.size() == 2)
         {
-            const auto gripper0_translation = poses[0].translation();
-            const auto gripper1_translation = poses[1].translation();
-            return (gripper0_translation - gripper1_translation).norm();
+            const auto positions = ToGripperPositions(poses);
+            return (positions.first - positions.second).norm();
         }
         else
         {

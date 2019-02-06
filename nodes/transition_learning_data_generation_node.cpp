@@ -38,8 +38,9 @@ int main(int argc, char* argv[])
                 nullptr,
                 nullptr);
     auto vis = std::make_shared<Visualizer>(nh, ph, true);
-    auto data_generator = DataGeneration(nh, ph, robot, vis);
-    data_generator.runTests();
+    auto data_generator = TransitionTesting(nh, ph, robot, vis);
+    const bool generate_new_data = true;
+    data_generator.runTests(generate_new_data);
 
     return EXIT_SUCCESS;
 }

@@ -923,9 +923,8 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
         }
 
         // Move the virtual rubber band to follow the grippers, projecting out of collision as needed
-        rubber_band_copy.forwardPropagateRubberBandToEndpointTargets(
-                    world_state_copy.all_grippers_single_pose_[0].translation(),
-                    world_state_copy.all_grippers_single_pose_[1].translation(),
+        rubber_band_copy.forwardPropagate(
+                    ToGripperPositions(world_state_copy.all_grippers_single_pose_),
                     band_verbose);
         projected_deformable_point_paths_and_projected_virtual_rubber_bands.second.push_back(rubber_band_copy);
 
@@ -978,7 +977,7 @@ bool TaskFramework::globalPlannerNeededDueToOverstretch(
     {
         const RubberBand& band = projected_rubber_bands[t];
         const double band_length = band.totalLength();
-        const std::pair<Vector3d, Vector3d> endpoints = band.getEndpoints();
+        const Pair3dPositions endpoints = band.getEndpoints();
         const double distance_between_endpoints = (endpoints.first - endpoints.second).norm();
 
         // Apply a low pass filter to the band length to try and remove "blips" in the estimate
@@ -1074,13 +1073,12 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
         const size_t next_idx = std::min(current_segment.size() - 1, policy_segment_next_idx_+ t);
 
         // Forward project the band and check for overstretch
-        const auto& grippers_pose = current_segment[next_idx].grippers();
-        band.forwardPropagateRubberBandToEndpointTargets(
-                    grippers_pose.first.translation(),
-                    grippers_pose.second.translation(),
+        const auto& grippers_poses = current_segment[next_idx].grippers();
+        band.forwardPropagate(
+                    ToGripperPositions(grippers_poses),
                     band_verbose);
         const double band_length = band.totalLength();
-        const std::pair<Vector3d, Vector3d> endpoints = band.getEndpoints();
+        const Pair3dPositions endpoints = band.getEndpoints();
         const double distance_between_endpoints = (endpoints.first - endpoints.second).norm();
 
         filtered_band_length = annealing_factor * filtered_band_length + (1.0 - annealing_factor) * band_length;
@@ -1091,7 +1089,7 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
 
         // Visualize
         band.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, (int32_t)t + 2, visualization_enabled);
-        vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, {grippers_pose.first, grippers_pose.second}, PREDICTION_GRIPPER_COLOR, (int32_t)(2 * t) + 2);
+        vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, {grippers_poses.first, grippers_poses.second}, PREDICTION_GRIPPER_COLOR, (int32_t)(2 * t) + 2);
     }
 
     vis_->forcePublishNow();
@@ -1105,6 +1103,7 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
 
 void TaskFramework::initializeBand(const WorldState& world_state)
 {
+    assert(world_state.all_grippers_single_pose_.size() == 2);
     // Extract the maximum distance between the grippers
     // This assumes that the starting position of the grippers is at the maximum "unstretched" distance
     const auto& grippers_starting_poses = world_state.all_grippers_single_pose_;
@@ -1496,10 +1495,9 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
 
     // Project the targets out of collision
     const double min_dist_to_obstacles = std::max(GetControllerMinDistanceToObstacles(*ph_), GetRRTMinGripperDistanceToObstacles(*ph_)) * GetRRTTargetMinDistanceScaleFactor(*ph_);
-    const Vector3d gripper0_position_pre_project = target_gripper_poses[0].translation();
-    const Vector3d gripper1_position_pre_project = target_gripper_poses[1].translation();
-    target_gripper_poses[0].translation() = dijkstras_task_->sdf_->ProjectOutOfCollisionToMinimumDistance3d(gripper0_position_pre_project, min_dist_to_obstacles);
-    target_gripper_poses[1].translation() = dijkstras_task_->sdf_->ProjectOutOfCollisionToMinimumDistance3d(gripper1_position_pre_project, min_dist_to_obstacles);
+    const auto gripper_positions_pre_project = ToGripperPositions(target_gripper_poses);
+    target_gripper_poses[0].translation() = dijkstras_task_->sdf_->ProjectOutOfCollisionToMinimumDistance3d(gripper_positions_pre_project.first, min_dist_to_obstacles);
+    target_gripper_poses[1].translation() = dijkstras_task_->sdf_->ProjectOutOfCollisionToMinimumDistance3d(gripper_positions_pre_project.second, min_dist_to_obstacles);
 
     // Visualization
     {

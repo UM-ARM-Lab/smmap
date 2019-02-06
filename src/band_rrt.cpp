@@ -2671,9 +2671,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> BandRRT::forwardPropogateBand(
     Stopwatch stopwatch;
     arc_helpers::DoNotOptimize(next_grippers_poses);
 
-    const TransitionEstimation::GripperPositions test_gripper_positions = {
-        next_grippers_poses.first.translation(),
-        next_grippers_poses.second.translation()};
+    const PairGripperPositions test_gripper_positions = ToGripperPositions(next_grippers_poses);
     auto transitions = transition_estimator_->applyLearnedTransitions(starting_band, test_gripper_positions);
     ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", transitions.size() << " learned transitions applied");
     if (SMMAP_RRT_VERBOSE)
@@ -2686,9 +2684,8 @@ std::vector<std::pair<RubberBand::Ptr, double>> BandRRT::forwardPropogateBand(
 
     auto next_band = std::make_shared<RubberBand>(*starting_band);
     // Forward simulate the rubber band to test this transition
-    next_band->forwardPropagateRubberBandToEndpointTargets(
-                next_grippers_poses.first.translation(),
-                next_grippers_poses.second.translation(),
+    next_band->forwardPropagate(
+                ToGripperPositions(next_grippers_poses),
                 rubber_band_verbose);
 
     // Only add this transition if the band endpoints match the target points,
@@ -3537,10 +3534,9 @@ std::pair<bool, RRTTree> BandRRT::forwardSimulateGrippersPath(
     {
         // Forward simulate the band
         stopwatch(RESET);
-        const auto& ending_grippers_pos = path[path_idx].grippers();
-        rubber_band.forwardPropagateRubberBandToEndpointTargets(
-                    ending_grippers_pos.first.translation(),
-                    ending_grippers_pos.second.translation(),
+        const auto& ending_grippers_poses = path[path_idx].grippers();
+        rubber_band.forwardPropagate(
+                    ToGripperPositions(ending_grippers_poses),
                     rubber_band_verbose);
         const double forward_propogation_time = stopwatch(READ);
         total_band_forward_propogation_time_ += forward_propogation_time;

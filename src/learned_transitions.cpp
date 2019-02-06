@@ -109,36 +109,6 @@ bool TransitionEstimation::State::operator!=(const State& other) const
     return !(*this == other);
 }
 
-//////// Grippers //////////////////////////////////////////////////////////////////////////////////////////////////////
-
-uint64_t TransitionEstimation::SerializeGrippers(
-        const GripperPositions& grippers,
-        std::vector<uint8_t>& buffer)
-{
-    // TODO: determine why I need these lambdas in order to avoid a linking error
-    auto f1 = [] (const GripperPositions::first_type& vec, std::vector<uint8_t>& buf)
-    {
-        return arc_utilities::SerializeEigen(vec, buf);
-    };
-    auto f2 = [] (const GripperPositions::second_type& vec, std::vector<uint8_t>& buf)
-    {
-        return arc_utilities::SerializeEigen(vec, buf);
-    };
-    return arc_utilities::SerializePair<GripperPositions::first_type, GripperPositions::second_type>(
-                grippers, buffer, f1, f2);
-}
-
-std::pair<TransitionEstimation::GripperPositions, uint64_t> TransitionEstimation::DeserializeGrippers(
-        const std::vector<uint8_t>& buffer,
-        const uint64_t current)
-{
-    return arc_utilities::DeserializePair<GripperPositions::first_type, GripperPositions::second_type>(
-                buffer,
-                current,
-                arc_utilities::DeserializeEigen<GripperPositions::first_type>,
-                arc_utilities::DeserializeEigen<GripperPositions::second_type>);
-}
-
 //////// StateTransition ///////////////////////////////////////////////////////////////////////////////////////////////
 
 uint64_t TransitionEstimation::StateTransition::serializeSelf(
@@ -147,8 +117,8 @@ uint64_t TransitionEstimation::StateTransition::serializeSelf(
     const uint64_t starting_bytes = buffer.size();
     starting_state_.serializeSelf(buffer);
     ending_state_.serializeSelf(buffer);
-    SerializeGrippers(starting_gripper_positions_, buffer);
-    SerializeGrippers(ending_gripper_positions_, buffer);
+    DeserializePair3dPositions(starting_gripper_positions_, buffer);
+    DeserializePair3dPositions(ending_gripper_positions_, buffer);
     arc_utilities::SerializeVector<WorldState>(microstep_state_history_, buffer, &WorldState::Serialize);
     const uint64_t bytes_written = buffer.size() - starting_bytes;
 
@@ -171,11 +141,11 @@ uint64_t TransitionEstimation::StateTransition::deserializeIntoSelf(
     bytes_read += starting_state_.deserializeIntoSelf(buffer, current + bytes_read);
     bytes_read += ending_state_.deserializeIntoSelf(buffer, current + bytes_read);
 
-    const auto staring_grippers_deserialized = DeserializeGrippers(buffer, current + bytes_read);
+    const auto staring_grippers_deserialized = DeserializePair3dPositions(buffer, current + bytes_read);
     starting_gripper_positions_ = staring_grippers_deserialized.first;
     bytes_read += staring_grippers_deserialized.second;
 
-    const auto ending_grippers_deserialized = DeserializeGrippers(buffer, current + bytes_read);
+    const auto ending_grippers_deserialized = DeserializePair3dPositions(buffer, current + bytes_read);
     ending_gripper_positions_ = ending_grippers_deserialized.first;
     bytes_read += ending_grippers_deserialized.second;
 
@@ -391,8 +361,8 @@ Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMo
         {
             const auto& start_state = trajectory[idx - 1].first;
             const auto& end_state = trajectory[idx].first;
-            const GripperPositions starting_gripper_positions = start_state.planned_rubber_band_->getEndpoints();
-            const GripperPositions ending_gripper_positions = end_state.planned_rubber_band_->getEndpoints();
+            const PairGripperPositions starting_gripper_positions = start_state.planned_rubber_band_->getEndpoints();
+            const PairGripperPositions ending_gripper_positions = end_state.planned_rubber_band_->getEndpoints();
             StateTransition transition =
             {
                 start_state,
@@ -428,7 +398,7 @@ const std::vector<TransitionEstimation::StateTransition>& TransitionEstimation::
 
 Maybe::Maybe<double> TransitionEstimation::transitionUseful(
         const RubberBand::ConstPtr& test_band,
-        const GripperPositions& test_ending_gripper_positions,
+        const PairGripperPositions& test_ending_gripper_positions,
         const StateTransition& transition) const
 {
     // First check if the start points of the grippers and the end points of the grippers are
@@ -519,7 +489,7 @@ Maybe::Maybe<double> TransitionEstimation::transitionUseful(
 
 std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::applyLearnedTransitions(
         const RubberBand::ConstPtr& test_band,
-        const GripperPositions& ending_gripper_positions) const
+        const PairGripperPositions& ending_gripper_positions) const
 {
     std::vector<std::pair<RubberBand::Ptr, double>> possible_transitions;
 
@@ -544,15 +514,14 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::applyLearn
 }
 
 RubberBand::Ptr TransitionEstimation::applyTransition(
-        const GripperPositions& ending_gripper_positions,
+        const PairGripperPositions& ending_gripper_positions,
         const StateTransition& transition) const
 {
     auto resulting_band = std::make_shared<RubberBand>(*transition.ending_state_.rubber_band_);
 
     const bool verbose = false;
-    resulting_band->forwardPropagateRubberBandToEndpointTargets(
-                ending_gripper_positions.first,
-                ending_gripper_positions.second,
+    resulting_band->forwardPropagate(
+                ending_gripper_positions,
                 verbose);
 
     return resulting_band;
@@ -570,13 +539,23 @@ void TransitionEstimation::visualizeTransition(
         const int32_t id,
         const std::string& ns_prefix) const
 {
-//    visualizeDeformableObject(ns_prefix + MDP_PRE_STATE_NS, transition.starting_state.deform_config_, Visualizer::Red(), id);
-    transition.starting_state_.rubber_band_->visualize(ns_prefix + MDP_PRE_STATE_NS, Visualizer::Yellow(), Visualizer::Yellow(), id + 1);
-    transition.starting_state_.planned_rubber_band_->visualize(ns_prefix + MDP_PRE_STATE_NS, Visualizer::Green(), Visualizer::Green(), id + 2);
+    VisualizeTransition(vis_, transition, id, ns_prefix);
+}
 
-//    visualizeDeformableObject(ns_prefix + MDP_POST_STATE_NS, transition.ending_state.deform_config_, Visualizer::Red(0.4f), id);
-    transition.ending_state_.rubber_band_->visualize(ns_prefix + MDP_POST_STATE_NS, Visualizer::Yellow(0.4f), Visualizer::Yellow(0.4f), id + 1);
-    transition.ending_state_.planned_rubber_band_->visualize(ns_prefix + MDP_POST_STATE_NS, Visualizer::Green(0.4f), Visualizer::Green(0.4f), id + 2);
+void TransitionEstimation::VisualizeTransition(
+        const Visualizer::ConstPtr& vis,
+        const StateTransition& transition,
+        const int32_t id,
+        const std::string& ns_prefix)
+{
+    (void)vis;
+    //    visualizeDeformableObject(ns_prefix + MDP_PRE_STATE_NS, transition.starting_state.deform_config_, Visualizer::Red(), id);
+        transition.starting_state_.rubber_band_->visualize(ns_prefix + MDP_PRE_STATE_NS, Visualizer::Yellow(), Visualizer::Yellow(), id + 1);
+        transition.starting_state_.planned_rubber_band_->visualize(ns_prefix + MDP_PRE_STATE_NS, Visualizer::Green(), Visualizer::Green(), id + 2);
+
+    //    visualizeDeformableObject(ns_prefix + MDP_POST_STATE_NS, transition.ending_state.deform_config_, Visualizer::Red(0.4f), id);
+        transition.ending_state_.rubber_band_->visualize(ns_prefix + MDP_POST_STATE_NS, Visualizer::Yellow(0.4f), Visualizer::Yellow(0.4f), id + 1);
+        transition.ending_state_.planned_rubber_band_->visualize(ns_prefix + MDP_POST_STATE_NS, Visualizer::Green(0.4f), Visualizer::Green(0.4f), id + 2);
 }
 
 void TransitionEstimation::visualizeLearnedTransitions(

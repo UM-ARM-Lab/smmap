@@ -80,7 +80,7 @@ namespace smmap
     typedef std::vector<RRTNode, RRTAllocator> RRTTree;
     typedef std::vector<std::pair<RRTPath, std::vector<size_t>>> RRTPolicy;
 
-    typedef std::pair<Eigen::Isometry3d, Eigen::Isometry3d> RRTGrippersRepresentation;
+    typedef smmap_utilities::PairGripperPoses RRTGrippersRepresentation;
     typedef Eigen::VectorXd RRTRobotRepresentation;
     typedef flann::KDTreeSingleIndex<flann::L2_weighted<float>> NNIndexType;
 

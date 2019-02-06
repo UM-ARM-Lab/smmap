@@ -10,7 +10,37 @@
 
 namespace smmap
 {
-    class DataGeneration
+    struct TransitionSimulationRecord
+    {
+    public:
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+        TransitionEstimation::StateTransition template_;
+        smmap_utilities::ObjectPointSet template_band_surface_;
+
+        Eigen::Isometry3d center_of_rotation_;
+        Eigen::Isometry3d transform_applied_;
+
+        TransitionEstimation::StateTransition tested_;
+        smmap_utilities::ObjectPointSet tested_band_surface_;
+
+        uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
+
+        static uint64_t Serialize(
+                const TransitionSimulationRecord& test_results,
+                std::vector<uint8_t>& buffer);
+
+        static std::pair<TransitionSimulationRecord, uint64_t> Deserialize(
+                const std::vector<uint8_t>& buffer,
+                const uint64_t current,
+                const RubberBand& template_band);
+
+        bool operator==(const TransitionSimulationRecord& other) const;
+
+        void visualize(const smmap_utilities::Visualizer::ConstPtr& vis) const;
+    };
+
+    class TransitionTesting
     {
     private:
         const std::shared_ptr<ros::NodeHandle> nh_;
@@ -27,6 +57,7 @@ namespace smmap
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
         const XYZGrid work_space_grid_;
         const double gripper_min_distance_to_obstacles_;
+        const Eigen::Isometry3d experiment_center_of_rotation_;
 
         const DeformableType deformable_type_;
         const TaskType task_type_;
@@ -34,141 +65,24 @@ namespace smmap
         RubberBand::Ptr band_;
         TransitionEstimation::Ptr transition_estimator_;
 
+        const std::string data_folder_;
+
     public:
-        struct TransitionTestResults
-        {
-        public:
-            TransitionEstimation::StateTransition template_;
-            smmap_utilities::ObjectPointSet tps_control_points_;
-            smmap_utilities::ObjectPointSet template_band_surface_;
-
-            TransitionEstimation::StateTransition tested_;
-            smmap_utilities::ObjectPointSet tps_target_points_;
-
-            smmap_utilities::ObjectPointSet predicted_final_band_surface_;
-            smmap_utilities::ObjectPointSet final_band_surface_;
-
-            uint64_t serializeSelf(std::vector<uint8_t>& buffer) const
-            {
-                const auto starting_bytes = buffer.size();
-                uint64_t bytes_written = 0;
-                bytes_written += template_.serializeSelf(buffer);
-                bytes_written += arc_utilities::SerializeEigen(tps_control_points_, buffer);
-                bytes_written += arc_utilities::SerializeEigen(template_band_surface_, buffer);
-                bytes_written += tested_.serializeSelf(buffer);
-                bytes_written += arc_utilities::SerializeEigen(tps_target_points_, buffer);
-                bytes_written += arc_utilities::SerializeEigen(predicted_final_band_surface_, buffer);
-                bytes_written += arc_utilities::SerializeEigen(final_band_surface_, buffer);
-
-                const auto ending_bytes = buffer.size();
-                assert(ending_bytes - starting_bytes == bytes_written);
-                const auto deserialized = Deserialize(buffer, starting_bytes, *template_.starting_state_.rubber_band_);
-                assert(bytes_written = deserialized.second);
-                assert(*this == deserialized.first);
-                return bytes_written;;
-            }
-
-            static uint64_t Serialize(
-                    const TransitionTestResults& test_results,
-                    std::vector<uint8_t>& buffer)
-            {
-                return test_results.serializeSelf(buffer);
-            }
-
-            static std::pair<TransitionTestResults, uint64_t> Deserialize(
-                    const std::vector<uint8_t>& buffer,
-                    const uint64_t current,
-                    const RubberBand& template_band)
-            {
-                TransitionTestResults result;
-                uint64_t bytes_read = 0;
-
-                const auto template_deserialized = TransitionEstimation::StateTransition::Deserialize(buffer, current + bytes_read, template_band);
-                result.template_ = template_deserialized.first;
-                bytes_read += template_deserialized.second;
-
-                const auto tps_control_points_deserialized = arc_utilities::DeserializeEigen<smmap_utilities::ObjectPointSet>(buffer, current + bytes_read);
-                result.tps_control_points_ = tps_control_points_deserialized.first;
-                bytes_read += tps_control_points_deserialized.second;
-
-                const auto template_band_surface_deserialized = arc_utilities::DeserializeEigen<smmap_utilities::ObjectPointSet>(buffer, current + bytes_read);
-                result.template_band_surface_ = template_band_surface_deserialized.first;
-                bytes_read += template_band_surface_deserialized.second;
-
-                const auto tested_deserialized = TransitionEstimation::StateTransition::Deserialize(buffer, current + bytes_read, template_band);
-                result.tested_ = tested_deserialized.first;
-                bytes_read += tested_deserialized.second;
-
-                const auto tps_target_points_deserialized = arc_utilities::DeserializeEigen<smmap_utilities::ObjectPointSet>(buffer, current + bytes_read);
-                result.tps_target_points_ = tps_target_points_deserialized.first;
-                bytes_read += tps_target_points_deserialized.second;
-
-                const auto predicted_final_band_surface_deserialized = arc_utilities::DeserializeEigen<smmap_utilities::ObjectPointSet>(buffer, current + bytes_read);
-                result.predicted_final_band_surface_ = predicted_final_band_surface_deserialized.first;
-                bytes_read += predicted_final_band_surface_deserialized.second;
-
-                const auto final_band_surface_deserialized = arc_utilities::DeserializeEigen<smmap_utilities::ObjectPointSet>(buffer, current + bytes_read);
-                result.final_band_surface_ = final_band_surface_deserialized.first;
-                bytes_read += final_band_surface_deserialized.second;
-
-                return {result, bytes_read};
-            }
-
-            bool operator==(const TransitionTestResults& other) const
-            {
-                if (template_ != template_)
-                {
-                    return false;
-                }
-                if ((tps_control_points_.array() != other.tps_control_points_.array()).any())
-                {
-                    return false;
-                }
-                if ((template_band_surface_.array() != other.template_band_surface_.array()).any())
-                {
-                    return false;
-                }
-                if (tested_ != other.tested_)
-                {
-                    return false;
-                }
-                if ((tps_target_points_.array() != other.tps_target_points_.array()).any())
-                {
-                    return false;
-                }
-                if ((predicted_final_band_surface_.array() != other.predicted_final_band_surface_.array()).any())
-                {
-                    return false;
-                }
-                if ((final_band_surface_.array() != other.final_band_surface_.array()).any())
-                {
-                    return false;
-                }
-                return true;
-            }
-        };
-
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        DataGeneration(
+        TransitionTesting(
                 std::shared_ptr<ros::NodeHandle> nh,
                 std::shared_ptr<ros::NodeHandle> ph,
                 RobotInterface::Ptr robot,
                 const smmap_utilities::Visualizer::ConstPtr& vis);
 
     private:
+        Eigen::Isometry3d calculateExperimentCenterOfRotation();
         void initialize(const WorldState& world_state);
         void initializeBand(const WorldState& world_state);
 
-
-        // Stored here because Eigen + tuple = bad
-        EigenHelpers::VectorIsometry3d random_test_rope_nodes_start_;
-        smmap_utilities::AllGrippersSinglePose random_test_starting_gripper_poses_;
-        smmap_utilities::AllGrippersSinglePose random_test_ending_gripper_poses_;
-        void generateRandomTest(const TransitionEstimation::StateTransition& trans);
-
     public:
-        void runTests();
+        void runTests(const bool generate_new_test_data);
 
         void visualizeDeformableObject(
                 const std::string& marker_name,
@@ -181,5 +95,31 @@ namespace smmap
                 const smmap_utilities::ObjectPointSet& object_configuration,
                 const std::vector<std_msgs::ColorRGBA>& colors,
                 const int32_t id = 1) const;
+
+    private:
+        class DataGeneration
+        {
+        public:
+            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+            DataGeneration(const TransitionTesting& framework);
+            void generateTestData(
+                    std::mt19937_64& generator,
+                    const std::string& data_folder);
+
+        private:
+            const TransitionTesting& framework_;
+            arc_helpers::RandomRotationGenerator random_rotation_distribution_;
+
+            // Stored here because Eigen + tuple = bad
+            EigenHelpers::VectorIsometry3d random_test_rope_nodes_start_;
+            smmap_utilities::AllGrippersSinglePose random_test_starting_gripper_poses_;
+            smmap_utilities::AllGrippersSinglePose random_test_ending_gripper_poses_;
+            Eigen::Isometry3d random_test_transform_applied_;
+
+            void generateRandomTest(
+                    std::mt19937_64& generator,
+                    const TransitionEstimation::StateTransition& trans);
+        };
+        friend class DataGeneration;
     };
 }

@@ -74,7 +74,7 @@ endif(USE_OPEN_MP)
 
 ############# Infrastructure ###################################################
 
-add_library(${PROJECT_NAME}_infrastructure
+add_custom_target(${PROJECT_NAME}_infrastructure_headers SOURCES
     include/${PROJECT_NAME}/point_reflector.hpp
     include/${PROJECT_NAME}/robot_interface.h
     include/${PROJECT_NAME}/ros_communication_helpers.h
@@ -82,6 +82,9 @@ add_library(${PROJECT_NAME}_infrastructure
     include/${PROJECT_NAME}/task_specification.h
     include/${PROJECT_NAME}/task_specification_implementions.h
     include/${PROJECT_NAME}/trajectory.hpp
+)
+
+add_library(${PROJECT_NAME}_infrastructure
     src/robot_interface.cpp
     src/ros_communication_helpers.cpp
     src/task_specification.cpp
@@ -92,13 +95,16 @@ target_link_libraries(${PROJECT_NAME}_infrastructure ${catkin_LIBRARIES})
 
 ############# Models ###########################################################
 
-add_library(${PROJECT_NAME}_models
+add_custom_target(${PROJECT_NAME}_models_headers SOURCES
     include/${PROJECT_NAME}/deformable_model.h
     include/${PROJECT_NAME}/jacobian_model.h
     include/${PROJECT_NAME}/adaptive_jacobian_model.h
     include/${PROJECT_NAME}/constraint_jacobian_model.h
     include/${PROJECT_NAME}/diminishing_rigidity_model.h
     include/${PROJECT_NAME}/least_squares_jacobian_model.h
+)
+
+add_library(${PROJECT_NAME}_models
     src/deformable_model.cpp
     src/jacobian_model.cpp
     src/adaptive_jacobian_model.cpp
@@ -125,9 +131,12 @@ target_link_libraries(${PROJECT_NAME}_controllers ${catkin_LIBRARIES})
 
 ############# Transitions ######################################################
 
-add_library(${PROJECT_NAME}_transitions
+add_custom_target(${PROJECT_NAME}_transitions_headers SOURCES
     include/${PROJECT_NAME}/learned_transitions.h
     include/${PROJECT_NAME}/quinlan_rubber_band.h
+)
+
+add_library(${PROJECT_NAME}_transitions
     src/learned_transitions.cpp
     src/quinlan_rubber_band.cpp
 )
@@ -136,19 +145,16 @@ target_link_libraries(${PROJECT_NAME}_transitions ${catkin_LIBRARIES})
 
 ############# Planning #########################################################
 
-add_library(${PROJECT_NAME}_planning
+add_custom_target(${PROJECT_NAME}_planning_headers SOURCES
     include/${PROJECT_NAME}/band_rrt.h
     include/${PROJECT_NAME}/task_framework.h
+)
+
+add_library(${PROJECT_NAME}_planning
     src/band_rrt.cpp
     src/task_framework.cpp
 )
-add_dependencies(${PROJECT_NAME}_planning
-    ${PROJECT_NAME}_infrastructure
-    ${PROJECT_NAME}_models
-    ${PROJECT_NAME}_controllers
-    ${PROJECT_NAME}_transitions
-    ${catkin_EXPORTED_TARGETS}
-)
+add_dependencies(${PROJECT_NAME}_planning ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_planning
     ${PROJECT_NAME}_infrastructure
     ${PROJECT_NAME}_models
@@ -160,20 +166,19 @@ target_link_libraries(${PROJECT_NAME}_planning
 set_target_properties(${PROJECT_NAME}_planning PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${FLANN_DEFINITIONS}")
 
 add_executable(planner_test_node nodes/planner_test_node.cpp)
-add_dependencies(planner_test_node ${PROJECT_NAME}_planning ${catkin_EXPORTED_TARGETS})
+add_dependencies(planner_test_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(planner_test_node ${PROJECT_NAME}_planning ${catkin_LIBRARIES})
 
 ############# Learning Testing #################################################
 
-add_library(${PROJECT_NAME}_learning_testing
+add_custom_target(${PROJECT_NAME}_learning_testing_headers SOURCES
     include/${PROJECT_NAME}/transition_learning_data_generation.h
+)
+
+add_library(${PROJECT_NAME}_learning_testing
     src/transition_learning_data_generation.cpp
 )
-add_dependencies(${PROJECT_NAME}_learning_testing
-    ${PROJECT_NAME}_infrastructure
-    ${PROJECT_NAME}_transitions
-    ${catkin_EXPORTED_TARGETS}
-)
+add_dependencies(${PROJECT_NAME}_learning_testing ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_learning_testing
     ${PROJECT_NAME}_infrastructure
     ${PROJECT_NAME}_transitions
@@ -181,5 +186,5 @@ target_link_libraries(${PROJECT_NAME}_learning_testing
 )
 
 add_executable(transition_learning_data_generation_node nodes/transition_learning_data_generation_node.cpp)
-add_dependencies(transition_learning_data_generation_node ${PROJECT_NAME}_learning_testing ${catkin_EXPORTED_TARGETS})
+add_dependencies(transition_learning_data_generation_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(transition_learning_data_generation_node ${PROJECT_NAME}_learning_testing ${catkin_LIBRARIES})
