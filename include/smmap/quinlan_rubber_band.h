@@ -18,10 +18,24 @@ namespace smmap
         typedef std::shared_ptr<QuinlanRubberBand> Ptr;
         typedef std::shared_ptr<const QuinlanRubberBand> ConstPtr;
 
+        static std::atomic<bool> ENABLE_BAND_DEBUGGING_;
+        // For any of the below to be meaningful, ENABLE_BAND_DEBUGGING must be true
+        static std::atomic<bool> ENABLE_INTERPOLATE_DEBUGGING_;
+        static std::atomic<bool> ENABLE_REMOVE_DEBUGGING_;
+        static std::atomic<bool> ENABLE_SMOOTHING_DEBUGGING_;
+
         static ObjectPointSet AggregateBandPoints(
                 const std::vector<QuinlanRubberBand>& bands);
         static ObjectPointSet AggregateBandPoints(
                 const std::vector<QuinlanRubberBand::ConstPtr>& bands);
+
+        static constexpr auto SMOOTHING_CLOSE_ENGOUGH_DIST = 1e-4;
+        static constexpr auto MAX_DELTA_SCALE_FACTOR = 0.9;
+        static constexpr auto MIN_OVERLAP_SCALE_FACTOR = 0.05;
+        static constexpr auto MIN_DIST_TO_OBSTACLES_SCALE_FACTOR = 0.1;
+        static constexpr auto NODE_REMOVAL_OVERLAP_FACTOR = 1.2;
+        static constexpr auto BACKTRACKING_THRESHOLD = 0.1;
+        static constexpr auto SMOOTHING_ITERATIONS = 100;
 
         QuinlanRubberBand(
                 std::shared_ptr<ros::NodeHandle> nh,
