@@ -2,7 +2,6 @@
 #include <smmap_utilities/gurobi_solvers.h>
 
 using namespace smmap;
-using namespace smmap_utilities;
 using namespace Eigen;
 using namespace EigenHelpers;
 

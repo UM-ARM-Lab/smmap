@@ -15,15 +15,15 @@
 
 namespace smmap
 {
-    std::vector<smmap_utilities::GripperData> GetGrippersData(ros::NodeHandle& nh);
+    std::vector<GripperData> GetGrippersData(ros::NodeHandle& nh);
 
-    smmap_utilities::ObjectPointSet GetObjectInitialConfiguration(ros::NodeHandle& nh);
+    ObjectPointSet GetObjectInitialConfiguration(ros::NodeHandle& nh);
 
     std::vector<geometry_msgs::Pose> GetRopeNodeTransforms(ros::NodeHandle& nh);
 
-    smmap_utilities::ObjectPointSet GetCoverPoints(ros::NodeHandle& nh);
+    ObjectPointSet GetCoverPoints(ros::NodeHandle& nh);
 
-    smmap_utilities::ObjectPointSet GetCoverPointNormals(ros::NodeHandle& nh);
+    ObjectPointSet GetCoverPointNormals(ros::NodeHandle& nh);
 
     // TODO: replace these out params with something else
     void GetFreeSpaceGraph(

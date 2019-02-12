@@ -33,32 +33,32 @@ namespace smmap
             void shutdown();
             void reset();
 
-            const std::vector<smmap_utilities::GripperData>& getGrippersData() const;
+            const std::vector<GripperData>& getGrippersData() const;
 
-            smmap_utilities::AllGrippersSinglePose getGrippersPoses();
+            AllGrippersSinglePose getGrippersPoses();
 
             // This function assumes only 2 grippers, and it is called before the grippers are moved by sendGrippersPoses
             double getGrippersInitialDistance();
 
             std::pair<WorldState, std::vector<WorldState>> commandRobotMotion(
-                    const smmap_utilities::AllGrippersSinglePose& target_grippers_poses,
+                    const AllGrippersSinglePose& target_grippers_poses,
                     const Eigen::VectorXd& target_robot_configuration,
                     const bool robot_configuration_valid);
 
             bool testRobotMotion(
-                    const std::vector<smmap_utilities::AllGrippersSinglePose>& test_grippers_poses,
+                    const std::vector<AllGrippersSinglePose>& test_grippers_poses,
                     const std::vector<Eigen::VectorXd>& test_robot_configurations,
                     const bool robot_configuration_valid,
                     const TestRobotMotionFeedbackCallbackFunctionType& feedback_callback);
 
             std::pair<WorldState, std::vector<WorldState>> testRobotMotionMicrosteps(
                     const EigenHelpers::VectorIsometry3d& starting_rope_configuration,
-                    const smmap_utilities::AllGrippersSinglePose& starting_grippers_poses,
-                    const smmap_utilities::AllGrippersSinglePose& target_grippers_poses,
+                    const AllGrippersSinglePose& starting_grippers_poses,
+                    const AllGrippersSinglePose& target_grippers_poses,
                     const int num_substeps);
 
-            std::vector<smmap_utilities::CollisionData> checkGripperCollision(
-                    const smmap_utilities::AllGrippersSinglePose& grippers_pose);
+            std::vector<CollisionData> checkGripperCollision(
+                    const AllGrippersSinglePose& grippers_pose);
 
             void resetRandomSeeds(const unsigned long seed, const unsigned long num_discards);
             void lockEnvironment() const;
@@ -71,7 +71,7 @@ namespace smmap
             void setActiveDOFValues(const Eigen::VectorXd& robot_configuration) const;
 
             // TODO: Change this name to something else, it is confusing with getGrippersPoses()
-            smmap_utilities::AllGrippersSinglePose getGrippersPosesFunctionPointer() const;
+            AllGrippersSinglePose getGrippersPosesFunctionPointer() const;
 
             // This a Jacobian between the movement of the grippers (in the gripper body frame)
             // and the movement of the robot's DOF
@@ -82,31 +82,31 @@ namespace smmap
             // for the Jacobian of the movement of the point relative to the robot DOF movement.
             //
             // This includes the grippers.
-            std::vector<std::pair<smmap_utilities::CollisionData, Eigen::Matrix3Xd>> getPointsOfInterestCollisionData();
+            std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> getPointsOfInterestCollisionData();
 
 
             Eigen::VectorXd mapGripperMotionToRobotMotion(
-                    const smmap_utilities::AllGrippersSinglePoseDelta& grippers_delta) const;
+                    const AllGrippersSinglePoseDelta& grippers_delta) const;
 
             bool checkRobotCollision() const;
 
             std::vector<Eigen::VectorXd> getCloseIkSolutions(
-                    const smmap_utilities::AllGrippersSinglePose& target_poses,
+                    const AllGrippersSinglePose& target_poses,
                     const double max_gripper_distance) const;
 
             std::vector<Eigen::VectorXd> getCloseIkSolutions(
                     const std::vector<std::string>& gripper_names,
-                    const smmap_utilities::AllGrippersSinglePose& target_poses,
+                    const AllGrippersSinglePose& target_poses,
                     const double max_gripper_distance) const;
 
             std::pair<bool, Eigen::VectorXd> getGeneralIkSolution(
                     const Eigen::VectorXd& starting_config,
-                    const smmap_utilities::AllGrippersSinglePose& target_poses) const;
+                    const AllGrippersSinglePose& target_poses) const;
 
             std::pair<bool, Eigen::VectorXd> getGeneralIkSolution(
                     const Eigen::VectorXd& starting_config,
                     const std::vector<std::string>& gripper_names,
-                    const smmap_utilities::AllGrippersSinglePose& target_poses) const;
+                    const AllGrippersSinglePose& target_poses) const;
 
             bool testPathForCollision(const std::vector<Eigen::VectorXd>& path) const;
 
@@ -116,13 +116,13 @@ namespace smmap
                     const std::function<void()>& unlock_env_fn,
                     const std::function<std::vector<Eigen::VectorXd>            ()>& get_robot_joint_info_fn,
                     const std::function<void                                    (const Eigen::VectorXd& configuration)> set_active_dof_values_fn,
-                    const std::function<smmap_utilities::AllGrippersSinglePose  ()>& get_ee_poses_fn,
+                    const std::function<AllGrippersSinglePose  ()>& get_ee_poses_fn,
                     const std::function<Eigen::MatrixXd                         ()>& get_grippers_jacobian_fn,
                     const std::function<std::vector<Eigen::Vector3d>            ()>& get_collision_points_of_interest_fn,
                     const std::function<std::vector<Eigen::MatrixXd>            ()>& get_collision_points_of_interest_jacobians_fn,
                     const std::function<bool                                    ()>& full_robot_collision_check_fn,
-                    const std::function<std::vector<Eigen::VectorXd>            (const std::vector<std::string>& gripper_names, const smmap_utilities::AllGrippersSinglePose& target_poses, const double max_gripper_distance)>& close_ik_solutions_fn,
-                    const std::function<std::pair<bool, Eigen::VectorXd>        (const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const smmap_utilities::AllGrippersSinglePose& target_poses)>& general_ik_solution_fn,
+                    const std::function<std::vector<Eigen::VectorXd>            (const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses, const double max_gripper_distance)>& close_ik_solutions_fn,
+                    const std::function<std::pair<bool, Eigen::VectorXd>        (const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)>& general_ik_solution_fn,
                     const std::function<bool                                    (const std::vector<Eigen::VectorXd>& path)>& test_path_for_collision_fn);
 
             // Defaults the timespace to "latest available", indicted by ros::Time(0)
@@ -150,8 +150,8 @@ namespace smmap
             const tf2_ros::TransformListener tf_listener_;
             Eigen::Isometry3d world_to_bullet_tf_;
 
-            const std::vector<smmap_utilities::GripperData> grippers_data_;
-            smmap_utilities::GripperCollisionChecker gripper_collision_checker_;
+            const std::vector<GripperData> grippers_data_;
+            GripperCollisionChecker gripper_collision_checker_;
             ros::ServiceClient execute_gripper_movement_client_;
             actionlib::SimpleActionClient<deformable_manipulation_msgs::TestRobotMotionAction> test_grippers_poses_client_;
 
@@ -176,13 +176,13 @@ namespace smmap
             std::function<void()> unlock_env_fn_;
 
             std::function<void                                      (const Eigen::VectorXd& configuration)> set_active_dof_values_fn_;
-            std::function<smmap_utilities::AllGrippersSinglePose    ()> get_ee_poses_fn_;
+            std::function<AllGrippersSinglePose    ()> get_ee_poses_fn_;
             std::function<Eigen::MatrixXd                           ()> get_grippers_jacobian_fn_;
             std::function<std::vector<Eigen::Vector3d>              ()> get_collision_points_of_interest_fn_;
             std::function<std::vector<Eigen::MatrixXd>              ()> get_collision_points_of_interest_jacobians_fn_;
             std::function<bool                                      ()> full_robot_collision_check_fn_;
-            std::function<std::vector<Eigen::VectorXd>              (const std::vector<std::string>& gripper_names, const smmap_utilities::AllGrippersSinglePose& target_poses, const double max_gripper_distance)> close_ik_solutions_fn_;
-            std::function<std::pair<bool, Eigen::VectorXd>          (const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const smmap_utilities::AllGrippersSinglePose& target_poses)> general_ik_solution_fn_;
+            std::function<std::vector<Eigen::VectorXd>              (const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses, const double max_gripper_distance)> close_ik_solutions_fn_;
+            std::function<std::pair<bool, Eigen::VectorXd>          (const Eigen::VectorXd& starting_config, const std::vector<std::string>& gripper_names, const AllGrippersSinglePose& target_poses)> general_ik_solution_fn_;
             std::function<bool                                      (const std::vector<Eigen::VectorXd>& path)> test_path_for_collision_fn_;
 
             std::pair<WorldState, std::vector<WorldState>> commandRobotMotion_impl(
@@ -190,7 +190,7 @@ namespace smmap
 
             deformable_manipulation_msgs::ExecuteRobotMotionRequest noOpGripperMovement();
             deformable_manipulation_msgs::ExecuteRobotMotionRequest toRosMovementRequest(
-                    const smmap_utilities::AllGrippersSinglePose& grippers_poses,
+                    const AllGrippersSinglePose& grippers_poses,
                     const Eigen::VectorXd& robot_configuration,
                     const bool robot_configuration_valid) const;
 
@@ -209,7 +209,7 @@ namespace smmap
                     const TestRobotMotionFeedbackCallbackFunctionType& feedback_callback);
 
             deformable_manipulation_msgs::TestRobotMotionGoal toRosTestPosesGoal(
-                    const std::vector<smmap_utilities::AllGrippersSinglePose>& grippers_poses,
+                    const std::vector<AllGrippersSinglePose>& grippers_poses,
                     const std::vector<Eigen::VectorXd>& robot_configurations,
                     const bool robot_configurations_valid) const;
 
@@ -222,8 +222,8 @@ namespace smmap
 
             deformable_manipulation_msgs::TestRobotMotionMicrostepsRequest toRosMicrostepsRequest(
                     const EigenHelpers::VectorIsometry3d& starting_rope_configuration,
-                    const smmap_utilities::AllGrippersSinglePose& starting_grippers_poses,
-                    const smmap_utilities::AllGrippersSinglePose& target_grippers_poses,
+                    const AllGrippersSinglePose& starting_grippers_poses,
+                    const AllGrippersSinglePose& target_grippers_poses,
                     const int num_substeps) const;
     };
 }

@@ -9,8 +9,6 @@
 
 namespace smmap
 {
-    using namespace smmap_utilities;
-
     std::vector<GripperData> GetGrippersData(ros::NodeHandle& nh)
     {
         ROS_INFO_NAMED("ros_comms_helpers" , "Getting grippers data");

@@ -18,13 +18,15 @@ namespace smmap
         typedef std::shared_ptr<QuinlanRubberBand> Ptr;
         typedef std::shared_ptr<const QuinlanRubberBand> ConstPtr;
 
-        static smmap_utilities::ObjectPointSet AggregateBandPoints(
-                const std::vector<QuinlanRubberBand::Ptr>& bands);
+        static ObjectPointSet AggregateBandPoints(
+                const std::vector<QuinlanRubberBand>& bands);
+        static ObjectPointSet AggregateBandPoints(
+                const std::vector<QuinlanRubberBand::ConstPtr>& bands);
 
         QuinlanRubberBand(
                 std::shared_ptr<ros::NodeHandle> nh,
                 std::shared_ptr<ros::NodeHandle> ph,
-                const smmap_utilities::Visualizer::ConstPtr vis,
+                const Visualizer::ConstPtr vis,
                 const sdf_tools::SignedDistanceField::ConstPtr& sdf,
                 const XYZGrid& work_space_grid,
                 const std::function<std::vector<ssize_t>(const ssize_t node)>& node_neighbours_fn,
@@ -40,13 +42,13 @@ namespace smmap
         void setPointsAndSmooth(const EigenHelpers::VectorVector3d& points);
 
         void resetBand(const WorldState& world_state);
-        void resetBand(const smmap_utilities::ObjectPointSet& object_config,
-                       const smmap_utilities::PairGripperPositions& gripper_positions);
+        void resetBand(const ObjectPointSet& object_config,
+                       const PairGripperPositions& gripper_positions);
 
         void overridePoints(const EigenHelpers::VectorVector3d& points);
 
         const EigenHelpers::VectorVector3d& forwardPropagate(
-                const smmap_utilities::PairGripperPositions& gripper_positions,
+                const PairGripperPositions& gripper_positions,
                 bool verbose);
 
         const EigenHelpers::VectorVector3d& getVectorRepresentation() const;
@@ -56,7 +58,7 @@ namespace smmap
         const EigenHelpers::VectorVector3d& upsampleBand() const;
         const Eigen::VectorXd& upsampleBandSingleVector() const;
 
-        smmap_utilities::Pair3dPositions getEndpoints() const;
+        Pair3dPositions getEndpoints() const;
 
         double maxSafeLength() const;
         double totalLength() const;
@@ -108,7 +110,7 @@ namespace smmap
         const std::shared_ptr<ros::NodeHandle> ph_;
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
         const XYZGrid work_space_grid_;
-        const smmap_utilities::Visualizer::ConstPtr vis_;
+        const Visualizer::ConstPtr vis_;
 
         const std::vector<ssize_t> path_between_grippers_through_object_;
         EigenHelpers::VectorVector3d band_;

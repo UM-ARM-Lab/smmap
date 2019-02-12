@@ -3,9 +3,10 @@
 #include <arc_utilities/thin_plate_spline.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
 #include <smmap_utilities/neighbours.h>
+#include <boost/filesystem.hpp>
+#include <deformable_manipulation_experiment_params/conversions.hpp>
 
 using namespace smmap;
-using namespace smmap_utilities;
 using namespace arc_utilities;
 using namespace arc_helpers;
 using namespace Eigen;
@@ -15,12 +16,21 @@ using namespace EigenHelpers;
 //          Random Helpers
 ////////////////////////////////////////////////////////////////////////////////
 
-ObjectPointSet TpsPointsFromBandAndGrippers(
-        const RubberBand::ConstPtr& band,
+int GetNumberOfDigits(int i)
+{
+    if (i < 0)
+    {
+        i = -i;
+    }
+    return i > 0 ? (int)std::log10((double) i) + 1 : 1;
+}
+
+ObjectPointSet PointsFromBandAndGrippers(
+        const RubberBand& band,
         const PairGripperPositions& grippers_start,
         const PairGripperPositions& grippers_end)
 {
-    const VectorVector3d band_points = band->upsampleBand();
+    const VectorVector3d& band_points = band.upsampleBand();
     ObjectPointSet result(3, band_points.size() + 4);
     for (size_t band_idx = 0; band_idx < band_points.size(); ++band_idx)
     {
@@ -138,9 +148,90 @@ void VisualizeBandSurface(
     {
         const float ratio = (float)(band_idx) / (float)(num_bands - 1);
         const auto color = InterpolateColor(start_color, end_color, ratio);
-        colors.insert(colors.end(), band_surface.cols(), color);
+        colors.insert(colors.end(), points_per_band, color);
     }
     vis->visualizePoints(ns, band_surface, colors, id, 0.002);
+}
+
+void VisualizeBandSurface(
+        const Visualizer::ConstPtr& vis,
+        const std::vector<RubberBand>& band_surface,
+        const std_msgs::ColorRGBA& start_color,
+        const std_msgs::ColorRGBA& end_color,
+        const std::string& ns,
+        const int32_t id = 1)
+{
+    if (band_surface.empty())
+    {
+        return;
+    }
+    const auto points_per_band = band_surface[0].upsampleBand().size();
+    const auto num_bands = band_surface.size();
+    ObjectPointSet points(3, num_bands * points_per_band);
+    for (size_t band_idx = 0; band_idx < num_bands; ++band_idx)
+    {
+        points.block(0, band_idx * points_per_band, 3, points_per_band)
+                = EigenHelpersConversions::VectorEigenVector3dToEigenMatrix3Xd(
+                    band_surface[band_idx].upsampleBand());
+    }
+    VisualizeBandSurface(vis, points, points_per_band, start_color, end_color, ns, id);
+}
+
+VectorVector3d TransformData(
+        const Eigen::Isometry3d& transform,
+        const VectorVector3d& data)
+{
+    VectorVector3d retval;
+    retval.reserve(data.size());
+    for (const auto& vec : data)
+    {
+        retval.push_back(transform * vec);
+    }
+    return retval;
+}
+
+VectorIsometry3d TransformData(
+        const Eigen::Isometry3d& transform,
+        const VectorIsometry3d& data)
+{
+    VectorIsometry3d retval;
+    retval.reserve(data.size());
+    for (const auto& pose : data)
+    {
+        retval.push_back(transform * pose);
+    }
+    return retval;
+}
+
+std::vector<CollisionData> TransformData(
+        const Eigen::Isometry3d& transform,
+        const std::vector<CollisionData>& data)
+{
+    std::vector<CollisionData> retval;
+    retval.reserve(data.size());
+    for (const auto& collision_data : data)
+    {
+        retval.push_back(CollisionData(
+                             transform * collision_data.nearest_point_to_obstacle_,
+                             transform * collision_data.obstacle_surface_normal_,
+                             collision_data.distance_to_obstacle_));
+    }
+    return retval;
+}
+
+WorldState TransformWorldState(
+        const Eigen::Isometry3d& transform,
+        const WorldState& state)
+{
+    WorldState new_state;
+    new_state.object_configuration_ = transform * state.object_configuration_;
+    new_state.rope_node_transforms_ = TransformData(transform, state.rope_node_transforms_);
+    new_state.all_grippers_single_pose_ = TransformData(transform, state.all_grippers_single_pose_);
+    new_state.robot_configuration_ = state.robot_configuration_;
+    new_state.robot_configuration_valid_ = state.robot_configuration_valid_;
+    new_state.gripper_collision_data_ = TransformData(transform, state.gripper_collision_data_);
+    new_state.sim_time_ = state.sim_time_;
+    return new_state;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -266,11 +357,11 @@ TransitionTesting::TransitionTesting(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
         RobotInterface::Ptr robot,
-        const Visualizer::ConstPtr& vis)
-    : nh_(nh)
-    , ph_(ph)
-    , robot_(robot)
-    , vis_(vis)
+        Visualizer::Ptr vis)
+    : nh_(std::move(nh))
+    , ph_(std::move(ph))
+    , robot_(std::move(robot))
+    , vis_(std::move(vis))
     , visualize_gripper_motion_(!GetDisableAllVisualizations(*ph_) && GetVisualizeGripperMotion(*ph_))
 
     , seed_(GetPlannerSeed(*ph_))
@@ -288,9 +379,11 @@ TransitionTesting::TransitionTesting(
     , gripper_min_distance_to_obstacles_(GetRRTMinGripperDistanceToObstacles(*ph_))
     , experiment_center_of_rotation_(calculateExperimentCenterOfRotation())
 
-    , deformable_type_(GetDeformableType(*nh))
-    , task_type_(GetTaskType(*nh))
-    , data_folder_("/tmp/transition_learning_data_generation")
+    , deformable_type_(GetDeformableType(*nh_))
+    , task_type_(GetTaskType(*nh_))
+    , data_folder_(ROSHelpers::GetParam<std::string>(*ph_, "data_folder", "/tmp/transition_learning_data_generation"))
+    , sim_test_result_suffix_("_results.compressed")
+    , prediction_result_suffix_("_prediction.compressed")
 {
     std::srand((unsigned int)seed_);
     initialize(robot_->start());
@@ -405,6 +498,46 @@ void TransitionTesting::initializeBand(const WorldState& world_state)
                 max_band_length);
 }
 
+std::vector<std::string> TransitionTesting::getDataFileList()
+{
+    const auto substr_len = sim_test_result_suffix_.size();
+
+    std::vector<std::string> files;
+    const boost::filesystem::path p(data_folder_);
+    const boost::filesystem::directory_iterator start(p);
+    const boost::filesystem::directory_iterator end;
+    for (auto itr = start; itr != end; ++itr)
+    {
+        if (boost::filesystem::is_regular_file(itr->status()))
+        {
+            const auto filename = itr->path().string();
+            if (filename.substr(filename.size() - substr_len, std::string::npos) == sim_test_result_suffix_)
+            {
+                files.push_back(filename);
+            }
+            else
+            {
+                ROS_WARN_STREAM("Ignoring file: " << filename);
+            }
+        }
+    }
+    std::sort(files.begin(), files.end());
+    ROS_INFO_STREAM("Found " << files.size() << " possible data files in " << data_folder_);
+    return files;
+}
+
+TransitionSimulationRecord TransitionTesting::loadSimRecord(const std::string& filename)
+{
+    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
+    const auto record = TransitionSimulationRecord::Deserialize(buffer, 0, *band_);
+    if (record.second != buffer.size())
+    {
+        throw_arc_exception(std::invalid_argument,
+                            "Buffer size mismatch: " + filename);
+    }
+    return record.first;
+}
+
 void TransitionTesting::runTests(const bool generate_new_test_data)
 {
     if (generate_new_test_data)
@@ -413,69 +546,32 @@ void TransitionTesting::runTests(const bool generate_new_test_data)
         data_generator.generateTestData(*generator_, data_folder_);
     }
 
-//    const auto tps_template_points = TpsPointsFromBandAndGrippers(
-//                trans.starting_state_.rubber_band_,
-//                trans.starting_gripper_positions_,
-//                trans.ending_gripper_positions_);
-
-//    const auto tps_target_points = TpsPointsFromBandAndGrippers(
-//                random_test_band_start,
-//                ToGripperPositions(random_test_starting_gripper_poses_),
-//                ToGripperPositions(random_test_ending_gripper_poses_));
-
-//    ThinPlateSpline<3> tps_warp(tps_template_points, tps_target_points);
-//    const auto tps_band_surface_prediction = tps_warp.interpolate(band_surface);
-
-//    // Visualization
-//    {
-//        // Add each band with a different color, ranging from
-//        // green (early in the history) to orange (late in the history)
-//        VisualizeBandSurface(vis_, tps_band_surface_prediction, points_per_band, Visualizer::Green(), Visualizer::Orange(), "band_surface_tps_prediction", 1);
-//        vis_->visualizePoints("tps_target", tps_target_points, Visualizer::Green(), 1, 0.002);
-//    }
-}
-
-void TransitionTesting::visualizeDeformableObject(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std_msgs::ColorRGBA& color,
-        const int32_t id) const
-{
-    switch (deformable_type_)
+    const auto files = getDataFileList();
+    for (const auto& file : files)
     {
-        case ROPE:
-            vis_->visualizeRope(marker_name, object_configuration, color, id);
-            break;
+        try
+        {
+            const auto sim_record = loadSimRecord(file);
 
-        case CLOTH:
-            vis_->visualizeCloth(marker_name, object_configuration, color, id);
-
-        default:
-            assert(false && "Imposibru!");
+            SE3Prediction se3_predictor(*this);
+            se3_predictor.predictAll(
+                        sim_record.template_,
+                        *sim_record.tested_.starting_state_.rubber_band_,
+                        sim_record.tested_.ending_gripper_positions_);
+            se3_predictor.visualizePrediction();
+            std::cout << "Press any key to continue " << std::flush;
+            auto key = arc_helpers::GetChar();
+            if (key != '\n')
+            {
+                std::cout << std::endl;
+            }
+        }
+        catch (const std::exception& ex)
+        {
+            ROS_ERROR_STREAM("Error parsing file: " << file << ": " << ex.what());
+        }
     }
 }
-
-void TransitionTesting::visualizeDeformableObject(
-        const std::string& marker_name,
-        const ObjectPointSet& object_configuration,
-        const std::vector<std_msgs::ColorRGBA>& colors,
-        const int32_t id) const
-{
-    switch (deformable_type_)
-    {
-        case ROPE:
-            vis_->visualizeRope(marker_name, object_configuration, colors, id);
-            break;
-
-        case CLOTH:
-            vis_->visualizeCloth(marker_name, object_configuration, colors, id);
-            break;
-
-        default:
-            assert(false && "Imposibru!");
-    }
-}
-
 
 ////////////////////////////////////////////////////////////////////////////////
 //          Data Generation
@@ -484,6 +580,7 @@ void TransitionTesting::visualizeDeformableObject(
 TransitionTesting::DataGeneration::DataGeneration(
         const TransitionTesting& framework)
     : framework_(framework)
+    , random_rotation_distribution_()
 {}
 
 void TransitionTesting::DataGeneration::generateTestData(
@@ -501,7 +598,7 @@ void TransitionTesting::DataGeneration::generateTestData(
         auto bands = framework_.transition_estimator_->reduceMicrostepsToBands(
                     trans.microstep_state_history_);
         bands.insert(bands.begin(), trans.starting_state_.rubber_band_);
-        const auto band_surface = RubberBand::AggregateBandPoints(bands);
+        const auto band_surface = RubberBand::AggregateBandPoints(ToConstPtr(bands));
 
         VisualizeBandSurface(framework_.vis_, band_surface, points_per_band, Visualizer::Blue(), Visualizer::Red(), "band_surface_template", 1);
         framework_.transition_estimator_->visualizeTransition(trans, 1, "transition_testing_");
@@ -526,7 +623,7 @@ void TransitionTesting::DataGeneration::generateTestData(
                 const auto& microsteps = test_result.second;
 
                 // Rejection sampling
-                if (microsteps.size() == 0)
+                if (microsteps.empty())
                 {
                     --i;
                     ROS_INFO("Rejecting sample, band starts overstretched");
@@ -545,7 +642,7 @@ void TransitionTesting::DataGeneration::generateTestData(
                 }
                 auto test_bands = framework_.transition_estimator_->reduceMicrostepsToBands(microsteps);
                 test_bands.insert(test_bands.begin(), random_test_band_start);
-                const auto test_band_surface = RubberBand::AggregateBandPoints(test_bands);
+                const auto test_band_surface = RubberBand::AggregateBandPoints(ToConstPtr(test_bands));
 
                 // Add each band with a different color, ranging from cyan (early in the history) to magenta (late in the history)
                 VisualizeBandSurface(framework_.vis_, test_band_surface, points_per_band, Visualizer::Cyan(), Visualizer::Magenta(), "band_surface_simulation", 1);
@@ -570,19 +667,17 @@ void TransitionTesting::DataGeneration::generateTestData(
 
                     transition_test_results.tested_band_surface_ = test_band_surface;
 
-                    const int trans_idx_width = (int)std::ceil(((double)transitions.size())/10.0);
-                    const int test_idx_width = (int)std::ceil(((double)num_random_tests)/10.0);
+                    const int trans_idx_width = GetNumberOfDigits(static_cast<int>(transitions.size()));
+                    const int test_idx_width = GetNumberOfDigits(num_random_tests);
                     std::vector<uint8_t> buffer;
                     transition_test_results.serializeSelf(buffer);
                     std::stringstream path;
                     path << data_folder
                          << "/trans_" << std::setfill('0') << std::setw(trans_idx_width) << idx
                          << "_random_test_" << std::setfill('0') << std::setw(test_idx_width) << i
-                         << "_results.compressed";
+                         << framework_.sim_test_result_suffix_;
                     ZlibHelpers::CompressAndWriteToFile(buffer, path.str());
                 }
-
-//                std::cout << "    Press any key to continue " << std::flush; GetChar(); std::cout << std::endl;
             }
         }
     }
@@ -671,5 +766,177 @@ void TransitionTesting::DataGeneration::generateRandomTest(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-//          Data Evaluation
+//          Prediction
 ////////////////////////////////////////////////////////////////////////////////
+
+TransitionTesting::SE3Prediction::SE3Prediction(
+        const TransitionTesting &framework)
+    : prediction_valid_(false)
+    , framework_(framework)
+{}
+
+std::map<std::string, std::vector<RubberBand>> TransitionTesting::SE3Prediction::predictAll(
+        const TransitionEstimation::StateTransition& stored_trans,
+        const RubberBand& band,
+        const PairGripperPositions& action)
+{
+    stored_bands_.clear();
+    stored_bands_.reserve(stored_trans.microstep_state_history_.size() + 1);
+    stored_bands_.push_back(band);
+    for (const auto& state : stored_trans.microstep_state_history_)
+    {
+        RubberBand temp_band(band);
+        temp_band.resetBand(state);
+        stored_bands_.push_back(temp_band);
+    }
+    VisualizeBandSurface(framework_.vis_,
+                         stored_bands_,
+                         Visualizer::Blue(),
+                         Visualizer::Red(),
+                         "stored_bands",
+                         1);
+
+    warping_target_points_ = PointsFromBandAndGrippers(
+                band,
+                band.getEndpoints(),
+                action);
+    framework_.vis_->visualizePoints("TARGET_POINTS",
+                                     warping_target_points_,
+                                     Visualizer::Yellow(), 1, 0.002);
+
+    arc_helpers::InteractiveWaitToContinue();
+
+    predictBasedOnPlannedBand(stored_trans);
+    predictBasedOnExecutedBand(stored_trans);
+    prediction_valid_ = true;
+    return results_;
+}
+
+void TransitionTesting::SE3Prediction::predictBasedOnPlannedBand(
+        const TransitionEstimation::StateTransition& stored_trans)
+{
+    const std::string transform_definition_name = "__PLANNED_BAND__";
+
+
+
+    warping_template_points_planned_ = PointsFromBandAndGrippers(
+                *stored_trans.starting_state_.planned_rubber_band_,
+                stored_trans.starting_gripper_positions_,
+                stored_trans.ending_gripper_positions_);
+
+
+    const Isometry3d transform =
+            Isometry3d(Eigen::umeyama(warping_template_points_planned_, warping_target_points_, false));
+    template_planned_band_aligned_to_target_ = transform * warping_template_points_planned_;
+
+
+
+    framework_.vis_->visualizePoints("TEMPLATE_POINTS_PLANNED",
+                                     warping_template_points_planned_,
+                                     Visualizer::Green(), 1, 0.002);
+    framework_.vis_->visualizePoints("TEMPLATE_POINTS_PLANNED_ALIGNED",
+                                     template_planned_band_aligned_to_target_,
+                                     Visualizer::Olive(), 1, 0.002);
+
+    arc_helpers::InteractiveWaitToContinue();
+
+
+    std::vector<RubberBand> transformed_bands_from_stored_world_state;
+    transformed_bands_from_stored_world_state.reserve(stored_trans.microstep_state_history_.size() + 1);
+    for (const auto state : stored_trans.microstep_state_history_)
+    {
+        RubberBand band(stored_bands_[0]);
+        band.resetBand(TransformWorldState(transform, state));
+        transformed_bands_from_stored_world_state.push_back(band);
+    }
+    results_[BASENAME + transform_definition_name + "WORLD_STATES"] = transformed_bands_from_stored_world_state;
+
+    std::vector<RubberBand> transformed_bands_from_stored_bands;
+    transformed_bands_from_stored_bands.reserve(stored_trans.microstep_state_history_.size() + 1);
+    for (const auto stored_band : stored_bands_)
+    {
+        RubberBand band(stored_band);
+        band.setPointsAndSmooth(TransformData(transform, stored_band.upsampleBand()));
+        transformed_bands_from_stored_bands.push_back(band);
+    }
+    results_[BASENAME + transform_definition_name + "STORED_BANDS"] = transformed_bands_from_stored_bands;
+}
+
+void TransitionTesting::SE3Prediction::predictBasedOnExecutedBand(
+        const TransitionEstimation::StateTransition& stored_trans)
+{
+    const std::string transform_definition_name = "__EXECUTED_BAND__";
+
+    warping_template_points_executed_ = PointsFromBandAndGrippers(
+                *stored_trans.starting_state_.rubber_band_,
+                stored_trans.starting_gripper_positions_,
+                stored_trans.ending_gripper_positions_);
+
+    const Isometry3d transform =
+            Isometry3d(Eigen::umeyama(warping_template_points_executed_, warping_target_points_, false));
+    template_executed_band_aligned_to_target_ = transform * warping_template_points_executed_;
+
+
+    std::vector<RubberBand> transformed_bands_from_stored_world_state;
+    transformed_bands_from_stored_world_state.reserve(stored_trans.microstep_state_history_.size() + 1);
+    for (const auto state : stored_trans.microstep_state_history_)
+    {
+        RubberBand band(stored_bands_[0]);
+        band.resetBand(TransformWorldState(transform, state));
+        transformed_bands_from_stored_world_state.push_back(band);
+    }
+    results_[BASENAME + transform_definition_name + "WORLD_STATES"] = transformed_bands_from_stored_world_state;
+
+    std::vector<RubberBand> transformed_bands_from_stored_bands;
+    transformed_bands_from_stored_bands.reserve(stored_trans.microstep_state_history_.size() + 1);
+    for (const auto stored_band : stored_bands_)
+    {
+        RubberBand band(stored_band);
+        band.setPointsAndSmooth(TransformData(transform, stored_band.upsampleBand()));
+        transformed_bands_from_stored_bands.push_back(band);
+    }
+    results_[BASENAME + transform_definition_name + "STORED_BANDS"] = transformed_bands_from_stored_bands;
+}
+
+void TransitionTesting::SE3Prediction::visualizePrediction()
+{
+    assert(prediction_valid_);
+
+    VisualizeBandSurface(framework_.vis_,
+                         stored_bands_,
+                         Visualizer::Blue(),
+                         Visualizer::Red(),
+                         "stored_bands",
+                         1);
+
+    framework_.vis_->visualizePoints("TARGET_POINTS",
+                                     warping_template_points_planned_,
+                                     Visualizer::Yellow(), 1, 0.002);
+
+    framework_.vis_->visualizePoints("TEMPLATE_POINTS_PLANNED",
+                                     warping_template_points_planned_,
+                                     Visualizer::Green(), 1, 0.002);
+
+    framework_.vis_->visualizePoints("TEMPLATE_POINTS_PLANNED_ALIGNED",
+                                     template_planned_band_aligned_to_target_,
+                                     Visualizer::Olive(), 1, 0.002);
+
+    framework_.vis_->visualizePoints("TEMPLATE_POINTS_EXECUTED",
+                                     warping_template_points_executed_,
+                                     Visualizer::White(), 1, 0.002);
+
+    framework_.vis_->visualizePoints("TEMPLATE_POINTS_EXECUTED_ALIGNED",
+                                     template_executed_band_aligned_to_target_,
+                                     Visualizer::Silver(), 1, 0.002);
+
+    for (const auto& result : results_)
+    {
+        VisualizeBandSurface(framework_.vis_,
+                             result.second,
+                             Visualizer::Cyan(),
+                             Visualizer::Orange(),
+                             result.first,
+                             1);
+    }
+}
+

@@ -10,7 +10,6 @@ using namespace Eigen;
 using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
 using namespace deformable_manipulation_msgs;
-using namespace smmap_utilities;
 
 namespace smmap
 {
@@ -47,7 +46,8 @@ namespace smmap
 
     RobotInterface::~RobotInterface()
     {
-        ROS_INFO_NAMED("robot_interface", "Terminating");
+        ROS_INFO_NAMED("robot_interface", "Terminating the whole node");
+        ros::shutdown();
         spin_thread_.join();
     }
 

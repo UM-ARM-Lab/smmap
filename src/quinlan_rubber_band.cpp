@@ -33,7 +33,6 @@
 #define BAND_BACKTRACKING_THRESHOLD 0.1
 #define BAND_SMOOTHING_ITERATIONS 100
 
-using namespace smmap_utilities;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
 namespace smmap
@@ -89,7 +88,29 @@ namespace smmap
     ////////////////////////////////////////////////////////////////////////////
 
     ObjectPointSet QuinlanRubberBand::AggregateBandPoints(
-            const std::vector<QuinlanRubberBand::Ptr>& bands)
+            const std::vector<QuinlanRubberBand>& bands)
+    {
+        if (bands.size() == 0)
+        {
+            return ObjectPointSet();
+        }
+
+        const size_t points_per_band = bands[0].upsampleBand().size();
+        ObjectPointSet points(3, points_per_band * bands.size());
+        for (size_t band_idx = 0; band_idx < bands.size(); ++band_idx)
+        {
+            const auto band_points = bands[band_idx].upsampleBand();
+            for (size_t point_idx = 0; point_idx < band_points.size(); ++point_idx)
+            {
+                points.col(band_idx * points_per_band + point_idx) =
+                        band_points[point_idx];
+            }
+        }
+        return points;
+    }
+
+    ObjectPointSet QuinlanRubberBand::AggregateBandPoints(
+            const std::vector<QuinlanRubberBand::ConstPtr>& bands)
     {
         if (bands.size() == 0)
         {

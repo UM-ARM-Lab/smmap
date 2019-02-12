@@ -10,6 +10,8 @@ std::vector<Eigen::VectorXd> getJointInfo()
 
 int main(int argc, char* argv[])
 {
+    using namespace smmap;
+
     // Read in all ROS parameters
     ros::init(argc, argv, "smmap_planner_node", ros::init_options::NoSigintHandler);
 
@@ -17,7 +19,7 @@ int main(int argc, char* argv[])
     auto ph = std::make_shared<ros::NodeHandle>("~");
 
     ROS_INFO("Creating utility objects");
-    auto robot = std::make_shared<smmap::RobotInterface>(nh, ph);
+    auto robot = std::make_shared<RobotInterface>(nh, ph);
     robot->setCallbackFunctions(
                 nullptr,
                 nullptr,
@@ -32,11 +34,11 @@ int main(int argc, char* argv[])
                 nullptr,
                 nullptr,
                 nullptr);
-    auto vis = std::make_shared<smmap_utilities::Visualizer>(nh, ph, true);
-    auto task_specification(smmap::TaskSpecification::MakeTaskSpecification(nh, ph, vis));
+    auto vis = std::make_shared<Visualizer>(nh, ph, true);
+    auto task_specification(TaskSpecification::MakeTaskSpecification(nh, ph, vis));
 
     ROS_INFO("Creating and executing planner");
-    smmap::TaskFramework planner(nh, ph, robot, vis, task_specification);
+    TaskFramework planner(nh, ph, robot, vis, task_specification);
     planner.execute();
 
     ROS_INFO("Disposing planner...");

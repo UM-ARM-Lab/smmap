@@ -25,7 +25,6 @@
 #include "smmap/straight_line_controller.h"
 
 using namespace smmap;
-using namespace smmap_utilities;
 using namespace arc_utilities;
 using namespace Eigen;
 using namespace EigenHelpers;
@@ -111,7 +110,7 @@ TaskFramework::TaskFramework(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
         RobotInterface::Ptr robot,
-        smmap_utilities::Visualizer::Ptr vis,
+        Visualizer::Ptr vis,
         TaskSpecification::Ptr task_specification)
     // Robot and task parameters
     : nh_(nh)

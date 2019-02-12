@@ -4,7 +4,6 @@
 #include <arc_utilities/timing.hpp>
 
 using namespace smmap;
-using namespace smmap_utilities;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Constructor

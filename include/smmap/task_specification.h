@@ -31,7 +31,7 @@ namespace smmap
             static TaskSpecification::Ptr MakeTaskSpecification(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis);
+                    Visualizer::Ptr vis);
 
         public:
 
@@ -42,7 +42,7 @@ namespace smmap
             TaskSpecification(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis,
+                    Visualizer::Ptr vis,
                     const bool is_dijkstras_type_task = false);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -51,13 +51,13 @@ namespace smmap
 
             void visualizeDeformableObject(
                     const std::string& marker_name,
-                    const smmap_utilities::ObjectPointSet& object_configuration,
+                    const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color,
                     const int32_t id = 1) const;
 
             void visualizeDeformableObject(
                     const std::string& marker_name,
-                    const smmap_utilities::ObjectPointSet& object_configuration,
+                    const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors,
                     const int32_t id = 1) const;
 
@@ -98,7 +98,7 @@ namespace smmap
              * @return
              */
             ObjectDeltaAndWeight calculateStretchingCorrectionDeltaFullyConnected(
-                    const smmap_utilities::ObjectPointSet& object_configuration,
+                    const ObjectPointSet& object_configuration,
                     bool visualize) const;
 
             /**
@@ -108,7 +108,7 @@ namespace smmap
              * @return
              */
             ObjectDeltaAndWeight calculateStretchingCorrectionDeltaPairwise(
-                    const smmap_utilities::ObjectPointSet& object_configuration,
+                    const ObjectPointSet& object_configuration,
                     bool visualize) const;
 
             /**
@@ -172,9 +172,9 @@ namespace smmap
 
             const std::shared_ptr<ros::NodeHandle> nh_;
             const std::shared_ptr<ros::NodeHandle> ph_;
-            const smmap_utilities::Visualizer::Ptr vis_;
+            const Visualizer::Ptr vis_;
 
-            const std::vector<smmap_utilities::GripperData> grippers_data_;
+            const std::vector<GripperData> grippers_data_;
             const Eigen::MatrixXd object_initial_node_distance_;
             const ssize_t num_nodes_;
 
@@ -192,13 +192,13 @@ namespace smmap
 
             virtual void visualizeDeformableObject_impl(
                     const std::string& marker_name,
-                    const smmap_utilities::ObjectPointSet& object_configuration,
+                    const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color,
                     const int32_t id) const;
 
             virtual void visualizeDeformableObject_impl(
                     const std::string& marker_name,
-                    const smmap_utilities::ObjectPointSet& object_configuration,
+                    const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors,
                     const int32_t id) const;
 
@@ -227,7 +227,7 @@ namespace smmap
             ModelAccuracyTestTask(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis);
+                    Visualizer::Ptr vis);
 
         private:
             virtual double calculateError_impl(
@@ -248,7 +248,7 @@ namespace smmap
             CoverageTask(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis,
+                    Visualizer::Ptr vis,
                     const bool is_dijkstras_type_task);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -263,8 +263,8 @@ namespace smmap
             bool pointIsCovered(const ssize_t cover_idx, const Eigen::Vector3d& test_point) const;
 
             /// Stores the points that we are trying to cover with the rope
-            const smmap_utilities::ObjectPointSet cover_points_;
-            const smmap_utilities::ObjectPointSet cover_point_normals_;
+            const ObjectPointSet cover_points_;
+            const ObjectPointSet cover_point_normals_;
             const ssize_t num_cover_points_;
 
             const double error_threshold_along_normal_;
@@ -279,7 +279,7 @@ namespace smmap
             DirectCoverageTask(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis);
+                    Visualizer::Ptr vis);
 
         private:
             virtual ObjectDeltaAndWeight calculateObjectErrorCorrectionDelta_impl(
@@ -319,7 +319,7 @@ namespace smmap
             DijkstrasCoverageTask(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis);
+                    Visualizer::Ptr vis);
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Virtual function wrappers
@@ -412,7 +412,7 @@ namespace smmap
             DistanceBasedCorrespondencesTask(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis);
+                    Visualizer::Ptr vis);
 
         private:
             virtual Correspondences getCoverPointCorrespondences_impl(
@@ -429,7 +429,7 @@ namespace smmap
             FixedCorrespondencesTask(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis);
+                    Visualizer::Ptr vis);
 
         protected:
             std::vector<std::vector<ssize_t>> correspondences_internal_fixed_;

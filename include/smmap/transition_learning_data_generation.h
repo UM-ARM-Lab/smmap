@@ -2,7 +2,9 @@
 
 #include <random>
 #include <memory>
+#include <string>
 
+#include <arc_utilities/arc_helpers.hpp>
 #include <smmap_utilities/visualization_tools.h>
 #include "smmap/learned_transitions.h"
 #include "smmap/quinlan_rubber_band.h"
@@ -16,13 +18,13 @@ namespace smmap
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
         TransitionEstimation::StateTransition template_;
-        smmap_utilities::ObjectPointSet template_band_surface_;
+        ObjectPointSet template_band_surface_;
 
         Eigen::Isometry3d center_of_rotation_;
         Eigen::Isometry3d transform_applied_;
 
         TransitionEstimation::StateTransition tested_;
-        smmap_utilities::ObjectPointSet tested_band_surface_;
+        ObjectPointSet tested_band_surface_;
 
         uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
 
@@ -37,7 +39,7 @@ namespace smmap
 
         bool operator==(const TransitionSimulationRecord& other) const;
 
-        void visualize(const smmap_utilities::Visualizer::ConstPtr& vis) const;
+        void visualize(const Visualizer::ConstPtr& vis) const;
     };
 
     class TransitionTesting
@@ -46,7 +48,7 @@ namespace smmap
         const std::shared_ptr<ros::NodeHandle> nh_;
         const std::shared_ptr<ros::NodeHandle> ph_;
         const RobotInterface::Ptr robot_;
-        const smmap_utilities::Visualizer::ConstPtr vis_;
+        const Visualizer::ConstPtr vis_;
         const bool visualize_gripper_motion_;
 
         const unsigned long seed_;
@@ -66,6 +68,8 @@ namespace smmap
         TransitionEstimation::Ptr transition_estimator_;
 
         const std::string data_folder_;
+        const std::string sim_test_result_suffix_;
+        const std::string prediction_result_suffix_;
 
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -74,27 +78,17 @@ namespace smmap
                 std::shared_ptr<ros::NodeHandle> nh,
                 std::shared_ptr<ros::NodeHandle> ph,
                 RobotInterface::Ptr robot,
-                const smmap_utilities::Visualizer::ConstPtr& vis);
+                Visualizer::Ptr vis);
 
     private:
         Eigen::Isometry3d calculateExperimentCenterOfRotation();
         void initialize(const WorldState& world_state);
         void initializeBand(const WorldState& world_state);
+        std::vector<std::string> getDataFileList();
+        TransitionSimulationRecord loadSimRecord(const std::string& filename);
 
     public:
         void runTests(const bool generate_new_test_data);
-
-        void visualizeDeformableObject(
-                const std::string& marker_name,
-                const smmap_utilities::ObjectPointSet& object_configuration,
-                const std_msgs::ColorRGBA& color,
-                const int32_t id = 1) const;
-
-        void visualizeDeformableObject(
-                const std::string& marker_name,
-                const smmap_utilities::ObjectPointSet& object_configuration,
-                const std::vector<std_msgs::ColorRGBA>& colors,
-                const int32_t id = 1) const;
 
     private:
         class DataGeneration
@@ -112,8 +106,8 @@ namespace smmap
 
             // Stored here because Eigen + tuple = bad
             EigenHelpers::VectorIsometry3d random_test_rope_nodes_start_;
-            smmap_utilities::AllGrippersSinglePose random_test_starting_gripper_poses_;
-            smmap_utilities::AllGrippersSinglePose random_test_ending_gripper_poses_;
+            AllGrippersSinglePose random_test_starting_gripper_poses_;
+            AllGrippersSinglePose random_test_ending_gripper_poses_;
             Eigen::Isometry3d random_test_transform_applied_;
 
             void generateRandomTest(
@@ -121,5 +115,53 @@ namespace smmap
                     const TransitionEstimation::StateTransition& trans);
         };
         friend class DataGeneration;
+
+        class SE3Prediction
+        {
+        public:
+            SE3Prediction(const TransitionTesting& framework);
+
+            std::map<std::string, std::vector<RubberBand>> predictAll(
+                    const TransitionEstimation::StateTransition& stored_trans,
+                    const RubberBand& band,
+                    const PairGripperPositions& action);
+
+            void predictBasedOnPlannedBand(
+                    const TransitionEstimation::StateTransition& stored_trans);
+
+            void predictBasedOnExecutedBand(
+                    const TransitionEstimation::StateTransition& stored_trans);
+
+            void visualizePrediction();
+
+            bool prediction_valid_;
+            const TransitionTesting& framework_;
+            static constexpr auto BASENAME = "SE3_ALIGNMENT";
+            std::vector<RubberBand> stored_bands_;
+            ObjectPointSet warping_template_points_planned_;
+            ObjectPointSet warping_template_points_executed_;
+            ObjectPointSet warping_target_points_;
+            ObjectPointSet template_planned_band_aligned_to_target_;
+            ObjectPointSet template_executed_band_aligned_to_target_;
+            std::map<std::string, std::vector<RubberBand>> results_;
+        };
+        friend class SE3Prediction;
+
+        class TPSPrediction
+        {
+        public:
+            TPSPrediction(const TransitionTesting& framework);
+
+            std::map<std::string, std::vector<RubberBand>> predictAll(
+                    const TransitionEstimation::StateTransition& stored_trans,
+                    const RubberBand& starting_band,
+                    const PairGripperPositions& action);
+
+            const TransitionTesting& framework_;
+            static constexpr auto BASENAME = "TPS_WARPING";
+            std::vector<RubberBand> stored_bands_;
+            std::map<std::string, std::vector<RubberBand>> results_;
+        };
+        friend class TPSPrediction;
     };
 }

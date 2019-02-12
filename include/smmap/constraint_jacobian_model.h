@@ -26,7 +26,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             static void SetInitialObjectConfiguration(
-                    const smmap_utilities::ObjectPointSet& object_initial_configuration);
+                    const ObjectPointSet& object_initial_configuration);
 
         private:
 
@@ -38,9 +38,9 @@ namespace smmap
                     const WorldState& previous,
                     const WorldState& next) final override;
 
-            virtual smmap_utilities::ObjectPointSet getObjectDelta_impl(
+            virtual ObjectPointSet getObjectDelta_impl(
                     const WorldState& world_state,
-                    const smmap_utilities::AllGrippersSinglePoseDelta& grippers_pose_delta) const final override;
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const final override;
 
             ////////////////////////////////////////////////////////////////////
             // Static helpers
@@ -94,7 +94,7 @@ namespace smmap
 
             Eigen::MatrixXd computeGrippersToDeformableObjectJacobian(
                     const WorldState& world_state,
-                    const smmap_utilities::AllGrippersSinglePoseDelta& grippers_pose_delta) const;
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const;
     };
 }
 

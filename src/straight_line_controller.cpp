@@ -1,13 +1,12 @@
 #include "smmap/straight_line_controller.h"
 
 using namespace smmap;
-using namespace smmap_utilities;
 
 StraightLineController::StraightLineController(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
         RobotInterface::Ptr robot,
-        smmap_utilities::Visualizer::Ptr vis,
+        Visualizer::Ptr vis,
         const DeformableModel::ConstPtr& model)
     : DeformableController(nh, ph, robot, vis, model)
 {

@@ -27,7 +27,7 @@ namespace smmap
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
                     RobotInterface::Ptr robot,
-                    smmap_utilities::Visualizer::Ptr vis,
+                    Visualizer::Ptr vis,
                     TaskSpecification::Ptr task_specification);
 
             void execute();
@@ -88,7 +88,7 @@ namespace smmap
 
             void initializeBandRRT(const bool planning_for_whole_robot);
 
-            smmap_utilities::AllGrippersSinglePose getGripperTargets(
+            AllGrippersSinglePose getGripperTargets(
                     const WorldState& world_state);
 
             void planGlobalGripperTrajectory(
@@ -108,7 +108,7 @@ namespace smmap
             std::vector<DeformableController::Ptr> controller_list_;
 
             const MABAlgorithm mab_algorithm_;
-            std::shared_ptr<smmap_utilities::MABBase> model_utility_bandit_;
+            std::shared_ptr<MABBase> model_utility_bandit_;
             double reward_std_dev_scale_factor_;
             const double process_noise_factor_;
             const double observation_noise_factor_;
@@ -138,7 +138,7 @@ namespace smmap
             RubberBand::Ptr rubber_band_;
             const size_t max_lookahead_steps_;
             const size_t max_grippers_pose_history_length_;
-            smmap_utilities::AllGrippersPoseTrajectory grippers_pose_history_;
+            AllGrippersPoseTrajectory grippers_pose_history_;
             std::vector<double> error_history_;
 
             bool executing_global_trajectory_;
@@ -172,8 +172,8 @@ namespace smmap
                     const bool visualization_enabled = true) const;
 
             void visualizeGripperMotion(
-                    const smmap_utilities::AllGrippersSinglePose& current_gripper_pose,
-                    const smmap_utilities::AllGrippersSinglePoseDelta& gripper_motion,
+                    const AllGrippersSinglePose& current_gripper_pose,
+                    const AllGrippersSinglePoseDelta& gripper_motion,
                     const ssize_t model_ind) const;
 
             void initializeBanditsLogging();
@@ -206,7 +206,7 @@ namespace smmap
             std::unordered_map<std::string, Log::Log> loggers_;
             std::unordered_map<std::string, Log::Log> controller_loggers_;
 
-            smmap_utilities::Visualizer::Ptr vis_;
+            Visualizer::Ptr vis_;
             const bool visualize_desired_motion_;
             const bool visualize_gripper_motion_;
             const bool visualize_predicted_motion_;

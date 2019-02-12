@@ -24,7 +24,7 @@ namespace smmap
                             const RobotInterface::Ptr& robot,
                             const Eigen::MatrixXd& robot_jacobian,
                             const bool robot_jacobian_valid,
-                            const std::vector<std::pair<smmap_utilities::CollisionData, Eigen::Matrix3Xd>>& poi_collision_data,
+                            const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>>& poi_collision_data,
                             const double max_step_size,
                             const double max_robot_dof_step_size,
                             const bool handle_overstretch)
@@ -44,7 +44,7 @@ namespace smmap
                     const RobotInterface::Ptr robot_;
                     const Eigen::MatrixXd robot_jacobian_;
                     const bool robot_jacobian_valid_;
-                    const std::vector<std::pair<smmap_utilities::CollisionData, Eigen::Matrix3Xd>> poi_collision_data_;
+                    const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> poi_collision_data_;
                     const double max_grippers_step_size_;
                     const double max_robot_dof_step_size_;
                     const bool handle_overstretch_;
@@ -61,21 +61,21 @@ namespace smmap
                             const ssize_t num_nodes_on_object,
                             const ssize_t num_robot_dof)
                         : grippers_motion_(num_grippers, kinematics::Vector6d::Zero())
-                        , object_motion_(smmap_utilities::ObjectPointSet::Zero(3, num_nodes_on_object))
+                        , object_motion_(ObjectPointSet::Zero(3, num_nodes_on_object))
                         , robot_dof_motion_(Eigen::VectorXd::Zero(num_robot_dof))
                     {}
 
                     OutputData(
-                            const smmap_utilities::AllGrippersSinglePoseDelta grippers_motion,
-                            const smmap_utilities::ObjectPointSet object_motion,
+                            const AllGrippersSinglePoseDelta grippers_motion,
+                            const ObjectPointSet object_motion,
                             const Eigen::VectorXd robot_dof_motion)
                         : grippers_motion_(grippers_motion)
                         , object_motion_(object_motion)
                         , robot_dof_motion_(robot_dof_motion)
                     {}
 
-                    smmap_utilities::AllGrippersSinglePoseDelta grippers_motion_;
-                    smmap_utilities::ObjectPointSet object_motion_;
+                    AllGrippersSinglePoseDelta grippers_motion_;
+                    ObjectPointSet object_motion_;
                     Eigen::VectorXd robot_dof_motion_;
             };
 
@@ -83,7 +83,7 @@ namespace smmap
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
                     RobotInterface::Ptr robot,
-                    smmap_utilities::Visualizer::Ptr vis,
+                    Visualizer::Ptr vis,
                     const DeformableModel::ConstPtr& model)
                 : nh_(nh)
                 , ph_(ph)
@@ -105,7 +105,7 @@ namespace smmap
             const std::shared_ptr<ros::NodeHandle> nh_;
             const std::shared_ptr<ros::NodeHandle> ph_;
             const RobotInterface::Ptr robot_;
-            const smmap_utilities::Visualizer::Ptr vis_;
+            const Visualizer::Ptr vis_;
             const DeformableModel::ConstPtr model_;
 
             ////////////////////////////////////////////////////////////////////

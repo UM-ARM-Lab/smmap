@@ -4,7 +4,6 @@
 #include <ros/ros.h>
 
 using namespace smmap;
-using namespace smmap_utilities;
 using namespace Eigen;
 using namespace EigenHelpers;
 

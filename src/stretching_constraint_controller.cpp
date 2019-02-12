@@ -18,7 +18,6 @@
 #define BARRIER_VIOLATED_LARGE_COST 1e3
 
 using namespace smmap;
-using namespace smmap_utilities;
 using namespace Eigen;
 using namespace EigenHelpers;
 
@@ -332,7 +331,7 @@ DeformableController::OutputData StretchingConstraintController::solvedByNomad(c
         std::cerr << "Invoking NOMAD wrapper" << std::endl;
 
         const VectorXd optimal_robot_motion =
-                smmap_utilities::minFunctionPointerDirectRobotDOF(
+                minFunctionPointerDirectRobotDOF(
                     log_file_path_,
                     fix_step_,
                     max_count_,
@@ -428,7 +427,7 @@ DeformableController::OutputData StretchingConstraintController::solvedByNomad(c
         std::cerr << "Invoking NOMAD wrapper" << std::endl;
 
         const AllGrippersSinglePoseDelta optimal_gripper_motion =
-                smmap_utilities::minFunctionPointerSE3Delta(
+                minFunctionPointerSE3Delta(
                     log_file_path_,
                     fix_step_,
                     max_count_,

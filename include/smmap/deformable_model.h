@@ -23,18 +23,18 @@ namespace smmap
 
             void updateModel(const WorldState& previous, const WorldState& next);
 
-            smmap_utilities::ObjectPointSet getObjectDelta(
+            ObjectPointSet getObjectDelta(
                     const WorldState& world_state,
-                    const smmap_utilities::AllGrippersSinglePoseDelta& grippers_pose_delta) const;
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const;
 
             ////////////////////////////////////////////////////////////////////
             // Update/Set function for static members
             ////////////////////////////////////////////////////////////////////
 
             static void SetGrippersData(
-                    const std::vector<smmap_utilities::GripperData>& grippers_data);
+                    const std::vector<GripperData>& grippers_data);
 
-            static const std::vector<smmap_utilities::GripperData>& GetGrippersData();
+            static const std::vector<GripperData>& GetGrippersData();
 
             static void SetCallbackFunctions(
                     const GripperCollisionCheckFunctionType& gripper_collision_check_fn);
@@ -53,7 +53,7 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             static std::atomic<bool> grippers_data_initialized_;
-            static std::vector<smmap_utilities::GripperData> grippers_data_;
+            static std::vector<GripperData> grippers_data_;
 
             static std::atomic_bool function_pointers_initialized_;
             static GripperCollisionCheckFunctionType gripper_collision_check_fn_;
@@ -61,9 +61,9 @@ namespace smmap
         private:
             virtual void updateModel_impl(const WorldState& previous, const WorldState& next) = 0;
 
-            virtual smmap_utilities::ObjectPointSet getObjectDelta_impl(
+            virtual ObjectPointSet getObjectDelta_impl(
                     const WorldState& world_state,
-                    const smmap_utilities::AllGrippersSinglePoseDelta& grippers_pose_delta) const = 0;
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const = 0;
 
             ////////////////////////////////////////////////////////////////////
             // Logging

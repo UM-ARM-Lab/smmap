@@ -18,7 +18,7 @@ namespace smmap
         struct State
         {
         public:
-            smmap_utilities::ObjectPointSet deform_config_;
+            ObjectPointSet deform_config_;
             RubberBand::Ptr rubber_band_;
             RubberBand::Ptr planned_rubber_band_;
             EigenHelpers::VectorIsometry3d rope_node_transforms_;
@@ -51,8 +51,8 @@ namespace smmap
             // In practice this data is duplicated in the endpoints of the band,
             // but this is being kept to keep everything in the
             // "state, action, next state" framework
-            smmap_utilities::PairGripperPositions starting_gripper_positions_;
-            smmap_utilities::PairGripperPositions ending_gripper_positions_;
+            PairGripperPositions starting_gripper_positions_;
+            PairGripperPositions ending_gripper_positions_;
             std::vector<WorldState> microstep_state_history_;
 
             uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
@@ -85,7 +85,7 @@ namespace smmap
                 std::shared_ptr<ros::NodeHandle> ph,
                 const sdf_tools::SignedDistanceField::ConstPtr& sdf,
                 const XYZGrid work_space_grid,
-                const smmap_utilities::Visualizer::ConstPtr& vis,
+                const Visualizer::ConstPtr& vis,
                 const RubberBand& template_band);
 
         ////////////////////////////////////////////////////////////////////////
@@ -122,7 +122,7 @@ namespace smmap
         // If the transition could be applicable, then it returns the distance
         Maybe::Maybe<double> transitionUseful(
                 const RubberBand::ConstPtr& test_band,
-                const smmap_utilities::PairGripperPositions& test_ending_gripper_positions,
+                const PairGripperPositions& test_ending_gripper_positions,
                 const StateTransition& transition) const;
 
         // Returns vector of potential outcomes of the action, and a relative
@@ -132,10 +132,10 @@ namespace smmap
         // rather that it *could* happen.
         std::vector<std::pair<RubberBand::Ptr, double>> applyLearnedTransitions(
                 const RubberBand::ConstPtr& band,
-                const smmap_utilities::PairGripperPositions& ending_gripper_positions) const;
+                const PairGripperPositions& ending_gripper_positions) const;
 
         RubberBand::Ptr applyTransition(
-                const smmap_utilities::PairGripperPositions& ending_gripper_positions,
+                const PairGripperPositions& ending_gripper_positions,
                 const StateTransition& transition) const;
 
         double confidence(const double dist) const;
@@ -150,7 +150,7 @@ namespace smmap
                 const std::string& ns_prefix = "") const;
 
         static void VisualizeTransition(
-                const smmap_utilities::Visualizer::ConstPtr& vis,
+                const Visualizer::ConstPtr& vis,
                 const StateTransition& transition,
                 const int32_t id = 1,
                 const std::string& ns_prefix = "");
@@ -173,7 +173,7 @@ namespace smmap
 
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
         const XYZGrid work_space_grid_;
-        const smmap_utilities::Visualizer::ConstPtr vis_;
+        const Visualizer::ConstPtr vis_;
         std::vector<StateTransition> learned_transitions_;
 
 //        const double action_dist_threshold_;

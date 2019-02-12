@@ -4,7 +4,6 @@
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 
 using namespace smmap;
-using namespace smmap_utilities;
 using namespace Eigen;
 using namespace EigenHelpers;
 using namespace EigenHelpersConversions;

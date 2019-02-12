@@ -16,7 +16,7 @@ namespace smmap
             ClothColabFolding(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis);
+                    Visualizer::Ptr vis);
 
         private:
             virtual double calculateError_impl(
@@ -30,7 +30,7 @@ namespace smmap
             virtual bool taskDone_impl(
                     const WorldState& world_state) override final;
 
-            const smmap_utilities::Grid4Neighbours neighbours_;
+            const Grid4Neighbours neighbours_;
 
         private:
             const PointReflector point_reflector_;
@@ -50,7 +50,7 @@ namespace smmap
             RopeCylinderCoverage(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis);
+                    Visualizer::Ptr vis);
 
         private:
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
@@ -58,7 +58,7 @@ namespace smmap
             virtual bool taskDone_impl(
                     const WorldState& world_state) override final;
 
-            const smmap_utilities::LineNeighbours neighbours_;
+            const LineNeighbours neighbours_;
     };
 
     /**
@@ -70,7 +70,7 @@ namespace smmap
             ClothTableCoverage(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis);
+                    Visualizer::Ptr vis);
 
         private:
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
@@ -78,7 +78,7 @@ namespace smmap
             virtual bool taskDone_impl(
                     const WorldState& world_state) override final;
 
-            const smmap_utilities::Grid4Neighbours neighbours_;
+            const Grid4Neighbours neighbours_;
     };
 
 
@@ -94,7 +94,7 @@ namespace smmap
             ClothDistanceBasedCorrespondences(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis);
+                    Visualizer::Ptr vis);
 
         private:
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
@@ -102,7 +102,7 @@ namespace smmap
             virtual bool taskDone_impl(
                     const WorldState& world_state) override final;
 
-            const smmap_utilities::Grid4Neighbours neighbours_;
+            const Grid4Neighbours neighbours_;
     };
 
     /**
@@ -116,7 +116,7 @@ namespace smmap
             RopeFixedCorrespondences(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis);
+                    Visualizer::Ptr vis);
 
         private:
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
@@ -124,7 +124,7 @@ namespace smmap
             virtual bool taskDone_impl(
                     const WorldState& world_state) override final;
 
-            const smmap_utilities::LineNeighbours neighbours_;
+            const LineNeighbours neighbours_;
     };
 
     /**
@@ -138,7 +138,7 @@ namespace smmap
             ClothFixedCorrespondences(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
-                    smmap_utilities::Visualizer::Ptr vis);
+                    Visualizer::Ptr vis);
 
         private:
             virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
@@ -147,7 +147,7 @@ namespace smmap
                     const WorldState& world_state) override final;
 
             // TODO: Not clear that this will be the case moving forward - are all nodes in a grid?
-            const smmap_utilities::Grid4Neighbours neighbours_;
+            const Grid4Neighbours neighbours_;
     };
 }
 

@@ -80,7 +80,7 @@ namespace smmap
     typedef std::vector<RRTNode, RRTAllocator> RRTTree;
     typedef std::vector<std::pair<RRTPath, std::vector<size_t>>> RRTPolicy;
 
-    typedef smmap_utilities::PairGripperPoses RRTGrippersRepresentation;
+    typedef PairGripperPoses RRTGrippersRepresentation;
     typedef Eigen::VectorXd RRTRobotRepresentation;
     typedef flann::KDTreeSingleIndex<flann::L2_weighted<float>> NNIndexType;
 
@@ -283,7 +283,7 @@ namespace smmap
                 const PlanningParams& planning_params,
                 const SmoothingParams& smoothing_params,
                 const TaskParams& task_params,
-                smmap_utilities::Visualizer::Ptr vis,
+                Visualizer::Ptr vis,
                 const bool visualization_enabled);
 
         //////// Planning functions //////////////////////////////////////////////////////////
@@ -541,7 +541,7 @@ namespace smmap
         std::chrono::time_point<std::chrono::steady_clock> start_time_;
 
         // Visualization
-        const smmap_utilities::Visualizer::Ptr vis_;
+        const Visualizer::Ptr vis_;
         const bool visualization_enabled_globally_;
     public:
         const std_msgs::ColorRGBA gripper_a_forward_tree_color_;

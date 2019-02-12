@@ -13,7 +13,7 @@ namespace smmap
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
                     RobotInterface::Ptr robot,
-                    smmap_utilities::Visualizer::Ptr vis,
+                    Visualizer::Ptr vis,
                     const JacobianModel::ConstPtr& model,
                     const double obstacle_avoidance_scale,
                     const bool optimize);

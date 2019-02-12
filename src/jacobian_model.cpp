@@ -1,7 +1,6 @@
 #include "smmap/jacobian_model.h"
 
 using namespace smmap;
-using namespace smmap_utilities;
 using namespace Eigen;
 using namespace EigenHelpers;
 

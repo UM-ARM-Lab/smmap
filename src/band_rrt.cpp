@@ -8,7 +8,6 @@
 #include <arc_utilities/path_utils.hpp>
 
 using namespace smmap;
-using namespace smmap_utilities;
 using namespace arc_utilities;
 using namespace arc_helpers;
 using namespace Eigen;
@@ -1564,9 +1563,9 @@ void BandRRT::storeTree(const RRTTree& tree, std::string file_path) const
 
         // Verify no mistakes were made
         {
-            const auto deserializer = [&] (const std::vector<uint8_t>& buffer, const uint64_t current)
+            const auto deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
             {
-                return RRTNode::Deserialize(buffer, current, *starting_band_);
+                return RRTNode::Deserialize(buf, cur, *starting_band_);
             };
 
             const RRTTree retrieved_path =

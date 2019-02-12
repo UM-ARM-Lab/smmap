@@ -13,7 +13,6 @@ std::vector<Eigen::VectorXd> getJointInfo()
 int main(int argc, char* argv[])
 {
     using namespace smmap;
-    using namespace smmap_utilities;
 
     // Read in all ROS parameters
     ros::init(argc, argv, "transition_learning_data_generation_node", ros::init_options::NoSigintHandler);
@@ -38,9 +37,9 @@ int main(int argc, char* argv[])
                 nullptr,
                 nullptr);
     auto vis = std::make_shared<Visualizer>(nh, ph, true);
-    auto data_generator = TransitionTesting(nh, ph, robot, vis);
-    const bool generate_new_data = true;
-    data_generator.runTests(generate_new_data);
+    auto transition_tester = TransitionTesting(nh, ph, robot, vis);
+    const bool generate_new_data = ROSHelpers::GetParam<bool>(*ph, "generate_new_data", false);
+    transition_tester.runTests(generate_new_data);
 
     return EXIT_SUCCESS;
 }

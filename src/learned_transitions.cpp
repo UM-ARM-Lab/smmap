@@ -8,7 +8,6 @@
 #include <arc_utilities/path_utils.hpp>
 
 using namespace smmap;
-using namespace smmap_utilities;
 
 constexpr char TransitionEstimation::MDP_PRE_STATE_NS[];
 constexpr char TransitionEstimation::MDP_TESTING_STATE_NS[];
@@ -235,7 +234,7 @@ TransitionEstimation::TransitionEstimation(
         std::shared_ptr<ros::NodeHandle> ph,
         const sdf_tools::SignedDistanceField::ConstPtr& sdf,
         const XYZGrid work_space_grid,
-        const smmap_utilities::Visualizer::ConstPtr& vis,
+        const Visualizer::ConstPtr& vis,
         const RubberBand& template_band)
     : nh_(nh)
     , ph_(ph)

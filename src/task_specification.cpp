@@ -11,7 +11,6 @@
 #include "smmap/task_specification_implementions.h"
 
 using namespace smmap;
-using namespace smmap_utilities;
 using namespace arc_utilities;
 
 #pragma message "Magic number - Stretching weight multiplication factor here"
@@ -1036,17 +1035,17 @@ bool DijkstrasCoverageTask::saveDijkstrasResults()
         free_space_graph_.SerializeSelf(buffer, &arc_utilities::SerializeEigen<double, 3, 1>);
 
         // Next serialize the results themselves
-        const auto first_serializer = [] (const std::vector<int64_t>& vec_to_serialize, std::vector<uint8_t>& buffer)
+        const auto first_serializer = [] (const std::vector<int64_t>& vec_to_serialize, std::vector<uint8_t>& buf)
         {
-            return arc_utilities::SerializeVector<int64_t>(vec_to_serialize, buffer, &arc_utilities::SerializeFixedSizePOD<int64_t>);
+            return arc_utilities::SerializeVector<int64_t>(vec_to_serialize, buf, &arc_utilities::SerializeFixedSizePOD<int64_t>);
         };
-        const auto second_serializer = [] (const std::vector<double>& vec_to_serialize, std::vector<uint8_t>& buffer)
+        const auto second_serializer = [] (const std::vector<double>& vec_to_serialize, std::vector<uint8_t>& buf)
         {
-            return arc_utilities::SerializeVector<double>(vec_to_serialize, buffer, &arc_utilities::SerializeFixedSizePOD<double>);
+            return arc_utilities::SerializeVector<double>(vec_to_serialize, buf, &arc_utilities::SerializeFixedSizePOD<double>);
         };
-        const auto pair_serializer = [&first_serializer, &second_serializer] (const std::pair<std::vector<int64_t>, std::vector<double>>& pair_to_serialize, std::vector<uint8_t>& buffer)
+        const auto pair_serializer = [&first_serializer, &second_serializer] (const std::pair<std::vector<int64_t>, std::vector<double>>& pair_to_serialize, std::vector<uint8_t>& buf)
         {
-            return arc_utilities::SerializePair<std::vector<int64_t>, std::vector<double>>(pair_to_serialize, buffer, first_serializer, second_serializer);
+            return arc_utilities::SerializePair<std::vector<int64_t>, std::vector<double>>(pair_to_serialize, buf, first_serializer, second_serializer);
         };
         arc_utilities::SerializeVector<std::pair<std::vector<int64_t>, std::vector<double>>>(dijkstras_results_, buffer, pair_serializer);
 
