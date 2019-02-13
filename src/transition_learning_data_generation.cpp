@@ -5,6 +5,7 @@
 #include <smmap_utilities/neighbours.h>
 #include <boost/filesystem.hpp>
 #include <deformable_manipulation_experiment_params/conversions.hpp>
+#include <deformable_manipulation_experiment_params/utility.hpp>
 
 using namespace smmap;
 using namespace arc_utilities;
@@ -15,15 +16,6 @@ using namespace EigenHelpers;
 ////////////////////////////////////////////////////////////////////////////////
 //          Random Helpers
 ////////////////////////////////////////////////////////////////////////////////
-
-int GetNumberOfDigits(int i)
-{
-    if (i < 0)
-    {
-        i = -i;
-    }
-    return i > 0 ? (int)std::log10((double) i) + 1 : 1;
-}
 
 ObjectPointSet PointsFromBandAndGrippers(
         const RubberBand& band,
