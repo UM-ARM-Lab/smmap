@@ -6,6 +6,7 @@
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/path_utils.hpp>
+#include <deformable_manipulation_experiment_params/utility.hpp>
 
 using namespace smmap;
 using namespace arc_utilities;
@@ -13,8 +14,6 @@ using namespace arc_helpers;
 using namespace Eigen;
 using namespace EigenHelpers;
 
-#warning "!!!!!!!!! Magic number !!!!!!!!!!!"
-#define GRIPPER_TRANSLATION_IS_APPROX_DIST 0.001
 //#define SMMAP_RRT_VERBOSE true
 #define SMMAP_RRT_VERBOSE false
 
@@ -54,8 +53,8 @@ static inline bool gripperPositionsAreApproximatelyEqual(
     const auto& c2_second_gripper    = c2.second.translation();
 
     bool is_equal = true;
-    is_equal &= c1_first_gripper.isApprox(c2_first_gripper, GRIPPER_TRANSLATION_IS_APPROX_DIST);
-    is_equal &= c1_second_gripper.isApprox(c2_second_gripper, GRIPPER_TRANSLATION_IS_APPROX_DIST);
+    is_equal &= c1_first_gripper.isApprox(c2_first_gripper, BandRRT::GRIPPER_TRANSLATION_IS_APPROX_DIST);
+    is_equal &= c1_second_gripper.isApprox(c2_second_gripper, BandRRT::GRIPPER_TRANSLATION_IS_APPROX_DIST);
     return is_equal;
 }
 
@@ -809,9 +808,7 @@ RRTPolicy BandRRT::plan(
         std::cerr << "Max allowable distance: " << max_grippers_distance_ << " Distance beteween goal grippers: " << dist_between_grippers << std::endl;
 
         vis_->visualizeGrippers("weird_gripper_goals", {grippers_goal_poses_.first, grippers_goal_poses_.second}, Visualizer::Red(), 1);
-        std::cout << "Press any key to continue " << std::flush;
-        arc_helpers::GetChar();
-        std::cout << std::endl;
+        PressKeyToContinue();
         assert(false && "Unfeasible goal location");
     }
 
@@ -1628,13 +1625,16 @@ bool BandRRT::useStoredTree() const
     return ROSHelpers::GetParamRequired<bool>(*ph_, "use_stored_path", __func__).GetImmutable();
 }
 
-void BandRRT::storePolicy(const RRTPolicy& policy, std::string file_path) const
+void BandRRT::storePolicy(const RRTPolicy& policy, const std::string& file_path) const
 {
+    (void)policy;
+    (void)file_path;
     ROS_ERROR_NAMED("rrt", "storePolicy not implemented.");
 }
 
-RRTPolicy BandRRT::loadStoredPolicy(std::string file_path) const
+RRTPolicy BandRRT::loadStoredPolicy(const std::string& file_path) const
 {
+    (void)file_path;
     ROS_ERROR_NAMED("rrt", "loadStoredPolicy not implemented.");
     return RRTPolicy();
 }
@@ -2730,10 +2730,7 @@ void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
                 visualizeBothTrees();
                 visualizeBlacklist();
             }
-
-//            std::cout << "Press any key to continue " << std::flush;
-//            arc_helpers::GetChar();
-//            std::cout << std::endl;
+//            PressKeyToContinue();
         }
     }
 }

@@ -204,6 +204,7 @@ namespace smmap
     {
     public:
         static constexpr double NN_BLACKLIST_DISTANCE = std::numeric_limits<double>::max() - 1e10;
+        static constexpr double GRIPPER_TRANSLATION_IS_APPROX_DIST = 0.001;
 
         // Topic names used for publishing visualization data
         static constexpr char RRT_BLACKLISTED_GOAL_BANDS_NS[]   = "rrt_blacklisted_goal_bands";
@@ -337,8 +338,8 @@ namespace smmap
         bool useStoredTree() const;
 
 
-        void storePolicy(const RRTPolicy& policy, std::string file_path) const;
-        RRTPolicy loadStoredPolicy(std::string file_path) const;
+        void storePolicy(const RRTPolicy& policy, const std::string& file_path) const;
+        RRTPolicy loadStoredPolicy(const std::string& file_path) const;
 
     private:
         ///////////////////////////////////////////////////////////////////////////////////////

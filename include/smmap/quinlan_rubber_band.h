@@ -52,8 +52,10 @@ namespace smmap
         QuinlanRubberBand& operator=(const QuinlanRubberBand& other);
 
         void setPointsWithoutSmoothing(const EigenHelpers::VectorVector3d& points);
+        void setPointsWithoutSmoothing(const ObjectPointSet& points);
 
         void setPointsAndSmooth(const EigenHelpers::VectorVector3d& points);
+        void setPointsAndSmooth(const ObjectPointSet& points);
 
         void resetBand(const WorldState& world_state);
         void resetBand(const ObjectPointSet& object_config,

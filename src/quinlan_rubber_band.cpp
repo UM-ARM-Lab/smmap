@@ -1,5 +1,6 @@
 #include <thread>
 
+#include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/serialization_eigen.hpp>
@@ -224,12 +225,22 @@ namespace smmap
         }
     }
 
+    void QuinlanRubberBand::setPointsWithoutSmoothing(const ObjectPointSet& points)
+    {
+        setPointsWithoutSmoothing(EigenHelpersConversions::EigenMatrix3XdToVectorEigenVector3d(points));
+    }
+
     void QuinlanRubberBand::setPointsAndSmooth(const EigenHelpers::VectorVector3d& points)
     {
         setPointsWithoutSmoothing(points);
         const bool verbose = true;
         smoothBandPoints(verbose);
         assert(bandIsValidWithVisualization());
+    }
+
+    void QuinlanRubberBand::setPointsAndSmooth(const ObjectPointSet& points)
+    {
+        setPointsAndSmooth(EigenHelpersConversions::EigenMatrix3XdToVectorEigenVector3d(points));
     }
 
     void QuinlanRubberBand::resetBand(const WorldState& world_state)

@@ -137,12 +137,22 @@ namespace smmap
             bool prediction_valid_;
             const TransitionTesting& framework_;
             static constexpr auto BASENAME = "SE3_ALIGNMENT";
+
+            RubberBand::ConstPtr test_band_;
+            PairGripperPositions test_action_;
+
+            size_t num_gripper_steps_;
             std::vector<RubberBand> stored_bands_;
-            ObjectPointSet warping_template_points_planned_;
-            ObjectPointSet warping_template_points_executed_;
             ObjectPointSet warping_target_points_;
+
+            ObjectPointSet warping_template_points_planned_;
             ObjectPointSet template_planned_band_aligned_to_target_;
+            ObjectPointSet stored_bands_planned_aligned_to_target_;
+
+            ObjectPointSet warping_template_points_executed_;
             ObjectPointSet template_executed_band_aligned_to_target_;
+            ObjectPointSet stored_bands_executed_aligned_to_target_;
+
             std::map<std::string, std::vector<RubberBand>> results_;
         };
         friend class SE3Prediction;
