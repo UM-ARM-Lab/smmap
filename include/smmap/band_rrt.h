@@ -182,6 +182,8 @@ namespace smmap
         bool blacklisted_from_nn_search_;
     };
 
+    std::ostream& operator<<(std::ostream& out, const RRTNode& node);
+
     class RRTDistance
     {
         public:
@@ -351,6 +353,7 @@ namespace smmap
 
         //////// Sampling functions //////////////////////////////////////////////////////////
 
+        std::vector<uint8_t> sample_history_buffer_;
         RRTNode configSampling(const bool sample_band);
         // Used for timing purposes
         // https://stackoverflow.com/questions/37786547/enforcing-statement-order-in-c

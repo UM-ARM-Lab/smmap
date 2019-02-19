@@ -1,6 +1,7 @@
 #include "smmap/band_rrt.h"
 #include "smmap/task_framework.h"
 
+#include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/timing.hpp>
 #include <arc_utilities/filesystem.hpp>
@@ -526,6 +527,11 @@ std::pair<RRTNode, uint64_t> RRTNode::Deserialize(const std::vector<uint8_t>& bu
     return std::make_pair(deserialized, bytes_read);
 }
 
+std::ostream& smmap::operator<<(std::ostream& out, const RRTNode& node)
+{
+    return out << node.print();
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////           RRTDistance functions                    /////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -722,6 +728,9 @@ RRTPolicy BandRRT::plan(
         const RRTGrippersRepresentation& grippers_goal_poses,
         const std::chrono::duration<double>& time_limit)
 {
+    sample_history_buffer_.clear();
+    sample_history_buffer_.reserve(2e8);
+
     const auto estimated_tree_size = ROSHelpers::GetParam(*ph_, "estimated_tree_size", 100000);
 
     // Extract start information
@@ -1357,12 +1366,11 @@ void BandRRT::visualizeTree(
         for (size_t idx = start_idx; idx < tree.size(); ++idx)
         {
             const RRTNode& curr = tree[idx];
-            if (!curr.initialized())
+            if (!curr.initialized() && tree == forward_tree_)
             {
                 std::cout << "Node idx: " << idx << std::endl
                           << curr.print() << std::endl;
             }
-//            assert(curr.initialized());
 
             if (draw_band)
             {
@@ -1758,6 +1766,9 @@ RRTNode BandRRT::configSampling(const bool sample_band)
     arc_helpers::DoNotOptimize(sample);
     const double sampling_time = stopwatch(READ);
     total_sampling_time_ += sampling_time;
+
+    sample.serialize(sample_history_buffer_);
+
     return sample;
 }
 
@@ -2716,11 +2727,13 @@ std::vector<std::pair<RubberBand::Ptr, double>> BandRRT::forwardPropogateBand(
 
 void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
 {
+    bool force_nn_rebuild = false;
     // Check if any of the new nodes reached the goal
     for (size_t idx = forward_tree_.size() - num_nodes; idx < forward_tree_.size(); ++idx)
     {
         if (goalReached(forward_tree_[idx]))
         {
+            force_nn_rebuild = true;
             forward_tree_[idx].setpGoalReachable(1.0);
             goalReachedCallback(idx);
             if (forward_tree_[idx].pReachability() < 1.0)
@@ -2732,6 +2745,16 @@ void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
             }
 //            PressKeyToContinue();
         }
+    }
+    if (force_nn_rebuild)
+    {
+        ZlibHelpers::CompressAndWriteToFile(sample_history_buffer_, GetLogFolder(*nh_) + "/sample_history_buffer.compressed");
+        rebuildNNIndex(forward_nn_index_,
+                       forward_nn_raw_data_,
+                       forward_nn_data_idx_to_tree_idx_,
+                       forward_tree_,
+                       forward_next_idx_to_add_to_nn_dataset_,
+                       force_nn_rebuild);
     }
 }
 

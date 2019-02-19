@@ -148,6 +148,7 @@ TaskFramework::TaskFramework(
     , visualize_predicted_motion_(!GetDisableAllVisualizations(*ph_) && GetVisualizeObjectPredictedMotion(*ph_))
 {
     ROS_INFO_STREAM_NAMED("task_framework", "Using seed " << std::hex << seed_ );
+    std::srand((unsigned int)seed_);
     initializeBanditsLogging();
     initializeControllerLogging();
 }
@@ -1607,7 +1608,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
             if (num_trials > 1)
             {
                 robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
-                flann::seed_random((unsigned int)seed_);
+                std::srand((unsigned int)seed_);
                 generator_->seed(seed_);
                 generator_->discard(trial_idx * 0xFFFF);
                 for (size_t discard_idx = 0; discard_idx < trial_idx * 0xFFFF; ++discard_idx)

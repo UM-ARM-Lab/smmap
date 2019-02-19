@@ -383,7 +383,6 @@ Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMo
 
 void TransitionEstimation::learnTransition(const StateTransition& transition)
 {
-    std::cout << transition << std::endl;
     learned_transitions_.push_back(transition);
     storeTransitions();
 }
