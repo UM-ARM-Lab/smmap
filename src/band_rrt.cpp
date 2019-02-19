@@ -729,7 +729,7 @@ RRTPolicy BandRRT::plan(
         const std::chrono::duration<double>& time_limit)
 {
     sample_history_buffer_.clear();
-    sample_history_buffer_.reserve(2e8);
+    sample_history_buffer_.reserve(1e9);
 
     const auto estimated_tree_size = ROSHelpers::GetParam(*ph_, "estimated_tree_size", 100000);
 
@@ -1565,7 +1565,6 @@ void BandRRT::storeTree(const RRTTree& tree, std::string file_path) const
         std::vector<uint8_t> buffer;
         arc_utilities::SerializeVector<RRTNode, RRTAllocator>(tree, buffer, &RRTNode::Serialize);
         ZlibHelpers::CompressAndWriteToFile(buffer, file_path);
-
         // Verify no mistakes were made
         {
             const auto deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
@@ -2748,7 +2747,15 @@ void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
     }
     if (force_nn_rebuild)
     {
-        ZlibHelpers::CompressAndWriteToFile(sample_history_buffer_, GetLogFolder(*nh_) + "/sample_history_buffer.compressed");
+        if (sample_history_buffer_.size() < 4e9)
+        {
+            ROS_INFO_STREAM_NAMED("rrt", "Sample history buffer size: " << sample_history_buffer_.size() << ". Saving to file.");
+            ZlibHelpers::CompressAndWriteToFile(sample_history_buffer_, GetLogFolder(*nh_) + "/sample_history_buffer.compressed");
+        }
+        else
+        {
+            ROS_ERROR_STREAM_NAMED("rrt", "Sample history buffer size: " << sample_history_buffer_.size() << ". Unable to save to file.");
+        }
         rebuildNNIndex(forward_nn_index_,
                        forward_nn_raw_data_,
                        forward_nn_data_idx_to_tree_idx_,
