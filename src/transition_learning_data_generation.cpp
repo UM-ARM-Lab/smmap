@@ -13,76 +13,11 @@ using namespace Eigen;
 using namespace EigenHelpers;
 
 ////////////////////////////////////////////////////////////////////////////////
-//          Random Helpers
+//          Random Helpers - duplicated in learned_transitions.cpp
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace smmap
 {
-    static ObjectPointSet PointsFromBandPointsAndGripperTargets(
-            const VectorVector3d& starting_points,
-            const PairGripperPositions& grippers_targets,
-            const size_t num_gripper_steps)
-    {
-        assert(num_gripper_steps > 0);
-        ObjectPointSet result(3, starting_points.size() + 2 * num_gripper_steps);
-        // Put the interpolated points between one end of the band and the first gripper into the result
-        for (size_t idx = 0; idx < num_gripper_steps; ++idx)
-        {
-            const double ratio = num_gripper_steps == 1 ? 0.0 : (double)idx / (double)(num_gripper_steps - 1);
-            result.col(idx) = Interpolate(grippers_targets.first, starting_points.front(), ratio);
-        }
-        // Put the band points themselves into the result
-        for (size_t idx = 0; idx < starting_points.size(); ++idx)
-        {
-            result.col(num_gripper_steps + idx) = starting_points[idx];
-        }
-        // Put the interpolated points between the other end of the band and the second gripper into the result
-        for (size_t idx = 0; idx < num_gripper_steps; ++idx)
-        {
-            const double ratio = num_gripper_steps == 1 ? 0.0 : (double)idx / (double)(num_gripper_steps - 1);
-            result.col(num_gripper_steps + starting_points.size() + idx) =
-                    Interpolate(grippers_targets.second, starting_points.back(), ratio);
-        }
-        return result;
-    }
-
-    static ObjectPointSet PointsFromBandAndGrippers(
-            const RubberBand& band,
-            const PairGripperPositions& grippers_start,
-            const PairGripperPositions& grippers_end,
-            const size_t num_gripper_steps)
-    {
-        assert(num_gripper_steps > 0);
-        const VectorVector3d& band_points = band.upsampleBand();
-        ObjectPointSet result(3, band_points.size() + 2 * (num_gripper_steps + 1));
-        // Put the interpolated points the first start and end point into the result
-        {
-            for (size_t idx = 0; idx < num_gripper_steps + 1; ++idx)
-            {
-                const double ratio = (double)idx / (double)(num_gripper_steps);
-                result.col(idx) = Interpolate(grippers_end.first, grippers_start.first, ratio);
-            }
-        }
-        // Put the band points themselves into the result
-        {
-            const auto offset = num_gripper_steps + 1;
-            for (size_t band_idx = 0; band_idx < band_points.size(); ++band_idx)
-            {
-                result.col(offset + band_idx) = band_points[band_idx];
-            }
-        }
-        // Put the interpolated points the second start and end point into the result
-        {
-            const auto offset = num_gripper_steps + 1 + band_points.size();
-            for (size_t idx = 0; idx < num_gripper_steps + 1; ++idx)
-            {
-                const double ratio = (double)idx / (double)(num_gripper_steps);
-                result.col(offset + idx) = Interpolate(grippers_end.second, grippers_start.second, ratio);
-            }
-        }
-        return result;
-    }
-
     static std::pair<RubberBand::Ptr,
               std::pair<PairGripperPositions,
                         PairGripperPositions>> BandAndGrippersFromTpsPoints(
@@ -115,26 +50,6 @@ namespace smmap
         return {band, {grippers_start, grippers_end}};
     }
 
-    static VectorVector3d ExtractPositionsFromPoses(const VectorIsometry3d& poses)
-    {
-        VectorVector3d positions(poses.size());
-        for (size_t idx = 0; idx < poses.size(); ++idx)
-        {
-            positions[idx] = poses[idx].translation();
-        }
-        return positions;
-    }
-
-    static ObjectPointSet ExtractPointSetFromPoses(const VectorIsometry3d& poses)
-    {
-        ObjectPointSet pointset(3, poses.size());
-        for (size_t idx = 0; idx < poses.size(); ++idx)
-        {
-            pointset.col(idx) = poses[idx].translation();
-        }
-        return pointset;
-    }
-
     static std::pair<AllGrippersSinglePose, AllGrippersSinglePose> ExtractGripperPosesFromTransition(
             const TransitionEstimation::StateTransition& trans)
     {
@@ -147,83 +62,6 @@ namespace smmap
         target_gripper_poses[0].translation() = trans.ending_gripper_positions_.first;
         target_gripper_poses[1].translation() = trans.ending_gripper_positions_.second;
         return {starting_gripper_poses, target_gripper_poses};
-    }
-
-    static RubberBand::Ptr BandFromNodeTransformsAndGrippers(
-            const VectorIsometry3d& node_transforms,
-            const PairGripperPositions& grippers_position,
-            const RubberBand& template_band)
-    {
-        auto band = std::make_shared<RubberBand>(template_band);
-        band->resetBand(ExtractPointSetFromPoses(node_transforms),
-                        grippers_position);
-        return band;
-    }
-
-    static RubberBand::Ptr BandFromWorldState(
-            const WorldState& world_state,
-            const RubberBand& template_band)
-    {
-        auto band = std::make_shared<RubberBand>(template_band);
-        band->resetBand(world_state);
-        return band;
-    }
-
-    static void VisualizeBandSurface(
-            const Visualizer::ConstPtr& vis,
-            const ObjectPointSet& band_surface,
-            const size_t num_bands,
-            const std_msgs::ColorRGBA& start_color,
-            const std_msgs::ColorRGBA& end_color,
-            const std::string& ns,
-            const int32_t id = 1)
-    {
-        if (num_bands == 0)
-        {
-            return;
-        }
-        assert(band_surface.cols() % num_bands == 0);
-        const size_t points_per_band = band_surface.cols() / num_bands;
-        std::vector<std_msgs::ColorRGBA> colors;
-        for (size_t band_idx = 0; band_idx < num_bands; ++band_idx)
-        {
-            const float ratio = (float)(band_idx) / (float)(num_bands - 1);
-            const auto color = InterpolateColor(start_color, end_color, ratio);
-            colors.insert(colors.end(), points_per_band, color);
-        }
-        vis->visualizePoints(ns, band_surface, colors, id, 0.002);
-    }
-
-    static void VisualizeBandSurface(
-            const Visualizer::ConstPtr& vis,
-            const std::vector<RubberBand>& bands,
-            const std_msgs::ColorRGBA& start_color,
-            const std_msgs::ColorRGBA& end_color,
-            const std::string& ns,
-            const int32_t id = 1)
-    {
-        if (bands.empty())
-        {
-            return;
-        }
-        const auto points = RubberBand::AggregateBandPoints(bands);
-        VisualizeBandSurface(vis, points, bands.size(), start_color, end_color, ns, id);
-    }
-
-    static void VisualizeBandSurface(
-            const Visualizer::ConstPtr& vis,
-            const std::vector<RubberBand::ConstPtr>& bands,
-            const std_msgs::ColorRGBA& start_color,
-            const std_msgs::ColorRGBA& end_color,
-            const std::string& ns,
-            const int32_t id = 1)
-    {
-        if (bands.empty())
-        {
-            return;
-        }
-        const auto points = RubberBand::AggregateBandPoints(bands);
-        VisualizeBandSurface(vis, points, bands.size(), start_color, end_color, ns, id);
     }
 
     static VectorVector3d TransformData(
@@ -252,37 +90,37 @@ namespace smmap
         return retval;
     }
 
-    static std::vector<CollisionData> TransformData(
-            const Isometry3d& transform,
-            const std::vector<CollisionData>& data)
-    {
-        std::vector<CollisionData> retval;
-        retval.reserve(data.size());
-        for (const auto& collision_data : data)
-        {
-            retval.push_back(CollisionData(
-                                 transform * collision_data.nearest_point_to_obstacle_,
-                                 transform * collision_data.obstacle_surface_normal_,
-                                 collision_data.distance_to_obstacle_));
-        }
-        return retval;
-    }
+//    static std::vector<CollisionData> TransformData(
+//            const Isometry3d& transform,
+//            const std::vector<CollisionData>& data)
+//    {
+//        std::vector<CollisionData> retval;
+//        retval.reserve(data.size());
+//        for (const auto& collision_data : data)
+//        {
+//            retval.push_back(CollisionData(
+//                                 transform * collision_data.nearest_point_to_obstacle_,
+//                                 transform * collision_data.obstacle_surface_normal_,
+//                                 collision_data.distance_to_obstacle_));
+//        }
+//        return retval;
+//    }
 
-    static WorldState TransformWorldState(
-            const Isometry3d& transform,
-            const WorldState& state)
-    {
-        return
-        {
-            transform * state.object_configuration_,
-            TransformData(transform, state.rope_node_transforms_),
-            TransformData(transform, state.all_grippers_single_pose_),
-            state.robot_configuration_,
-            state.robot_configuration_valid_,
-            TransformData(transform, state.gripper_collision_data_),
-            state.sim_time_
-        };
-    }
+//    static WorldState TransformWorldState(
+//            const Isometry3d& transform,
+//            const WorldState& state)
+//    {
+//        return
+//        {
+//            transform * state.object_configuration_,
+//            TransformData(transform, state.rope_node_transforms_),
+//            TransformData(transform, state.all_grippers_single_pose_),
+//            state.robot_configuration_,
+//            state.robot_configuration_valid_,
+//            TransformData(transform, state.gripper_collision_data_),
+//            state.sim_time_
+//        };
+//    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -396,8 +234,8 @@ namespace smmap
         TransitionEstimation::VisualizeTransition(vis, template_, 1, "template_");
         TransitionEstimation::VisualizeTransition(vis, tested_, 1, "tested_");
         vis->visualizeAxes("center_of_rotation", center_of_rotation_, 0.1, 0.005, 1);
-        VisualizeBandSurface(vis, template_band_surface_,   num_bands, Visualizer::Blue(), Visualizer::Red(),     "band_surface_template", 1);
-        VisualizeBandSurface(vis, tested_band_surface_,     num_bands, Visualizer::Cyan(), Visualizer::Magenta(), "band_surface_tested",   1);
+        RubberBand::VisualizeBandSurface(vis, template_band_surface_,   num_bands, Visualizer::Blue(), Visualizer::Red(),     "band_surface_template", 1);
+        RubberBand::VisualizeBandSurface(vis, tested_band_surface_,     num_bands, Visualizer::Cyan(), Visualizer::Magenta(), "band_surface_tested",   1);
     }
 }
 
@@ -655,7 +493,7 @@ namespace smmap
                         trans.microstep_state_history_);
             template_bands.insert(template_bands.begin(), trans.starting_state_.rubber_band_);
 
-            VisualizeBandSurface(framework_.vis_, ToConstPtr(template_bands), Visualizer::Blue(), Visualizer::Red(), "band_surface_template", 1);
+            RubberBand::VisualizeBandSurface(framework_.vis_, ToConstPtr(template_bands), Visualizer::Blue(), Visualizer::Red(), "band_surface_template", 1);
             framework_.transition_estimator_->visualizeTransition(trans, 1, "transition_testing_");
 
             // Test transitions with random changes
@@ -685,7 +523,7 @@ namespace smmap
                         continue;
                     }
 
-                    const auto random_test_band_start = BandFromWorldState(
+                    const auto random_test_band_start = RubberBand::BandFromWorldState(
                                 start_after_settling,
                                 *trans.starting_state_.rubber_band_);
                     // More rejection sampling
@@ -699,7 +537,7 @@ namespace smmap
                     test_bands.insert(test_bands.begin(), random_test_band_start);
 
                     // Add each band with a different color, ranging from cyan (early in the history) to magenta (late in the history)
-                    VisualizeBandSurface(framework_.vis_, ToConstPtr(test_bands), Visualizer::Cyan(), Visualizer::Magenta(), "band_surface_simulation", 1);
+                    RubberBand::VisualizeBandSurface(framework_.vis_, ToConstPtr(test_bands), Visualizer::Cyan(), Visualizer::Magenta(), "band_surface_simulation", 1);
 
                     ////// Compile the results into a single structure and save to file ////////////////////////////////////
                     {
@@ -759,6 +597,9 @@ namespace smmap
         bool valid = false;
         while (!valid)
         {
+            // Overridden if something renders this invalid
+            valid = true;
+
             // Transform the whole band + gripper motion by some random amount
             {
                 const Translation3d band_translation_offset((Vector3d::Random() * translation_delta_random_max));
@@ -773,21 +614,12 @@ namespace smmap
                         * random_test_transform
                         * framework_.experiment_center_of_rotation_.inverse();
 
-                random_test_rope_nodes_start_.resize(trans.starting_state_.rope_node_transforms_.size());
-                for (size_t idx = 0; idx < random_test_rope_nodes_start_.size(); ++ idx)
-                {
-                    random_test_rope_nodes_start_[idx] = random_test_transform_applied_ * trans.starting_state_.rope_node_transforms_[idx];
-                }
+                random_test_rope_nodes_start_ = TransformData(random_test_transform_applied_, trans.starting_state_.rope_node_transforms_);
+
                 const auto template_gripper_poses = ExtractGripperPosesFromTransition(trans);
+                random_test_starting_gripper_poses_ = TransformData(random_test_transform_applied_, template_gripper_poses.first);
+                random_test_ending_gripper_poses_ = TransformData(random_test_transform_applied_, template_gripper_poses.first);
 
-                random_test_starting_gripper_poses_.resize(2);
-                random_test_starting_gripper_poses_[0] = random_test_transform_applied_ * template_gripper_poses.first[0];
-                random_test_starting_gripper_poses_[1] = random_test_transform_applied_ * template_gripper_poses.first[1];
-                random_test_ending_gripper_poses_.resize(2);
-                random_test_ending_gripper_poses_[0]   = random_test_transform_applied_ * template_gripper_poses.second[0];
-                random_test_ending_gripper_poses_[1]   = random_test_transform_applied_ * template_gripper_poses.second[1];
-
-                valid = true;
                 if (framework_.sdf_->EstimateDistance3d(random_test_starting_gripper_poses_[0].translation()).first < framework_.gripper_min_distance_to_obstacles_)
                 {
                     valid = false;
@@ -860,9 +692,9 @@ namespace smmap
             stored_bands_.push_back(temp_band);
         }
 
-        warping_target_points_ = PointsFromBandAndGrippers(
-                    *test_band_,
-                    test_band_->getEndpoints(),
+        warping_target_points_ = RubberBand::PointsFromBandAndGrippers(
+                    band,
+                    band.getEndpoints(),
                     action,
                     num_gripper_steps_);
 
@@ -879,14 +711,14 @@ namespace smmap
 
         // Extract the best SE(3) transform that transforms the template points
         // (memorized data) into the target points (test data)
-        warping_template_points_planned_ = PointsFromBandAndGrippers(
+        warping_template_points_planned_ = RubberBand::PointsFromBandAndGrippers(
                     *stored_trans.starting_state_.planned_rubber_band_,
                     stored_trans.starting_gripper_positions_,
                     stored_trans.ending_gripper_positions_,
                     num_gripper_steps_);
 
         const Isometry3d transform =
-                Isometry3d(umeyama(warping_template_points_executed_, warping_target_points_, false));
+                Isometry3d(umeyama(warping_template_points_planned_, warping_target_points_, false));
         template_planned_band_aligned_to_target_ = transform * warping_template_points_planned_;
         stored_bands_planned_aligned_to_target_ = transform * RubberBand::AggregateBandPoints(stored_bands_);
 
@@ -902,7 +734,7 @@ namespace smmap
             // Move the endpoints to the line along the test action vector
             const double ratio = (double)idx / (double)(stored_bands_.size() - 1);
             const auto gripper_targets = Interpolate(test_band_->getEndpoints(), test_action_, ratio);
-            const auto points_to_smooth = PointsFromBandPointsAndGripperTargets(transformed_band, gripper_targets, 1);
+            const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_band, gripper_targets, 1);
 
             RubberBand band(stored_band);
             band.setPointsAndSmooth(points_to_smooth);
@@ -918,7 +750,7 @@ namespace smmap
 
         // Extract the best SE(3) transform that transforms the template points
         // (memorized data) into the target points (test data)
-        warping_template_points_executed_ = PointsFromBandAndGrippers(
+        warping_template_points_executed_ = RubberBand::PointsFromBandAndGrippers(
                     *stored_trans.starting_state_.rubber_band_,
                     stored_trans.starting_gripper_positions_,
                     stored_trans.ending_gripper_positions_,
@@ -941,7 +773,7 @@ namespace smmap
             // Move the endpoints to the line along the test action vector
             const double ratio = (double)idx / (double)(stored_bands_.size() - 1);
             const auto gripper_targets = Interpolate(test_band_->getEndpoints(), test_action_, ratio);
-            const auto points_to_smooth = PointsFromBandPointsAndGripperTargets(transformed_band, gripper_targets, 1);
+            const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_band, gripper_targets, 1);
 
             RubberBand band(stored_band);
             band.setPointsAndSmooth(points_to_smooth);
@@ -975,34 +807,34 @@ namespace smmap
                                          template_planned_band_aligned_to_target_,
                                          Visualizer::Olive(), 1, 0.002);
 
-        VisualizeBandSurface(framework_.vis_,
-                             stored_bands_,
-                             Visualizer::Blue(),
-                             Visualizer::Red(),
-                             "stored_bands", 1);
+        RubberBand::VisualizeBandSurface(framework_.vis_,
+                                         stored_bands_,
+                                         Visualizer::Blue(),
+                                         Visualizer::Red(),
+                                         "stored_bands", 1);
 
 
-        VisualizeBandSurface(framework_.vis_,
-                             stored_bands_executed_aligned_to_target_,
-                             stored_bands_.size(),
-                             Visualizer::Silver(),
-                             Visualizer::White(),
-                             "stored_bands_EXECUTED_ALIGNED", 1);
+        RubberBand::VisualizeBandSurface(framework_.vis_,
+                                         stored_bands_executed_aligned_to_target_,
+                                         stored_bands_.size(),
+                                         Visualizer::Silver(),
+                                         Visualizer::White(),
+                                         "stored_bands_EXECUTED_ALIGNED", 1);
 
-        VisualizeBandSurface(framework_.vis_,
-                             stored_bands_executed_aligned_to_target_,
-                             stored_bands_.size(),
-                             Visualizer::Silver(),
-                             Visualizer::White(),
-                             "stored_bands_PLANNED_ALIGNED", 1);
+        RubberBand::VisualizeBandSurface(framework_.vis_,
+                                         stored_bands_executed_aligned_to_target_,
+                                         stored_bands_.size(),
+                                         Visualizer::Silver(),
+                                         Visualizer::White(),
+                                         "stored_bands_PLANNED_ALIGNED", 1);
 
         for (const auto& result : results_)
         {
-            VisualizeBandSurface(framework_.vis_,
-                                 result.second,
-                                 Visualizer::Seafoam(),
-                                 Visualizer::Orange(),
-                                 result.first, 1);
+            RubberBand::VisualizeBandSurface(framework_.vis_,
+                                             result.second,
+                                             Visualizer::Seafoam(),
+                                             Visualizer::Orange(),
+                                             result.first, 1);
         }
     }
 }

@@ -29,6 +29,16 @@ namespace smmap
         static ObjectPointSet AggregateBandPoints(
                 const std::vector<QuinlanRubberBand::ConstPtr>& bands);
 
+        static ObjectPointSet PointsFromBandPointsAndGripperTargets(
+                const EigenHelpers::VectorVector3d& starting_points,
+                const PairGripperPositions& grippers_targets,
+                const size_t num_gripper_steps);
+        static ObjectPointSet PointsFromBandAndGrippers(
+                const QuinlanRubberBand& band,
+                const PairGripperPositions& grippers_start,
+                const PairGripperPositions& grippers_end,
+                const size_t num_gripper_steps);
+
         static constexpr auto SMOOTHING_CLOSE_ENGOUGH_DIST = 1e-4;
         static constexpr auto MAX_DELTA_SCALE_FACTOR = 0.9;
         static constexpr auto MIN_OVERLAP_SCALE_FACTOR = 0.05;
@@ -36,6 +46,15 @@ namespace smmap
         static constexpr auto NODE_REMOVAL_OVERLAP_FACTOR = 1.2;
         static constexpr auto BACKTRACKING_THRESHOLD = 0.1;
         static constexpr auto SMOOTHING_ITERATIONS = 100;
+
+        static QuinlanRubberBand::Ptr BandFromNodeTransformsAndGrippers(
+                const EigenHelpers::VectorIsometry3d& node_transforms,
+                const PairGripperPositions& grippers_position,
+                const QuinlanRubberBand& template_band);
+
+        static QuinlanRubberBand::Ptr BandFromWorldState(
+                const WorldState& world_state,
+                const QuinlanRubberBand& template_band);
 
         QuinlanRubberBand(
                 std::shared_ptr<ros::NodeHandle> nh,
@@ -109,6 +128,31 @@ namespace smmap
                 const std_msgs::ColorRGBA& overstretched_color,
                 const int32_t id,
                 const bool visualization_enabled = true) const;
+
+        static void VisualizeBandSurface(
+                const Visualizer::ConstPtr& vis,
+                const ObjectPointSet& band_surface,
+                const size_t num_bands,
+                const std_msgs::ColorRGBA& start_color,
+                const std_msgs::ColorRGBA& end_color,
+                const std::string& ns,
+                const int32_t id = 1);
+
+        static void VisualizeBandSurface(
+                const Visualizer::ConstPtr& vis,
+                const std::vector<QuinlanRubberBand>& bands,
+                const std_msgs::ColorRGBA& start_color,
+                const std_msgs::ColorRGBA& end_color,
+                const std::string& ns,
+                const int32_t id = 1);
+
+        static void VisualizeBandSurface(
+                const Visualizer::ConstPtr& vis,
+                const std::vector<QuinlanRubberBand::ConstPtr>& bands,
+                const std_msgs::ColorRGBA& start_color,
+                const std_msgs::ColorRGBA& end_color,
+                const std::string& ns,
+                const int32_t id = 1);
 
         uint64_t serialize(std::vector<uint8_t>& buffer) const;
         uint64_t deserializeIntoSelf(const std::vector<uint8_t>& buffer, const uint64_t current);

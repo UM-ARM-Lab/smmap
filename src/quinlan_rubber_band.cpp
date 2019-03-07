@@ -117,6 +117,96 @@ namespace smmap
         return points;
     }
 
+    ObjectPointSet QuinlanRubberBand::PointsFromBandPointsAndGripperTargets(
+            const EigenHelpers::VectorVector3d& starting_points,
+            const PairGripperPositions& grippers_targets,
+            const size_t num_gripper_steps)
+    {
+        assert(num_gripper_steps > 0);
+        ObjectPointSet result(3, starting_points.size() + 2 * num_gripper_steps);
+        // Put the interpolated points between one end of the band and the first gripper into the result
+        for (size_t idx = 0; idx < num_gripper_steps; ++idx)
+        {
+            const double ratio = num_gripper_steps == 1 ? 0.0 : (double)idx / (double)(num_gripper_steps - 1);
+            result.col(idx) = EigenHelpers::Interpolate(grippers_targets.first, starting_points.front(), ratio);
+        }
+        // Put the band points themselves into the result
+        for (size_t idx = 0; idx < starting_points.size(); ++idx)
+        {
+            result.col(num_gripper_steps + idx) = starting_points[idx];
+        }
+        // Put the interpolated points between the other end of the band and the second gripper into the result
+        for (size_t idx = 0; idx < num_gripper_steps; ++idx)
+        {
+            const double ratio = num_gripper_steps == 1 ? 0.0 : (double)idx / (double)(num_gripper_steps - 1);
+            result.col(num_gripper_steps + starting_points.size() + idx) =
+                    EigenHelpers::Interpolate(grippers_targets.second, starting_points.back(), ratio);
+        }
+        return result;
+    }
+
+    ObjectPointSet QuinlanRubberBand::PointsFromBandAndGrippers(
+            const QuinlanRubberBand& band,
+            const PairGripperPositions& grippers_start,
+            const PairGripperPositions& grippers_end,
+            const size_t num_gripper_steps)
+    {
+        assert(num_gripper_steps > 0);
+        const EigenHelpers::VectorVector3d& band_points = band.upsampleBand();
+        ObjectPointSet result(3, band_points.size() + 2 * (num_gripper_steps + 1));
+        // Put the interpolated points the first start and end point into the result
+        {
+            for (size_t idx = 0; idx < num_gripper_steps + 1; ++idx)
+            {
+                const double ratio = (double)idx / (double)(num_gripper_steps);
+                result.col(idx) = EigenHelpers::Interpolate(grippers_end.first, grippers_start.first, ratio);
+            }
+        }
+        // Put the band points themselves into the result
+        {
+            const auto offset = num_gripper_steps + 1;
+            for (size_t band_idx = 0; band_idx < band_points.size(); ++band_idx)
+            {
+                result.col(offset + band_idx) = band_points[band_idx];
+            }
+        }
+        // Put the interpolated points the second start and end point into the result
+        {
+            const auto offset = num_gripper_steps + 1 + band_points.size();
+            for (size_t idx = 0; idx < num_gripper_steps + 1; ++idx)
+            {
+                const double ratio = (double)idx / (double)(num_gripper_steps);
+                result.col(offset + idx) = EigenHelpers::Interpolate(grippers_end.second, grippers_start.second, ratio);
+            }
+        }
+        return result;
+    }
+
+    QuinlanRubberBand::Ptr QuinlanRubberBand::BandFromNodeTransformsAndGrippers(
+            const EigenHelpers::VectorIsometry3d& node_transforms,
+            const PairGripperPositions& grippers_position,
+            const QuinlanRubberBand& template_band)
+    {
+        ObjectPointSet pointset(3, node_transforms.size());
+        for (size_t idx = 0; idx < node_transforms.size(); ++idx)
+        {
+            pointset.col(idx) = node_transforms[idx].translation();
+        }
+
+        auto band = std::make_shared<QuinlanRubberBand>(template_band);
+        band->resetBand(pointset, grippers_position);
+        return band;
+    }
+
+    QuinlanRubberBand::Ptr QuinlanRubberBand::BandFromWorldState(
+            const WorldState& world_state,
+            const QuinlanRubberBand& template_band)
+    {
+        auto band = std::make_shared<QuinlanRubberBand>(template_band);
+        band->resetBand(world_state);
+        return band;
+    }
+
     QuinlanRubberBand::QuinlanRubberBand(
             std::shared_ptr<ros::NodeHandle> nh,
             std::shared_ptr<ros::NodeHandle> ph,
@@ -478,6 +568,62 @@ namespace smmap
         }
     }
 
+    void QuinlanRubberBand::VisualizeBandSurface(
+            const Visualizer::ConstPtr& vis,
+            const ObjectPointSet& band_surface,
+            const size_t num_bands,
+            const std_msgs::ColorRGBA& start_color,
+            const std_msgs::ColorRGBA& end_color,
+            const std::string& ns,
+            const int32_t id)
+    {
+        if (num_bands == 0)
+        {
+            return;
+        }
+        assert(band_surface.cols() % num_bands == 0);
+        const size_t points_per_band = band_surface.cols() / num_bands;
+        std::vector<std_msgs::ColorRGBA> colors;
+        for (size_t band_idx = 0; band_idx < num_bands; ++band_idx)
+        {
+            const float ratio = (float)(band_idx) / (float)(num_bands - 1);
+            const auto color = arc_helpers::InterpolateColor(start_color, end_color, ratio);
+            colors.insert(colors.end(), points_per_band, color);
+        }
+        vis->visualizePoints(ns, band_surface, colors, id, 0.002);
+    }
+
+    void QuinlanRubberBand::VisualizeBandSurface(
+            const Visualizer::ConstPtr& vis,
+            const std::vector<QuinlanRubberBand>& bands,
+            const std_msgs::ColorRGBA& start_color,
+            const std_msgs::ColorRGBA& end_color,
+            const std::string& ns,
+            const int32_t id)
+    {
+        if (bands.empty())
+        {
+            return;
+        }
+        const auto points = RubberBand::AggregateBandPoints(bands);
+        VisualizeBandSurface(vis, points, bands.size(), start_color, end_color, ns, id);
+    }
+
+    void QuinlanRubberBand::VisualizeBandSurface(
+            const Visualizer::ConstPtr& vis,
+            const std::vector<QuinlanRubberBand::ConstPtr>& bands,
+            const std_msgs::ColorRGBA& start_color,
+            const std_msgs::ColorRGBA& end_color,
+            const std::string& ns,
+            const int32_t id)
+    {
+        if (bands.empty())
+        {
+            return;
+        }
+        const auto points = RubberBand::AggregateBandPoints(bands);
+        VisualizeBandSurface(vis, points, bands.size(), start_color, end_color, ns, id);
+    }
 
 
 
