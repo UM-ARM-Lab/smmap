@@ -6,6 +6,7 @@
 #include <arc_utilities/timing.hpp>
 #include <deformable_manipulation_msgs/messages.h>
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
+#include <deformable_manipulation_experiment_params/utility.hpp>
 
 #include "smmap/task_specification.h"
 #include "smmap/task_specification_implementions.h"
@@ -14,10 +15,10 @@ using namespace smmap;
 using namespace arc_utilities;
 
 #pragma message "Magic number - Stretching weight multiplication factor here"
-#define STRETCHING_WEIGHT_MULTIPLICATION_FACTOR (2000.0)
+static constexpr double STRETCHING_WEIGHT_MULTIPLICATION_FACTOR = 2000.0;
 #pragma message "Magic number - Step size and min progress for forward projection of dijkstras field following"
-#define VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS   (10)
-#define VECTOR_FIELD_FOLLOWING_MIN_PROGRESS     (1e-6)
+static constexpr int VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS      = 10;
+static constexpr double VECTOR_FIELD_FOLLOWING_MIN_PROGRESS     = 1e-6;
 
 //#define ENABLE_PROJECTION
 
@@ -593,35 +594,20 @@ DirectCoverageTask::DirectCoverageTask(
 
 double DirectCoverageTask::calculateError_impl(const WorldState& world_state)
 {
-    const ObjectPointSet& object_configuration = world_state.object_configuration_;
-    #warning "Direct coverage task - error thesholds not updated to use combined measure - distance to/along normal"
-    const double minimum_threshold = error_threshold_distance_to_normal_;
-
-    Eigen::VectorXd error(cover_points_.cols());
+    Eigen::VectorXd error(num_cover_points_);
 
     // for every cover point, find the nearest deformable object point
     #pragma omp parallel for
-    for (ssize_t target_ind = 0; target_ind < cover_points_.cols(); ++target_ind)
+    for (ssize_t cover_idx = 0; cover_idx < num_cover_points_; ++cover_idx)
     {
-        const Eigen::Vector3d& target_point = cover_points_.col(target_ind);
-
         // find the closest deformable object point
-        double min_dist_squared = std::numeric_limits<double>::infinity();
-        for (ssize_t deformable_ind = 0; deformable_ind < num_nodes_; ++deformable_ind)
-        {
-            const Eigen::Vector3d& deformable_point = object_configuration.col(deformable_ind);
-            const double new_dist_squared = (target_point - deformable_point).squaredNorm();
-            min_dist_squared = std::min(new_dist_squared, min_dist_squared);
-        }
+        ssize_t min_idx;
+        double min_dist;
+        bool covered;
+        std::tie(min_idx, min_dist, covered) = findNearestObjectPoint(world_state, cover_idx);
 
-        if (std::sqrt(min_dist_squared) >= minimum_threshold)
-        {
-            error(target_ind) = std::sqrt(min_dist_squared);
-        }
-        else
-        {
-            error(target_ind) = 0;
-        }
+        // Only count the distance if the point is not considered covered
+        error(cover_idx) = covered ? 0.0 : min_dist;
     }
 
     return error.sum();
@@ -631,45 +617,66 @@ ObjectDeltaAndWeight DirectCoverageTask::calculateObjectErrorCorrectionDelta_imp
         const WorldState& world_state)
 {
     const ObjectPointSet& object_configuration = world_state.object_configuration_;
-    #warning "Direct coverage task - error thesholds not updated to use combined measure - distance to/along normal"
-    const double minimum_threshold = error_threshold_distance_to_normal_;
-
     ObjectDeltaAndWeight desired_object_delta(num_nodes_ * 3);
 
     // for every target point, find the nearest deformable object point
-    for (ssize_t target_ind = 0; target_ind < cover_points_.cols(); ++target_ind)
+    for (ssize_t cover_idx = 0; cover_idx < num_cover_points_; ++cover_idx)
     {
-        const Eigen::Vector3d& target_point = cover_points_.col(target_ind);
+        // Find the closest deformable object point
+        ssize_t min_idx;
+        double min_dist;
+        bool covered;
+        std::tie(min_idx, min_dist, covered) = findNearestObjectPoint(world_state, cover_idx);
 
-        // find the closest deformable object point
-        ssize_t min_ind = -1;
-        double min_dist_squared = std::numeric_limits<double>::infinity();
-        for (ssize_t deformable_ind = 0; deformable_ind < num_nodes_; ++deformable_ind)
+        // Only count the distance if the point is not considered covered
+        if (!covered)
         {
-            const Eigen::Vector3d& deformable_point = object_configuration.col(deformable_ind);
-            const double new_dist_squared = (target_point - deformable_point).squaredNorm();
-            if (new_dist_squared < min_dist_squared)
-            {
-                min_dist_squared = new_dist_squared;
-                min_ind = deformable_ind;
-            }
-        }
+            desired_object_delta.delta.segment<3>(min_idx * 3) =
+                    desired_object_delta.delta.segment<3>(min_idx * 3)
+                    + (cover_points_.col(cover_idx) - object_configuration.col(min_idx));
 
-        const double min_dist = std::sqrt(min_dist_squared);
-        if (min_dist > minimum_threshold)
-        {
-            desired_object_delta.delta.segment<3>(min_ind * 3) =
-                    desired_object_delta.delta.segment<3>(min_ind * 3)
-                    + (target_point - object_configuration.col(min_ind));
-
-            const double weight = std::max(desired_object_delta.weight(min_ind * 3), min_dist);
-            desired_object_delta.weight(min_ind * 3) = weight;
-            desired_object_delta.weight(min_ind * 3 + 1) = weight;
-            desired_object_delta.weight(min_ind * 3 + 2) = weight;
+            const double weight = std::max(desired_object_delta.weight(min_idx * 3), min_dist);
+            desired_object_delta.weight(min_idx * 3) = weight;
+            desired_object_delta.weight(min_idx * 3 + 1) = weight;
+            desired_object_delta.weight(min_idx * 3 + 2) = weight;
         }
     }
 
     return desired_object_delta;
+}
+
+/**
+ * @brief DirectCoverageTask::findNearestObjectPoint
+ * @param object_configuration
+ * @param cover_ind
+ * @return index in object_configuration of the closest point
+ *         the matching distance,
+ *         if the point is consisered 'covered'
+ */
+std::tuple<ssize_t, double, bool> DirectCoverageTask::findNearestObjectPoint(
+        const WorldState& world_state,
+        const ssize_t cover_idx) const
+{
+    const Eigen::Vector3d& cover_point = cover_points_.col(cover_idx);
+
+    // find the closest deformable object point
+    bool covered = false;
+    ssize_t min_idx = -1;
+    double min_dist_squared = std::numeric_limits<double>::infinity();
+    for (ssize_t deformable_idx = 0; deformable_idx < num_nodes_; ++deformable_idx)
+    {
+        const Eigen::Vector3d& deformable_point = world_state.object_configuration_.col(deformable_idx);
+        const double new_dist_squared = (cover_point - deformable_point).squaredNorm();
+        if (new_dist_squared < min_dist_squared)
+        {
+            min_dist_squared = new_dist_squared;
+            min_idx = deformable_idx;
+        }
+
+        covered |= pointIsCovered(cover_idx, deformable_point);
+    }
+
+    return std::make_tuple(min_idx, std::sqrt(min_dist_squared), covered);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1173,7 +1180,6 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
             const Eigen::Vector3d combined_delta = summed_dijkstras_deltas.normalized() * work_space_grid_.minStepDimension();
 
             const Eigen::Vector3d micro_delta = combined_delta/ (double)VECTOR_FIELD_FOLLOWING_NUM_MICROSTEPS;
-            #warning "Changed from legacy to new projection here"
             const Eigen::Vector3d projected_pos = sdf_->ProjectOutOfCollision3d(updated_pos + micro_delta);
 
             inner_progress = (projected_pos - updated_pos).squaredNorm() > VECTOR_FIELD_FOLLOWING_MIN_PROGRESS;
@@ -1226,6 +1232,8 @@ DijkstrasCoverageTask::Correspondences DistanceBasedCorrespondencesTask::getCove
         if (closest_deformable_idx == -1)
         {
             visualizeIndividualDijkstrasResult(cover_idx, cover_points_.col(cover_idx));
+            ROS_ERROR_NAMED("task_specification", "Weirdness in correspondences calculation");
+            PressKeyToContinue();
         }
 
         // Record the results in the data structure
@@ -1250,7 +1258,10 @@ DijkstrasCoverageTask::Correspondences DistanceBasedCorrespondencesTask::getCove
  * @brief DistanceBasedCorrespondencesTask::findNearestObjectPoint
  * @param object_configuration
  * @param cover_ind
- * @return The index in object_configuration of the closest point as defined by Dijkstras, and the matching distance, and the index of the target position in the free space graph
+ * @return index in object_configuration of the closest point as defined by Dijkstras,
+ *         the matching distance,
+ *         the index of the target position in the free space graph,
+ *         if the point is consisered 'covered'
  */
 std::tuple<ssize_t, double, ssize_t, bool> DistanceBasedCorrespondencesTask::findNearestObjectPoint(
         const WorldState& world_state,

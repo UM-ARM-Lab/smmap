@@ -88,7 +88,7 @@ DeformableController::OutputData StretchingConstraintController::getGripperMotio
 
 DeformableController::OutputData StretchingConstraintController::solvedByRandomSampling(const InputData& input_data)
 {
-//    assert(false && "Not updated to use new constraints etc. Verify that this whole function is doing what we want, for both simulation and live robot");
+    assert(false && "Not updated to use new constraints etc. Verify that this whole function is doing what we want, for both simulation and live robot");
 
     const WorldState& current_world_state = input_data.world_current_state_;
     const ssize_t num_grippers = (ssize_t)(current_world_state.all_grippers_single_pose_.size());
@@ -1701,7 +1701,7 @@ double StretchingConstraintController::gripperCollisionCheckHelper(
         const AllGrippersSinglePose& current_gripper_pose,
         const AllGrippersSinglePoseDelta& test_gripper_motion) const
 {
-//    assert(false && "This function is not used for the gradient descent method");
+    assert(false && "This function is not used for the gradient descent method");
 
     const auto grippers_test_poses = kinematics::applyTwist(current_gripper_pose, test_gripper_motion);
 
@@ -1710,7 +1710,7 @@ double StretchingConstraintController::gripperCollisionCheckHelper(
     for (size_t gripper_idx = 0; gripper_idx < grippers_test_poses.size(); ++gripper_idx)
     {
         const auto gripper_pos = grippers_test_poses[gripper_idx].translation();
-        #warning "Changed from legacy to new projection here"
+        // Changed from legacy to new projection here
         const auto collision_result = environment_sdf_->EstimateDistance3d(gripper_pos);
         if (collision_result.first < min_collision_distance)
         {

@@ -287,6 +287,10 @@ namespace smmap
 
             virtual double calculateError_impl(
                     const WorldState& world_state) override final;
+
+            std::tuple<ssize_t, double, bool> findNearestObjectPoint(
+                    const WorldState& world_state,
+                    const ssize_t cover_idx) const;
     };
 
     class DijkstrasCoverageTask : public CoverageTask
