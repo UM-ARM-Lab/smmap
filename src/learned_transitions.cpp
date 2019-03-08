@@ -6,8 +6,16 @@
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/first_order_deformation.h>
 #include <arc_utilities/path_utils.hpp>
+#include <deformable_manipulation_experiment_params/utility.hpp>
+
+#define TRANSITION_LEARNING_VERBOSE true
+//#define TRANSITION_LEARNING_VERBOSE false
 
 using namespace smmap;
+using namespace arc_utilities;
+using namespace arc_helpers;
+using namespace Eigen;
+using namespace EigenHelpers;
 
 constexpr char TransitionEstimation::MDP_PRE_STATE_NS[];
 constexpr char TransitionEstimation::MDP_TESTING_STATE_NS[];
@@ -23,10 +31,10 @@ uint64_t TransitionEstimation::State::serializeSelf(
         std::vector<uint8_t>& buffer) const
 {
     const uint64_t starting_size = buffer.size();
-    arc_utilities::SerializeEigen(deform_config_, buffer);
+    SerializeEigen(deform_config_, buffer);
     rubber_band_->serialize(buffer);
     planned_rubber_band_->serialize(buffer);
-    arc_utilities::SerializeVector(rope_node_transforms_, buffer, arc_utilities::SerializeEigen<Eigen::Isometry3d>);
+    SerializeVector(rope_node_transforms_, buffer, SerializeEigen<Isometry3d>);
     const auto bytes_written = buffer.size() - starting_size;
     // Verify no mistakes were made
     {
@@ -44,14 +52,14 @@ uint64_t TransitionEstimation::State::deserializeIntoSelf(
     uint64_t bytes_read = 0;
 
     const auto deform_config_deserialized =
-            arc_utilities::DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
+            DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
     deform_config_ = deform_config_deserialized.first;
     bytes_read += deform_config_deserialized.second;
     bytes_read += rubber_band_->deserializeIntoSelf(buffer, current + bytes_read);
     bytes_read += planned_rubber_band_->deserializeIntoSelf(buffer, current + bytes_read);
     const auto rope_node_transforms_deserialized =
-            arc_utilities::DeserializeVector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d>>(
-                buffer, current + bytes_read, arc_utilities::DeserializeEigen<Eigen::Isometry3d>);
+            DeserializeVector<Isometry3d, aligned_allocator<Isometry3d>>(
+                buffer, current + bytes_read, DeserializeEigen<Isometry3d>);
     rope_node_transforms_ = rope_node_transforms_deserialized.first;
     bytes_read += rope_node_transforms_deserialized.second;
     return bytes_read;
@@ -118,7 +126,7 @@ uint64_t TransitionEstimation::StateTransition::serializeSelf(
     ending_state_.serializeSelf(buffer);
     DeserializePair3dPositions(starting_gripper_positions_, buffer);
     DeserializePair3dPositions(ending_gripper_positions_, buffer);
-    arc_utilities::SerializeVector<WorldState>(microstep_state_history_, buffer, &WorldState::Serialize);
+    SerializeVector<WorldState>(microstep_state_history_, buffer, &WorldState::Serialize);
     const uint64_t bytes_written = buffer.size() - starting_bytes;
 
     // Verify no mistakes were made
@@ -148,7 +156,7 @@ uint64_t TransitionEstimation::StateTransition::deserializeIntoSelf(
     ending_gripper_positions_ = ending_grippers_deserialized.first;
     bytes_read += ending_grippers_deserialized.second;
 
-    const auto microsteps_deserialized = arc_utilities::DeserializeVector<WorldState>(buffer, current + bytes_read, &WorldState::Deserialize);
+    const auto microsteps_deserialized = DeserializeVector<WorldState>(buffer, current + bytes_read, &WorldState::Deserialize);
     microstep_state_history_ = microsteps_deserialized.first;
     bytes_read += microsteps_deserialized.second;
 
@@ -241,6 +249,8 @@ TransitionEstimation::TransitionEstimation(
     , sdf_(sdf)
     , work_space_grid_(work_space_grid)
     , vis_(vis)
+
+    , default_propogation_confidence_(GetTransitionDefaultPropagationConfidence(*ph_))
 //    , action_dist_threshold_(GetTransitionActionDistThreshold(*ph_))
 //    , action_dist_scale_factor(GetTransitionActionDistScaleFactor(*ph_))
     , band_dist_threshold_(GetTransitionBandDistThreshold(*ph_))
@@ -258,8 +268,8 @@ TransitionEstimation::TransitionEstimation(
 
 // Assumes the vectors have already been appropriately discretized/resampled
 bool TransitionEstimation::checkFirstOrderHomotopy(
-        const EigenHelpers::VectorVector3d& b1,
-        const EigenHelpers::VectorVector3d& b2) const
+        const VectorVector3d& b1,
+        const VectorVector3d& b2) const
 {
     // Checks if the straight line between elements of the two paths is collision free
     const auto straight_line_collision_check_fn = [&] (
@@ -275,7 +285,7 @@ bool TransitionEstimation::checkFirstOrderHomotopy(
         for (ssize_t ind = 0; ind <= num_steps; ++ind)
         {
             const double ratio = (double)ind / (double)num_steps;
-            const auto interpolated_point = EigenHelpers::Interpolate(b1_node, b2_node, ratio);
+            const auto interpolated_point = Interpolate(b1_node, b2_node, ratio);
             if (sdf_->GetImmutable3d(interpolated_point).first < 0.0)
             {
                 return false;
@@ -285,7 +295,7 @@ bool TransitionEstimation::checkFirstOrderHomotopy(
         return true;
     };
 
-    return arc_utilities::FirstOrderDeformation::CheckFirstOrderDeformation(
+    return FirstOrderDeformation::CheckFirstOrderDeformation(
                     b1.size(),
                     b2.size(),
                     straight_line_collision_check_fn);
@@ -394,17 +404,20 @@ const std::vector<TransitionEstimation::StateTransition>& TransitionEstimation::
     return learned_transitions_;
 }
 
+/*
 Maybe::Maybe<double> TransitionEstimation::transitionUseful(
-        const RubberBand::ConstPtr& test_band,
+        const RubberBand::ConstPtr& test_band_start,
         const PairGripperPositions& test_ending_gripper_positions,
         const StateTransition& transition) const
 {
+    assert(false && "Unused and not updated");
+
     // First check if the start points of the grippers and the end points of the grippers are
     // within 1 work space grid cell. This tries to ensure that when propagating, we don't
     // "hop over" any obstacles
     {
         static const double max_dist = work_space_grid_.minStepDimension() * std::sqrt(2.0);
-        const auto& test_starting_gripper_positions = test_band->getEndpoints();
+        const auto& test_starting_gripper_positions = test_band_start->getEndpoints();
 
 //        static double smallest_dist_starting_first = std::numeric_limits<double>::infinity();
 //        static double smallest_dist_starting_second = std::numeric_limits<double>::infinity();
@@ -446,19 +459,19 @@ Maybe::Maybe<double> TransitionEstimation::transitionUseful(
         }
     }
 
-    const double actual_band_dist = test_band->distance(*transition.starting_state_.rubber_band_);
+    const double actual_band_dist = test_band_start->distance(*transition.starting_state_.rubber_band_);
     bool actual_band_match = false;
     if (actual_band_dist < band_dist_threshold_)
     {
-        actual_band_match = checkFirstOrderHomotopy(*test_band, *transition.starting_state_.rubber_band_);
+        actual_band_match = checkFirstOrderHomotopy(*test_band_start, *transition.starting_state_.rubber_band_);
     }
     std::cout << "Actual  band distance: " << actual_band_dist << " match: " << actual_band_match << std::endl;
 
-    const double planned_band_dist = test_band->distance(*transition.starting_state_.planned_rubber_band_);
+    const double planned_band_dist = test_band_start->distance(*transition.starting_state_.planned_rubber_band_);
     bool planned_band_match = false;
     if (planned_band_dist < band_dist_threshold_)
     {
-        planned_band_match = checkFirstOrderHomotopy(*test_band, *transition.starting_state_.planned_rubber_band_);
+        planned_band_match = checkFirstOrderHomotopy(*test_band_start, *transition.starting_state_.planned_rubber_band_);
     }
     std::cout << "Planned band distance: " << planned_band_dist << " match: " << planned_band_match << std::endl;
 
@@ -485,49 +498,123 @@ Maybe::Maybe<double> TransitionEstimation::transitionUseful(
     return band_dist_scale_factor_ * band_dist;
 }
 
-std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::applyLearnedTransitions(
-        const RubberBand::ConstPtr& test_band,
-        const PairGripperPositions& ending_gripper_positions) const
+*/
+
+std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTransitions(
+        const RubberBand& test_band_start,
+        const PairGripperPositions& ending_gripper_positions,
+        const bool verbose) const
 {
-    std::vector<std::pair<RubberBand::Ptr, double>> possible_transitions;
+    std::vector<std::pair<RubberBand::Ptr, double>> transitions;
 
-    for (size_t idx = 0; idx < learned_transitions_.size(); ++idx)
+    auto default_next_band = std::make_shared<RubberBand>(test_band_start);
+    default_next_band->forwardPropagate(ending_gripper_positions, false);
+
+    // Only add this transition if the band is not overstretched after moving
+    if (default_next_band->isOverstretched())
     {
-        const StateTransition& transition = learned_transitions_[idx];
-        Maybe::Maybe<double> dist = transitionUseful(test_band, ending_gripper_positions, transition);
-        if (dist.Valid())
-        {
-            possible_transitions.push_back({
-                    applyTransition(ending_gripper_positions, transition),
-                    confidence(dist.GetImmutable())});
+        ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Stopped due to band overstretch");
+    }
+    else
+    {
+        transitions.push_back({default_next_band, default_propogation_confidence_});
+    }
 
-            visualizeTransition(transition, (int32_t)(3 * idx + 1));
-            test_band->visualize(MDP_TESTING_STATE_NS + std::string("_pre"), Visualizer::White(), Visualizer::White(), (int32_t)idx + 1);
-            possible_transitions.back().first->visualize(MDP_TESTING_STATE_NS + std::string("_post"), Visualizer::Silver(), Visualizer::Silver(), (int32_t)idx + 2);
-            vis_->forcePublishNow(0.02);
+    for (size_t transition_idx = 0; transition_idx < learned_transitions_.size(); ++transition_idx)
+    {
+        const StateTransition& stored_trans = learned_transitions_[transition_idx];
+
+        const bool fo_homotopy_check =
+                checkFirstOrderHomotopy(test_band_start, *stored_trans.starting_state_.planned_rubber_band_);
+
+        if (fo_homotopy_check)
+        {
+            const auto num_gripper_steps = stored_trans.microstep_state_history_.size() / 4;
+            std::vector<RubberBand> stored_bands;
+            stored_bands.reserve(stored_trans.microstep_state_history_.size() + 1);
+            stored_bands.push_back(*stored_trans.starting_state_.rubber_band_);
+            for (const auto& state : stored_trans.microstep_state_history_)
+            {
+                RubberBand temp_band(test_band_start);
+                temp_band.resetBand(state);
+                stored_bands.push_back(temp_band);
+            }
+
+            // Extract the best SE(3) transform that transforms the template points
+            // (memorized data) into the target points (test data)
+            ObjectPointSet warping_template_points_planned = RubberBand::PointsFromBandAndGrippers(
+                        *stored_trans.starting_state_.planned_rubber_band_,
+                        stored_trans.starting_gripper_positions_,
+                        stored_trans.ending_gripper_positions_,
+                        num_gripper_steps);
+
+            ObjectPointSet warping_target_points = RubberBand::PointsFromBandAndGrippers(
+                        test_band_start,
+                        test_band_start.getEndpoints(),
+                        ending_gripper_positions,
+                        num_gripper_steps);
+
+            const Isometry3d transform =
+                    Isometry3d(umeyama(warping_template_points_planned, warping_target_points, false));
+            ObjectPointSet template_planned_band_aligned_to_target = transform * warping_template_points_planned;
+            ObjectPointSet stored_bands_planned_aligned_to_target = transform * RubberBand::AggregateBandPoints(stored_bands);
+
+            // Apply the best SE(3) transform to the memorized stored bands
+            // Project the transformed points out of collision and retighten
+            std::vector<RubberBand> transformed_bands_from_stored_bands;
+            transformed_bands_from_stored_bands.reserve(stored_bands.size());
+            for (size_t band_surface_idx = 0; band_surface_idx < stored_bands.size(); ++band_surface_idx)
+            {
+                // Transform the stored band into the test band space
+                const auto& stored_band = stored_bands[band_surface_idx];
+                const auto transformed_band = TransformData(transform, stored_band.getVectorRepresentation());
+                // Move the endpoints to the line along the test action vector
+                assert(stored_bands.size() > 1);
+                const double ratio = (double)band_surface_idx / (double)(stored_bands.size() - 1);
+                const auto gripper_targets = Interpolate(test_band_start.getEndpoints(), ending_gripper_positions, ratio);
+                const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_band, gripper_targets, 1);
+
+                RubberBand band(stored_band);
+                band.setPointsAndSmooth(points_to_smooth);
+                transformed_bands_from_stored_bands.push_back(band);
+            }
+
+            vis_->visualizePoints("TEMPLATE_POINTS_PLANNED",
+                                  warping_template_points_planned,
+                                  Visualizer::Green(), 1, 0.002);
+
+            vis_->visualizePoints("TARGET_POINTS",
+                                  warping_target_points,
+                                  Visualizer::Yellow(), 1, 0.002);
+
+            vis_->visualizePoints("TEMPLATE_POINTS_PLANNED_ALIGNED",
+                                  template_planned_band_aligned_to_target,
+                                  Visualizer::Olive(), 1, 0.002);
+
+            RubberBand::VisualizeBandSurface(vis_,
+                                             stored_bands,
+                                             Visualizer::Blue(),
+                                             Visualizer::Red(),
+                                             "stored_bands", 1);
+
+            RubberBand::VisualizeBandSurface(vis_,
+                                             stored_bands_planned_aligned_to_target,
+                                             stored_bands.size(),
+                                             Visualizer::Blue(),
+                                             Visualizer::Red(),
+                                             "stored_bands_planned_aligned", 1);
+
+            RubberBand::VisualizeBandSurface(vis_,
+                                             transformed_bands_from_stored_bands,
+                                             Visualizer::Seafoam(),
+                                             Visualizer::Orange(),
+                                             "stored_bands_planned_aligned_retightened", 1);
+
+            PressKeyToContinue();
         }
     }
 
-    return possible_transitions;
-}
-
-RubberBand::Ptr TransitionEstimation::applyTransition(
-        const PairGripperPositions& ending_gripper_positions,
-        const StateTransition& transition) const
-{
-    auto resulting_band = std::make_shared<RubberBand>(*transition.ending_state_.rubber_band_);
-
-    const bool verbose = false;
-    resulting_band->forwardPropagate(
-                ending_gripper_positions,
-                verbose);
-
-    return resulting_band;
-}
-
-double TransitionEstimation::confidence(const double dist) const
-{
-    return std::exp(-std::pow(dist, 2));
+    return transitions;
 }
 
 //////// Visualization /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -576,7 +663,7 @@ void TransitionEstimation::clearVisualizations() const
 
 bool TransitionEstimation::useStoredTransitions() const
 {
-    return ROSHelpers::GetParamRequired<bool>(*ph_, "transition_learning/use_stored_transitions", __func__).GetImmutable();
+    return ROSHelpers::GetParamRequired<bool>(*ph_, "transition_estimation/use_stored_transitions", __func__).GetImmutable();
 }
 
 void TransitionEstimation::storeTransitions() const
@@ -584,20 +671,19 @@ void TransitionEstimation::storeTransitions() const
     try
     {
         const auto log_folder = GetLogFolder(*nh_);
-        arc_utilities::CreateDirectory(log_folder);
-        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "transition_learning/file_name_prefix", __func__);
+        CreateDirectory(log_folder);
+        const auto file_name_prefix = ROSHelpers::GetParamRequired<bool>(*ph_, "transition_estimation/file_name_prefix", __func__);
         if (!file_name_prefix.Valid())
         {
             throw_arc_exception(std::invalid_argument, "Unable to load file_name_prefix from parameter server");
         }
-
-        const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsString();
+        const std::string file_name_suffix = GetCurrentTimeAsString();
         const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
         const std::string full_path = log_folder + file_name;
         ROS_INFO_STREAM_NAMED("transitions", "Saving learned_transitions to " << full_path);
 
         std::vector<uint8_t> buffer;
-        arc_utilities::SerializeVector<StateTransition>(learned_transitions_, buffer, &StateTransition::Serialize);
+        SerializeVector<StateTransition>(learned_transitions_, buffer, &StateTransition::Serialize);
         ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
     }
     catch (const std::exception& e)
@@ -611,17 +697,17 @@ void TransitionEstimation::loadSavedTransitions()
     try
     {
         const auto log_folder = GetLogFolder(*nh_);
-        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "transition_learning/file_name_prefix", __func__);
+        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "transition_estimation/file_name_prefix", __func__);
         if (!file_name_prefix.Valid())
         {
             throw_arc_exception(std::invalid_argument, "Unable to load file_name_prefix from parameter server");
         }
 
         std::vector<std::string> suffixes_files_to_load;
-        if (!ph_->getParam("transition_learning/file_name_suffixes_to_load", suffixes_files_to_load))
+        if (!ph_->getParam("transition_estimation/file_name_suffixes_to_load", suffixes_files_to_load))
         {
             ROS_ERROR_STREAM_NAMED("transitions", "Cannot find "
-                                   << ph_->getNamespace() << "/transition_learning"
+                                   << ph_->getNamespace() << "/transition_estimation"
                                    << "/file_name_suffixes_to_load on parameter server for "
                                    << __func__
                                    << ": Value must be on paramter sever");
@@ -637,7 +723,7 @@ void TransitionEstimation::loadSavedTransitions()
             {
                 return StateTransition::Deserialize(buf, current, template_band_);
             };
-            const auto transitions_deserialized = arc_utilities::DeserializeVector<StateTransition>(buffer, 0, deserializer);
+            const auto transitions_deserialized = DeserializeVector<StateTransition>(buffer, 0, deserializer);
             const auto& transitions = transitions_deserialized.first;
             learned_transitions_.insert(learned_transitions_.begin(), transitions.begin(), transitions.end());
         }

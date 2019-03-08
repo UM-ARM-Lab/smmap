@@ -660,8 +660,6 @@ BandRRT::BandRRT(
     , smoothing_band_dist_threshold_(smoothing_params.smoothing_band_dist_threshold_)
     , uniform_shortcut_smoothing_int_distribution_(1, 4)
 
-    , default_propogation_confidence_(planning_params.default_propogation_confidence_)
-
     , forward_nn_data_idx_to_tree_idx_(0)
     , goal_set_nn_data_idx_to_tree_idx_(0)
     , forward_nn_raw_data_(0)
@@ -2675,44 +2673,18 @@ std::vector<std::pair<RubberBand::Ptr, double>> BandRRT::forwardPropogateBand(
         const RubberBand::ConstPtr& starting_band,
         const RRTGrippersRepresentation& next_grippers_poses)
 {
-    const bool rubber_band_verbose = false && visualization_enabled_globally_;
-
     Stopwatch stopwatch;
     arc_helpers::DoNotOptimize(next_grippers_poses);
 
     const PairGripperPositions test_gripper_positions = ToGripperPositions(next_grippers_poses);
-    auto transitions = transition_estimator_->applyLearnedTransitions(starting_band, test_gripper_positions);
-    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", transitions.size() << " learned transitions applied");
+    const auto transitions = transition_estimator_->estimateTransitions(*starting_band, test_gripper_positions);
+    ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", transitions.size() << " transitions possible");
     if (SMMAP_RRT_VERBOSE)
     {
         for (size_t idx = 0; idx < transitions.size(); ++idx)
         {
             ROS_INFO_STREAM_NAMED("rrt.prop", "    Learned transition " << idx << " confidence: " << transitions[idx].second);
         }
-    }
-
-    auto next_band = std::make_shared<RubberBand>(*starting_band);
-    // Forward simulate the rubber band to test this transition
-    next_band->forwardPropagate(
-                ToGripperPositions(next_grippers_poses),
-                rubber_band_verbose);
-
-    // Only add this transition if the band endpoints match the target points,
-    // and the band is not overstretched after moving
-    if (bandEndpointsMatchGripperPositions(*next_band, next_grippers_poses))
-    {
-        if (next_band->isOverstretched())
-        {
-            ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", "Stopped due to band overstretch");
-        }
-        else
-        {
-            transitions.push_back({next_band, default_propogation_confidence_});
-        }
-    }
-    else
-    {
-        ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", "Stopped due to band endpoints not matching desired gripper positions");
     }
 
     arc_helpers::DoNotOptimize(transitions);

@@ -249,7 +249,6 @@ namespace smmap
             double best_near_radius2_;
             double goal_bias_;
             double feasibility_distancescale_factor_;
-            double default_propogation_confidence_;
         };
 
         struct SmoothingParams
@@ -486,8 +485,6 @@ namespace smmap
         double max_grippers_distance_;
         std::chrono::duration<double> time_limit_;
         RRTGrippersRepresentation grippers_goal_poses_;
-
-        const double default_propogation_confidence_;
 
         // Counters to track which node/transition/split we are on
         int64_t next_state_index_;

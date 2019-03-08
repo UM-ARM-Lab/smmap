@@ -13,7 +13,7 @@ using namespace Eigen;
 using namespace EigenHelpers;
 
 ////////////////////////////////////////////////////////////////////////////////
-//          Random Helpers - duplicated in learned_transitions.cpp
+//          Random Helpers
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace smmap
@@ -63,64 +63,6 @@ namespace smmap
         target_gripper_poses[1].translation() = trans.ending_gripper_positions_.second;
         return {starting_gripper_poses, target_gripper_poses};
     }
-
-    static VectorVector3d TransformData(
-            const Isometry3d& transform,
-            const VectorVector3d& data)
-    {
-        VectorVector3d retval;
-        retval.reserve(data.size());
-        for (const auto& vec : data)
-        {
-            retval.push_back(transform * vec);
-        }
-        return retval;
-    }
-
-    static VectorIsometry3d TransformData(
-            const Isometry3d& transform,
-            const VectorIsometry3d& data)
-    {
-        VectorIsometry3d retval;
-        retval.reserve(data.size());
-        for (const auto& pose : data)
-        {
-            retval.push_back(transform * pose);
-        }
-        return retval;
-    }
-
-//    static std::vector<CollisionData> TransformData(
-//            const Isometry3d& transform,
-//            const std::vector<CollisionData>& data)
-//    {
-//        std::vector<CollisionData> retval;
-//        retval.reserve(data.size());
-//        for (const auto& collision_data : data)
-//        {
-//            retval.push_back(CollisionData(
-//                                 transform * collision_data.nearest_point_to_obstacle_,
-//                                 transform * collision_data.obstacle_surface_normal_,
-//                                 collision_data.distance_to_obstacle_));
-//        }
-//        return retval;
-//    }
-
-//    static WorldState TransformWorldState(
-//            const Isometry3d& transform,
-//            const WorldState& state)
-//    {
-//        return
-//        {
-//            transform * state.object_configuration_,
-//            TransformData(transform, state.rope_node_transforms_),
-//            TransformData(transform, state.all_grippers_single_pose_),
-//            state.robot_configuration_,
-//            state.robot_configuration_valid_,
-//            TransformData(transform, state.gripper_collision_data_),
-//            state.sim_time_
-//        };
-//    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -725,7 +667,7 @@ namespace smmap
         // Apply the best SE(3) transform to the memorized stored bands
         // Project the transformed points out of collision and retighten
         std::vector<RubberBand> transformed_bands_from_stored_bands;
-        transformed_bands_from_stored_bands.reserve(stored_trans.microstep_state_history_.size() + 1);
+        transformed_bands_from_stored_bands.reserve(stored_bands_.size());
         for (size_t idx = 0; idx < stored_bands_.size(); ++idx)
         {
             // Transform the stored band into the test band space
@@ -764,7 +706,7 @@ namespace smmap
         // Apply the best SE(3) transform to the memorized stored bands
         // Project the transformed points out of collision and retighten
         std::vector<RubberBand> transformed_bands_from_stored_bands;
-        transformed_bands_from_stored_bands.reserve(stored_trans.microstep_state_history_.size() + 1);
+        transformed_bands_from_stored_bands.reserve(stored_bands_.size());
         for (size_t idx = 0; idx < stored_bands_.size(); ++idx)
         {
             // Transform the stored band into the test band space

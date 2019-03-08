@@ -119,26 +119,15 @@ namespace smmap
 
         const std::vector<StateTransition>& transitions() const;
 
-        // If the transition could be applicable, then it returns the distance
-        Maybe::Maybe<double> transitionUseful(
-                const RubberBand::ConstPtr& test_band,
-                const PairGripperPositions& test_ending_gripper_positions,
-                const StateTransition& transition) const;
-
         // Returns vector of potential outcomes of the action, and a relative
         // confidence from 0 (not likely) to 1 (input data exactly matched a
         // stored transition) in the possibility that the transition is possible.
         // I.e.; confidence 1 does not mean that the transition will happen, but
         // rather that it *could* happen.
-        std::vector<std::pair<RubberBand::Ptr, double>> applyLearnedTransitions(
-                const RubberBand::ConstPtr& band,
-                const PairGripperPositions& ending_gripper_positions) const;
-
-        RubberBand::Ptr applyTransition(
+        std::vector<std::pair<RubberBand::Ptr, double>> estimateTransitions(
+                const RubberBand& test_band_start,
                 const PairGripperPositions& ending_gripper_positions,
-                const StateTransition& transition) const;
-
-        double confidence(const double dist) const;
+                const bool verbose = false) const;
 
         ////////////////////////////////////////////////////////////////////////
         // Visualizing transitions
@@ -176,6 +165,7 @@ namespace smmap
         const Visualizer::ConstPtr vis_;
         std::vector<StateTransition> learned_transitions_;
 
+        const double default_propogation_confidence_;
 //        const double action_dist_threshold_;
 //        const double action_dist_scale_factor;
         const double band_dist_threshold_;

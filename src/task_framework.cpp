@@ -1157,12 +1157,11 @@ void TaskFramework::initializeBandRRT(const bool planning_for_whole_robot)
     const auto use_cbirrt_style_projection      = GetUseCBiRRTStyleProjection(*ph_);
     const auto forward_tree_extend_iterations   = GetRRTForwardTreeExtendIterations(*ph_);
     const auto backward_tree_extend_iterations  = GetRRTBackwardTreeExtendIterations(*ph_);
-    const auto kd_tree_grow_threshold           = GetKdTreeGrowThreshold(*ph_);
-    const auto use_brute_force_nn               = GetUseBruteForceNN(*ph_);
+    const auto kd_tree_grow_threshold           = GetRRTKdTreeGrowThreshold(*ph_);
+    const auto use_brute_force_nn               = GetRRTUseBruteForceNN(*ph_);
     const auto goal_bias                        = GetRRTGoalBias(*ph_);
     const auto best_near_radius                 = GetRRTBestNearRadius(*ph_);
     const auto feasibility_dist_scale_factor    = GetRRTFeasibilityDistanceScaleFactor(*ph_);
-    const auto default_propogation_confidence   = GetRRTDefaultPropagationConfidence(*ph_);
     assert(!use_cbirrt_style_projection && "CBiRRT style projection is no longer supported");
     BandRRT::PlanningParams planning_params =
     {
@@ -1172,15 +1171,14 @@ void TaskFramework::initializeBandRRT(const bool planning_for_whole_robot)
         kd_tree_grow_threshold,
         best_near_radius * best_near_radius,
         goal_bias,
-        feasibility_dist_scale_factor,
-        default_propogation_confidence
+        feasibility_dist_scale_factor
     };
 
     // Smoothing parameters
-    const auto max_shortcut_index_distance = GetRRTMaxShortcutIndexDistance(*ph_);
-    const auto max_smoothing_iterations = GetRRTMaxSmoothingIterations(*ph_);
-    const auto max_failed_smoothing_iterations = GetRRTMaxFailedSmoothingIterations(*ph_);
-    const auto smoothing_band_dist_threshold = GetRRTSmoothingBandDistThreshold(*ph_);
+    const auto max_shortcut_index_distance      = GetRRTMaxShortcutIndexDistance(*ph_);
+    const auto max_smoothing_iterations         = GetRRTMaxSmoothingIterations(*ph_);
+    const auto max_failed_smoothing_iterations  = GetRRTMaxFailedSmoothingIterations(*ph_);
+    const auto smoothing_band_dist_threshold    = GetRRTSmoothingBandDistThreshold(*ph_);
     BandRRT::SmoothingParams smoothing_params =
     {
         max_shortcut_index_distance,
@@ -1199,14 +1197,14 @@ void TaskFramework::initializeBandRRT(const bool planning_for_whole_robot)
                 GetRRTPlanningXMaxBulletFrame(*ph_),
                 GetRRTPlanningYMaxBulletFrame(*ph_),
                 GetRRTPlanningZMaxBulletFrame(*ph_));
-    const auto max_gripper_step_size = dijkstras_task_->work_space_grid_.minStepDimension();
-    const auto max_robot_step_size = GetRRTMaxRobotDOFStepSize(*ph_);
-    const auto min_robot_step_size = GetRRTMinRobotDOFStepSize(*ph_);
-    const auto max_gripper_rotation = GetRRTMaxGripperRotation(*ph_); // only matters for real robot
-    const auto goal_reached_radius = dijkstras_task_->work_space_grid_.minStepDimension();
-    const auto min_gripper_distance_to_obstacles = GetRRTMinGripperDistanceToObstacles(*ph_); // only matters for simulation
-    const auto band_distance2_scaling_factor = GetRRTBandDistance2ScalingFactor(*ph_);
-    const auto upsampled_band_num_points = GetRRTBandMaxPoints(*ph_);
+    const auto max_gripper_step_size                = dijkstras_task_->work_space_grid_.minStepDimension();
+    const auto max_robot_step_size                  = GetRRTMaxRobotDOFStepSize(*ph_);
+    const auto min_robot_step_size                  = GetRRTMinRobotDOFStepSize(*ph_);
+    const auto max_gripper_rotation                 = GetRRTMaxGripperRotation(*ph_); // only matters for real robot
+    const auto goal_reached_radius                  = dijkstras_task_->work_space_grid_.minStepDimension();
+    const auto min_gripper_distance_to_obstacles    = GetRRTMinGripperDistanceToObstacles(*ph_); // only matters for simulation
+    const auto band_distance2_scaling_factor        = GetRRTBandDistance2ScalingFactor(*ph_);
+    const auto upsampled_band_num_points            = GetRRTBandMaxPoints(*ph_);
     BandRRT::TaskParams task_params =
     {
         task_aligned_frame,
