@@ -251,10 +251,12 @@ TransitionEstimation::TransitionEstimation(
     , vis_(vis)
 
     , default_propogation_confidence_(GetTransitionDefaultPropagationConfidence(*ph_))
-//    , action_dist_threshold_(GetTransitionActionDistThreshold(*ph_))
-//    , action_dist_scale_factor(GetTransitionActionDistScaleFactor(*ph_))
-    , band_dist_threshold_(GetTransitionBandDistThreshold(*ph_))
-    , band_dist_scale_factor_(GetTransitionBandDistScaleFactor(*ph_))
+    , default_band_dist_threshold_(GetTransitionDefaultBandDistThreshold(*ph_))
+    , confidence_threshold_(GetTransitionConfidenceThreshold(*ph_))
+    , template_misalignment_scale_factor_(GetTransitionTemplateMisalignmentScaleFactor(*ph_))
+    , band_tighten_scale_factor_(GetTransitionTightenDeltaScaleFactor(*ph_))
+    , homotopy_changes_scale_factor_(GetTransitionHomotopyChangesScaleFactor(*ph_))
+
     , template_band_(template_band)
 {
     if (useStoredTransitions())
@@ -271,6 +273,8 @@ bool TransitionEstimation::checkFirstOrderHomotopy(
         const VectorVector3d& b1,
         const VectorVector3d& b2) const
 {
+    static const double one_div_min_step_size = 1.0 / (work_space_grid_.minStepDimension() * 0.5);
+
     // Checks if the straight line between elements of the two paths is collision free
     const auto straight_line_collision_check_fn = [&] (
             const ssize_t b1_ind,
@@ -279,13 +283,17 @@ bool TransitionEstimation::checkFirstOrderHomotopy(
         const auto& b1_node = b1[b1_ind];
         const auto& b2_node = b2[b2_ind];
 
-        const ssize_t num_steps = (ssize_t)std::ceil((b2_node - b1_node).norm() / (work_space_grid_.minStepDimension() * 0.5));
+        const size_t num_steps = (size_t)std::ceil((b2_node - b1_node).norm() * one_div_min_step_size);
+        if (num_steps == 0)
+        {
+            return true;
+        }
 
-        // Checking 0 and num_steps to catch the endpoints of each band
-        for (ssize_t ind = 0; ind <= num_steps; ++ind)
+        // Checking 0 and num_steps to catch the endpoints of the line
+        for (size_t ind = 0; ind <= num_steps; ++ind)
         {
             const double ratio = (double)ind / (double)num_steps;
-            const auto interpolated_point = Interpolate(b1_node, b2_node, ratio);
+            const Vector3d interpolated_point = Interpolate(b1_node, b2_node, ratio);
             if (sdf_->GetImmutable3d(interpolated_point).first < 0.0)
             {
                 return false;
@@ -307,7 +315,6 @@ bool TransitionEstimation::checkFirstOrderHomotopy(
 {
     const auto b1_points = b1.resampleBand();
     const auto b2_points = b2.resampleBand();
-
     return checkFirstOrderHomotopy(b1_points, b2_points);
 }
 
@@ -323,7 +330,11 @@ std::vector<RubberBand::Ptr> TransitionEstimation::reduceMicrostepsToBands(
             continue;
         }
         bands.push_back(std::make_shared<RubberBand>(template_band_));
-        bands.back()->resetBand(microsteps[idx]);
+        if (!bands.back()->resetBand(microsteps[idx]))
+        {
+            ROS_ERROR_NAMED("transitions", "Unable to extract surface");
+            PressKeyToContinue("Unable to extract surface");
+        }
     }
 
     return bands;
@@ -332,7 +343,8 @@ std::vector<RubberBand::Ptr> TransitionEstimation::reduceMicrostepsToBands(
 /////// Learning transitions ///////////////////////////////////////////////////////////////////////////////////////////
 
 Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMostRecentBadTransition(
-        const std::vector<std::pair<TransitionEstimation::State, std::vector<WorldState>>>& trajectory) const
+        const std::vector<std::pair<TransitionEstimation::State,
+                          std::vector<WorldState>>>& trajectory) const
 {
     // We can only learn a transition if there are at least states
     if (trajectory.size() < 2)
@@ -397,108 +409,29 @@ void TransitionEstimation::learnTransition(const StateTransition& transition)
     storeTransitions();
 }
 
+std::vector<RubberBand> TransitionEstimation::extractBandSurface(const StateTransition& transition) const
+{
+    std::vector<RubberBand> band_surface;
+    band_surface.reserve(transition.microstep_state_history_.size() + 1);
+    band_surface.push_back(*transition.starting_state_.rubber_band_);
+    for (const auto& state : transition.microstep_state_history_)
+    {
+        RubberBand temp_band(band_surface[0]);
+        if (!temp_band.resetBand(state))
+        {
+            PressKeyToContinue("creating band surface failed");
+        }
+        band_surface.push_back(temp_band);
+    }
+    return band_surface;
+}
+
 //////// Using transitions /////////////////////////////////////////////////////////////////////////////////////////////
 
 const std::vector<TransitionEstimation::StateTransition>& TransitionEstimation::transitions() const
 {
     return learned_transitions_;
 }
-
-/*
-Maybe::Maybe<double> TransitionEstimation::transitionUseful(
-        const RubberBand::ConstPtr& test_band_start,
-        const PairGripperPositions& test_ending_gripper_positions,
-        const StateTransition& transition) const
-{
-    assert(false && "Unused and not updated");
-
-    // First check if the start points of the grippers and the end points of the grippers are
-    // within 1 work space grid cell. This tries to ensure that when propagating, we don't
-    // "hop over" any obstacles
-    {
-        static const double max_dist = work_space_grid_.minStepDimension() * std::sqrt(2.0);
-        const auto& test_starting_gripper_positions = test_band_start->getEndpoints();
-
-//        static double smallest_dist_starting_first = std::numeric_limits<double>::infinity();
-//        static double smallest_dist_starting_second = std::numeric_limits<double>::infinity();
-//        static double smallest_dist_ending_first = std::numeric_limits<double>::infinity();
-//        static double smallest_dist_ending_second = std::numeric_limits<double>::infinity();
-
-//        std::cout << "max dist: " << max_dist << std::endl;
-//        smallest_dist_starting_first = std::min(smallest_dist_starting_first, (test_starting_gripper_positions.first - transition.starting_gripper_positions_.first).norm());
-//        smallest_dist_starting_second = std::min(smallest_dist_starting_second, (test_starting_gripper_positions.second - transition.starting_gripper_positions_.second).norm());
-//        smallest_dist_ending_first = std::min(smallest_dist_ending_first, (test_ending_gripper_positions.first - transition.ending_gripper_positions_.first).norm());
-//        smallest_dist_ending_second = std::min(smallest_dist_ending_second, (test_ending_gripper_positions.second - transition.ending_gripper_positions_.second).norm());
-
-//        std::cout << "smallest seen:\n"
-//                  << "          " << smallest_dist_starting_first << std::endl
-//                  << "          " << smallest_dist_starting_second << std::endl
-//                  << "          " << smallest_dist_ending_first << std::endl
-//                  << "          " << smallest_dist_ending_second << std::endl;
-
-//        std::cout << "starting dist first:  " << (test_starting_gripper_positions.first - transition.starting_gripper_positions_.first).norm() << std::endl;
-//        std::cout << "starting dist second: " << (test_starting_gripper_positions.second - transition.starting_gripper_positions_.second).norm() << std::endl;
-//        std::cout << "ending   dist first:  " << (test_ending_gripper_positions.first - transition.ending_gripper_positions_.first).norm() << std::endl;
-//        std::cout << "ending   dist second: " << (test_ending_gripper_positions.second - transition.ending_gripper_positions_.second).norm() << std::endl;
-
-        if ((transition.starting_gripper_positions_.first - test_starting_gripper_positions.first).norm() > max_dist)
-        {
-            return Maybe::Maybe<double>();
-        }
-        if ((transition.starting_gripper_positions_.second - test_starting_gripper_positions.second).norm() > max_dist)
-        {
-            return Maybe::Maybe<double>();
-        }
-        if ((transition.ending_gripper_positions_.first - test_ending_gripper_positions.first).norm() > max_dist)
-        {
-            return Maybe::Maybe<double>();
-        }
-        if ((transition.ending_gripper_positions_.second - test_ending_gripper_positions.second).norm() > max_dist)
-        {
-            return Maybe::Maybe<double>();
-        }
-    }
-
-    const double actual_band_dist = test_band_start->distance(*transition.starting_state_.rubber_band_);
-    bool actual_band_match = false;
-    if (actual_band_dist < band_dist_threshold_)
-    {
-        actual_band_match = checkFirstOrderHomotopy(*test_band_start, *transition.starting_state_.rubber_band_);
-    }
-    std::cout << "Actual  band distance: " << actual_band_dist << " match: " << actual_band_match << std::endl;
-
-    const double planned_band_dist = test_band_start->distance(*transition.starting_state_.planned_rubber_band_);
-    bool planned_band_match = false;
-    if (planned_band_dist < band_dist_threshold_)
-    {
-        planned_band_match = checkFirstOrderHomotopy(*test_band_start, *transition.starting_state_.planned_rubber_band_);
-    }
-    std::cout << "Planned band distance: " << planned_band_dist << " match: " << planned_band_match << std::endl;
-
-    double band_dist = std::numeric_limits<double>::infinity();
-    // If only one matches, then return that distance
-    if (actual_band_match && !planned_band_match)
-    {
-        band_dist = actual_band_dist;
-    }
-    else if (!actual_band_match && planned_band_match)
-    {
-        band_dist = planned_band_dist;
-    }
-    // If both bands match, then take the shorter distance;
-    else if (actual_band_match && planned_band_match)
-    {
-        band_dist = std::min(actual_band_dist, planned_band_dist);
-    }
-    // Otherwise, return no useful transition
-    else
-    {
-        return Maybe::Maybe<double>();
-    }
-    return band_dist_scale_factor_ * band_dist;
-}
-
-*/
 
 std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTransitions(
         const RubberBand& test_band_start,
@@ -508,8 +441,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     std::vector<std::pair<RubberBand::Ptr, double>> transitions;
 
     auto default_next_band = std::make_shared<RubberBand>(test_band_start);
-    default_next_band->forwardPropagate(ending_gripper_positions, false);
-
+    default_next_band->forwardPropagate(ending_gripper_positions, verbose);
     // Only add this transition if the band is not overstretched after moving
     if (default_next_band->isOverstretched())
     {
@@ -523,61 +455,43 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     for (size_t transition_idx = 0; transition_idx < learned_transitions_.size(); ++transition_idx)
     {
         const StateTransition& stored_trans = learned_transitions_[transition_idx];
+        const std::vector<RubberBand>& stored_bands = learned_band_surfaces_[transition_idx];
 
-        const bool fo_homotopy_check =
-                checkFirstOrderHomotopy(test_band_start, *stored_trans.starting_state_.planned_rubber_band_);
+        // TODO: Update this to be in the new environment somehow
+//        // If the stored band is in a different homotopy class, skip it
+//        if (!checkFirstOrderHomotopy(test_band_start, *stored_trans.starting_state_.planned_rubber_band_))
+//        {
+//            continue;
+//        }
 
-        if (fo_homotopy_check)
+        // Extract the best SE(3) transform that transforms the template points
+        // (memorized data) into the target points (test data)
+        const auto num_gripper_steps = stored_trans.microstep_state_history_.size() / 4;
+        ObjectPointSet warping_template_points_planned = RubberBand::PointsFromBandAndGrippers(
+                    *stored_trans.starting_state_.planned_rubber_band_,
+                    stored_trans.starting_gripper_positions_,
+                    stored_trans.ending_gripper_positions_,
+                    num_gripper_steps);
+        ObjectPointSet warping_target_points = RubberBand::PointsFromBandAndGrippers(
+                    test_band_start,
+                    test_band_start.getEndpoints(),
+                    ending_gripper_positions,
+                    num_gripper_steps);
+        const Isometry3d transform = Isometry3d(umeyama(warping_template_points_planned, warping_target_points, true));
+
+        const ObjectPointSet template_planned_band_aligned_to_target = transform * warping_template_points_planned;
+        // Stop processing if we are already below the threshold
+        const double template_misalignment_dist = (warping_target_points - template_planned_band_aligned_to_target).norm();
+        double confidence = std::exp(-template_misalignment_scale_factor_ * template_misalignment_dist);
+        if (confidence < confidence_threshold_)
         {
-            const auto num_gripper_steps = stored_trans.microstep_state_history_.size() / 4;
-            std::vector<RubberBand> stored_bands;
-            stored_bands.reserve(stored_trans.microstep_state_history_.size() + 1);
-            stored_bands.push_back(*stored_trans.starting_state_.rubber_band_);
-            for (const auto& state : stored_trans.microstep_state_history_)
-            {
-                RubberBand temp_band(test_band_start);
-                temp_band.resetBand(state);
-                stored_bands.push_back(temp_band);
-            }
+            continue;
+        }
 
-            // Extract the best SE(3) transform that transforms the template points
-            // (memorized data) into the target points (test data)
-            ObjectPointSet warping_template_points_planned = RubberBand::PointsFromBandAndGrippers(
-                        *stored_trans.starting_state_.planned_rubber_band_,
-                        stored_trans.starting_gripper_positions_,
-                        stored_trans.ending_gripper_positions_,
-                        num_gripper_steps);
-
-            ObjectPointSet warping_target_points = RubberBand::PointsFromBandAndGrippers(
-                        test_band_start,
-                        test_band_start.getEndpoints(),
-                        ending_gripper_positions,
-                        num_gripper_steps);
-
-            const Isometry3d transform =
-                    Isometry3d(umeyama(warping_template_points_planned, warping_target_points, false));
-            ObjectPointSet template_planned_band_aligned_to_target = transform * warping_template_points_planned;
-            ObjectPointSet stored_bands_planned_aligned_to_target = transform * RubberBand::AggregateBandPoints(stored_bands);
-
-            // Apply the best SE(3) transform to the memorized stored bands
-            // Project the transformed points out of collision and retighten
-            std::vector<RubberBand> transformed_bands_from_stored_bands;
-            transformed_bands_from_stored_bands.reserve(stored_bands.size());
-            for (size_t band_surface_idx = 0; band_surface_idx < stored_bands.size(); ++band_surface_idx)
-            {
-                // Transform the stored band into the test band space
-                const auto& stored_band = stored_bands[band_surface_idx];
-                const auto transformed_band = TransformData(transform, stored_band.getVectorRepresentation());
-                // Move the endpoints to the line along the test action vector
-                assert(stored_bands.size() > 1);
-                const double ratio = (double)band_surface_idx / (double)(stored_bands.size() - 1);
-                const auto gripper_targets = Interpolate(test_band_start.getEndpoints(), ending_gripper_positions, ratio);
-                const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_band, gripper_targets, 1);
-
-                RubberBand band(stored_band);
-                band.setPointsAndSmooth(points_to_smooth);
-                transformed_bands_from_stored_bands.push_back(band);
-            }
+        // Visualization
+        if (false)
+        {
+            const ObjectPointSet stored_bands_planned_aligned_to_target = transform * RubberBand::AggregateBandPoints(stored_bands);
 
             vis_->visualizePoints("TEMPLATE_POINTS_PLANNED",
                                   warping_template_points_planned,
@@ -603,15 +517,100 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
                                              Visualizer::Blue(),
                                              Visualizer::Red(),
                                              "stored_bands_planned_aligned", 1);
-
-            RubberBand::VisualizeBandSurface(vis_,
-                                             transformed_bands_from_stored_bands,
-                                             Visualizer::Seafoam(),
-                                             Visualizer::Orange(),
-                                             "stored_bands_planned_aligned_retightened", 1);
-
-            PressKeyToContinue();
         }
+
+        // Align ending state band, then tighten the resulting band
+        auto next_band = std::make_shared<RubberBand>(test_band_start);
+        {
+            const auto transformed_points = TransformData(transform, stored_trans.ending_state_.rubber_band_->getVectorRepresentation());
+            const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_points, ending_gripper_positions, 1);
+            if (!next_band->setPointsAndSmooth(points_to_smooth))
+            {
+                continue;
+            }
+        }
+        // Stop processing this stored transition if the resulting band is overstretched
+        if (next_band->isOverstretched())
+        {
+            continue;
+        }
+
+        // Stop processing if we are already below the threshold
+        const double band_tighten_delta = next_band->distance(TransformData(transform, stored_trans.ending_state_.rubber_band_->upsampleBand()));
+        confidence *= std::exp(-band_tighten_scale_factor_ * band_tighten_delta);
+        if (confidence < confidence_threshold_)
+        {
+            continue;
+        }
+
+        // Visualization
+        if (false)
+        {
+            default_next_band->visualize("DEFAULT_TRANSITION", Visualizer::Blue(), Visualizer::Blue(), 1);
+            next_band->visualize("STORED_TRANSITION", Visualizer::Red(), Visualizer::Red(), 1);
+            PressKeyToContinue("vis align ");
+        }
+
+        // Check if there is a "meaningful" difference between the default band, and this result
+        // If there is not a meaningful difference, then stop processing this stored transition
+        if (checkFirstOrderHomotopy(*default_next_band, *next_band))
+        {
+            const auto band_dist_sq = default_next_band->distanceSq(*next_band);
+            if (std::sqrt(band_dist_sq) < default_band_dist_threshold_)
+            {
+//                    PressKeyToContinue("Stored transition is producing a result similar to the default");
+                continue;
+            }
+            else
+            {
+//                    std::cout << "default to next dist: " << std::sqrt(band_dist_sq) << std::endl;
+            }
+        }
+        else
+        {
+//            PressKeyToContinue("FO did not match ");
+        }
+
+        // Apply the best SE(3) transform to the memorized stored bands
+        // Project the transformed points out of collision and retighten
+//        std::vector<RubberBand> transformed_bands_from_stored_bands;
+//        transformed_bands_from_stored_bands.reserve(stored_bands.size());
+//        bool all_bands_mappable = true;
+//        for (size_t band_surface_idx = 0; band_surface_idx < stored_bands.size(); ++band_surface_idx)
+//        {
+//            // Transform the stored band into the test band space
+//            const auto& stored_band = stored_bands[band_surface_idx];
+//            const auto transformed_band = TransformData(transform, stored_band.getVectorRepresentation());
+//            // Move the endpoints to the line along the test action vector
+//            assert(stored_bands.size() > 1);
+//            const double ratio = (double)band_surface_idx / (double)(stored_bands.size() - 1);
+//            const auto gripper_targets = Interpolate(test_band_start.getEndpoints(), ending_gripper_positions, ratio);
+//            const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_band, gripper_targets, 1);
+
+//            RubberBand band(stored_band);
+//            if (!band.setPointsAndSmooth(points_to_smooth))
+//            {
+//                all_bands_mappable = false;
+//                break;
+//            }
+//            transformed_bands_from_stored_bands.push_back(band);
+//        }
+//        if (!all_bands_mappable)
+//        {
+//            continue;
+//        }
+
+//        if (false)
+//        {
+//            RubberBand::VisualizeBandSurface(vis_,
+//                                             transformed_bands_from_stored_bands,
+//                                             Visualizer::Seafoam(),
+//                                             Visualizer::Orange(),
+//                                             "stored_bands_planned_aligned_retightened", 1);
+//        }
+
+//            PressKeyToContinue("Made it to the end of the stored trans loop");
+        transitions.push_back({next_band, confidence});
     }
 
     return transitions;
@@ -729,10 +728,11 @@ void TransitionEstimation::loadSavedTransitions()
         }
         ROS_INFO_STREAM_NAMED("transitions", "Loaded " << learned_transitions_.size() << " transitions from file");
 
-//        for (const auto& t : learned_transitions_)
-//        {
-//            std::cout << t << std::endl;
-//        }
+        learned_band_surfaces_.reserve(learned_transitions_.size());
+        for (const auto& transition : learned_transitions_)
+        {
+            learned_band_surfaces_.push_back(extractBandSurface(transition));
+        }
     }
     catch (const std::exception& e)
     {

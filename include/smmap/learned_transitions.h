@@ -113,6 +113,8 @@ namespace smmap
 
         void learnTransition(const StateTransition& transition);
 
+        std::vector<RubberBand> extractBandSurface(const StateTransition& transition) const;
+
         ////////////////////////////////////////////////////////////////////////
         // Using transitions
         ////////////////////////////////////////////////////////////////////////
@@ -164,12 +166,14 @@ namespace smmap
         const XYZGrid work_space_grid_;
         const Visualizer::ConstPtr vis_;
         std::vector<StateTransition> learned_transitions_;
+        std::vector<std::vector<RubberBand>> learned_band_surfaces_;
 
         const double default_propogation_confidence_;
-//        const double action_dist_threshold_;
-//        const double action_dist_scale_factor;
-        const double band_dist_threshold_;
-        const double band_dist_scale_factor_;
+        const double default_band_dist_threshold_;
+        const double confidence_threshold_;
+        const double template_misalignment_scale_factor_;
+        const double band_tighten_scale_factor_;
+        const double homotopy_changes_scale_factor_;
 
         ////////////////////////////////////////////////////////////////////////
         // Saving and loading learned transitions

@@ -13,6 +13,7 @@
 #include <arc_utilities/timing.hpp>
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
+#include <deformable_manipulation_experiment_params/utility.hpp>
 
 #include "smmap/diminishing_rigidity_model.h"
 #include "smmap/adaptive_jacobian_model.h"
@@ -381,7 +382,11 @@ WorldState TaskFramework::sendNextCommand(
         else
         {
             world_feedback = sendNextCommandUsingLocalController(world_state);
-            rubber_band_->resetBand(world_feedback);
+            if (!rubber_band_->resetBand(world_feedback))
+            {
+                PressKeyToContinue("Error resetting the band after moving the grippers ");
+                assert(false);
+            }
         }
 
         // Keep the last N grippers positions recorded to detect if the grippers are stuck
@@ -688,7 +693,11 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     const WorldState& world_feedback = command_result.first;
     microstep_history_buffer_.insert(microstep_history_buffer_.end(), command_result.second.begin(), command_result.second.end());
     // Update the band with the new position of the deformable object
-    rubber_band_->resetBand(world_feedback);
+    if (!rubber_band_->resetBand(world_feedback))
+    {
+        PressKeyToContinue("Error resetting the band after moving the grippers ");
+        assert(false);
+    }
 
     // If we targetted the last node of the current path segment, then we need to handle
     // recording data differently and determine which path segment to follow next

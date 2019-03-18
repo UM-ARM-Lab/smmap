@@ -70,15 +70,15 @@ namespace smmap
 
         QuinlanRubberBand& operator=(const QuinlanRubberBand& other);
 
-        void setPointsWithoutSmoothing(const EigenHelpers::VectorVector3d& points);
-        void setPointsWithoutSmoothing(const ObjectPointSet& points);
+        [[gnu::warn_unused_result]] bool setPointsWithoutSmoothing(const EigenHelpers::VectorVector3d& points);
+        [[gnu::warn_unused_result]] bool setPointsWithoutSmoothing(const ObjectPointSet& points);
 
-        void setPointsAndSmooth(const EigenHelpers::VectorVector3d& points);
-        void setPointsAndSmooth(const ObjectPointSet& points);
+        [[gnu::warn_unused_result]] bool setPointsAndSmooth(const EigenHelpers::VectorVector3d& points);
+        [[gnu::warn_unused_result]] bool setPointsAndSmooth(const ObjectPointSet& points);
 
-        void resetBand(const WorldState& world_state);
-        void resetBand(const ObjectPointSet& object_config,
-                       const PairGripperPositions& gripper_positions);
+        [[gnu::warn_unused_result]] bool resetBand(const WorldState& world_state);
+        [[gnu::warn_unused_result]] bool resetBand(const ObjectPointSet& object_config,
+                                                   const PairGripperPositions& gripper_positions);
 
         void overridePoints(const EigenHelpers::VectorVector3d& points);
 
@@ -160,6 +160,8 @@ namespace smmap
         bool operator==(const QuinlanRubberBand& other) const;
         bool operator!=(const QuinlanRubberBand& other) const;
 
+        double distanceSq(const EigenHelpers::VectorVector3d& other) const;
+        double distance(const EigenHelpers::VectorVector3d& other) const;
         double distanceSq(const QuinlanRubberBand& other) const;
         double distance(const QuinlanRubberBand& other) const;
         static double DistanceSq(const QuinlanRubberBand& b1, const QuinlanRubberBand& b2);
@@ -200,12 +202,12 @@ namespace smmap
         bool bandIsValidWithVisualization() const;
         bool bandIsValidWithVisualization(const EigenHelpers::VectorVector3d& test_band) const;
 
-        void interpolateBetweenPoints(
+        [[gnu::warn_unused_result]] bool interpolateBetweenPoints(
                 EigenHelpers::VectorVector3d& point_buffer,
                 const Eigen::Vector3d& target) const;
-        void interpolateBandPoints();
+        [[gnu::warn_unused_result]] bool interpolateBandPoints();
         void removeExtraBandPoints(const bool verbose);
-        void smoothBandPoints(const bool verbose);
+        [[gnu::warn_unused_result]] bool smoothBandPoints(const bool verbose);
 
         void printBandData(const EigenHelpers::VectorVector3d& test_band) const;
 

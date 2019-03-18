@@ -194,7 +194,10 @@ namespace smmap
         }
 
         auto band = std::make_shared<QuinlanRubberBand>(template_band);
-        band->resetBand(pointset, grippers_position);
+        if (!band->resetBand(pointset, grippers_position))
+        {
+            assert(false && "Unable to build band");
+        }
         return band;
     }
 
@@ -203,7 +206,10 @@ namespace smmap
             const QuinlanRubberBand& template_band)
     {
         auto band = std::make_shared<QuinlanRubberBand>(template_band);
-        band->resetBand(world_state);
+        if (!band->resetBand(world_state))
+        {
+            assert(false && "Unable to build band");
+        }
         return band;
     }
 
@@ -242,7 +248,7 @@ namespace smmap
         , backtrack_threshold_(BACKTRACKING_THRESHOLD)
         , smoothing_iterations_(SMOOTHING_ITERATIONS)
     {
-        resetBand(world_state);
+        assert(resetBand(world_state));
         assert(bandIsValidWithVisualization());
     }
 
@@ -262,21 +268,21 @@ namespace smmap
         assert(upsample_num_points_ == other.upsample_num_points_);
         upsampled_band_single_vector_ = other.upsampled_band_single_vector_;
         #if ENABLE_BAND_LOAD_SAVE
-            if (useStoredBand())
-            {
-                loadStoredBand();
-            }
-            else
-            {
-                storeBand();
-            }
+        if (useStoredBand())
+        {
+            loadStoredBand();
+        }
+        else
+        {
+            storeBand();
+        }
         #endif
 
         assert(bandIsValidWithVisualization());
         return *this;
     }
 
-    void QuinlanRubberBand::setPointsWithoutSmoothing(const EigenHelpers::VectorVector3d& points)
+    bool QuinlanRubberBand::setPointsWithoutSmoothing(const EigenHelpers::VectorVector3d& points)
     {
         band_ = points;
         resampled_band_.clear();
@@ -301,46 +307,59 @@ namespace smmap
         {
             vis_->forcePublishNow();
         }
-        interpolateBandPoints();
-        const bool verbose = true;
-        if (ENABLE_BAND_DEBUGGING_)
+        if (!interpolateBandPoints())
         {
-            vis_->forcePublishNow();
+            return false;
         }
-        removeExtraBandPoints(verbose);
-        if (ENABLE_BAND_DEBUGGING_)
+        else
         {
-            vis_->forcePublishNow();
-            assert(bandIsValidWithVisualization());
+            const bool verbose = true;
+            if (ENABLE_BAND_DEBUGGING_)
+            {
+                vis_->forcePublishNow();
+            }
+            removeExtraBandPoints(verbose);
+            if (ENABLE_BAND_DEBUGGING_)
+            {
+                vis_->forcePublishNow();
+                assert(bandIsValidWithVisualization());
+            }
+            return true;
         }
     }
 
-    void QuinlanRubberBand::setPointsWithoutSmoothing(const ObjectPointSet& points)
+    bool QuinlanRubberBand::setPointsWithoutSmoothing(const ObjectPointSet& points)
     {
-        setPointsWithoutSmoothing(EigenHelpersConversions::EigenMatrix3XdToVectorEigenVector3d(points));
+        return setPointsWithoutSmoothing(EigenHelpersConversions::EigenMatrix3XdToVectorEigenVector3d(points));
     }
 
-    void QuinlanRubberBand::setPointsAndSmooth(const EigenHelpers::VectorVector3d& points)
+    bool QuinlanRubberBand::setPointsAndSmooth(const EigenHelpers::VectorVector3d& points)
     {
-        setPointsWithoutSmoothing(points);
-        const bool verbose = true;
-        smoothBandPoints(verbose);
+        if (!setPointsWithoutSmoothing(points))
+        {
+            return false;
+        }
+        if (!smoothBandPoints(true))
+        {
+            return false;
+        }
         assert(bandIsValidWithVisualization());
+        return true;
     }
 
-    void QuinlanRubberBand::setPointsAndSmooth(const ObjectPointSet& points)
+    bool QuinlanRubberBand::setPointsAndSmooth(const ObjectPointSet& points)
     {
-        setPointsAndSmooth(EigenHelpersConversions::EigenMatrix3XdToVectorEigenVector3d(points));
+        return setPointsAndSmooth(EigenHelpersConversions::EigenMatrix3XdToVectorEigenVector3d(points));
     }
 
-    void QuinlanRubberBand::resetBand(const WorldState& world_state)
+    bool QuinlanRubberBand::resetBand(const WorldState& world_state)
     {
         assert(world_state.all_grippers_single_pose_.size() == 2);
-        resetBand(world_state.object_configuration_,
-                  ToGripperPositions(world_state.all_grippers_single_pose_));
+        return resetBand(world_state.object_configuration_,
+                         ToGripperPositions(world_state.all_grippers_single_pose_));
     }
 
-    void QuinlanRubberBand::resetBand(
+    bool QuinlanRubberBand::resetBand(
             const ObjectPointSet& object_config,
             const PairGripperPositions& gripper_positions)
     {
@@ -356,7 +375,7 @@ namespace smmap
         }
 
         points.push_back(gripper_positions.second);
-        setPointsAndSmooth(points);
+        return setPointsAndSmooth(points);
     }
 
     void QuinlanRubberBand::overridePoints(const EigenHelpers::VectorVector3d& points)
@@ -399,10 +418,15 @@ namespace smmap
             }
         #endif
 
-        interpolateBandPoints();
+        if (!interpolateBandPoints())
+        {
+            throw_arc_exception(std::runtime_error, "Unable to forward propagate band");
+        }
         removeExtraBandPoints(verbose);
-        smoothBandPoints(verbose);
-
+        if (!smoothBandPoints(verbose))
+        {
+            throw_arc_exception(std::runtime_error, "Unable to forward propagate band");
+        }
         assert(bandIsValidWithVisualization());
         return band_;
     }
@@ -776,7 +800,7 @@ namespace smmap
       * Interpolates bewteen the end of point_buffer and target, but does not add target to the buffer
       */
 
-    void QuinlanRubberBand::interpolateBetweenPoints(
+    bool QuinlanRubberBand::interpolateBetweenPoints(
             EigenHelpers::VectorVector3d& point_buffer,
             const Eigen::Vector3d& target) const
     {
@@ -794,7 +818,6 @@ namespace smmap
             vis_->visualizePoint("start_of_interpolateBetweenPoints_target_point", target, Visualizer::Orange(), 1, 0.01);
             vis_->forcePublishNow();
         }
-
 
         const double target_bubble_size = getBubbleSize(target);
 
@@ -831,7 +854,6 @@ namespace smmap
                 assert(sdf_->LocationInBounds3d(interpolated_point));
                 assert(sdf_->LocationInBounds3d(test_point));
             }
-            ROS_WARN_STREAM_COND_NAMED(outer_iteration_counter == 20, "rubber_band", "Rubber band interpolation outer loop counter at " << outer_iteration_counter << ", probably stuck in an infinite loop");
             if (ENABLE_BAND_DEBUGGING_ && ENABLE_INTERPOLATE_DEBUGGING_ && outer_iteration_counter >= 20)
             {
                 std::string tmp;
@@ -868,10 +890,15 @@ namespace smmap
                 vis_->deleteObjects("null", 1, 10);
                 std::cin >> tmp;
             }
+            if (outer_iteration_counter == 20)
+            {
+//                ROS_WARN_STREAM_NAMED("rubber_band", "Rubber band interpolation outer loop counter at " << outer_iteration_counter << ", probably stuck in an infinite loop");
+//                throw_arc_exception(std::runtime_error, "Interpolation stuck");
+                return false;
+            }
 
             while (!sufficientOverlap(curr_bubble_size, test_point_bubble_size, distance_between_curr_and_test_point))
             {
-                ROS_WARN_STREAM_COND_NAMED(inner_iteration_counter == 5, "rubber_band", "Rubber band interpolation inner loop counter at " << inner_iteration_counter << ", probably stuck in an infinite loop");
                 if (ENABLE_BAND_DEBUGGING_ && ENABLE_INTERPOLATE_DEBUGGING_)
                 {
                     std::cout << "Start of interpolateBetweenPoints inner loop" << std::endl;
@@ -913,6 +940,12 @@ namespace smmap
                         vis_->deleteObjects("null", 1, 10);
                     }
                 }
+                if (inner_iteration_counter == 5)
+                {
+//                    ROS_WARN_STREAM_NAMED("rubber_band", "Rubber band interpolation inner loop counter at " << inner_iteration_counter << ", probably stuck in an infinite loop");
+//                    throw_arc_exception(std::runtime_error, "Interpolation stuck");
+                    return false;
+                }
 
                 interpolation_ratio *= 0.5;
                 interpolated_point = EigenHelpers::Interpolate(curr, target, interpolation_ratio);
@@ -948,13 +981,15 @@ namespace smmap
             point_buffer.erase(point_buffer.end() - 1);
             std::cout << "End of interpolateBetweenPoints" << std::endl;
         }
+
+        return true;
     }
 
     /**
      * @brief QuinlanRubberBand::interpolateBandPoints
      * Re-interpolates the entire band, not to be used for just 1 segment
      */
-    void QuinlanRubberBand::interpolateBandPoints()
+    bool QuinlanRubberBand::interpolateBandPoints()
     {
         if (ENABLE_BAND_DEBUGGING_ && ENABLE_INTERPOLATE_DEBUGGING_)
         {
@@ -983,7 +1018,10 @@ namespace smmap
             }
 
             const auto& next_node = band_[idx + 1];
-            interpolateBetweenPoints(new_band, next_node);
+            if (!interpolateBetweenPoints(new_band, next_node))
+            {
+                return false;
+            }
             new_band.push_back(next_node);
             if (ENABLE_BAND_DEBUGGING_ && ENABLE_INTERPOLATE_DEBUGGING_)
             {
@@ -994,6 +1032,7 @@ namespace smmap
 
         band_ = new_band;
         assert(bandIsValidWithVisualization());
+        return true;
     }
 
     void QuinlanRubberBand::removeExtraBandPoints(const bool verbose)
@@ -1131,7 +1170,7 @@ namespace smmap
         }
     }
 
-    void QuinlanRubberBand::smoothBandPoints(const bool verbose)
+    bool QuinlanRubberBand::smoothBandPoints(const bool verbose)
     {
         if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_)
         {
@@ -1267,12 +1306,18 @@ namespace smmap
                 const bool next_bubble_overlaps_curr = sufficientOverlap(next_bubble_size, projected_bubble_size, curr_next_dist);
                 if (!prev_bubble_overlaps_curr)
                 {
-                    interpolateBetweenPoints(next_band, projected);
+                    if (!interpolateBetweenPoints(next_band, projected))
+                    {
+                        return false;
+                    }
                 }
                 next_band.push_back(projected);
                 if (!next_bubble_overlaps_curr)
                 {
-                    interpolateBetweenPoints(next_band, next);
+                    if (!interpolateBetweenPoints(next_band, next))
+                    {
+                        return false;
+                    }
                 }
 
                 if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_)
@@ -1287,7 +1332,7 @@ namespace smmap
             // Shortcut the process if there has been no meaningful change in the band
             if (EigenHelpers::CloseEnough(band_, next_band, SMOOTHING_CLOSE_ENGOUGH_DIST))
             {
-                return;
+                return true;
             }
 
             band_ = next_band;
@@ -1308,6 +1353,8 @@ namespace smmap
             printBandData(band_);
             assert(bandIsValidWithVisualization());
         }
+
+        return true;
     }
 
 
@@ -1504,6 +1551,23 @@ namespace smmap
         return !(*this == other);
     }
 
+
+    double QuinlanRubberBand::distanceSq(const EigenHelpers::VectorVector3d& other) const
+    {
+        const auto b1_points = upsampleBand();
+        assert(other.size() == b1_points.size());
+        double dist_sq = 0.0;
+        for (size_t idx = 0; idx < b1_points.size(); ++idx)
+        {
+            dist_sq += (b1_points[idx] - other[idx]).squaredNorm();
+        }
+        return dist_sq;
+    }
+
+    double QuinlanRubberBand::distance(const EigenHelpers::VectorVector3d& other) const
+    {
+        return std::sqrt(distanceSq(other));
+    }
 
     double QuinlanRubberBand::distanceSq(const QuinlanRubberBand& other) const
     {

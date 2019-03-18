@@ -815,7 +815,7 @@ RRTPolicy BandRRT::plan(
         std::cerr << "Max allowable distance: " << max_grippers_distance_ << " Distance beteween goal grippers: " << dist_between_grippers << std::endl;
 
         vis_->visualizeGrippers("weird_gripper_goals", {grippers_goal_poses_.first, grippers_goal_poses_.second}, Visualizer::Red(), 1);
-        PressKeyToContinue();
+        PressKeyToContinue("Unfeasible goal location");
         assert(false && "Unfeasible goal location");
     }
 
