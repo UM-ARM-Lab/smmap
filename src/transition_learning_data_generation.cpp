@@ -310,6 +310,7 @@ namespace smmap
                 {
                     return neighbours_calc.getNodeNeighbours(node);
                 };
+                break;
             }
             default:
                 throw_arc_exception(std::invalid_argument, "Invalid deformable type; this should not be possible");
@@ -630,7 +631,7 @@ namespace smmap
         for (const auto& state : stored_trans.microstep_state_history_)
         {
             RubberBand temp_band(band);
-            temp_band.resetBand(state);
+            assert(temp_band.resetBand(state));
             stored_bands_.push_back(temp_band);
         }
 
@@ -679,7 +680,7 @@ namespace smmap
             const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_band, gripper_targets, 1);
 
             RubberBand band(stored_band);
-            band.setPointsAndSmooth(points_to_smooth);
+            assert(band.setPointsAndSmooth(points_to_smooth));
             transformed_bands_from_stored_bands.push_back(band);
         }
         results_[BASENAME + transform_definition_name + "STORED_BANDS"] = transformed_bands_from_stored_bands;
@@ -718,7 +719,7 @@ namespace smmap
             const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_band, gripper_targets, 1);
 
             RubberBand band(stored_band);
-            band.setPointsAndSmooth(points_to_smooth);
+            assert(band.setPointsAndSmooth(points_to_smooth));
             transformed_bands_from_stored_bands.push_back(band);
         }
         results_[BASENAME + transform_definition_name + "STORED_BANDS"] = transformed_bands_from_stored_bands;

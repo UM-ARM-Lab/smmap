@@ -2719,7 +2719,7 @@ void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
     }
     if (force_nn_rebuild)
     {
-        if (sample_history_buffer_.size() < 4e9)
+        if ((double)sample_history_buffer_.size() < 4e9)
         {
             ROS_INFO_STREAM_NAMED("rrt", "Sample history buffer size: " << sample_history_buffer_.size() << ". Saving to file.");
             ZlibHelpers::CompressAndWriteToFile(sample_history_buffer_, GetLogFolder(*nh_) + "/sample_history_buffer.compressed");

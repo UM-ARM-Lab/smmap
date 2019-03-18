@@ -471,6 +471,7 @@ void TaskSpecification::visualizeDeformableObject_impl(
 
         case CLOTH:
             vis_->visualizeCloth(marker_name, object_configuration, color, id);
+            break;
 
         default:
             assert(false && "Imposibru!");
