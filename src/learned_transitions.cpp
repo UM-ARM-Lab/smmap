@@ -671,7 +671,7 @@ void TransitionEstimation::storeTransitions() const
     {
         const auto log_folder = GetLogFolder(*nh_);
         CreateDirectory(log_folder);
-        const auto file_name_prefix = ROSHelpers::GetParamRequired<bool>(*ph_, "transition_estimation/file_name_prefix", __func__);
+        const auto file_name_prefix = ROSHelpers::GetParamRequired<std::string>(*ph_, "transition_estimation/file_name_prefix", __func__);
         if (!file_name_prefix.Valid())
         {
             throw_arc_exception(std::invalid_argument, "Unable to load file_name_prefix from parameter server");
