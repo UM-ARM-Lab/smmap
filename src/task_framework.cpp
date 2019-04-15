@@ -32,7 +32,7 @@ using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
-const static std_msgs::ColorRGBA PREDICTION_GRIPPER_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 1.0f);
+const static std_msgs::ColorRGBA PREDICTION_GRIPPER_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 0.5f);
 const static std_msgs::ColorRGBA PREDICTION_RUBBER_BAND_SAFE_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.0f, 1.0f);
 const static std_msgs::ColorRGBA PREDICTION_RUBBER_BAND_VIOLATION_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
 
@@ -264,6 +264,15 @@ void TaskFramework::execute()
 WorldState TaskFramework::sendNextCommand(
         WorldState world_state)
 {
+    static bool paused = false;
+    if (!paused && world_state.sim_time_ > 4.0)
+    {
+        PressAnyKeyToContinue("Sim time 4.0. Press any key ... ");
+        paused = true;
+    }
+
+
+
 #if ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE
     if (useStoredWorldState())
     {
@@ -311,16 +320,34 @@ WorldState TaskFramework::sendNextCommand(
 
             if (global_plan_will_overstretch)
             {
+                arc_helpers::Sleep(1.0);
+
+                vis_->purgeMarkerList();
+                vis_->forcePublishNow(0.01);
+                vis_->clearVisualizationsBullet();
+                band_rrt_->visualizePolicy(rrt_planned_policy_);
+                vis_->forcePublishNow(0.01);
+
+//                vis_->deleteObjects(BandRRT::RRT_SOLUTION_RUBBER_BAND_NS, 1, 40);
+//                vis_->deleteObjects(PROJECTED_BAND_NS, 2, 11);
+//                vis_->deleteObjects(PROJECTED_GRIPPER_NS, 2, 21);
+//                vis_->forcePublishNow(0.05);
+
                 planning_needed = true;
 
                 ROS_WARN_NAMED("task_framework", "Determining most recent bad transition");
                 const auto last_bad_transition = transition_estimator_->findMostRecentBadTransition(rrt_executed_path_);
                 if (last_bad_transition.Valid())
                 {
+                    arc_helpers::Sleep(1.0);
+//                    vis_->deleteObjects("TRANSITION_LEARNING_LOOKING_BACK_PLANNED", 1, (int32_t)(rrt_executed_path_.size()));
+//                    vis_->forcePublishNow(0.01);
+//                    vis_->deleteObjects("TRANSITION_LEARNING_LOOKING_BACK_EXECUTED", 1, (int32_t)(rrt_executed_path_.size()));
+//                    vis_->forcePublishNow(0.01);
                     transition_estimator_->learnTransition(last_bad_transition.GetImmutable());
-                    transition_estimator_->visualizeTransition(last_bad_transition.GetImmutable());
+//                    transition_estimator_->visualizeTransition(last_bad_transition.GetImmutable());
                     vis_->forcePublishNow(0.5);
-                    PressKeyToContinue("Waiting for input after visualizing new memorized transition");
+                    PressAnyKeyToContinue("Waiting for input after visualizing new memorized transition");
                 }
                 else
                 {
@@ -385,7 +412,7 @@ WorldState TaskFramework::sendNextCommand(
             world_feedback = sendNextCommandUsingLocalController(world_state);
             if (!rubber_band_->resetBand(world_feedback))
             {
-                PressKeyToContinue("Error resetting the band after moving the grippers ");
+                PressAnyKeyToContinue("Error resetting the band after moving the grippers ");
                 assert(false);
             }
         }
@@ -696,7 +723,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     // Update the band with the new position of the deformable object
     if (!rubber_band_->resetBand(world_feedback))
     {
-        PressKeyToContinue("Error resetting the band after moving the grippers ");
+        PressAnyKeyToContinue("Error resetting the band after moving the grippers ");
         assert(false);
     }
 
@@ -747,7 +774,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
                                    (rrt_executed_path_.end() - 1)->first.rubber_band_->getEndpoints().second},
                                   Visualizer::Magenta(), 0.002, 0.005, 0.008, 1);
 
-            PressKeyToContinue("Finished step of plan");
+            PressAnyKeyToContinue("Finished step of plan");
         }
 
         ++policy_segment_next_idx_;
@@ -1683,6 +1710,8 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
             }
         }
     }
+
+//    band_rrt_->visualizePolicy(rrt_planned_policy_, true);
 
     // We set the next index to "1" because the policy starts with the current configuration
     policy_current_idx_ = 0;

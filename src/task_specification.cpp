@@ -1234,7 +1234,7 @@ DijkstrasCoverageTask::Correspondences DistanceBasedCorrespondencesTask::getCove
         {
             visualizeIndividualDijkstrasResult(cover_idx, cover_points_.col(cover_idx));
             ROS_ERROR_NAMED("task_specification", "Weirdness in correspondences calculation");
-            PressKeyToContinue("Weirdness in correspondences calculation ");
+            PressAnyKeyToContinue("Weirdness in correspondences calculation ");
         }
 
         // Record the results in the data structure

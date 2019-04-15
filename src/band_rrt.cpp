@@ -815,7 +815,7 @@ RRTPolicy BandRRT::plan(
         std::cerr << "Max allowable distance: " << max_grippers_distance_ << " Distance beteween goal grippers: " << dist_between_grippers << std::endl;
 
         vis_->visualizeGrippers("weird_gripper_goals", {grippers_goal_poses_.first, grippers_goal_poses_.second}, Visualizer::Red(), 1);
-        PressKeyToContinue("Unfeasible goal location");
+        PressAnyKeyToContinue("Unfeasible goal location");
         assert(false && "Unfeasible goal location");
     }
 
@@ -1476,7 +1476,7 @@ void BandRRT::deleteTreeVisualizations() const
 }
 
 // Assumes the path that is passed is sequential
-void BandRRT::visualizePath(const RRTPath& path, const int32_t id) const
+void BandRRT::visualizePath(const RRTPath& path, const int32_t id, const bool draw_band) const
 {
     VectorVector3d gripper_a_cubes;
     VectorVector3d gripper_b_cubes;
@@ -1506,15 +1506,18 @@ void BandRRT::visualizePath(const RRTPath& path, const int32_t id) const
 
     vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.005, 0.005, 0.005), gripper_a_forward_tree_color_, id);
     vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.005, 0.005, 0.005), gripper_b_forward_tree_color_, id);
-//        vis_->visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Yellow(), 1);
+    if (draw_band)
+    {
+        vis_->visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Blue(), id);
+    }
 }
 
-void BandRRT::visualizePolicy(const RRTPolicy& policy) const
+void BandRRT::visualizePolicy(const RRTPolicy& policy, const bool draw_band) const
 {
     for (size_t path_idx = 0; path_idx < policy.size(); ++path_idx)
     {
         const RRTPath& path = policy[path_idx].first;
-        visualizePath(path, (int32_t)path_idx + 1);
+        visualizePath(path, (int32_t)path_idx + 1, draw_band);
     }
 }
 
@@ -3473,7 +3476,7 @@ void BandRRT::shortcutSmoothPath(
 
         if (visualization_enabled_globally_ && visualization_enabled_locally)
         {
-            visualizePath(path, visualization_idx);
+            visualizePath(path, visualization_idx, false);
             vis_->forcePublishNow(0.01);
         }
     }

@@ -333,7 +333,7 @@ std::vector<RubberBand::Ptr> TransitionEstimation::reduceMicrostepsToBands(
         if (!bands.back()->resetBand(microsteps[idx]))
         {
             ROS_ERROR_NAMED("transitions", "Unable to extract surface");
-            PressKeyToContinue("Unable to extract surface");
+            PressAnyKeyToContinue("Unable to extract surface");
         }
     }
 
@@ -344,7 +344,7 @@ std::vector<RubberBand::Ptr> TransitionEstimation::reduceMicrostepsToBands(
 
 Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMostRecentBadTransition(
         const std::vector<std::pair<TransitionEstimation::State,
-                          std::vector<WorldState>>>& trajectory) const
+                                    std::vector<WorldState>>>& trajectory) const
 {
     // We can only learn a transition if there are at least states
     if (trajectory.size() < 2)
@@ -369,19 +369,55 @@ Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMo
         return Maybe::Maybe<StateTransition>();
     }
 
+//    trajectory.back().first.planned_rubber_band_->visualize(
+//                "TRANSITION_LEARNING_LOOKING_BACK_PLANNED",
+//                Visualizer::Blue(),
+//                Visualizer::Blue(),
+//                (int32_t)(trajectory.size() - 1));
+
+//    trajectory.back().first.rubber_band_->visualize(
+//                "TRANSITION_LEARNING_LOOKING_BACK_EXECUTED",
+//                Visualizer::Yellow(),
+//                Visualizer::Yellow(),
+//                (int32_t)(trajectory.size() - 1));
+
 
     // Search backwards through the list for the last time we transitioned
     // from a matching first order homotopy to not matching
     for (size_t idx = trajectory.size() - 1; idx > 0; --idx)
     {
+        const auto& start_state = trajectory[idx - 1].first;
+        const auto& end_state = trajectory[idx].first;
+
+        start_state.planned_rubber_band_->visualize(
+                    "TRANSITION_LEARNING_LOOKING_BACK_PLANNED",
+                    Visualizer::Blue(),
+                    Visualizer::Blue(),
+                    1);
+
+        start_state.rubber_band_->visualize(
+                    "TRANSITION_LEARNING_LOOKING_BACK_EXECUTED",
+                    Visualizer::Yellow(),
+                    Visualizer::Yellow(),
+                    1);
+
+        end_state.planned_rubber_band_->visualize(
+                    "TRANSITION_LEARNING_LOOKING_BACK_PLANNED",
+                    Visualizer::Blue(),
+                    Visualizer::Blue(),
+                    2);
+
+        end_state.rubber_band_->visualize(
+                    "TRANSITION_LEARNING_LOOKING_BACK_EXECUTED",
+                    Visualizer::Yellow(),
+                    Visualizer::Yellow(),
+                    2);
+
+
         // If the first order homotopy check passes, then the actual rubber band
         // and the planned rubber band are in the same first order homotopy class
-        if (checkFirstOrderHomotopy(
-                *trajectory[idx - 1].first.rubber_band_,
-                *trajectory[idx - 1].first.planned_rubber_band_))
+        if (checkFirstOrderHomotopy(*start_state.rubber_band_, *end_state.planned_rubber_band_))
         {
-            const auto& start_state = trajectory[idx - 1].first;
-            const auto& end_state = trajectory[idx].first;
             const PairGripperPositions starting_gripper_positions = start_state.planned_rubber_band_->getEndpoints();
             const PairGripperPositions ending_gripper_positions = end_state.planned_rubber_band_->getEndpoints();
             StateTransition transition =
@@ -394,6 +430,8 @@ Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMo
             };
             return Maybe::Maybe<StateTransition>(transition);
         }
+
+        arc_helpers::Sleep(1.0);
     }
 
     ROS_WARN_STREAM_NAMED("transitions",
@@ -419,7 +457,7 @@ std::vector<RubberBand> TransitionEstimation::extractBandSurface(const StateTran
         RubberBand temp_band(band_surface[0]);
         if (!temp_band.resetBand(state))
         {
-            PressKeyToContinue("creating band surface failed");
+            PressAnyKeyToContinue("creating band surface failed");
         }
         band_surface.push_back(temp_band);
     }
@@ -614,7 +652,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
 //                                             "stored_bands_planned_aligned_retightened", 1);
 //        }
 
-        PressKeyToContinue("Made it to the end of the stored trans loop");
+        PressAnyKeyToContinue("Made it to the end of the stored trans loop");
         transitions.push_back({next_band, confidence});
     }
 

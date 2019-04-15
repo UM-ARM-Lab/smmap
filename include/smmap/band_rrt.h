@@ -327,11 +327,11 @@ namespace smmap
                 const std_msgs::ColorRGBA& color_a,
                 const std_msgs::ColorRGBA& color_b,
                 const std_msgs::ColorRGBA& color_band,
-                const bool draw_band) const;
+                const bool draw_band = false) const;
         void visualizeBothTrees() const;
         void deleteTreeVisualizations() const;
-        void visualizePath(const RRTPath& path, const int32_t id) const;
-        void visualizePolicy(const RRTPolicy& policy) const;
+        void visualizePath(const RRTPath& path, const int32_t id, const bool draw_band = false) const;
+        void visualizePolicy(const RRTPolicy& policy, const bool draw_band = false) const;
         void visualizeBlacklist() const;
 
         void storeTree(const RRTTree& tree, std::string file_path = "") const;

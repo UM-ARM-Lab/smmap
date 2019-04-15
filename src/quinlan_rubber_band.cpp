@@ -1159,7 +1159,7 @@ namespace smmap
         }
 
         band_ = forward_pass;
-        visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, verbose);
+//        visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, verbose);
 
         if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_)
         {
