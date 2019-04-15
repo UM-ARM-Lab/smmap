@@ -367,8 +367,7 @@ namespace smmap
         const auto record = TransitionSimulationRecord::Deserialize(buffer, 0, *band_);
         if (record.second != buffer.size())
         {
-            throw_arc_exception(std::invalid_argument,
-                                "Buffer size mismatch: " + filename);
+            throw_arc_exception(std::invalid_argument, "Buffer size mismatch: " + filename);
         }
         return record.first;
     }
@@ -389,17 +388,26 @@ namespace smmap
                 vis_->deleteAll();
 
                 const TransitionSimulationRecord sim_record = loadSimRecord(file);
-                sim_record.visualize(vis_);
+//                sim_record.visualize(vis_);
 //                PressKeyToContinue("Sim Record Vis ");
 
-                SE3Prediction se3_predictor(*this);
-                se3_predictor.predictAll(
-                            sim_record.template_,
-                            *sim_record.tested_.starting_state_.rubber_band_,
-                            sim_record.tested_.ending_gripper_positions_);
-                se3_predictor.visualizePrediction();
+//                SE3Prediction se3_predictor(*this);
+//                se3_predictor.predictAll(
+//                            sim_record.template_,
+//                            *sim_record.tested_.starting_state_.rubber_band_,
+//                            sim_record.tested_.ending_gripper_positions_);
+//                se3_predictor.visualizePrediction();
+//                PressKeyToContinue("SE3 Prediction Vis ");
 
-                PressKeyToContinue("SE3 Prediction Vis ");
+                RubberBand b = *sim_record.tested_.starting_state_.rubber_band_;
+//                b.forwardPropagate(b.getEndpoints(), false);
+                vis_->visualizePoints("TESTED_TRUE_RESULT",
+                                      sim_record.tested_.ending_state_.rubber_band_->upsampleBand(),
+                                      Visualizer::White(), 1, 0.002);
+
+                transition_estimator_->estimateTransitions(
+                            b,
+                            sim_record.tested_.ending_gripper_positions_);
             }
             catch (const std::exception& ex)
             {
@@ -441,7 +449,7 @@ namespace smmap
 
             // Test transitions with random changes
             {
-                const int num_random_tests = 2;
+                const int num_random_tests = 500;
                 for (int i = 0; i < num_random_tests; ++i)
                 {
                     // Stores the test parameters in class variables
@@ -618,11 +626,11 @@ namespace smmap
 
     std::map<std::string, std::vector<RubberBand>> TransitionTesting::SE3Prediction::predictAll(
             const TransitionEstimation::StateTransition& stored_trans,
-            const RubberBand& band,
-            const PairGripperPositions& action)
+            const RubberBand& test_band_start,
+            const PairGripperPositions& ending_gripper_positions)
     {
-        test_band_ = std::make_shared<RubberBand>(band);
-        test_action_ = action;
+        test_band_ = std::make_shared<RubberBand>(test_band_start);
+        test_action_ = ending_gripper_positions;
 
         num_gripper_steps_ = stored_trans.microstep_state_history_.size() / 4;
         stored_bands_.clear();
@@ -630,15 +638,15 @@ namespace smmap
         stored_bands_.push_back(*stored_trans.starting_state_.rubber_band_);
         for (const auto& state : stored_trans.microstep_state_history_)
         {
-            RubberBand temp_band(band);
+            RubberBand temp_band(test_band_start);
             assert(temp_band.resetBand(state));
             stored_bands_.push_back(temp_band);
         }
 
         warping_target_points_ = RubberBand::PointsFromBandAndGrippers(
-                    band,
-                    band.getEndpoints(),
-                    action,
+                    test_band_start,
+                    test_band_start.getEndpoints(),
+                    ending_gripper_positions,
                     num_gripper_steps_);
 
         predictBasedOnExecutedBand(stored_trans);

@@ -455,7 +455,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     for (size_t transition_idx = 0; transition_idx < learned_transitions_.size(); ++transition_idx)
     {
         const StateTransition& stored_trans = learned_transitions_[transition_idx];
-        const std::vector<RubberBand>& stored_bands = learned_band_surfaces_[transition_idx];
+//        const std::vector<RubberBand>& stored_bands = learned_band_surfaces_[transition_idx];
 
         // TODO: Update this to be in the new environment somehow
 //        // If the stored band is in a different homotopy class, skip it
@@ -489,9 +489,9 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
         }
 
         // Visualization
-        if (false)
+        if (true)
         {
-            const ObjectPointSet stored_bands_planned_aligned_to_target = transform * RubberBand::AggregateBandPoints(stored_bands);
+//            const ObjectPointSet stored_bands_planned_aligned_to_target = transform * RubberBand::AggregateBandPoints(stored_bands);
 
             vis_->visualizePoints("TEMPLATE_POINTS_PLANNED",
                                   warping_template_points_planned,
@@ -503,25 +503,31 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
 
             vis_->visualizePoints("TEMPLATE_POINTS_PLANNED_ALIGNED",
                                   template_planned_band_aligned_to_target,
-                                  Visualizer::Olive(), 1, 0.002);
+                                  Visualizer::Magenta(), 1, 0.002);
 
-            RubberBand::VisualizeBandSurface(vis_,
-                                             stored_bands,
-                                             Visualizer::Blue(),
-                                             Visualizer::Red(),
-                                             "stored_bands", 1);
+//            RubberBand::VisualizeBandSurface(vis_,
+//                                             stored_bands,
+//                                             Visualizer::Blue(),
+//                                             Visualizer::Red(),
+//                                             "stored_bands", 1);
 
-            RubberBand::VisualizeBandSurface(vis_,
-                                             stored_bands_planned_aligned_to_target,
-                                             stored_bands.size(),
-                                             Visualizer::Blue(),
-                                             Visualizer::Red(),
-                                             "stored_bands_planned_aligned", 1);
+//            RubberBand::VisualizeBandSurface(vis_,
+//                                             stored_bands_planned_aligned_to_target,
+//                                             stored_bands.size(),
+//                                             Visualizer::Blue(),
+//                                             Visualizer::Red(),
+//                                             "stored_bands_planned_aligned", 1);
         }
 
         // Align ending state band, then tighten the resulting band
         auto next_band = std::make_shared<RubberBand>(test_band_start);
         {
+            vis_->visualizePoints("MEMORIZED_NEXT_STATE",
+                                  stored_trans.ending_state_.rubber_band_->upsampleBand(),
+                                  Visualizer::Blue(), 1, 0.002);
+            vis_->visualizePoints("TRANSFORMED_MEMORIZED_NEXT_STATE",
+                                  TransformData(transform, stored_trans.ending_state_.rubber_band_->upsampleBand()),
+                                  Visualizer::Cyan(), 1, 0.002);
             const auto transformed_points = TransformData(transform, stored_trans.ending_state_.rubber_band_->getVectorRepresentation());
             const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_points, ending_gripper_positions, 1);
             if (!next_band->setPointsAndSmooth(points_to_smooth))
@@ -544,11 +550,10 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
         }
 
         // Visualization
-        if (false)
+        if (true)
         {
             default_next_band->visualize("DEFAULT_TRANSITION", Visualizer::Blue(), Visualizer::Blue(), 1);
-            next_band->visualize("STORED_TRANSITION", Visualizer::Red(), Visualizer::Red(), 1);
-            PressKeyToContinue("vis align ");
+            next_band->visualize("MEMORY_ADAPTED_TRANSITION", Visualizer::Red(), Visualizer::Red(), 1);
         }
 
         // Check if there is a "meaningful" difference between the default band, and this result
@@ -600,7 +605,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
 //            continue;
 //        }
 
-//        if (false)
+//        if (true)
 //        {
 //            RubberBand::VisualizeBandSurface(vis_,
 //                                             transformed_bands_from_stored_bands,
@@ -609,7 +614,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
 //                                             "stored_bands_planned_aligned_retightened", 1);
 //        }
 
-//            PressKeyToContinue("Made it to the end of the stored trans loop");
+        PressKeyToContinue("Made it to the end of the stored trans loop");
         transitions.push_back({next_band, confidence});
     }
 
@@ -638,8 +643,8 @@ void TransitionEstimation::VisualizeTransition(
         transition.starting_state_.planned_rubber_band_->visualize(ns_prefix + MDP_PRE_STATE_NS, Visualizer::Green(), Visualizer::Green(), id + 2);
 
     //    visualizeDeformableObject(ns_prefix + MDP_POST_STATE_NS, transition.ending_state.deform_config_, Visualizer::Red(0.4f), id);
-        transition.ending_state_.rubber_band_->visualize(ns_prefix + MDP_POST_STATE_NS, Visualizer::Yellow(0.4f), Visualizer::Yellow(0.4f), id + 1);
-        transition.ending_state_.planned_rubber_band_->visualize(ns_prefix + MDP_POST_STATE_NS, Visualizer::Green(0.4f), Visualizer::Green(0.4f), id + 2);
+        transition.ending_state_.rubber_band_->visualize(ns_prefix + MDP_POST_STATE_NS, Visualizer::Yellow(1.0f), Visualizer::Yellow(1.0f), id + 1);
+        transition.ending_state_.planned_rubber_band_->visualize(ns_prefix + MDP_POST_STATE_NS, Visualizer::Green(1.0f), Visualizer::Green(1.0f), id + 2);
 }
 
 void TransitionEstimation::visualizeLearnedTransitions(

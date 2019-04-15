@@ -123,8 +123,8 @@ namespace smmap
 
             std::map<std::string, std::vector<RubberBand>> predictAll(
                     const TransitionEstimation::StateTransition& stored_trans,
-                    const RubberBand& band,
-                    const PairGripperPositions& action);
+                    const RubberBand& test_band_start,
+                    const PairGripperPositions& ending_gripper_positions);
 
             void predictBasedOnPlannedBand(
                     const TransitionEstimation::StateTransition& stored_trans);
