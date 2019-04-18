@@ -10,18 +10,19 @@ namespace smmap
     typedef std::function<std::vector<CollisionData>(
             const AllGrippersSinglePose& gripper_poses
             )>
-    GripperCollisionCheckFunctionType;
-
-    typedef std::function<ObjectDeltaAndWeight(
-            const WorldState& world_state
-            )>
-    TaskDesiredObjectDeltaFunctionType;
+    GripperCollisionCheckFunction;
 
     typedef std::function<void(
             const size_t test_id,
             const WorldState& resulting_world_state
             )>
-    TestRobotMotionFeedbackCallbackFunctionType;
+    TestRobotMotionFeedbackCallback;
+
+    typedef std::function<void(
+            const size_t test_id,
+            const deformable_manipulation_msgs::TransitionTestResult& test_result
+            )>
+    GenerateTransitionDataFeedbackCallback;
 }
 
 #endif // TASK_FUNCTION_POINTER_TYPES_H

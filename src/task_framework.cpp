@@ -271,8 +271,6 @@ WorldState TaskFramework::sendNextCommand(
         paused = true;
     }
 
-
-
 #if ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE
     if (useStoredWorldState())
     {

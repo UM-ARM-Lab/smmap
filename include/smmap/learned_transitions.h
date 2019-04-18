@@ -85,7 +85,7 @@ namespace smmap
                 std::shared_ptr<ros::NodeHandle> ph,
                 const sdf_tools::SignedDistanceField::ConstPtr& sdf,
                 const XYZGrid work_space_grid,
-                const Visualizer::ConstPtr& vis,
+                const Visualizer::Ptr& vis,
                 const RubberBand& template_band);
 
         ////////////////////////////////////////////////////////////////////////
@@ -141,7 +141,7 @@ namespace smmap
                 const std::string& ns_prefix = "") const;
 
         static void VisualizeTransition(
-                const Visualizer::ConstPtr& vis,
+                const Visualizer::Ptr& vis,
                 const StateTransition& transition,
                 const int32_t id = 1,
                 const std::string& ns_prefix = "");
@@ -164,7 +164,7 @@ namespace smmap
 
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
         const XYZGrid work_space_grid_;
-        const Visualizer::ConstPtr vis_;
+        const Visualizer::Ptr vis_;
         std::vector<StateTransition> learned_transitions_;
         std::vector<std::vector<RubberBand>> learned_band_surfaces_;
 

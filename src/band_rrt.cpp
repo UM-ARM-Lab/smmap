@@ -94,6 +94,22 @@ static inline bool maxGrippersDistanceViolated(
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////           Conversion functions                   ///////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+AllGrippersPoseTrajectory smmap::RRTPathToGrippersPoseTrajectory(const RRTPath& path)
+{
+    AllGrippersPoseTrajectory traj;
+    traj.reserve(path.size());
+    for (const auto& node : path)
+    {
+        const auto grippers = node.grippers();
+        traj.push_back({grippers.first, grippers.second});
+    }
+    return traj;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////           RRTNode functions                      ///////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2444,8 +2460,8 @@ size_t BandRRT::forwardPropogationFunction(
             {
                 // Check if we rotated the grippers too much
                 {
-                    const double gripper_a_rotation_dist = Distance(starting_grippers_poses_.first.rotation(), next_grippers_poses.first.rotation());
-                    const double gripper_b_rotation_dist = Distance(starting_grippers_poses_.second.rotation(), next_grippers_poses.second.rotation());
+                    const double gripper_a_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_.first.rotation(), next_grippers_poses.first.rotation());
+                    const double gripper_b_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_.second.rotation(), next_grippers_poses.second.rotation());
                     if (gripper_a_rotation_dist > max_gripper_rotation_ || gripper_b_rotation_dist > max_gripper_rotation_)
                     {
                         ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", "Stopped due to excess gripper rotation");
@@ -2751,8 +2767,8 @@ bool BandRRT::goalReached(const RRTNode& node)
     // Check if the grippers have been rotated too far
     if (planning_for_whole_robot_)
     {
-        const double gripper_a_rotation_dist = Distance(starting_grippers_poses_.first.rotation(), node.grippers().first.rotation());
-        const double gripper_b_rotation_dist = Distance(starting_grippers_poses_.second.rotation(), node.grippers().second.rotation());
+        const double gripper_a_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_.first.rotation(), node.grippers().first.rotation());
+        const double gripper_b_rotation_dist = EigenHelpers::Distance(starting_grippers_poses_.second.rotation(), node.grippers().second.rotation());
         if (gripper_a_rotation_dist > max_gripper_rotation_ || gripper_b_rotation_dist > max_gripper_rotation_)
         {
             return false;

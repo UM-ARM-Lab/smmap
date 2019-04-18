@@ -80,6 +80,8 @@ namespace smmap
     typedef std::vector<RRTNode, RRTAllocator> RRTTree;
     typedef std::vector<std::pair<RRTPath, std::vector<size_t>>> RRTPolicy;
 
+    AllGrippersPoseTrajectory RRTPathToGrippersPoseTrajectory(const RRTPath& path);
+
     typedef PairGripperPoses RRTGrippersRepresentation;
     typedef Eigen::VectorXd RRTRobotRepresentation;
     typedef flann::KDTreeSingleIndex<flann::L2_weighted<float>> NNIndexType;
@@ -278,8 +280,7 @@ namespace smmap
             size_t band_max_points_;
         };
 
-        BandRRT(
-                std::shared_ptr<ros::NodeHandle> nh,
+        BandRRT(std::shared_ptr<ros::NodeHandle> nh,
                 std::shared_ptr<ros::NodeHandle> ph,
                 const WorldParams& world_params,
                 const PlanningParams& planning_params,

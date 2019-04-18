@@ -242,7 +242,7 @@ TransitionEstimation::TransitionEstimation(
         std::shared_ptr<ros::NodeHandle> ph,
         const sdf_tools::SignedDistanceField::ConstPtr& sdf,
         const XYZGrid work_space_grid,
-        const Visualizer::ConstPtr& vis,
+        const Visualizer::Ptr& vis,
         const RubberBand& template_band)
     : nh_(nh)
     , ph_(ph)
@@ -670,7 +670,7 @@ void TransitionEstimation::visualizeTransition(
 }
 
 void TransitionEstimation::VisualizeTransition(
-        const Visualizer::ConstPtr& vis,
+        const Visualizer::Ptr& vis,
         const StateTransition& transition,
         const int32_t id,
         const std::string& ns_prefix)

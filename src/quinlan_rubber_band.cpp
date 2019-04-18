@@ -216,7 +216,7 @@ namespace smmap
     QuinlanRubberBand::QuinlanRubberBand(
             std::shared_ptr<ros::NodeHandle> nh,
             std::shared_ptr<ros::NodeHandle> ph,
-            const Visualizer::ConstPtr vis,
+            const Visualizer::Ptr vis,
             const sdf_tools::SignedDistanceField::ConstPtr& sdf,
             const XYZGrid& work_space_grid,
             const std::function<std::vector<ssize_t>(const ssize_t node)>& node_neighbours_fn,
@@ -593,7 +593,7 @@ namespace smmap
     }
 
     void QuinlanRubberBand::VisualizeBandSurface(
-            const Visualizer::ConstPtr& vis,
+            const Visualizer::Ptr& vis,
             const ObjectPointSet& band_surface,
             const size_t num_bands,
             const std_msgs::ColorRGBA& start_color,
@@ -618,7 +618,7 @@ namespace smmap
     }
 
     void QuinlanRubberBand::VisualizeBandSurface(
-            const Visualizer::ConstPtr& vis,
+            const Visualizer::Ptr& vis,
             const std::vector<QuinlanRubberBand>& bands,
             const std_msgs::ColorRGBA& start_color,
             const std_msgs::ColorRGBA& end_color,
@@ -634,7 +634,7 @@ namespace smmap
     }
 
     void QuinlanRubberBand::VisualizeBandSurface(
-            const Visualizer::ConstPtr& vis,
+            const Visualizer::Ptr& vis,
             const std::vector<QuinlanRubberBand::ConstPtr>& bands,
             const std_msgs::ColorRGBA& start_color,
             const std_msgs::ColorRGBA& end_color,

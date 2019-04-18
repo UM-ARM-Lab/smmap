@@ -37,7 +37,7 @@ namespace smmap
             static const std::vector<GripperData>& GetGrippersData();
 
             static void SetCallbackFunctions(
-                    const GripperCollisionCheckFunctionType& gripper_collision_check_fn);
+                    const GripperCollisionCheckFunction& gripper_collision_check_fn);
 
 
         protected:
@@ -56,7 +56,7 @@ namespace smmap
             static std::vector<GripperData> grippers_data_;
 
             static std::atomic_bool function_pointers_initialized_;
-            static GripperCollisionCheckFunctionType gripper_collision_check_fn_;
+            static GripperCollisionCheckFunction gripper_collision_check_fn_;
 
         private:
             virtual void updateModel_impl(const WorldState& previous, const WorldState& next) = 0;

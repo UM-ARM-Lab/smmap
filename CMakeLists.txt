@@ -180,8 +180,9 @@ add_library(${PROJECT_NAME}_learning_testing
 )
 add_dependencies(${PROJECT_NAME}_learning_testing ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_learning_testing
-    ${PROJECT_NAME}_infrastructure
-    ${PROJECT_NAME}_transitions
+#    ${PROJECT_NAME}_infrastructure
+#    ${PROJECT_NAME}_transitions
+    ${PROJECT_NAME}_planning
     ${catkin_LIBRARIES}
 )
 

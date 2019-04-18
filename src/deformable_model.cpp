@@ -47,10 +47,10 @@ const std::vector<GripperData>& DeformableModel::GetGrippersData()
 }
 
 std::atomic_bool DeformableModel::function_pointers_initialized_(false);
-GripperCollisionCheckFunctionType DeformableModel::gripper_collision_check_fn_;
+GripperCollisionCheckFunction DeformableModel::gripper_collision_check_fn_;
 
 void DeformableModel::SetCallbackFunctions(
-        const GripperCollisionCheckFunctionType& gripper_collision_check_fn)
+        const GripperCollisionCheckFunction& gripper_collision_check_fn)
 {
     gripper_collision_check_fn_ = gripper_collision_check_fn;
     function_pointers_initialized_.store(true);

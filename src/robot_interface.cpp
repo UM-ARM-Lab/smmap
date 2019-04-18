@@ -26,6 +26,7 @@ namespace smmap
         , gripper_collision_checker_(*nh_)
         , execute_gripper_movement_client_(nh_->serviceClient<ExecuteRobotMotion>(GetExecuteRobotMotionTopic(*nh_), true))
         , test_grippers_poses_client_(*nh_, GetTestRobotMotionTopic(*nh_), false)
+        , generate_transition_data_client_(*nh_, GetGenerateTransitionDataTopic(*nh_), false)
         , dt_(GetRobotControlPeriod(*nh_))
         , max_gripper_velocity_norm_(GetMaxGripperVelocityNorm(*nh_))
         , max_dof_velocity_norm_(GetMaxDOFVelocityNorm(*nh_))
@@ -69,9 +70,6 @@ namespace smmap
 
         ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper movement service to be available");
         execute_gripper_movement_client_.waitForExistence();
-        // TODO: Parameterize this ability to be enabled or not
-        ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper test grippers poses to be available");
-        test_grippers_poses_client_.waitForServer();
 
         ROS_INFO_NAMED("robot_interface", "Kickstarting the planner with a no-op");
         return commandRobotMotion_impl(noOpGripperMovement()).first;
@@ -158,13 +156,33 @@ namespace smmap
             const std::vector<AllGrippersSinglePose>& test_grippers_poses,
             const std::vector<VectorXd>& test_robot_configurations,
             const bool robot_configuration_valid,
-            const TestRobotMotionFeedbackCallbackFunctionType& feedback_callback)
+            const TestRobotMotionFeedbackCallback& feedback_callback)
     {
+        // TODO: Parameterize this ability to be enabled or not
+        ROS_INFO_NAMED("robot_interface", "Waiting for the robot gripper test grippers poses to be available");
+        test_grippers_poses_client_.waitForServer();
+
         return testRobotMotion_impl(
                     toRosTestPosesGoal(test_grippers_poses,
                                        test_robot_configurations,
                                        robot_configuration_valid),
                     feedback_callback);
+    }
+
+    bool RobotInterface::generateTransitionData(
+            const std::vector<TransitionTest>& tests,
+            const GenerateTransitionDataFeedbackCallback& feedback_callback)
+    {
+        // TODO: Parameterize this ability to be enabled or not
+        ROS_INFO_NAMED("robot_interface", "Waiting for the transition data generator to be available");
+        generate_transition_data_client_.waitForServer();
+
+        GenerateTransitionDataGoal goal;
+        goal.tests = tests;
+        goal.header.frame_id = world_frame_name_;
+        goal.header.stamp = ros::Time::now();
+
+        return generateTransitionData_impl(goal, feedback_callback);
     }
 
     std::pair<WorldState, std::vector<WorldState>> RobotInterface::testRobotMotionMicrosteps(
@@ -546,7 +564,7 @@ namespace smmap
 
     void RobotInterface::internalTestPoseFeedbackCallback(
             const TestRobotMotionActionFeedbackConstPtr& feedback,
-            const TestRobotMotionFeedbackCallbackFunctionType& feedback_callback)
+            const TestRobotMotionFeedbackCallback& feedback_callback)
     {
         ROS_INFO_STREAM_NAMED("robot_interface", "Got feedback for test number " << feedback->feedback.test_id);
         CHECK_FRAME_NAME("robot_interface", world_frame_name_, feedback->feedback.world_state.header.frame_id);
@@ -560,7 +578,7 @@ namespace smmap
 
     bool RobotInterface::testRobotMotion_impl(
             const TestRobotMotionGoal& goal,
-            const TestRobotMotionFeedbackCallbackFunctionType& feedback_callback)
+            const TestRobotMotionFeedbackCallback& feedback_callback)
     {
 
         feedback_counter_ = goal.poses_to_test.size();
@@ -616,6 +634,80 @@ namespace smmap
         return goal;
     }
 
+
+
+    void RobotInterface::internalGenerateTransitionDataFeedbackCallback(
+            const GenerateTransitionDataActionFeedbackConstPtr& feedback,
+            const GenerateTransitionDataFeedbackCallback& feedback_callback)
+    {
+        ROS_INFO_STREAM_NAMED("robot_interface", "Got feedback for test number " << feedback->feedback.test_id);
+        CHECK_FRAME_NAME("robot_interface", world_frame_name_, feedback->feedback.test_result.header.frame_id);
+        feedback_callback(feedback->feedback.test_id, feedback->feedback.test_result);
+        if (feedback_recieved_[feedback->feedback.test_id] == false)
+        {
+            feedback_recieved_[feedback->feedback.test_id] = true;
+            feedback_counter_--;
+        }
+    }
+
+    bool RobotInterface::generateTransitionData_impl(
+            const deformable_manipulation_msgs::GenerateTransitionDataGoal& goal,
+            const GenerateTransitionDataFeedbackCallback& feedback_callback)
+    {
+        feedback_counter_ = goal.tests.size();
+        feedback_recieved_.clear();
+        feedback_recieved_.resize(goal.tests.size(), false);
+
+        ros::Subscriber internal_feedback_sub = nh_->subscribe<GenerateTransitionDataActionFeedback>(
+                    GetGenerateTransitionDataTopic(*nh_) + "/feedback",
+                    1000,
+                    boost::bind(&RobotInterface::internalGenerateTransitionDataFeedbackCallback, this, _1, feedback_callback));
+
+        generate_transition_data_client_.sendGoal(goal);
+
+        // TODO: Why am I waitingForResult and checking the feedback counter?
+        // One possible reason is because messages can arrive out of order
+        const bool result = generate_transition_data_client_.waitForResult();
+        while (feedback_counter_ > 0)
+        {
+            std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));
+        }
+
+        return result;
+    }
+
+    TransitionTest RobotInterface::toRosTransitionTest(
+            const EigenHelpers::VectorIsometry3d& starting_rope_node_transforms,
+            const AllGrippersSinglePose& starting_gripper_poses,
+            const AllGrippersPoseTrajectory& path_to_start_of_test,
+            const AllGrippersSinglePose& final_gripper_targets) const
+    {
+        TransitionTest test;
+        test.gripper_names = ExtractGripperNames(grippers_data_);
+        test.starting_object_configuration =
+                VectorIsometry3dToVectorGeometryPose(starting_rope_node_transforms);
+        test.starting_gripper_poses =
+                VectorIsometry3dToVectorGeometryPose(starting_gripper_poses);
+
+        test.path_to_start_of_test.resize(path_to_start_of_test.size());
+        test.path_num_substeps.resize(path_to_start_of_test.size());
+        auto prev_poses = starting_gripper_poses;
+        for (size_t path_idx = 0; path_idx < path_to_start_of_test.size(); ++path_idx)
+        {
+            test.path_to_start_of_test[path_idx].poses =
+                    VectorIsometry3dToVectorGeometryPose(path_to_start_of_test[path_idx]);
+            const double step_size = Distance(prev_poses, path_to_start_of_test[path_idx], false);
+            test.path_num_substeps[path_idx] = (int)std::ceil(step_size / max_gripper_velocity_norm_ * dt_);
+            prev_poses = path_to_start_of_test[path_idx];
+        }
+
+        test.final_gripper_targets = VectorIsometry3dToVectorGeometryPose(final_gripper_targets);
+        test.final_num_substeps = (int)std::ceil(Distance(prev_poses, final_gripper_targets) / max_gripper_velocity_norm_ * dt_);
+
+        test.header.frame_id = world_frame_name_;
+        test.header.stamp = ros::Time::now();
+        return test;
+    }
 
 
 

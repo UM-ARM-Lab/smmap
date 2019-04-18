@@ -6,6 +6,9 @@
 #include <boost/filesystem.hpp>
 #include <deformable_manipulation_experiment_params/conversions.hpp>
 #include <deformable_manipulation_experiment_params/utility.hpp>
+#include <deformable_manipulation_msgs/GenerateTransitionDataAction.h>
+
+#include "smmap/band_rrt.h"
 
 using namespace arc_utilities;
 using namespace arc_helpers;
@@ -169,7 +172,7 @@ namespace smmap
         return true;
     }
 
-    void TransitionSimulationRecord::visualize(const Visualizer::ConstPtr& vis) const
+    void TransitionSimulationRecord::visualize(const Visualizer::Ptr& vis) const
     {
         const size_t points_per_band = template_.starting_state_.rubber_band_->upsampleBand().size();
         const size_t num_bands = template_band_surface_.cols() / points_per_band;
@@ -211,7 +214,11 @@ namespace smmap
                            GetWorldYNumSteps(*nh_),
                            GetWorldZNumSteps(*nh_))
         , gripper_min_distance_to_obstacles_(GetRRTMinGripperDistanceToObstacles(*ph_))
-        , experiment_center_of_rotation_(calculateExperimentCenterOfRotation())
+        , gripper_a_starting_pose_(GetPoseFromParamSerer(*ph_, "gripper_a_test_start", true))
+        , gripper_a_ending_pose_(GetPoseFromParamSerer(*ph_, "gripper_a_test_end", true))
+        , gripper_b_starting_pose_(GetPoseFromParamSerer(*ph_, "gripper_b_test_start", true))
+        , gripper_b_ending_pose_(GetPoseFromParamSerer(*ph_, "gripper_b_test_end", true))
+        , experiment_center_of_rotation_(Isometry3d(Translation3d(GetVectorFromParamServer(*ph_, "experiment_cor"))))
 
         , deformable_type_(GetDeformableType(*nh_))
         , task_type_(GetTaskType(*nh_))
@@ -222,48 +229,10 @@ namespace smmap
         std::srand((unsigned int)seed_);
         initialize(robot_->start());
         vis_->visualizeAxes("center_of_rotation", experiment_center_of_rotation_, 0.1, 0.005, 1);
-    }
-
-    Isometry3d TransitionTesting::calculateExperimentCenterOfRotation()
-    {
-        using namespace ROSHelpers;
-
-        const Vector3d world_min(
-                    GetWorldXMinBulletFrame(*nh_),
-                    GetWorldYMinBulletFrame(*nh_),
-                    GetWorldZMinBulletFrame(*nh_));
-
-        const Vector3d world_max(
-                    GetWorldXMaxBulletFrame(*nh_),
-                    GetWorldYMaxBulletFrame(*nh_),
-                    GetWorldZMaxBulletFrame(*nh_));
-
-    //    const double wall_thickness = GetWorldResolution(*nh_) * 4.0;
-        const Vector3d world_center = (world_max + world_min) / 2.0;
-    //    const Vector3d world_size = world_max - world_min;
-
-        const double task_progress_wall_width =         GetParamRequired<double>(*nh_, "task_progress_wall_width", __func__).GetImmutable();
-        const double task_progress_wall_x_com =         GetParamRequired<double>(*nh_, "task_progress_wall_x_com", __func__).GetImmutable();
-        const double gripper_separator_lower_height =   GetParamRequired<double>(*nh_, "gripper_separator_lower_height", __func__).GetImmutable();
-
-        double hook_length =                            GetParamRequired<double>(*nh_, "hook_length", __func__).GetImmutable();
-        double hook_radius =                            GetParamRequired<double>(*nh_, "hook_radius", __func__).GetImmutable();
-        double hook_com_offset_y =                      GetParamRequired<double>(*nh_, "hook_com_offset_y", __func__).GetImmutable();
-
-        const Vector3d hook_half_extents(
-                    hook_length / 2.0f,
-                    hook_radius,
-                    hook_radius);
-
-        const Vector3d hook_com(
-                    task_progress_wall_x_com - task_progress_wall_width / 2.0f - hook_half_extents.x(),
-                    world_center.y() + hook_com_offset_y,
-                    world_min.z() + gripper_separator_lower_height - hook_radius);
-
-        return Isometry3d(Translation3d(
-                    hook_com.x() - hook_half_extents.x() + work_space_grid_.minStepDimension() / 4.0,
-                    hook_com.y(),
-                    hook_com.z()));
+        vis_->visualizeAxes("gripper_a_start", gripper_a_starting_pose_, 0.1, 0005, 1);
+        vis_->visualizeAxes("gripper_a_end", gripper_a_ending_pose_, 0.1, 0005, 1);
+        vis_->visualizeAxes("gripper_b_start", gripper_b_starting_pose_, 0.1, 0005, 1);
+        vis_->visualizeAxes("gripper_b_end", gripper_b_ending_pose_, 0.1, 0005, 1);
     }
 
     void TransitionTesting::initialize(const WorldState& world_state)
@@ -288,7 +257,7 @@ namespace smmap
                                     " but the ros param saved distance is " << max_band_length <<
                                     ". Double check the stored value in the roslaunch file.");
 
-        // Find the shortest path through the object, between the grippers, while follow nodes of the object.
+        // Find the shortest path through the object, between the grippers, while following nodes of the object.
         // Used to determine the starting position of the rubber band at each timestep
         const auto num_nodes = world_state.object_configuration_.cols();
         std::function<std::vector<ssize_t>(const ssize_t node)> neighbour_fn;
@@ -433,6 +402,7 @@ namespace smmap
             std::mt19937_64& generator,
             const std::string& data_folder)
     {
+#if 0
         const auto& transitions = framework_.transition_estimator_->transitions();
 
         ROS_INFO_STREAM("Visualizing " << transitions.size() << " transitions");
@@ -533,6 +503,127 @@ namespace smmap
                 }
             }
         }
+#endif
+    }
+
+    AllGrippersPoseTrajectory TransitionTesting::DataGeneration::generateTestPath(
+            std::shared_ptr<std::mt19937_64> generator,
+            const WorldState& starting_world_state,
+            const AllGrippersSinglePose& gripper_target_poses)
+    {
+        // "World" params used by planning
+        BandRRT::WorldParams world_params =
+        {
+            framework_.robot_,
+            false,
+            framework_.sdf_,
+            framework_.work_space_grid_,
+            framework_.transition_estimator_,
+            generator
+        };
+
+        // Algorithm parameters
+        const auto use_cbirrt_style_projection      = GetUseCBiRRTStyleProjection(*framework_.ph_);
+        const auto forward_tree_extend_iterations   = GetRRTForwardTreeExtendIterations(*framework_.ph_);
+        const auto backward_tree_extend_iterations  = GetRRTBackwardTreeExtendIterations(*framework_.ph_);
+        const auto kd_tree_grow_threshold           = GetRRTKdTreeGrowThreshold(*framework_.ph_);
+        const auto use_brute_force_nn               = GetRRTUseBruteForceNN(*framework_.ph_);
+        const auto goal_bias                        = GetRRTGoalBias(*framework_.ph_);
+        const auto best_near_radius                 = GetRRTBestNearRadius(*framework_.ph_);
+        const auto feasibility_dist_scale_factor    = GetRRTFeasibilityDistanceScaleFactor(*framework_.ph_);
+        assert(!use_cbirrt_style_projection && "CBiRRT style projection is no longer supported");
+        BandRRT::PlanningParams planning_params =
+        {
+            forward_tree_extend_iterations,
+            backward_tree_extend_iterations,
+            use_brute_force_nn,
+            kd_tree_grow_threshold,
+            best_near_radius * best_near_radius,
+            goal_bias,
+            feasibility_dist_scale_factor
+        };
+
+        // Smoothing parameters
+        const auto max_shortcut_index_distance      = GetRRTMaxShortcutIndexDistance(*framework_.ph_);
+        const auto max_smoothing_iterations         = GetRRTMaxSmoothingIterations(*framework_.ph_);
+        const auto max_failed_smoothing_iterations  = GetRRTMaxFailedSmoothingIterations(*framework_.ph_);
+        const auto smoothing_band_dist_threshold    = GetRRTSmoothingBandDistThreshold(*framework_.ph_);
+        BandRRT::SmoothingParams smoothing_params =
+        {
+            max_shortcut_index_distance,
+            max_smoothing_iterations,
+            max_failed_smoothing_iterations,
+            smoothing_band_dist_threshold
+        };
+
+        // Task defined parameters
+        const auto task_aligned_frame = framework_.robot_->getWorldToTaskFrameTf();
+        const auto task_frame_lower_limits = Vector3d(
+                    GetRRTPlanningXMinBulletFrame(*framework_.ph_),
+                    GetRRTPlanningYMinBulletFrame(*framework_.ph_),
+                    GetRRTPlanningZMinBulletFrame(*framework_.ph_));
+        const auto task_frame_upper_limits = Vector3d(
+                    GetRRTPlanningXMaxBulletFrame(*framework_.ph_),
+                    GetRRTPlanningYMaxBulletFrame(*framework_.ph_),
+                    GetRRTPlanningZMaxBulletFrame(*framework_.ph_));
+        const auto max_gripper_step_size                = framework_.work_space_grid_.minStepDimension();
+        const auto max_robot_step_size                  = GetRRTMaxRobotDOFStepSize(*framework_.ph_);
+        const auto min_robot_step_size                  = GetRRTMinRobotDOFStepSize(*framework_.ph_);
+        const auto max_gripper_rotation                 = GetRRTMaxGripperRotation(*framework_.ph_); // only matters for real robot
+        const auto goal_reached_radius                  = framework_.work_space_grid_.minStepDimension();
+        const auto min_gripper_distance_to_obstacles    = GetRRTMinGripperDistanceToObstacles(*framework_.ph_); // only matters for simulation
+        const auto band_distance2_scaling_factor        = GetRRTBandDistance2ScalingFactor(*framework_.ph_);
+        const auto upsampled_band_num_points            = GetRRTBandMaxPoints(*framework_.ph_);
+        BandRRT::TaskParams task_params =
+        {
+            task_aligned_frame,
+            task_frame_lower_limits,
+            task_frame_upper_limits,
+            max_gripper_step_size,
+            max_robot_step_size,
+            min_robot_step_size,
+            max_gripper_rotation,
+            goal_reached_radius,
+            min_gripper_distance_to_obstacles,
+            band_distance2_scaling_factor,
+            upsampled_band_num_points
+        };
+
+        // Visualization
+        const auto enable_rrt_visualizations = GetVisualizeRRT(*framework_.ph_);
+
+        // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
+        auto band_rrt = BandRRT(framework_.nh_,
+                                framework_.ph_,
+                                world_params,
+                                planning_params,
+                                smoothing_params,
+                                task_params,
+                                framework_.vis_,
+                                enable_rrt_visualizations);
+
+        const auto gripper_config = RRTGrippersRepresentation(
+                    starting_world_state.all_grippers_single_pose_[0],
+                    starting_world_state.all_grippers_single_pose_[1]);
+
+        RRTRobotRepresentation robot_config(6);
+        robot_config.head<3>() = gripper_config.first.translation();
+        robot_config.tail<3>() = gripper_config.second.translation();
+
+        const auto rubber_band = RubberBand::BandFromWorldState(starting_world_state, *framework_.band_);
+
+        const RRTNode start_config(
+                    gripper_config,
+                    robot_config,
+                    rubber_band);
+
+        const std::chrono::duration<double> time_limit(GetRRTTimeout(*framework_.ph_));
+
+        const auto policy = band_rrt.plan(start_config,
+                                          {gripper_target_poses[0], gripper_target_poses[1]},
+                                          time_limit);
+        assert(policy.size() == 1);
+        return RRTPathToGrippersPoseTrajectory(policy[0].first);
     }
 
     void TransitionTesting::DataGeneration::generateRandomTest(

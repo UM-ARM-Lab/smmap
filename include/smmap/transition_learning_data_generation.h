@@ -5,6 +5,7 @@
 #include <string>
 
 #include <arc_utilities/arc_helpers.hpp>
+#include <deformable_manipulation_msgs/TransitionTest.h>
 #include <smmap_utilities/visualization_tools.h>
 #include "smmap/learned_transitions.h"
 #include "smmap/quinlan_rubber_band.h"
@@ -39,7 +40,7 @@ namespace smmap
 
         bool operator==(const TransitionSimulationRecord& other) const;
 
-        void visualize(const Visualizer::ConstPtr& vis) const;
+        void visualize(const Visualizer::Ptr& vis) const;
     };
 
     class TransitionTesting
@@ -48,7 +49,7 @@ namespace smmap
         const std::shared_ptr<ros::NodeHandle> nh_;
         const std::shared_ptr<ros::NodeHandle> ph_;
         const RobotInterface::Ptr robot_;
-        const Visualizer::ConstPtr vis_;
+        const Visualizer::Ptr vis_;
         const bool visualize_gripper_motion_;
 
         const unsigned long seed_;
@@ -59,6 +60,11 @@ namespace smmap
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
         const XYZGrid work_space_grid_;
         const double gripper_min_distance_to_obstacles_;
+
+        const Eigen::Isometry3d gripper_a_starting_pose_;
+        const Eigen::Isometry3d gripper_a_ending_pose_;
+        const Eigen::Isometry3d gripper_b_starting_pose_;
+        const Eigen::Isometry3d gripper_b_ending_pose_;
         const Eigen::Isometry3d experiment_center_of_rotation_;
 
         const DeformableType deformable_type_;
@@ -81,7 +87,6 @@ namespace smmap
                 Visualizer::Ptr vis);
 
     private:
-        Eigen::Isometry3d calculateExperimentCenterOfRotation();
         void initialize(const WorldState& world_state);
         void initializeBand(const WorldState& world_state);
         std::vector<std::string> getDataFileList();
@@ -109,6 +114,11 @@ namespace smmap
             AllGrippersSinglePose random_test_starting_gripper_poses_;
             AllGrippersSinglePose random_test_ending_gripper_poses_;
             Eigen::Isometry3d random_test_transform_applied_;
+
+            AllGrippersPoseTrajectory generateTestPath(
+                    std::shared_ptr<std::mt19937_64> generator,
+                    const WorldState& starting_world_state,
+                    const AllGrippersSinglePose& gripper_target_poses);
 
             void generateRandomTest(
                     std::mt19937_64& generator,
