@@ -8,8 +8,8 @@
 #include <arc_utilities/path_utils.hpp>
 #include <deformable_manipulation_experiment_params/utility.hpp>
 
-#define TRANSITION_LEARNING_VERBOSE true
-//#define TRANSITION_LEARNING_VERBOSE false
+//#define TRANSITION_LEARNING_VERBOSE true
+#define TRANSITION_LEARNING_VERBOSE false
 
 using namespace smmap;
 using namespace arc_utilities;

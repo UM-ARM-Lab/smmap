@@ -10,6 +10,7 @@
 #include "smmap/learned_transitions.h"
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/robot_interface.h"
+#include "smmap/band_rrt.h"
 
 namespace smmap
 {
@@ -59,12 +60,16 @@ namespace smmap
         // resolutions due to the way the SDF is created in CustomScene
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
         const XYZGrid work_space_grid_;
-        const double gripper_min_distance_to_obstacles_;
+
+        std::shared_ptr<BandRRT::WorldParams> world_params_;
+        BandRRT::PlanningParams planning_params_;
+        BandRRT::SmoothingParams smoothing_params_;
+        BandRRT::TaskParams task_params_;
 
         Eigen::Isometry3d gripper_a_starting_pose_;
-        Eigen::Isometry3d gripper_a_ending_pose_;
         Eigen::Isometry3d gripper_b_starting_pose_;
-        Eigen::Isometry3d gripper_b_ending_pose_;
+        Eigen::Vector3d gripper_a_action_vector_;
+        Eigen::Vector3d gripper_b_action_vector_;
         const Eigen::Isometry3d experiment_center_of_rotation_;
 
         const DeformableType deformable_type_;
@@ -90,6 +95,8 @@ namespace smmap
     private:
         void initialize(const WorldState& world_state);
         void initializeBand(const WorldState& world_state);
+        void initializeRRTParams();
+        void clampGripperDeltas(Eigen::Ref<Eigen::Vector3d> a_delta, Eigen::Ref<Eigen::Vector3d> b_delta);
         std::vector<std::string> getDataFileList();
         TransitionSimulationRecord loadSimRecord(const std::string& filename);
 
