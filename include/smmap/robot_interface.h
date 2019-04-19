@@ -207,6 +207,7 @@ namespace smmap
         volatile size_t feedback_counter_;
         std::vector<bool> feedback_recieved_;
 
+
         void internalTestPoseFeedbackCallback(
                 const deformable_manipulation_msgs::TestRobotMotionActionFeedbackConstPtr& feedback,
                 const TestRobotMotionFeedbackCallback& feedback_callback);
@@ -219,6 +220,10 @@ namespace smmap
                 const std::vector<AllGrippersSinglePose>& grippers_poses,
                 const std::vector<Eigen::VectorXd>& robot_configurations,
                 const bool robot_configurations_valid) const;
+
+        ////////////////////////////////////////////////////////////////////
+        // Transition testing framework
+        ////////////////////////////////////////////////////////////////////
 
         void internalGenerateTransitionDataFeedbackCallback(
                 const deformable_manipulation_msgs::GenerateTransitionDataActionFeedbackConstPtr& feedback,
@@ -234,11 +239,8 @@ namespace smmap
                 const AllGrippersSinglePose& starting_gripper_poses,
                 const AllGrippersPoseTrajectory& path_to_start_of_test,
                 const AllGrippersSinglePose& final_gripper_targets) const;
-    private:
 
-        ////////////////////////////////////////////////////////////////////
-        // Transition testing framework
-        ////////////////////////////////////////////////////////////////////
+    private:
 
         std::pair<WorldState, std::vector<WorldState>> testRobotMotionMicrosteps_impl(
                 const deformable_manipulation_msgs::TestRobotMotionMicrostepsRequest& request);

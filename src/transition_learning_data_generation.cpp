@@ -222,17 +222,24 @@ namespace smmap
 
         , deformable_type_(GetDeformableType(*nh_))
         , task_type_(GetTaskType(*nh_))
+        , initial_world_state_(robot_->start())
+
         , data_folder_(ROSHelpers::GetParam<std::string>(*ph_, "data_folder", "/tmp/transition_learning_data_generation"))
         , sim_test_result_suffix_("_results.compressed")
         , prediction_result_suffix_("_prediction.compressed")
     {
+        gripper_a_starting_pose_.linear() = initial_world_state_.all_grippers_single_pose_[0].linear();
+        gripper_b_starting_pose_.linear() = initial_world_state_.all_grippers_single_pose_[1].linear();
+        gripper_a_ending_pose_.linear() = initial_world_state_.all_grippers_single_pose_[0].linear();
+        gripper_b_ending_pose_.linear() = initial_world_state_.all_grippers_single_pose_[1].linear();
+
         std::srand((unsigned int)seed_);
-        initialize(robot_->start());
-        vis_->visualizeAxes("center_of_rotation", experiment_center_of_rotation_, 0.1, 0.005, 1);
-        vis_->visualizeAxes("gripper_a_start", gripper_a_starting_pose_, 0.1, 0005, 1);
-        vis_->visualizeAxes("gripper_a_end", gripper_a_ending_pose_, 0.1, 0005, 1);
-        vis_->visualizeAxes("gripper_b_start", gripper_b_starting_pose_, 0.1, 0005, 1);
-        vis_->visualizeAxes("gripper_b_end", gripper_b_ending_pose_, 0.1, 0005, 1);
+        initialize(initial_world_state_);
+        vis_->visualizeAxes("center_of_rotation",   experiment_center_of_rotation_, 0.1, 0.005, 1);
+        vis_->visualizeAxes("gripper_a_start",      gripper_a_starting_pose_,       0.1, 0.005, 1);
+        vis_->visualizeAxes("gripper_a_end",        gripper_a_ending_pose_,         0.1, 0.005, 1);
+        vis_->visualizeAxes("gripper_b_start",      gripper_b_starting_pose_,       0.1, 0.005, 1);
+        vis_->visualizeAxes("gripper_b_end",        gripper_b_ending_pose_,         0.1, 0.005, 1);
     }
 
     void TransitionTesting::initialize(const WorldState& world_state)
@@ -346,8 +353,10 @@ namespace smmap
         if (generate_new_test_data)
         {
             DataGeneration data_generator(*this);
-            data_generator.generateTestData(*generator_, data_folder_);
+            data_generator.generateTestData(data_folder_);
         }
+
+        PressAnyKeyToContinue("Testing canonical position");
 
         const auto files = getDataFileList();
         for (const auto& file : files)
@@ -399,9 +408,26 @@ namespace smmap
     {}
 
     void TransitionTesting::DataGeneration::generateTestData(
-            std::mt19937_64& generator,
             const std::string& data_folder)
     {
+        // Generate the canonical example
+        const auto test = framework_.robot_->toRosTransitionTest(
+                    framework_.initial_world_state_.rope_node_transforms_,
+                    framework_.initial_world_state_.all_grippers_single_pose_,
+                    generateTestPath({framework_.gripper_a_starting_pose_, framework_.gripper_b_starting_pose_}),
+                    {framework_.gripper_a_ending_pose_, framework_.gripper_b_ending_pose_});
+
+        const auto feedback_callback = [&] (const size_t test_id, const deformable_manipulation_msgs::TransitionTestResult& result)
+        {
+            std::cout << "Test id: " << test_id << std::endl;
+
+            for (size_t idx = 0; idx < result.microsteps_all.size(); ++idx)
+            {
+                const auto world_state = ConvertToEigenFeedback(result.microsteps_all[idx]);
+                framework_.vis_->visualizePoints("microsteps_all", world_state.object_configuration_, Visualizer::Green(), (int)(idx + 1));
+            }
+        };
+        framework_.robot_->generateTransitionData({test}, feedback_callback);
 #if 0
         const auto& transitions = framework_.transition_estimator_->transitions();
 
@@ -507,8 +533,6 @@ namespace smmap
     }
 
     AllGrippersPoseTrajectory TransitionTesting::DataGeneration::generateTestPath(
-            std::shared_ptr<std::mt19937_64> generator,
-            const WorldState& starting_world_state,
             const AllGrippersSinglePose& gripper_target_poses)
     {
         // "World" params used by planning
@@ -519,7 +543,7 @@ namespace smmap
             framework_.sdf_,
             framework_.work_space_grid_,
             framework_.transition_estimator_,
-            generator
+            framework_.generator_
         };
 
         // Algorithm parameters
@@ -589,9 +613,6 @@ namespace smmap
             upsampled_band_num_points
         };
 
-        // Visualization
-        const auto enable_rrt_visualizations = GetVisualizeRRT(*framework_.ph_);
-
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         auto band_rrt = BandRRT(framework_.nh_,
                                 framework_.ph_,
@@ -600,17 +621,18 @@ namespace smmap
                                 smoothing_params,
                                 task_params,
                                 framework_.vis_,
-                                enable_rrt_visualizations);
+                                false);
 
         const auto gripper_config = RRTGrippersRepresentation(
-                    starting_world_state.all_grippers_single_pose_[0],
-                    starting_world_state.all_grippers_single_pose_[1]);
+                    framework_.initial_world_state_.all_grippers_single_pose_[0],
+                    framework_.initial_world_state_.all_grippers_single_pose_[1]);
 
         RRTRobotRepresentation robot_config(6);
         robot_config.head<3>() = gripper_config.first.translation();
         robot_config.tail<3>() = gripper_config.second.translation();
 
-        const auto rubber_band = RubberBand::BandFromWorldState(starting_world_state, *framework_.band_);
+        const auto rubber_band = RubberBand::BandFromWorldState(
+                    framework_.initial_world_state_, *framework_.band_);
 
         const RRTNode start_config(
                     gripper_config,

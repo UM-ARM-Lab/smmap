@@ -61,15 +61,16 @@ namespace smmap
         const XYZGrid work_space_grid_;
         const double gripper_min_distance_to_obstacles_;
 
-        const Eigen::Isometry3d gripper_a_starting_pose_;
-        const Eigen::Isometry3d gripper_a_ending_pose_;
-        const Eigen::Isometry3d gripper_b_starting_pose_;
-        const Eigen::Isometry3d gripper_b_ending_pose_;
+        Eigen::Isometry3d gripper_a_starting_pose_;
+        Eigen::Isometry3d gripper_a_ending_pose_;
+        Eigen::Isometry3d gripper_b_starting_pose_;
+        Eigen::Isometry3d gripper_b_ending_pose_;
         const Eigen::Isometry3d experiment_center_of_rotation_;
 
         const DeformableType deformable_type_;
         const TaskType task_type_;
 
+        const WorldState initial_world_state_;
         RubberBand::Ptr band_;
         TransitionEstimation::Ptr transition_estimator_;
 
@@ -101,9 +102,7 @@ namespace smmap
         public:
             EIGEN_MAKE_ALIGNED_OPERATOR_NEW
             DataGeneration(const TransitionTesting& framework);
-            void generateTestData(
-                    std::mt19937_64& generator,
-                    const std::string& data_folder);
+            void generateTestData(const std::string& data_folder);
 
         private:
             const TransitionTesting& framework_;
@@ -116,8 +115,6 @@ namespace smmap
             Eigen::Isometry3d random_test_transform_applied_;
 
             AllGrippersPoseTrajectory generateTestPath(
-                    std::shared_ptr<std::mt19937_64> generator,
-                    const WorldState& starting_world_state,
                     const AllGrippersSinglePose& gripper_target_poses);
 
             void generateRandomTest(

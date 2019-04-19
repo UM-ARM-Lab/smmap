@@ -697,12 +697,12 @@ namespace smmap
             test.path_to_start_of_test[path_idx].poses =
                     VectorIsometry3dToVectorGeometryPose(path_to_start_of_test[path_idx]);
             const double step_size = Distance(prev_poses, path_to_start_of_test[path_idx], false);
-            test.path_num_substeps[path_idx] = (int)std::ceil(step_size / max_gripper_velocity_norm_ * dt_);
+            test.path_num_substeps[path_idx] = (int)std::ceil(step_size / (max_gripper_velocity_norm_ * dt_));
             prev_poses = path_to_start_of_test[path_idx];
         }
 
         test.final_gripper_targets = VectorIsometry3dToVectorGeometryPose(final_gripper_targets);
-        test.final_num_substeps = (int)std::ceil(Distance(prev_poses, final_gripper_targets) / max_gripper_velocity_norm_ * dt_);
+        test.final_num_substeps = (int)std::ceil(Distance(prev_poses, final_gripper_targets, false) / (max_gripper_velocity_norm_ * dt_));
 
         test.header.frame_id = world_frame_name_;
         test.header.stamp = ros::Time::now();

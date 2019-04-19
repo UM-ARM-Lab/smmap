@@ -267,6 +267,14 @@ WorldState TaskFramework::sendNextCommand(
     static bool paused = false;
     if (!paused && world_state.sim_time_ > 4.0)
     {
+        int32_t id = 1;
+        for (size_t idx = 0; idx < rrt_executed_path_.size(); ++idx)
+        {
+            for (size_t idx2 = 0; idx2 < rrt_executed_path_[idx].second.size(); ++idx2)
+            {
+                vis_->visualizePoints("path_microsteps", rrt_executed_path_[idx].second[idx2].object_configuration_, Visualizer::Green(), id++);
+            }
+        }
         PressAnyKeyToContinue("Sim time 4.0. Press any key ... ");
         paused = true;
     }
