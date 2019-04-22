@@ -670,7 +670,7 @@ namespace smmap
     }
 
     void TransitionTesting::DataGeneration::generateRandomTest(
-            std::mt19937_64& generator,
+            std::mt19937_64 generator,
             const TransitionEstimation::StateTransition& trans)
     {
         static const double grippers_delta_random_max = 0.025;     // meters

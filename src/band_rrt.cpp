@@ -320,6 +320,9 @@ std::string RRTNode::print() const
         << "Already extended:       " << already_extended_towards_goal_set_ << std::endl
         << "Blacklisted from NN:    " << blacklisted_from_nn_search_ << std::endl
         << "Robot configuration:    " << robot_configuration_.transpose() << std::endl
+        << "  p_reachablity_:       " << p_reachability_ << std::endl
+        << "  p_transition_:        " << p_transition_ << std::endl
+        << "  p_goal_reachable_:    " << p_goal_reachable_ << std::endl
         << std::endl;
     return out.str();
 }
@@ -1257,7 +1260,12 @@ RRTPolicy BandRRT::ExtractSolutionPolicy(const RRTTree& tree)
             {
                 // If there are no children, and we're at this point in the tree, then this had better satisfy the goal check.
                 // TODO: make this function non static and explicitly use the goalCheck function
-                assert(curr_node.getpGoalReachable() == 1.0);
+                if (curr_node.getpGoalReachable() != 1.0)
+                {
+                    std::cout << curr_node << std::endl;
+                    PressAnyKeyToContinue("Weirdness in tree");
+                    assert(false);
+                }
                 goal_reached = true;
                 assert(path.size() > 1);
                 std::vector<size_t> child_paths;

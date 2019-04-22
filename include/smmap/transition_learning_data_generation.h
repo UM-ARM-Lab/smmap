@@ -125,7 +125,7 @@ namespace smmap
                     const AllGrippersSinglePose& gripper_target_poses);
 
             void generateRandomTest(
-                    std::mt19937_64& generator,
+                    std::mt19937_64 generator,
                     const TransitionEstimation::StateTransition& trans);
         };
         friend class DataGeneration;
