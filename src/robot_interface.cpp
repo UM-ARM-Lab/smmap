@@ -171,7 +171,9 @@ namespace smmap
 
     bool RobotInterface::generateTransitionData(
             const std::vector<TransitionTest>& tests,
-            const GenerateTransitionDataFeedbackCallback& feedback_callback)
+            const std::vector<std::string>& filenames,
+            const GenerateTransitionDataFeedbackCallback& feedback_callback,
+            const bool wait_for_feedback)
     {
         // TODO: Parameterize this ability to be enabled or not
         ROS_INFO_NAMED("robot_interface", "Waiting for the transition data generator to be available");
@@ -179,10 +181,16 @@ namespace smmap
 
         GenerateTransitionDataGoal goal;
         goal.tests = tests;
+        for (size_t idx = 0; idx < filenames.size(); ++idx)
+        {
+            std_msgs::String str;
+            str.data = filenames[idx];
+            goal.filenames.push_back(str);
+        }
         goal.header.frame_id = world_frame_name_;
         goal.header.stamp = ros::Time::now();
 
-        return generateTransitionData_impl(goal, feedback_callback);
+        return generateTransitionData_impl(goal, feedback_callback, wait_for_feedback);
     }
 
     std::pair<WorldState, std::vector<WorldState>> RobotInterface::testRobotMotionMicrosteps(
@@ -652,7 +660,8 @@ namespace smmap
 
     bool RobotInterface::generateTransitionData_impl(
             const deformable_manipulation_msgs::GenerateTransitionDataGoal& goal,
-            const GenerateTransitionDataFeedbackCallback& feedback_callback)
+            const GenerateTransitionDataFeedbackCallback& feedback_callback,
+            const bool wait_for_feedback)
     {
         feedback_counter_ = goal.tests.size();
         feedback_recieved_.clear();
@@ -668,7 +677,7 @@ namespace smmap
         // TODO: Why am I waitingForResult and checking the feedback counter?
         // One possible reason is because messages can arrive out of order
         const bool result = generate_transition_data_client_.waitForResult();
-        while (feedback_counter_ > 0)
+        while (wait_for_feedback && feedback_counter_ > 0)
         {
             std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));
         }

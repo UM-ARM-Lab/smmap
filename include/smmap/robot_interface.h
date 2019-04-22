@@ -53,7 +53,9 @@ namespace smmap
 
         bool generateTransitionData(
                 const std::vector<deformable_manipulation_msgs::TransitionTest>& tests,
-                const GenerateTransitionDataFeedbackCallback& feedback_callback);
+                const std::vector<std::string>& filenames,
+                const GenerateTransitionDataFeedbackCallback& feedback_callback,
+                const bool wait_for_feedback);
 
         std::pair<WorldState, std::vector<WorldState>> testRobotMotionMicrosteps(
                 const EigenHelpers::VectorIsometry3d& starting_rope_configuration,
@@ -231,7 +233,8 @@ namespace smmap
 
         bool generateTransitionData_impl(
                 const deformable_manipulation_msgs::GenerateTransitionDataGoal& goal,
-                const GenerateTransitionDataFeedbackCallback& feedback_callback);
+                const GenerateTransitionDataFeedbackCallback& feedback_callback,
+                const bool wait_for_feedback);
 
     public:
         deformable_manipulation_msgs::TransitionTest toRosTransitionTest(

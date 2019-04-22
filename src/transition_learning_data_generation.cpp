@@ -539,16 +539,18 @@ namespace smmap
             const std::string& data_folder)
     {
         std::vector<deformable_manipulation_msgs::TransitionTest> tests;
-        std::vector<std::string> test_descriptions;
+        std::vector<std::string> filenames;
 
 //        std::vector<deformable_manipulation_msgs::TransitionTestResult> results(tests.size());
         const auto feedback_callback = [&] (const size_t test_id, const deformable_manipulation_msgs::TransitionTestResult& result)
         {
-            std::cout << data_folder + "//" + test_descriptions[test_id] + ".compressed" << std::endl;
-//            results[test_id] = result;
-            std::vector<uint8_t> buffer;
-            RosMessageSerializationWrapper(result, buffer);
-            ZlibHelpers::CompressAndWriteToFile(buffer, data_folder + "//" + test_descriptions[test_id] + ".compressed");
+//            std::cout << data_folder + "/" + test_descriptions[test_id] + ".compressed" << std::endl;
+////            results[test_id] = result;
+//            std::vector<uint8_t> buffer;
+//            RosMessageSerializationWrapper(result, buffer);
+//            ZlibHelpers::CompressAndWriteToFile(buffer, data_folder + "//" + test_descriptions[test_id] + ".compressed");
+            (void)test_id;
+            (void)result;
         };
 
         //// Generate the canonical example ////////////////////////////////////
@@ -561,7 +563,7 @@ namespace smmap
                         generateTestPath({framework_.gripper_a_starting_pose_, framework_.gripper_b_starting_pose_}),
                         {gripper_a_ending_pose_, gripper_b_ending_pose_});
             tests.push_back(canonical_test);
-            test_descriptions.push_back("cannonical_straight_test");
+            filenames.push_back("cannonical_straight_test");
         }
 
         //// Generate versions with perturbed gripper start positions //////////
@@ -580,8 +582,16 @@ namespace smmap
             {
                 try
                 {
-                    Isometry3d gripper_b_starting_pose = framework_.gripper_b_starting_pose_ * Translation3d(gripper_positions_perturbations[b_idx]);
-                    Isometry3d gripper_b_ending_pose = gripper_b_starting_pose * Translation3d(framework_.gripper_b_action_vector_);
+                    const Isometry3d gripper_b_starting_pose = framework_.gripper_b_starting_pose_ * Translation3d(gripper_positions_perturbations[b_idx]);
+                    const Isometry3d gripper_b_ending_pose = gripper_b_starting_pose * Translation3d(framework_.gripper_b_action_vector_);
+
+                    const std::string filename(data_folder +
+                                               "/cannonical_straight_test_"
+                                               "_perturbed_gripper_start_positions_"
+                                               "_gripper_a_" + ToString(gripper_positions_perturbations[a_idx]) +
+                                               "_gripper_b_" + ToString(gripper_positions_perturbations[b_idx]) +
+                                               ".compressed");
+
                     const auto test = framework_.robot_->toRosTransitionTest(
                                 framework_.initial_world_state_.rope_node_transforms_,
                                 framework_.initial_world_state_.all_grippers_single_pose_,
@@ -592,17 +602,14 @@ namespace smmap
                     {
                         // Add the test to the list waiting to be executed
                         tests.push_back(test);
-                        test_descriptions.push_back("cannonical_straight_test_"
-                                                    "_perturbed_gripper_start_positions_"
-                                                    "_gripper_a_" + ToString(gripper_positions_perturbations[a_idx]) +
-                                                    "_gripper_b_" + ToString(gripper_positions_perturbations[b_idx]));
+                        filenames.push_back(filename);
 
                         // Execute the tests if tehre are enough to run
                         if (tests.size() == num_threads)
                         {
-                            framework_.robot_->generateTransitionData(tests, feedback_callback);
+                            framework_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
                             tests.clear();
-                            test_descriptions.clear();
+                            filenames.clear();
                         }
                     }
                 }
@@ -619,9 +626,9 @@ namespace smmap
         // Run an tests left over
         if (tests.size() != 0)
         {
-            framework_.robot_->generateTransitionData(tests, feedback_callback);
+            framework_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
             tests.clear();
-            test_descriptions.clear();
+            filenames.clear();
         }
     }
 
