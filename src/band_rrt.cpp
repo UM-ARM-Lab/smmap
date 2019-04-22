@@ -1229,8 +1229,7 @@ RRTPolicy BandRRT::ExtractSolutionPolicy(const RRTTree& tree)
             }
             ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "    " << effective_child_branches.size() << " transitions taken out of this node");
 
-            // Now that we have the splits separated out, compute the goal probability of each transition,
-            // keeping only the largest
+            // Now that we have the splits separated out, compute the goal probability of each transition, keeping only the largest
             double p_goal_reachable = 0.0;
             std::vector<int64_t> best_transition_idx; // should be only one element long, ideally. A vector is stored to catch edge conditions that we have not yet decided how to resolve.
             for (auto itr = effective_child_branches.begin(); itr != effective_child_branches.end(); ++itr)
@@ -1243,12 +1242,14 @@ RRTPolicy BandRRT::ExtractSolutionPolicy(const RRTTree& tree)
                     p_goal_reachable_current_transition += child.pTransition() * child.getpGoalReachable();
                 }
 
-                if (p_goal_reachable_current_transition > p_goal_reachable)
+                if (p_goal_reachable_current_transition > 0.0 &&
+                    p_goal_reachable_current_transition > p_goal_reachable)
                 {
                     best_transition_idx = {itr->first};
                     p_goal_reachable = p_goal_reachable_current_transition;
                 }
-                else if (p_goal_reachable_current_transition == p_goal_reachable)
+                else if (p_goal_reachable_current_transition > 0.0 &&
+                         p_goal_reachable_current_transition == p_goal_reachable)
                 {
                     best_transition_idx.push_back(itr->first);
                 }
