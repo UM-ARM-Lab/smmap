@@ -570,6 +570,7 @@ namespace smmap
         const auto gripper_positions_perturbations_num_divisions = ROSHelpers::GetParamRequired<int>(*framework_.ph_, "perturbations/gripper_positions/num_divisions", __func__).GetImmutable();
         const auto gripper_positions_perturbations = Vec3dPerturbations(gripper_positions_perturbations_max_magnitude, gripper_positions_perturbations_num_divisions);
         std::cout << "Num total perturbations: " << gripper_positions_perturbations.size() << std::endl;
+        const auto num_threads = GetNumOMPThreads();
         #pragma omp parallel for
         for (size_t a_idx = 0; a_idx < gripper_positions_perturbations.size(); ++a_idx)
         {
@@ -597,7 +598,7 @@ namespace smmap
                                                     "_gripper_b_" + ToString(gripper_positions_perturbations[b_idx]));
 
                         // Execute the tests if tehre are enough to run
-                        if (tests.size() == 12)
+                        if (tests.size() == num_threads)
                         {
                             framework_.robot_->generateTransitionData(tests, feedback_callback);
                             tests.clear();
