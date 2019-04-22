@@ -509,7 +509,7 @@ namespace smmap
     static VectorVector3d Vec3dPerturbations(const double max_magnitude, const int num_divisions)
     {
         VectorVector3d perturbations;
-        perturbations.reserve(std::pow(2 * num_divisions + 1, 3) - 1);
+        perturbations.reserve((size_t)(std::pow(2 * num_divisions + 1, 3) - 1));
         for (int x_idx = -num_divisions; x_idx <= num_divisions; ++x_idx)
         {
             const double x_delta = max_magnitude * x_idx / num_divisions;
@@ -538,7 +538,6 @@ namespace smmap
     void TransitionTesting::DataGeneration::generateTestData(
             const std::string& data_folder)
     {
-        std::mutex tests_mtx;
         std::vector<deformable_manipulation_msgs::TransitionTest> tests;
         std::vector<std::string> test_descriptions;
 
@@ -578,142 +577,51 @@ namespace smmap
             Isometry3d gripper_a_ending_pose = gripper_a_starting_pose * Translation3d(framework_.gripper_a_action_vector_);
             for (size_t b_idx = 0; b_idx < gripper_positions_perturbations.size(); ++b_idx)
             {
-                Isometry3d gripper_b_starting_pose = framework_.gripper_b_starting_pose_ * Translation3d(gripper_positions_perturbations[b_idx]);
-                Isometry3d gripper_b_ending_pose = gripper_b_starting_pose * Translation3d(framework_.gripper_b_action_vector_);
-                const auto test = framework_.robot_->toRosTransitionTest(
-                            framework_.initial_world_state_.rope_node_transforms_,
-                            framework_.initial_world_state_.all_grippers_single_pose_,
-                            generateTestPath({gripper_a_starting_pose, gripper_b_starting_pose}),
-                            {gripper_a_ending_pose, gripper_b_ending_pose});
-
+                try
                 {
-                    std::lock_guard<std::mutex> lock(tests_mtx);
-                    tests.push_back(test);
-                    test_descriptions.push_back("cannonical_straight_test_"
-                                                "_perturbed_gripper_start_positions_"
-                                                "_gripper_a_" + ToString(gripper_positions_perturbations[a_idx]) +
-                                                "_gripper_b_" + ToString(gripper_positions_perturbations[b_idx]));
+                    Isometry3d gripper_b_starting_pose = framework_.gripper_b_starting_pose_ * Translation3d(gripper_positions_perturbations[b_idx]);
+                    Isometry3d gripper_b_ending_pose = gripper_b_starting_pose * Translation3d(framework_.gripper_b_action_vector_);
+                    const auto test = framework_.robot_->toRosTransitionTest(
+                                framework_.initial_world_state_.rope_node_transforms_,
+                                framework_.initial_world_state_.all_grippers_single_pose_,
+                                generateTestPath({gripper_a_starting_pose, gripper_b_starting_pose}),
+                                {gripper_a_ending_pose, gripper_b_ending_pose});
 
-                    if (tests.size() == 12)
+                    #pragma omp critical
                     {
-                        framework_.robot_->generateTransitionData(tests, feedback_callback);
-                        tests.clear();
-                        test_descriptions.clear();
+                        // Add the test to the list waiting to be executed
+                        tests.push_back(test);
+                        test_descriptions.push_back("cannonical_straight_test_"
+                                                    "_perturbed_gripper_start_positions_"
+                                                    "_gripper_a_" + ToString(gripper_positions_perturbations[a_idx]) +
+                                                    "_gripper_b_" + ToString(gripper_positions_perturbations[b_idx]));
+
+                        // Execute the tests if tehre are enough to run
+                        if (tests.size() == 12)
+                        {
+                            framework_.robot_->generateTransitionData(tests, feedback_callback);
+                            tests.clear();
+                            test_descriptions.clear();
+                        }
                     }
+                }
+                catch (const std::runtime_error& ex)
+                {
+                    ROS_ERROR_STREAM_NAMED("data_generation", "Unable to plan with perturbation"
+                                           << " a: " << gripper_positions_perturbations[a_idx].transpose()
+                                           << " b: " << gripper_positions_perturbations[b_idx].transpose()
+                                           << " Message: " << ex.what());
                 }
             }
         }
 
+        // Run an tests left over
         if (tests.size() != 0)
         {
             framework_.robot_->generateTransitionData(tests, feedback_callback);
             tests.clear();
             test_descriptions.clear();
         }
-
-
-#if 0
-        const auto& transitions = framework_.transition_estimator_->transitions();
-
-        ROS_INFO_STREAM("Visualizing " << transitions.size() << " transitions");
-        for (size_t idx = 0; idx < transitions.size(); ++idx)
-        {
-            const TransitionEstimation::StateTransition& trans = transitions[idx];
-
-            auto template_bands = framework_.transition_estimator_->reduceMicrostepsToBands(
-                        trans.microstep_state_history_);
-            template_bands.insert(template_bands.begin(), trans.starting_state_.rubber_band_);
-
-            RubberBand::VisualizeBandSurface(framework_.vis_, ToConstPtr(template_bands), Visualizer::Blue(), Visualizer::Red(), "band_surface_template", 1);
-            framework_.transition_estimator_->visualizeTransition(trans, 1, "transition_testing_");
-
-            // Test transitions with random changes
-            {
-                const int num_random_tests = 500;
-                for (int i = 0; i < num_random_tests; ++i)
-                {
-                    // Stores the test parameters in class variables
-                    generateRandomTest(generator, trans);
-
-                    ////// Gather simulated results ////////////////////////////////////////////////////////////////////////
-
-                    const std::pair<WorldState, std::vector<WorldState>> test_result =
-                            framework_.robot_->testRobotMotionMicrosteps(
-                                random_test_rope_nodes_start_,
-                                random_test_starting_gripper_poses_,
-                                random_test_ending_gripper_poses_,
-                                (int)trans.microstep_state_history_.size() / 4);
-                    const auto& start_after_settling = test_result.first;
-                    const auto& microsteps = test_result.second;
-
-                    // Rejection sampling
-                    if (microsteps.empty())
-                    {
-                        --i;
-                        ROS_INFO("Rejecting sample, band starts overstretched");
-                        continue;
-                    }
-
-                    const auto random_test_band_start = RubberBand::BandFromWorldState(
-                                start_after_settling,
-                                *trans.starting_state_.rubber_band_);
-                    // More rejection sampling
-                    if (random_test_band_start->isOverstretched())
-                    {
-                        --i;
-                        ROS_INFO("Rejecting sample, rope starts in collision");
-                        continue;
-                    }
-                    auto test_bands = framework_.transition_estimator_->reduceMicrostepsToBands(microsteps);
-                    test_bands.insert(test_bands.begin(), random_test_band_start);
-
-                    // Add each band with a different color, ranging from cyan (early in the history) to magenta (late in the history)
-                    RubberBand::VisualizeBandSurface(framework_.vis_, ToConstPtr(test_bands), Visualizer::Cyan(), Visualizer::Magenta(), "band_surface_simulation", 1);
-
-                    ////// Compile the results into a single structure and save to file ////////////////////////////////////
-                    {
-                        TransitionSimulationRecord transition_test_results;
-                        transition_test_results.template_ = trans;
-                        transition_test_results.template_band_surface_ = RubberBand::AggregateBandPoints(ToConstPtr(template_bands));
-
-                        transition_test_results.center_of_rotation_ = framework_.experiment_center_of_rotation_;
-                        transition_test_results.transform_applied_ = random_test_transform_applied_;
-
-                        transition_test_results.tested_.starting_state_.deform_config_          = start_after_settling.object_configuration_;
-                        transition_test_results.tested_.starting_state_.rubber_band_            = random_test_band_start;
-                        transition_test_results.tested_.starting_state_.planned_rubber_band_    = random_test_band_start;
-                        transition_test_results.tested_.starting_state_.rope_node_transforms_   = start_after_settling.rope_node_transforms_;
-                        transition_test_results.tested_.starting_gripper_positions_             = ToGripperPositions(start_after_settling.all_grippers_single_pose_);
-
-
-                        transition_test_results.tested_.ending_state_.deform_config_        = microsteps.back().object_configuration_;
-                        transition_test_results.tested_.ending_state_.rubber_band_          = std::make_shared<RubberBand>(*test_bands.back());
-                        transition_test_results.tested_.ending_state_.planned_rubber_band_  = std::make_shared<RubberBand>(*test_bands.back());
-                        transition_test_results.tested_.ending_state_.rope_node_transforms_ = microsteps.back().rope_node_transforms_;
-                        transition_test_results.tested_.ending_gripper_positions_           = ToGripperPositions(random_test_ending_gripper_poses_);
-                        transition_test_results.tested_.microstep_state_history_            = microsteps;
-
-                        transition_test_results.tested_band_surface_ = RubberBand::AggregateBandPoints(ToConstPtr(test_bands));
-
-                        transition_test_results.visualize(framework_.vis_);
-//                        PressKeyToContinue("Generated test vis");
-
-
-                        const int trans_idx_width = 4; //GetNumberOfDigits(static_cast<int>(transitions.size()));
-                        const int test_idx_width = 6; //GetNumberOfDigits(num_random_tests);
-                        std::vector<uint8_t> buffer;
-                        transition_test_results.serializeSelf(buffer);
-                        std::stringstream path;
-                        path << data_folder
-                             << "/trans_" << std::setfill('0') << std::setw(trans_idx_width) << idx
-                             << "_random_test_" << std::setfill('0') << std::setw(test_idx_width) << i
-                             << framework_.sim_test_result_suffix_;
-                        ZlibHelpers::CompressAndWriteToFile(buffer, path.str());
-                    }
-                }
-            }
-        }
-#endif
     }
 
     AllGrippersPoseTrajectory TransitionTesting::DataGeneration::generateTestPath(
@@ -750,7 +658,14 @@ namespace smmap
         const auto policy = band_rrt.plan(start_config,
                                           {gripper_target_poses[0], gripper_target_poses[1]},
                                           time_limit);
-        assert(policy.size() == 1);
+        if (policy.size() == 0)
+        {
+            throw_arc_exception(std::runtime_error, "No path returned by RRT.");
+        }
+        else if (policy.size() > 1)
+        {
+            throw_arc_exception(std::runtime_error, "Multiple paths returned by RRT. Weird.");
+        }
         return RRTPathToGrippersPoseTrajectory(policy[0].first);
     }
 

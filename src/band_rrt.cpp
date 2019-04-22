@@ -742,8 +742,8 @@ RRTPolicy BandRRT::plan(
         const RRTGrippersRepresentation& grippers_goal_poses,
         const std::chrono::duration<double>& time_limit)
 {
-    sample_history_buffer_.clear();
-    sample_history_buffer_.reserve(1e9);
+//    sample_history_buffer_.clear();
+//    sample_history_buffer_.reserve(1e9);
 
     const auto estimated_tree_size = ROSHelpers::GetParam(*ph_, "estimated_tree_size", 100000);
 
@@ -831,8 +831,9 @@ RRTPolicy BandRRT::plan(
         std::cerr << "Max allowable distance: " << max_grippers_distance_ << " Distance beteween goal grippers: " << dist_between_grippers << std::endl;
 
         vis_->visualizeGrippers("weird_gripper_goals", {grippers_goal_poses_.first, grippers_goal_poses_.second}, Visualizer::Red(), 1);
-        PressAnyKeyToContinue("Unfeasible goal location");
-        assert(false && "Unfeasible goal location");
+//        PressAnyKeyToContinue("Unfeasible goal location");
+//        assert(false && "Unfeasible goal location");
+        throw_arc_exception(std::runtime_error, "Unfeasible goal location");
     }
 
     // Clear the forward tree flann data
@@ -941,8 +942,8 @@ RRTPolicy BandRRT::plan(
 //        planning_statistics_["planning_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
 //        planning_statistics_["planning_size11_backward_connections_made               "] = (double)backward_connections_made_;
 
-        ROS_INFO_STREAM_NAMED("rrt", "RRT Helper Planning Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl);
-        storeTree(forward_tree_);
+//        ROS_INFO_STREAM_NAMED("rrt", "RRT Helper Planning Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl);
+//        storeTree(forward_tree_);
 
         if (visualization_enabled_globally_)
         {
@@ -980,7 +981,7 @@ RRTPolicy BandRRT::plan(
         const bool visualize_rrt_smoothing = visualization_enabled_globally_ && true;
         shortcutSmoothPolicy(policy, visualize_rrt_smoothing);
         robot_->unlockEnvironment();
-        std::cout << "RRT Helper Smoothing Statistics:\n" << PrettyPrint::PrettyPrint(smoothing_statistics_, false, "\n") << std::endl << std::endl;
+//        std::cout << "RRT Helper Smoothing Statistics:\n" << PrettyPrint::PrettyPrint(smoothing_statistics_, false, "\n") << std::endl << std::endl;
 
 //        ROS_INFO_NAMED("rrt", "Playing back smoothed path in OpenRAVE");
 //        robot_->testPathForCollision(ConvertRRTPathToRobotPath(smoothed_path));
@@ -1783,7 +1784,7 @@ RRTNode BandRRT::configSampling(const bool sample_band)
     const double sampling_time = stopwatch(READ);
     total_sampling_time_ += sampling_time;
 
-    sample.serialize(sample_history_buffer_);
+//    sample.serialize(sample_history_buffer_);
 
     return sample;
 }
@@ -2738,15 +2739,15 @@ void BandRRT::checkNewStatesForGoal(const ssize_t num_nodes)
     }
     if (force_nn_rebuild)
     {
-        if ((double)sample_history_buffer_.size() < 4e9)
-        {
-            ROS_INFO_STREAM_NAMED("rrt", "Sample history buffer size: " << sample_history_buffer_.size() << ". Saving to file.");
-            ZlibHelpers::CompressAndWriteToFile(sample_history_buffer_, GetLogFolder(*nh_) + "/sample_history_buffer.compressed");
-        }
-        else
-        {
-            ROS_ERROR_STREAM_NAMED("rrt", "Sample history buffer size: " << sample_history_buffer_.size() << ". Unable to save to file.");
-        }
+//        if ((double)sample_history_buffer_.size() < 4e9)
+//        {
+//            ROS_INFO_STREAM_NAMED("rrt", "Sample history buffer size: " << sample_history_buffer_.size() << ". Saving to file.");
+//            ZlibHelpers::CompressAndWriteToFile(sample_history_buffer_, GetLogFolder(*nh_) + "/sample_history_buffer.compressed");
+//        }
+//        else
+//        {
+//            ROS_ERROR_STREAM_NAMED("rrt", "Sample history buffer size: " << sample_history_buffer_.size() << ". Unable to save to file.");
+//        }
         rebuildNNIndex(forward_nn_index_,
                        forward_nn_raw_data_,
                        forward_nn_data_idx_to_tree_idx_,
