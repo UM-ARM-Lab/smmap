@@ -4,6 +4,7 @@
 #include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/timing.hpp>
 #include <arc_utilities/serialization_ros.hpp>
+#include <arc_utilities/filesystem.hpp>
 #include <smmap_utilities/neighbours.h>
 #include <boost/filesystem.hpp>
 #include <deformable_manipulation_experiment_params/conversions.hpp>
@@ -585,12 +586,14 @@ namespace smmap
                         const Isometry3d gripper_b_starting_pose = framework_.gripper_b_starting_pose_ * Translation3d(perturbations[b_idx]);
                         const Isometry3d gripper_b_ending_pose = gripper_b_starting_pose * Translation3d(framework_.gripper_b_action_vector_);
 
-                        const std::string filename(data_folder +
-                                                   "/cannonical_straight_test"
-                                                   "/perturbed_gripper_start_positions"
-                                                   "/gripper_a_" + ToString(perturbations[a_idx]) +
+                        const std::string folder(data_folder +
+                                                 "/cannonical_straight_test"
+                                                 "/perturbed_gripper_start_positions"
+                                                 "/gripper_a_" + ToString(perturbations[a_idx]));
+                        const std::string filename(folder +
                                                    "/gripper_b_" + ToString(perturbations[b_idx]) +
                                                    ".compressed");
+                        arc_utilities::CreateDirectory(folder);
 
                         const auto test = framework_.robot_->toRosTransitionTest(
                                     framework_.initial_world_state_.rope_node_transforms_,
@@ -645,12 +648,14 @@ namespace smmap
                         const Isometry3d gripper_a_ending_pose = framework_.gripper_a_starting_pose_ * Translation3d(gripper_a_action_vector_normalized);
                         const Isometry3d gripper_b_ending_pose = framework_.gripper_b_starting_pose_ * Translation3d(gripper_b_action_vector_normalized);
 
-                        const std::string filename(data_folder +
-                                                   "/cannonical_straight_test"
-                                                   "/perturbed_gripper_action_vectors"
-                                                   "/gripper_a_" + ToString(perturbations[a_idx]) +
+                        const std::string folder(data_folder +
+                                                 "/cannonical_straight_test"
+                                                 "/perturbed_gripper_action_vectors"
+                                                 "/gripper_a_" + ToString(perturbations[a_idx]));
+                        const std::string filename(folder +
                                                    "/gripper_b_" + ToString(perturbations[b_idx]) +
                                                    ".compressed");
+                        arc_utilities::CreateDirectory(folder);
 
                         const auto test = framework_.robot_->toRosTransitionTest(
                                     framework_.initial_world_state_.rope_node_transforms_,
