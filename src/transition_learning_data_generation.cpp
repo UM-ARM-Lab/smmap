@@ -565,7 +565,9 @@ namespace smmap
                         generateTestPath({framework_.gripper_a_starting_pose_, framework_.gripper_b_starting_pose_}),
                         {gripper_a_ending_pose_, gripper_b_ending_pose_});
             tests.push_back(canonical_test);
-            filenames.push_back("cannonical_straight_test");
+            filenames.push_back(data_folder +
+                                "/cannonical_straight_test"
+                                "/unmodified.compressed");
         }
 
         //// Generate versions with perturbed gripper start positions //////////
