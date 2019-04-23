@@ -394,13 +394,13 @@ namespace smmap
         };
     }
 
-    void TransitionTesting::clampGripperDeltas(Ref<Vector3d> a_delta, Ref<Vector3d> b_delta)
+    void TransitionTesting::clampGripperDeltas(Ref<Vector3d> a_delta, Ref<Vector3d> b_delta) const
     {
         const double distance = std::sqrt(a_delta.squaredNorm() + b_delta.squaredNorm());
         if (distance > task_params_.max_gripper_step_size_)
         {
-            gripper_a_action_vector_ *= (task_params_.max_gripper_step_size_ / distance);
-            gripper_b_action_vector_ *= (task_params_.max_gripper_step_size_ / distance);
+            a_delta *= (task_params_.max_gripper_step_size_ / distance);
+            b_delta *= (task_params_.max_gripper_step_size_ / distance);
         }
     }
 
@@ -506,10 +506,11 @@ namespace smmap
         return ss.str();
     }
 
+    // Note: this includes "no perturbation" so that it can be combined "cartesian-product" style
     static VectorVector3d Vec3dPerturbations(const double max_magnitude, const int num_divisions)
     {
         VectorVector3d perturbations;
-        perturbations.reserve((size_t)(std::pow(2 * num_divisions + 1, 3) - 1));
+        perturbations.reserve((size_t)(std::pow(2 * num_divisions + 1, 3)));
         for (int x_idx = -num_divisions; x_idx <= num_divisions; ++x_idx)
         {
             const double x_delta = max_magnitude * x_idx / num_divisions;
@@ -518,11 +519,8 @@ namespace smmap
                 const double y_delta = max_magnitude * y_idx / num_divisions;
                 for (int z_idx = -num_divisions; z_idx <= num_divisions; ++z_idx)
                 {
-                    if (!(x_idx == 0 && y_idx == 0 && z_idx == 0))
-                    {
-                        const double z_delta = max_magnitude * z_idx / num_divisions;
-                        perturbations.push_back(Vector3d(x_delta, y_delta, z_delta));
-                    }
+                    const double z_delta = max_magnitude * z_idx / num_divisions;
+                    perturbations.push_back(Vector3d(x_delta, y_delta, z_delta));
                 }
             }
         }
@@ -538,8 +536,11 @@ namespace smmap
     void TransitionTesting::DataGeneration::generateTestData(
             const std::string& data_folder)
     {
+        const auto num_threads = GetNumOMPThreads();
         std::vector<deformable_manipulation_msgs::TransitionTest> tests;
         std::vector<std::string> filenames;
+        tests.reserve(num_threads);
+        filenames.reserve(num_threads);
 
 //        std::vector<deformable_manipulation_msgs::TransitionTestResult> results(tests.size());
         const auto feedback_callback = [&] (const size_t test_id, const deformable_manipulation_msgs::TransitionTestResult& result)
@@ -567,58 +568,118 @@ namespace smmap
         }
 
         //// Generate versions with perturbed gripper start positions //////////
-
-        const auto gripper_positions_perturbations_max_magnitude = ROSHelpers::GetParamRequired<double>(*framework_.ph_, "perturbations/gripper_positions/max_magnitude", __func__).GetImmutable();
-        const auto gripper_positions_perturbations_num_divisions = ROSHelpers::GetParamRequired<int>(*framework_.ph_, "perturbations/gripper_positions/num_divisions", __func__).GetImmutable();
-        const auto gripper_positions_perturbations = Vec3dPerturbations(gripper_positions_perturbations_max_magnitude, gripper_positions_perturbations_num_divisions);
-        std::cout << "Num total perturbations: " << gripper_positions_perturbations.size() << std::endl;
-        const auto num_threads = GetNumOMPThreads();
-        #pragma omp parallel for
-        for (size_t a_idx = 0; a_idx < gripper_positions_perturbations.size(); ++a_idx)
         {
-            Isometry3d gripper_a_starting_pose = framework_.gripper_a_starting_pose_ * Translation3d(gripper_positions_perturbations[a_idx]);
-            Isometry3d gripper_a_ending_pose = gripper_a_starting_pose * Translation3d(framework_.gripper_a_action_vector_);
-            for (size_t b_idx = 0; b_idx < gripper_positions_perturbations.size(); ++b_idx)
+            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*framework_.ph_, "perturbations/gripper_positions/max_magnitude", __func__).GetImmutable();
+            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*framework_.ph_, "perturbations/gripper_positions/num_divisions", __func__).GetImmutable();
+            const auto perturbations = Vec3dPerturbations(max_magnitude, num_divisions);
+            std::cout << "Num position perturbations: " << perturbations.size() * perturbations.size()<< std::endl;
+            #pragma omp parallel for
+            for (size_t a_idx = 0; a_idx < perturbations.size(); ++a_idx)
             {
-                try
+                const Isometry3d gripper_a_starting_pose = framework_.gripper_a_starting_pose_ * Translation3d(perturbations[a_idx]);
+                const Isometry3d gripper_a_ending_pose = gripper_a_starting_pose * Translation3d(framework_.gripper_a_action_vector_);
+                for (size_t b_idx = 0; b_idx < perturbations.size(); ++b_idx)
                 {
-                    const Isometry3d gripper_b_starting_pose = framework_.gripper_b_starting_pose_ * Translation3d(gripper_positions_perturbations[b_idx]);
-                    const Isometry3d gripper_b_ending_pose = gripper_b_starting_pose * Translation3d(framework_.gripper_b_action_vector_);
-
-                    const std::string filename(data_folder +
-                                               "/cannonical_straight_test_"
-                                               "_perturbed_gripper_start_positions_"
-                                               "_gripper_a_" + ToString(gripper_positions_perturbations[a_idx]) +
-                                               "_gripper_b_" + ToString(gripper_positions_perturbations[b_idx]) +
-                                               ".compressed");
-
-                    const auto test = framework_.robot_->toRosTransitionTest(
-                                framework_.initial_world_state_.rope_node_transforms_,
-                                framework_.initial_world_state_.all_grippers_single_pose_,
-                                generateTestPath({gripper_a_starting_pose, gripper_b_starting_pose}),
-                                {gripper_a_ending_pose, gripper_b_ending_pose});
-
-                    #pragma omp critical
+                    try
                     {
-                        // Add the test to the list waiting to be executed
-                        tests.push_back(test);
-                        filenames.push_back(filename);
+                        const Isometry3d gripper_b_starting_pose = framework_.gripper_b_starting_pose_ * Translation3d(perturbations[b_idx]);
+                        const Isometry3d gripper_b_ending_pose = gripper_b_starting_pose * Translation3d(framework_.gripper_b_action_vector_);
 
-                        // Execute the tests if tehre are enough to run
-                        if (tests.size() == num_threads)
+                        const std::string filename(data_folder +
+                                                   "/cannonical_straight_test"
+                                                   "/perturbed_gripper_start_positions"
+                                                   "/gripper_a_" + ToString(perturbations[a_idx]) +
+                                                   "/gripper_b_" + ToString(perturbations[b_idx]) +
+                                                   ".compressed");
+
+                        const auto test = framework_.robot_->toRosTransitionTest(
+                                    framework_.initial_world_state_.rope_node_transforms_,
+                                    framework_.initial_world_state_.all_grippers_single_pose_,
+                                    generateTestPath({gripper_a_starting_pose, gripper_b_starting_pose}),
+                                    {gripper_a_ending_pose, gripper_b_ending_pose});
+
+                        #pragma omp critical
                         {
-                            framework_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
-                            tests.clear();
-                            filenames.clear();
+                            // Add the test to the list waiting to be executed
+                            tests.push_back(test);
+                            filenames.push_back(filename);
+
+                            // Execute the tests if tehre are enough to run
+                            if (tests.size() == num_threads)
+                            {
+                                framework_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
+                                tests.clear();
+                                filenames.clear();
+                            }
                         }
                     }
+                    catch (const std::runtime_error& ex)
+                    {
+                        ROS_ERROR_STREAM_NAMED("data_generation", "Unable to plan with perturbation"
+                                               << " a: " << perturbations[a_idx].transpose()
+                                               << " b: " << perturbations[b_idx].transpose()
+                                               << " Message: " << ex.what());
+                    }
                 }
-                catch (const std::runtime_error& ex)
+            }
+        }
+
+        //// Generate versions with perturbed action vectors ///////////////////
+        {
+            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*framework_.ph_, "perturbations/action_vectors/max_magnitude", __func__).GetImmutable();
+            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*framework_.ph_, "perturbations/action_vectors/num_divisions", __func__).GetImmutable();
+            const auto perturbations = Vec3dPerturbations(max_magnitude, num_divisions);
+            std::cout << "Num action perturbations: " << perturbations.size() * perturbations.size()<< std::endl;
+            for (size_t a_idx = 0; a_idx < perturbations.size(); ++a_idx)
+            {
+                const Vector3d gripper_a_action_vector = framework_.gripper_a_action_vector_ + perturbations[a_idx];
+                for (size_t b_idx = 0; b_idx < perturbations.size(); ++b_idx)
                 {
-                    ROS_ERROR_STREAM_NAMED("data_generation", "Unable to plan with perturbation"
-                                           << " a: " << gripper_positions_perturbations[a_idx].transpose()
-                                           << " b: " << gripper_positions_perturbations[b_idx].transpose()
-                                           << " Message: " << ex.what());
+                    try
+                    {
+                        const Vector3d gripper_b_action_vector = framework_.gripper_b_action_vector_ + perturbations[b_idx];
+                        Vector3d gripper_a_action_vector_normalized = gripper_a_action_vector;
+                        Vector3d gripper_b_action_vector_normalized = gripper_b_action_vector;
+                        framework_.clampGripperDeltas(gripper_a_action_vector_normalized, gripper_b_action_vector_normalized);
+
+                        const Isometry3d gripper_a_ending_pose = framework_.gripper_a_starting_pose_ * Translation3d(gripper_a_action_vector_normalized);
+                        const Isometry3d gripper_b_ending_pose = framework_.gripper_b_starting_pose_ * Translation3d(gripper_b_action_vector_normalized);
+
+                        const std::string filename(data_folder +
+                                                   "/cannonical_straight_test"
+                                                   "/perturbed_gripper_action_vectors"
+                                                   "/gripper_a_" + ToString(perturbations[a_idx]) +
+                                                   "/gripper_b_" + ToString(perturbations[b_idx]) +
+                                                   ".compressed");
+
+                        const auto test = framework_.robot_->toRosTransitionTest(
+                                    framework_.initial_world_state_.rope_node_transforms_,
+                                    framework_.initial_world_state_.all_grippers_single_pose_,
+                                    generateTestPath({framework_.gripper_a_starting_pose_, framework_.gripper_b_starting_pose_}),
+                                    {gripper_a_ending_pose, gripper_b_ending_pose});
+
+                        #pragma omp critical
+                        {
+                            // Add the test to the list waiting to be executed
+                            tests.push_back(test);
+                            filenames.push_back(filename);
+
+                            // Execute the tests if tehre are enough to run
+                            if (tests.size() == num_threads)
+                            {
+                                framework_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
+                                tests.clear();
+                                filenames.clear();
+                            }
+                        }
+                    }
+                    catch (const std::runtime_error& ex)
+                    {
+                        ROS_ERROR_STREAM_NAMED("data_generation", "Unable to plan with perturbation"
+                                               << " a: " << perturbations[a_idx].transpose()
+                                               << " b: " << perturbations[b_idx].transpose()
+                                               << " Message: " << ex.what());
+                    }
                 }
             }
         }

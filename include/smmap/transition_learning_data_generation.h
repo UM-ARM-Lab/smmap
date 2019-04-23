@@ -96,7 +96,9 @@ namespace smmap
         void initialize(const WorldState& world_state);
         void initializeBand(const WorldState& world_state);
         void initializeRRTParams();
-        void clampGripperDeltas(Eigen::Ref<Eigen::Vector3d> a_delta, Eigen::Ref<Eigen::Vector3d> b_delta);
+        void clampGripperDeltas(
+                Eigen::Ref<Eigen::Vector3d> a_delta,
+                Eigen::Ref<Eigen::Vector3d> b_delta) const;
         std::vector<std::string> getDataFileList();
         TransitionSimulationRecord loadSimRecord(const std::string& filename);
 
