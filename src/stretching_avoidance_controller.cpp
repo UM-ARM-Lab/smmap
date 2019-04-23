@@ -28,7 +28,7 @@ inline std::string print(const AllGrippersSinglePoseDelta& delta)
 {
     assert(delta.size() == 2);
 
-    ostringstream strm;
+    std::ostringstream strm;
     strm << "0th: " << delta[0].transpose() << "     1st: " << delta[1].transpose();
 
     return strm.str();
