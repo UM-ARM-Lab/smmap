@@ -22,11 +22,10 @@ namespace smmap
         TransitionEstimation::StateTransition template_;
         ObjectPointSet template_band_surface_;
 
-        Eigen::Isometry3d center_of_rotation_;
-        Eigen::Isometry3d transform_applied_;
-
         TransitionEstimation::StateTransition tested_;
         ObjectPointSet tested_band_surface_;
+
+        TransitionEstimation::TransitionAdaptationResult adaptation_result_;
 
         uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
 
@@ -109,57 +108,22 @@ namespace smmap
         class DataGeneration
         {
         public:
-            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
             DataGeneration(const TransitionTesting& framework);
             void generateTestData(const std::string& data_folder);
 
         private:
-            const TransitionTesting& framework_;
-            arc_helpers::RandomRotationGenerator random_rotation_distribution_;
-
-            // Stored here because Eigen + tuple = bad
-            EigenHelpers::VectorIsometry3d random_test_rope_nodes_start_;
-            AllGrippersSinglePose random_test_starting_gripper_poses_;
-            AllGrippersSinglePose random_test_ending_gripper_poses_;
-            Eigen::Isometry3d random_test_transform_applied_;
+            const TransitionTesting& fw_;
 
             AllGrippersPoseTrajectory generateTestPath(
                     const AllGrippersSinglePose& gripper_target_poses);
-
-            void generateRandomTest(
-                    std::mt19937_64 generator,
-                    const TransitionEstimation::StateTransition& trans);
         };
         friend class DataGeneration;
 
-        class SE3Prediction
+        class DataProcessing
         {
         public:
-            SE3Prediction(const TransitionTesting& framework);
-
-            void visualizePrediction();
-
-            bool prediction_valid_;
-            const TransitionTesting& framework_;
-            static constexpr auto BASENAME = "SE3_ALIGNMENT";
-
-            RubberBand::ConstPtr test_band_;
-            PairGripperPositions test_action_;
-
-            size_t num_gripper_steps_;
-            std::vector<RubberBand> stored_bands_;
-            ObjectPointSet warping_target_points_;
-
-            ObjectPointSet warping_template_points_planned_;
-            ObjectPointSet template_planned_band_aligned_to_target_;
-            ObjectPointSet stored_bands_planned_aligned_to_target_;
-
-            ObjectPointSet warping_template_points_executed_;
-            ObjectPointSet template_executed_band_aligned_to_target_;
-            ObjectPointSet stored_bands_executed_aligned_to_target_;
-
-            std::map<std::string, std::vector<RubberBand>> results_;
+        private:
         };
-        friend class SE3Prediction;
+        friend class DataProcessing;
     };
 }

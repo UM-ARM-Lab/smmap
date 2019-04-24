@@ -2637,7 +2637,7 @@ std::pair<WorldState, RubberBand::Ptr> TaskFramework::loadStoredWorldState()
         deserialized_result.first = deserialized_world_state.first;
 
         deserialized_result.second = std::make_shared<RubberBand>(*rubber_band_);
-        deserialized_result.second->deserializeIntoSelf(buffer, deserialized_world_state.second);
+        deserialized_result.second->deserialize(buffer, deserialized_world_state.second);
     }
     catch (const std::exception& e)
     {

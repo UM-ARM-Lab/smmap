@@ -27,6 +27,8 @@ namespace smmap
         static ObjectPointSet AggregateBandPoints(
                 const std::vector<QuinlanRubberBand>& bands);
         static ObjectPointSet AggregateBandPoints(
+                const std::vector<QuinlanRubberBand::Ptr>& bands);
+        static ObjectPointSet AggregateBandPoints(
                 const std::vector<QuinlanRubberBand::ConstPtr>& bands);
 
         static ObjectPointSet PointsFromBandPointsAndGripperTargets(
@@ -155,8 +157,12 @@ namespace smmap
                 const int32_t id = 1);
 
         uint64_t serialize(std::vector<uint8_t>& buffer) const;
-        uint64_t deserializeIntoSelf(const std::vector<uint8_t>& buffer, const uint64_t current);
+        uint64_t deserialize(const std::vector<uint8_t>& buffer, const uint64_t current);
         static uint64_t Serialize(const QuinlanRubberBand::ConstPtr& band, std::vector<uint8_t>& buffer);
+        static std::pair<QuinlanRubberBand::Ptr, uint64_t> Deserialize(
+                const std::vector<uint8_t>& buffer,
+                const uint64_t current,
+                const QuinlanRubberBand& template_band);
 
         bool operator==(const QuinlanRubberBand& other) const;
         bool operator!=(const QuinlanRubberBand& other) const;

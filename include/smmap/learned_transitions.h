@@ -23,9 +23,9 @@ namespace smmap
             RubberBand::Ptr planned_rubber_band_;
             EigenHelpers::VectorIsometry3d rope_node_transforms_;
 
-            uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
+            uint64_t serialize(std::vector<uint8_t>& buffer) const;
 
-            uint64_t deserializeIntoSelf(
+            uint64_t deserialize(
                     const std::vector<uint8_t>& buffer,
                     const uint64_t current);
 
@@ -56,9 +56,9 @@ namespace smmap
             std::vector<WorldState> microstep_state_history_;
             std::vector<RubberBand::Ptr> microstep_band_history_;
 
-            uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
+            uint64_t serialize(std::vector<uint8_t>& buffer) const;
 
-            uint64_t deserializeIntoSelf(
+            uint64_t deserialize(
                     const std::vector<uint8_t>& buffer,
                     const uint64_t current);
 
@@ -124,13 +124,42 @@ namespace smmap
 
         struct TransitionAdaptationResult
         {
+            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+            // Results
             RubberBand::Ptr default_next_band_;
             RubberBand::Ptr result_;
+
+            // Intermediary calculations
+            Eigen::Isometry3d invariant_transform_;
+            ObjectPointSet template_planned_band_aligned_to_target_;
+            ObjectPointSet next_band_points_to_smooth_;
+            ObjectPointSet transformed_band_surface_points_;
+            std::vector<RubberBand::Ptr> tightened_transformed_bands_;
+            ObjectPointSet tightened_transformed_bands_surface_;
+            std::vector<bool> foh_changes_;
+
+            // "Distance" evaluations
             double template_misalignment_dist_;
             bool default_band_foh_result_;
             double default_band_dist_;
             bool entire_surface_mapable_;
             int num_foh_changes_;
+
+            uint64_t serialize(std::vector<uint8_t>& buffer) const;
+
+            static uint64_t Serialize(
+                    const TransitionAdaptationResult& adaptation_result,
+                    std::vector<uint8_t>& buffer);
+
+            static std::pair<TransitionAdaptationResult, uint64_t> Deserialize(
+                    const std::vector<uint8_t>& buffer,
+                    const uint64_t current,
+                    const RubberBand& template_band);
+
+            bool operator==(const TransitionAdaptationResult& other) const;
+
+            bool operator!=(const TransitionAdaptationResult& other) const;
         };
 
         TransitionAdaptationResult generateTransition(

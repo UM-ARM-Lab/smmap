@@ -474,7 +474,7 @@ std::pair<RRTNode, uint64_t> RRTNode::Deserialize(const std::vector<uint8_t>& bu
 
     // Deserialize the rubber band
     auto band = std::make_shared<RubberBand>(starting_band);
-    current_position += band->deserializeIntoSelf(buffer, current_position);
+    current_position += band->deserialize(buffer, current_position);
 
     // Deserialize the cost to come
     const auto cost_to_come_deserialized = arc_utilities::DeserializeFixedSizePOD<double>(buffer, current_position);

@@ -96,6 +96,28 @@ namespace smmap
     }
 
     ObjectPointSet QuinlanRubberBand::AggregateBandPoints(
+            const std::vector<QuinlanRubberBand::Ptr>& bands)
+    {
+        if (bands.size() == 0)
+        {
+            return ObjectPointSet();
+        }
+
+        const size_t points_per_band = bands[0]->upsampleBand().size();
+        ObjectPointSet points(3, points_per_band * bands.size());
+        for (size_t band_idx = 0; band_idx < bands.size(); ++band_idx)
+        {
+            const auto band_points = bands[band_idx]->upsampleBand();
+            for (size_t point_idx = 0; point_idx < band_points.size(); ++point_idx)
+            {
+                points.col(band_idx * points_per_band + point_idx) =
+                        band_points[point_idx];
+            }
+        }
+        return points;
+    }
+
+    ObjectPointSet QuinlanRubberBand::AggregateBandPoints(
             const std::vector<QuinlanRubberBand::ConstPtr>& bands)
     {
         if (bands.size() == 0)
@@ -1405,14 +1427,14 @@ namespace smmap
         // Verify no mistakes were made
         {
             auto tmp = *this;
-            const auto bytes_read = tmp.deserializeIntoSelf(buffer, starting_bytes);
+            const auto bytes_read = tmp.deserialize(buffer, starting_bytes);
             assert(bytes_written == bytes_read);
             assert(*this == tmp);
         }
         return bytes_written;
     }
 
-    uint64_t QuinlanRubberBand::deserializeIntoSelf(const std::vector<uint8_t>& buffer, const uint64_t current)
+    uint64_t QuinlanRubberBand::deserialize(const std::vector<uint8_t>& buffer, const uint64_t current)
     {
         const auto deserialized_band_results =
                 arc_utilities::DeserializeVector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>(
@@ -1432,6 +1454,16 @@ namespace smmap
     uint64_t QuinlanRubberBand::Serialize(const QuinlanRubberBand::ConstPtr& band, std::vector<uint8_t>& buffer)
     {
         return band->serialize(buffer);
+    }
+
+    std::pair<QuinlanRubberBand::Ptr, uint64_t> QuinlanRubberBand::Deserialize(
+            const std::vector<uint8_t>& buffer,
+            const uint64_t current,
+            const QuinlanRubberBand& template_band)
+    {
+        auto band = std::make_shared<QuinlanRubberBand>(template_band);
+        const auto bytes = band->deserialize(buffer, current);
+        return {band, bytes};
     }
 
     void QuinlanRubberBand::storeBand() const
@@ -1490,7 +1522,7 @@ namespace smmap
             ROS_INFO_STREAM("Loading band from " << full_path);
 
             const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(full_path);
-            deserializeIntoSelf(buffer, 0);
+            deserialize(buffer, 0);
         }
         catch (const std::exception& e)
         {

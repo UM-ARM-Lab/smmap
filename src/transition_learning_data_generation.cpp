@@ -69,6 +69,13 @@ namespace smmap
         target_gripper_poses[1].translation() = trans.ending_gripper_positions_.second;
         return {starting_gripper_poses, target_gripper_poses};
     }
+
+    static std::string ToString(const Eigen::Vector3d& mat)
+    {
+        std::stringstream ss;
+        ss << mat.x() << "_" << mat.y() << "_" << mat.z() ;
+        return ss.str();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,12 +88,11 @@ namespace smmap
     {
         const auto starting_bytes = buffer.size();
         uint64_t bytes_written = 0;
-        bytes_written += template_.serializeSelf(buffer);
+        bytes_written += template_.serialize(buffer);
         bytes_written += arc_utilities::SerializeEigen(template_band_surface_, buffer);
-        bytes_written += arc_utilities::SerializeEigen(center_of_rotation_, buffer);
-        bytes_written += arc_utilities::SerializeEigen(transform_applied_, buffer);
-        bytes_written += tested_.serializeSelf(buffer);
+        bytes_written += tested_.serialize(buffer);
         bytes_written += arc_utilities::SerializeEigen(tested_band_surface_, buffer);
+        bytes_written += adaptation_result_.serialize(buffer);
 
         const auto ending_bytes = buffer.size();
         assert(ending_bytes - starting_bytes == bytes_written);
@@ -118,14 +124,6 @@ namespace smmap
                 arc_utilities::DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
         bytes_read += template_band_surface_deserialized.second;
 
-        const auto center_of_rotation_deserialized =
-                arc_utilities::DeserializeEigen<Isometry3d>(buffer, current + bytes_read);
-        bytes_read += center_of_rotation_deserialized.second;
-
-        const auto transform_applied_deserialized =
-                arc_utilities::DeserializeEigen<Isometry3d>(buffer, current + bytes_read);
-        bytes_read += transform_applied_deserialized.second;
-
         const auto tested_deserialized =
                 TransitionEstimation::StateTransition::Deserialize(buffer, current + bytes_read, template_band);
         bytes_read += tested_deserialized.second;
@@ -134,14 +132,17 @@ namespace smmap
                 arc_utilities::DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
         bytes_read += tested_band_surface_deserialized.second;
 
+        const auto adaptation_result_deserialized =
+                TransitionEstimation::TransitionAdaptationResult::Deserialize(buffer, current + bytes_read, template_band);
+        bytes_read += adaptation_result_deserialized.second;
+
         TransitionSimulationRecord record =
         {
             template_deserialized.first,
             template_band_surface_deserialized.first,
-            center_of_rotation_deserialized.first,
-            transform_applied_deserialized.first,
             tested_deserialized.first,
-            tested_band_surface_deserialized.first
+            tested_band_surface_deserialized.first,
+            adaptation_result_deserialized.first
         };
         return {record, bytes_read};
     }
@@ -152,15 +153,7 @@ namespace smmap
         {
             return false;
         }
-        if ((template_band_surface_.array() != other.template_band_surface_.array()).any())
-        {
-            return false;
-        }
-        if ((center_of_rotation_.matrix().array() != other.center_of_rotation_.matrix().array()).any())
-        {
-            return false;
-        }
-        if ((transform_applied_.matrix().array() != other.transform_applied_.matrix().array()).any())
+        if (template_band_surface_ != other.template_band_surface_)
         {
             return false;
         }
@@ -168,22 +161,15 @@ namespace smmap
         {
             return false;
         }
-        if ((tested_band_surface_.array() != other.tested_band_surface_.array()).any())
+        if (tested_band_surface_ != other.tested_band_surface_)
+        {
+            return false;
+        }
+        if (adaptation_result_ != other.adaptation_result_)
         {
             return false;
         }
         return true;
-    }
-
-    void TransitionSimulationRecord::visualize(const Visualizer::Ptr& vis) const
-    {
-        const size_t points_per_band = template_.starting_state_.rubber_band_->upsampleBand().size();
-        const size_t num_bands = template_band_surface_.cols() / points_per_band;
-        TransitionEstimation::VisualizeTransition(vis, template_, 1, "template_");
-        TransitionEstimation::VisualizeTransition(vis, tested_, 1, "tested_");
-        vis->visualizeAxes("center_of_rotation", center_of_rotation_, 0.1, 0.005, 1);
-        RubberBand::VisualizeBandSurface(vis, template_band_surface_,   num_bands, Visualizer::Blue(), Visualizer::Red(),     "band_surface_template", 1);
-        RubberBand::VisualizeBandSurface(vis, tested_band_surface_,     num_bands, Visualizer::Cyan(), Visualizer::Magenta(), "band_surface_tested",   1);
     }
 }
 
@@ -500,13 +486,6 @@ namespace smmap
 
 namespace smmap
 {
-    static std::string ToString(const Eigen::Vector3d& mat)
-    {
-        std::stringstream ss;
-        ss << mat.x() << "_" << mat.y() << "_" << mat.z() ;
-        return ss.str();
-    }
-
     // Note: this includes "no perturbation" so that it can be combined "cartesian-product" style
     static VectorVector3d Vec3dPerturbations(const double max_magnitude, const int num_divisions)
     {
@@ -530,8 +509,7 @@ namespace smmap
 
     TransitionTesting::DataGeneration::DataGeneration(
             const TransitionTesting& framework)
-        : framework_(framework)
-        , random_rotation_distribution_()
+        : fw_(framework)
     {}
 
     void TransitionTesting::DataGeneration::generateTestData(
@@ -557,12 +535,12 @@ namespace smmap
 
         //// Generate the canonical example ////////////////////////////////////
         {
-            Isometry3d gripper_a_ending_pose_ = framework_.gripper_a_starting_pose_ * Translation3d(framework_.gripper_a_action_vector_);
-            Isometry3d gripper_b_ending_pose_ = framework_.gripper_b_starting_pose_ * Translation3d(framework_.gripper_b_action_vector_);
-            const auto canonical_test = framework_.robot_->toRosTransitionTest(
-                        framework_.initial_world_state_.rope_node_transforms_,
-                        framework_.initial_world_state_.all_grippers_single_pose_,
-                        generateTestPath({framework_.gripper_a_starting_pose_, framework_.gripper_b_starting_pose_}),
+            Isometry3d gripper_a_ending_pose_ = fw_.gripper_a_starting_pose_ * Translation3d(fw_.gripper_a_action_vector_);
+            Isometry3d gripper_b_ending_pose_ = fw_.gripper_b_starting_pose_ * Translation3d(fw_.gripper_b_action_vector_);
+            const auto canonical_test = fw_.robot_->toRosTransitionTest(
+                        fw_.initial_world_state_.rope_node_transforms_,
+                        fw_.initial_world_state_.all_grippers_single_pose_,
+                        generateTestPath({fw_.gripper_a_starting_pose_, fw_.gripper_b_starting_pose_}),
                         {gripper_a_ending_pose_, gripper_b_ending_pose_});
             tests.push_back(canonical_test);
             filenames.push_back(data_folder +
@@ -572,21 +550,21 @@ namespace smmap
 
         //// Generate versions with perturbed gripper start positions //////////
         {
-            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*framework_.ph_, "perturbations/gripper_positions/max_magnitude", __func__).GetImmutable();
-            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*framework_.ph_, "perturbations/gripper_positions/num_divisions", __func__).GetImmutable();
+            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*fw_.ph_, "perturbations/gripper_positions/max_magnitude", __func__).GetImmutable();
+            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*fw_.ph_, "perturbations/gripper_positions/num_divisions", __func__).GetImmutable();
             const auto perturbations = Vec3dPerturbations(max_magnitude, num_divisions);
             std::cout << "Num position perturbations: " << perturbations.size() * perturbations.size()<< std::endl;
             #pragma omp parallel for
             for (size_t a_idx = 0; a_idx < perturbations.size(); ++a_idx)
             {
-                const Isometry3d gripper_a_starting_pose = framework_.gripper_a_starting_pose_ * Translation3d(perturbations[a_idx]);
-                const Isometry3d gripper_a_ending_pose = gripper_a_starting_pose * Translation3d(framework_.gripper_a_action_vector_);
+                const Isometry3d gripper_a_starting_pose = fw_.gripper_a_starting_pose_ * Translation3d(perturbations[a_idx]);
+                const Isometry3d gripper_a_ending_pose = gripper_a_starting_pose * Translation3d(fw_.gripper_a_action_vector_);
                 for (size_t b_idx = 0; b_idx < perturbations.size(); ++b_idx)
                 {
                     try
                     {
-                        const Isometry3d gripper_b_starting_pose = framework_.gripper_b_starting_pose_ * Translation3d(perturbations[b_idx]);
-                        const Isometry3d gripper_b_ending_pose = gripper_b_starting_pose * Translation3d(framework_.gripper_b_action_vector_);
+                        const Isometry3d gripper_b_starting_pose = fw_.gripper_b_starting_pose_ * Translation3d(perturbations[b_idx]);
+                        const Isometry3d gripper_b_ending_pose = gripper_b_starting_pose * Translation3d(fw_.gripper_b_action_vector_);
 
                         const std::string folder(data_folder +
                                                  "/cannonical_straight_test"
@@ -599,9 +577,9 @@ namespace smmap
 
                         if (!boost::filesystem::is_regular_file(filename))
                         {
-                            const auto test = framework_.robot_->toRosTransitionTest(
-                                        framework_.initial_world_state_.rope_node_transforms_,
-                                        framework_.initial_world_state_.all_grippers_single_pose_,
+                            const auto test = fw_.robot_->toRosTransitionTest(
+                                        fw_.initial_world_state_.rope_node_transforms_,
+                                        fw_.initial_world_state_.all_grippers_single_pose_,
                                         generateTestPath({gripper_a_starting_pose, gripper_b_starting_pose}),
                                         {gripper_a_ending_pose, gripper_b_ending_pose});
 
@@ -614,7 +592,7 @@ namespace smmap
                                 // Execute the tests if tehre are enough to run
                                 if (tests.size() == num_threads)
                                 {
-                                    framework_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
+                                    fw_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
                                     tests.clear();
                                     filenames.clear();
                                 }
@@ -634,25 +612,25 @@ namespace smmap
 
         //// Generate versions with perturbed action vectors ///////////////////
         {
-            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*framework_.ph_, "perturbations/action_vectors/max_magnitude", __func__).GetImmutable();
-            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*framework_.ph_, "perturbations/action_vectors/num_divisions", __func__).GetImmutable();
+            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*fw_.ph_, "perturbations/action_vectors/max_magnitude", __func__).GetImmutable();
+            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*fw_.ph_, "perturbations/action_vectors/num_divisions", __func__).GetImmutable();
             const auto perturbations = Vec3dPerturbations(max_magnitude, num_divisions);
             std::cout << "Num action perturbations: " << perturbations.size() * perturbations.size()<< std::endl;
             #pragma omp parallel for
             for (size_t a_idx = 0; a_idx < perturbations.size(); ++a_idx)
             {
-                const Vector3d gripper_a_action_vector = framework_.gripper_a_action_vector_ + perturbations[a_idx];
+                const Vector3d gripper_a_action_vector = fw_.gripper_a_action_vector_ + perturbations[a_idx];
                 for (size_t b_idx = 0; b_idx < perturbations.size(); ++b_idx)
                 {
                     try
                     {
-                        const Vector3d gripper_b_action_vector = framework_.gripper_b_action_vector_ + perturbations[b_idx];
+                        const Vector3d gripper_b_action_vector = fw_.gripper_b_action_vector_ + perturbations[b_idx];
                         Vector3d gripper_a_action_vector_normalized = gripper_a_action_vector;
                         Vector3d gripper_b_action_vector_normalized = gripper_b_action_vector;
-                        framework_.clampGripperDeltas(gripper_a_action_vector_normalized, gripper_b_action_vector_normalized);
+                        fw_.clampGripperDeltas(gripper_a_action_vector_normalized, gripper_b_action_vector_normalized);
 
-                        const Isometry3d gripper_a_ending_pose = framework_.gripper_a_starting_pose_ * Translation3d(gripper_a_action_vector_normalized);
-                        const Isometry3d gripper_b_ending_pose = framework_.gripper_b_starting_pose_ * Translation3d(gripper_b_action_vector_normalized);
+                        const Isometry3d gripper_a_ending_pose = fw_.gripper_a_starting_pose_ * Translation3d(gripper_a_action_vector_normalized);
+                        const Isometry3d gripper_b_ending_pose = fw_.gripper_b_starting_pose_ * Translation3d(gripper_b_action_vector_normalized);
 
                         const std::string folder(data_folder +
                                                  "/cannonical_straight_test"
@@ -665,10 +643,10 @@ namespace smmap
 
                         if (!boost::filesystem::is_regular_file(filename))
                         {
-                            const auto test = framework_.robot_->toRosTransitionTest(
-                                        framework_.initial_world_state_.rope_node_transforms_,
-                                        framework_.initial_world_state_.all_grippers_single_pose_,
-                                        generateTestPath({framework_.gripper_a_starting_pose_, framework_.gripper_b_starting_pose_}),
+                            const auto test = fw_.robot_->toRosTransitionTest(
+                                        fw_.initial_world_state_.rope_node_transforms_,
+                                        fw_.initial_world_state_.all_grippers_single_pose_,
+                                        generateTestPath({fw_.gripper_a_starting_pose_, fw_.gripper_b_starting_pose_}),
                                         {gripper_a_ending_pose, gripper_b_ending_pose});
 
                             #pragma omp critical
@@ -680,7 +658,7 @@ namespace smmap
                                 // Execute the tests if tehre are enough to run
                                 if (tests.size() == num_threads)
                                 {
-                                    framework_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
+                                    fw_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
                                     tests.clear();
                                     filenames.clear();
                                 }
@@ -702,7 +680,7 @@ namespace smmap
         // Run an tests left over
         if (tests.size() != 0)
         {
-            framework_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
+            fw_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
             tests.clear();
             filenames.clear();
         }
@@ -712,32 +690,32 @@ namespace smmap
             const AllGrippersSinglePose& gripper_target_poses)
     {
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
-        auto band_rrt = BandRRT(framework_.nh_,
-                                framework_.ph_,
-                                *framework_.world_params_,
-                                framework_.planning_params_,
-                                framework_.smoothing_params_,
-                                framework_.task_params_,
-                                framework_.vis_,
+        auto band_rrt = BandRRT(fw_.nh_,
+                                fw_.ph_,
+                                *fw_.world_params_,
+                                fw_.planning_params_,
+                                fw_.smoothing_params_,
+                                fw_.task_params_,
+                                fw_.vis_,
                                 false);
 
         const auto gripper_config = RRTGrippersRepresentation(
-                    framework_.initial_world_state_.all_grippers_single_pose_[0],
-                    framework_.initial_world_state_.all_grippers_single_pose_[1]);
+                    fw_.initial_world_state_.all_grippers_single_pose_[0],
+                    fw_.initial_world_state_.all_grippers_single_pose_[1]);
 
         RRTRobotRepresentation robot_config(6);
         robot_config.head<3>() = gripper_config.first.translation();
         robot_config.tail<3>() = gripper_config.second.translation();
 
         const auto rubber_band = RubberBand::BandFromWorldState(
-                    framework_.initial_world_state_, *framework_.band_);
+                    fw_.initial_world_state_, *fw_.band_);
 
         const RRTNode start_config(
                     gripper_config,
                     robot_config,
                     rubber_band);
 
-        const std::chrono::duration<double> time_limit(GetRRTTimeout(*framework_.ph_));
+        const std::chrono::duration<double> time_limit(GetRRTTimeout(*fw_.ph_));
 
         const auto policy = band_rrt.plan(start_config,
                                           {gripper_target_poses[0], gripper_target_poses[1]},
@@ -752,149 +730,13 @@ namespace smmap
         }
         return RRTPathToGrippersPoseTrajectory(policy[0].first);
     }
-
-    void TransitionTesting::DataGeneration::generateRandomTest(
-            std::mt19937_64 generator,
-            const TransitionEstimation::StateTransition& trans)
-    {
-        static const double grippers_delta_random_max = 0.025;     // meters
-        static const double translation_delta_random_max = 0.1;    // meters
-        static const double rotation_delta_max = 0.1;              // radians
-        const auto max_gripper_step_size = framework_.task_params_.max_gripper_step_size_;
-
-        // Transform all the data by the random translation and rotation of the test frame
-        bool valid = false;
-        while (!valid)
-        {
-            // Overridden if something renders this invalid
-            valid = true;
-
-            // Transform the whole band + gripper motion by some random amount
-            {
-                const Translation3d band_translation_offset((Vector3d::Random() * translation_delta_random_max));
-                Quaterniond band_rotation_offset = random_rotation_distribution_.GetQuaternion(generator);
-                while (2* std::acos(band_rotation_offset.w()) > rotation_delta_max)
-                {
-                    band_rotation_offset = random_rotation_distribution_.GetQuaternion(generator);
-                }
-                const Isometry3d random_test_transform = band_translation_offset * band_rotation_offset;
-                random_test_transform_applied_ =
-                        framework_.experiment_center_of_rotation_
-                        * random_test_transform
-                        * framework_.experiment_center_of_rotation_.inverse();
-
-                random_test_rope_nodes_start_ = TransformData(random_test_transform_applied_, trans.starting_state_.rope_node_transforms_);
-
-                const auto template_gripper_poses = ExtractGripperPosesFromTransition(trans);
-                random_test_starting_gripper_poses_ = TransformData(random_test_transform_applied_, template_gripper_poses.first);
-                random_test_ending_gripper_poses_ = TransformData(random_test_transform_applied_, template_gripper_poses.first);
-
-                if (framework_.sdf_->EstimateDistance3d(random_test_starting_gripper_poses_[0].translation()).first < framework_.task_params_.gripper_min_distance_to_obstacles_)
-                {
-                    valid = false;
-                }
-                if (framework_.sdf_->EstimateDistance3d(random_test_starting_gripper_poses_[1].translation()).first < framework_.task_params_.gripper_min_distance_to_obstacles_)
-                {
-                    valid = false;
-                }
-            }
-
-            // Transform the target position of the grippers by some random amount
-            {
-                const auto delta =
-                        Sub(ToGripperPositions(random_test_ending_gripper_poses_),
-                            ToGripperPositions(random_test_starting_gripper_poses_));
-
-                auto test_delta = delta;
-                test_delta.first += Vector3d::Random() * grippers_delta_random_max;
-                test_delta.second += Vector3d::Random() * grippers_delta_random_max;
-                const double test_delta_norm = std::sqrt(test_delta.first.squaredNorm() + test_delta.second.squaredNorm());
-                if (test_delta_norm > max_gripper_step_size)
-                {
-                    test_delta.first *= (max_gripper_step_size / test_delta_norm);
-                    test_delta.second *= (max_gripper_step_size / test_delta_norm);
-                }
-                random_test_ending_gripper_poses_[0].translation() += test_delta.first;
-                random_test_ending_gripper_poses_[1].translation() += test_delta.first;
-
-                if (framework_.sdf_->EstimateDistance3d(random_test_ending_gripper_poses_[0].translation()).first < framework_.task_params_.gripper_min_distance_to_obstacles_)
-                {
-                    valid = false;
-                }
-                if (framework_.sdf_->EstimateDistance3d(random_test_ending_gripper_poses_[1].translation()).first < framework_.task_params_.gripper_min_distance_to_obstacles_)
-                {
-                    valid = false;
-                }
-            }
-        }
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-//          Prediction
+//          Data Processing
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace smmap
 {
-    TransitionTesting::SE3Prediction::SE3Prediction(
-            const TransitionTesting &framework)
-        : prediction_valid_(false)
-        , framework_(framework)
-    {}
 
-    void TransitionTesting::SE3Prediction::visualizePrediction()
-    {
-        assert(prediction_valid_);
-
-
-        framework_.vis_->visualizePoints("TEMPLATE_POINTS_EXECUTED",
-                                         warping_template_points_executed_,
-                                         Visualizer::Green(), 1, 0.002);
-
-        framework_.vis_->visualizePoints("TEMPLATE_POINTS_PLANNED",
-                                         warping_template_points_planned_,
-                                         Visualizer::Green(), 1, 0.002);
-
-        framework_.vis_->visualizePoints("TARGET_POINTS",
-                                         warping_target_points_,
-                                         Visualizer::Yellow(), 1, 0.002);
-
-        framework_.vis_->visualizePoints("TEMPLATE_POINTS_EXECUTED_ALIGNED",
-                                         template_executed_band_aligned_to_target_,
-                                         Visualizer::Olive(), 1, 0.002);
-
-        framework_.vis_->visualizePoints("TEMPLATE_POINTS_PLANNED_ALIGNED",
-                                         template_planned_band_aligned_to_target_,
-                                         Visualizer::Olive(), 1, 0.002);
-
-        RubberBand::VisualizeBandSurface(framework_.vis_,
-                                         stored_bands_,
-                                         Visualizer::Blue(),
-                                         Visualizer::Red(),
-                                         "stored_bands", 1);
-
-
-        RubberBand::VisualizeBandSurface(framework_.vis_,
-                                         stored_bands_executed_aligned_to_target_,
-                                         stored_bands_.size(),
-                                         Visualizer::Silver(),
-                                         Visualizer::White(),
-                                         "stored_bands_EXECUTED_ALIGNED", 1);
-
-        RubberBand::VisualizeBandSurface(framework_.vis_,
-                                         stored_bands_executed_aligned_to_target_,
-                                         stored_bands_.size(),
-                                         Visualizer::Silver(),
-                                         Visualizer::White(),
-                                         "stored_bands_PLANNED_ALIGNED", 1);
-
-        for (const auto& result : results_)
-        {
-            RubberBand::VisualizeBandSurface(framework_.vis_,
-                                             result.second,
-                                             Visualizer::Seafoam(),
-                                             Visualizer::Orange(),
-                                             result.first, 1);
-        }
-    }
 }

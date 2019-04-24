@@ -27,7 +27,7 @@ constexpr char TransitionEstimation::MDP_POST_STATE_NS[];
 
 //////// State /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-uint64_t TransitionEstimation::State::serializeSelf(
+uint64_t TransitionEstimation::State::serialize(
         std::vector<uint8_t>& buffer) const
 {
     const uint64_t starting_size = buffer.size();
@@ -45,7 +45,7 @@ uint64_t TransitionEstimation::State::serializeSelf(
     return bytes_written;
 }
 
-uint64_t TransitionEstimation::State::deserializeIntoSelf(
+uint64_t TransitionEstimation::State::deserialize(
         const std::vector<uint8_t>& buffer,
         const uint64_t current)
 {
@@ -55,8 +55,8 @@ uint64_t TransitionEstimation::State::deserializeIntoSelf(
             DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
     deform_config_ = deform_config_deserialized.first;
     bytes_read += deform_config_deserialized.second;
-    bytes_read += rubber_band_->deserializeIntoSelf(buffer, current + bytes_read);
-    bytes_read += planned_rubber_band_->deserializeIntoSelf(buffer, current + bytes_read);
+    bytes_read += rubber_band_->deserialize(buffer, current + bytes_read);
+    bytes_read += planned_rubber_band_->deserialize(buffer, current + bytes_read);
     const auto rope_node_transforms_deserialized =
             DeserializeVector<Isometry3d, aligned_allocator<Isometry3d>>(
                 buffer, current + bytes_read, DeserializeEigen<Isometry3d>);
@@ -69,7 +69,7 @@ uint64_t TransitionEstimation::State::Serialize(
         const State& state,
         std::vector<uint8_t>& buffer)
 {
-    return state.serializeSelf(buffer);
+    return state.serialize(buffer);
 }
 
 std::pair<TransitionEstimation::State, uint64_t> TransitionEstimation::State::Deserialize(
@@ -80,7 +80,7 @@ std::pair<TransitionEstimation::State, uint64_t> TransitionEstimation::State::De
     State state;
     state.planned_rubber_band_ = std::make_shared<RubberBand>(template_band);
     state.rubber_band_ = std::make_shared<RubberBand>(template_band);
-    const auto bytes_read = state.deserializeIntoSelf(buffer, current);
+    const auto bytes_read = state.deserialize(buffer, current);
     return {state, bytes_read};
 }
 
@@ -118,12 +118,12 @@ bool TransitionEstimation::State::operator!=(const State& other) const
 
 //////// StateTransition ///////////////////////////////////////////////////////////////////////////////////////////////
 
-uint64_t TransitionEstimation::StateTransition::serializeSelf(
+uint64_t TransitionEstimation::StateTransition::serialize(
         std::vector<uint8_t>& buffer) const
 {
     const uint64_t starting_bytes = buffer.size();
-    starting_state_.serializeSelf(buffer);
-    ending_state_.serializeSelf(buffer);
+    starting_state_.serialize(buffer);
+    ending_state_.serialize(buffer);
     DeserializePair3dPositions(starting_gripper_positions_, buffer);
     DeserializePair3dPositions(ending_gripper_positions_, buffer);
     SerializeVector<WorldState>(microstep_state_history_, buffer, &WorldState::Serialize);
@@ -140,14 +140,14 @@ uint64_t TransitionEstimation::StateTransition::serializeSelf(
     return bytes_written;
 }
 
-uint64_t TransitionEstimation::StateTransition::deserializeIntoSelf(
+uint64_t TransitionEstimation::StateTransition::deserialize(
         const std::vector<uint8_t>& buffer,
         const uint64_t current)
 {
     uint64_t bytes_read = 0;
 
-    bytes_read += starting_state_.deserializeIntoSelf(buffer, current + bytes_read);
-    bytes_read += ending_state_.deserializeIntoSelf(buffer, current + bytes_read);
+    bytes_read += starting_state_.deserialize(buffer, current + bytes_read);
+    bytes_read += ending_state_.deserialize(buffer, current + bytes_read);
 
     const auto staring_grippers_deserialized = DeserializePair3dPositions(buffer, current + bytes_read);
     starting_gripper_positions_ = staring_grippers_deserialized.first;
@@ -163,9 +163,7 @@ uint64_t TransitionEstimation::StateTransition::deserializeIntoSelf(
 
     const auto band_deserializer = [&](const std::vector<uint8_t>& buffer_internal, const uint64_t current_internal)
     {
-        auto band = std::make_shared<RubberBand>(*starting_state_.rubber_band_);
-        const auto bytes = band->deserializeIntoSelf(buffer_internal, current_internal);
-        return std::make_pair(band, bytes);
+        return RubberBand::Deserialize(buffer_internal, current_internal, *starting_state_.rubber_band_);
     };
     const auto microsteps_bands_deserialized = DeserializeVector<RubberBand::Ptr>(buffer, current + bytes_read, band_deserializer);
     microstep_band_history_ = microsteps_bands_deserialized.first;
@@ -178,7 +176,7 @@ uint64_t TransitionEstimation::StateTransition::Serialize(
         const StateTransition& state_transition,
         std::vector<uint8_t>& buffer)
 {
-    return state_transition.serializeSelf(buffer);
+    return state_transition.serialize(buffer);
 }
 
 std::pair<TransitionEstimation::StateTransition, uint64_t> TransitionEstimation::StateTransition::Deserialize(
@@ -191,7 +189,7 @@ std::pair<TransitionEstimation::StateTransition, uint64_t> TransitionEstimation:
     transition.starting_state_.planned_rubber_band_ = std::make_shared<RubberBand>(template_band);
     transition.ending_state_.rubber_band_ = std::make_shared<RubberBand>(template_band);
     transition.ending_state_.planned_rubber_band_ = std::make_shared<RubberBand>(template_band);
-    const auto bytes_read = transition.deserializeIntoSelf(buffer, current);
+    const auto bytes_read = transition.deserialize(buffer, current);
     return {transition, bytes_read};
 }
 
@@ -291,6 +289,190 @@ InvariantTransform(const MatrixBase<Derived>& src, const MatrixBase<OtherDerived
     Rt.topRightCorner(1, m).noalias() = dst_mean - Rt.topLeftCorner(m, m) * src_mean;
 
     return Rt;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TransitionAdapationResult helpers
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+uint64_t TransitionEstimation::TransitionAdaptationResult::serialize(std::vector<uint8_t>& buffer) const
+{
+    const auto starting_bytes = buffer.size();
+    uint64_t bytes_written = 0;
+    bytes_written += default_next_band_->serialize(buffer);
+    bytes_written += result_->serialize(buffer);
+    bytes_written += SerializeEigen(invariant_transform_, buffer);
+    bytes_written += SerializeEigen(template_planned_band_aligned_to_target_, buffer);
+    bytes_written += SerializeEigen(next_band_points_to_smooth_, buffer);
+    bytes_written += SerializeEigen(transformed_band_surface_points_, buffer);
+    bytes_written += SerializeVector<RubberBand::Ptr>(tightened_transformed_bands_, buffer, &RubberBand::Serialize);
+    bytes_written += SerializeEigen(tightened_transformed_bands_surface_, buffer);
+    bytes_written += SerializeVector<bool>(foh_changes_, buffer, &SerializeFixedSizePOD<bool>);
+    bytes_written += SerializeFixedSizePOD(template_misalignment_dist_, buffer);
+    bytes_written += SerializeFixedSizePOD(default_band_foh_result_, buffer);
+    bytes_written += SerializeFixedSizePOD(default_band_dist_, buffer);
+    bytes_written += SerializeFixedSizePOD(entire_surface_mapable_, buffer);
+    bytes_written += SerializeFixedSizePOD(num_foh_changes_, buffer);
+
+    const auto ending_bytes = buffer.size();
+    assert(ending_bytes - starting_bytes == bytes_written);
+    const auto deserialized = Deserialize(buffer, starting_bytes, *default_next_band_);
+    assert(bytes_written = deserialized.second);
+    assert(*this == deserialized.first);
+    return bytes_written;
+}
+
+uint64_t TransitionEstimation::TransitionAdaptationResult::Serialize(
+        const TransitionAdaptationResult& adaptation_result,
+        std::vector<uint8_t>& buffer)
+{
+    return adaptation_result.serialize(buffer);
+}
+
+std::pair<TransitionEstimation::TransitionAdaptationResult, uint64_t> TransitionEstimation::TransitionAdaptationResult::Deserialize(
+        const std::vector<uint8_t>& buffer,
+        const uint64_t current,
+        const RubberBand& template_band)
+{
+    uint64_t bytes_read = 0;
+
+    const auto default_next_band_deserialized = RubberBand::Deserialize(buffer, current + bytes_read, template_band);
+    bytes_read += default_next_band_deserialized.second;
+
+    const auto next_band_deserialized = RubberBand::Deserialize(buffer, current + bytes_read, template_band);
+    bytes_read += next_band_deserialized.second;
+
+
+    const auto invariant_transform_deserialized = DeserializeEigen<Isometry3d>(buffer, current + bytes_read);
+    bytes_read += invariant_transform_deserialized.second;
+
+    const auto template_planned_band_aligned_deserialized = DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
+    bytes_read += template_planned_band_aligned_deserialized.second;
+
+    const auto next_band_points_to_smooth_deserialized = DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
+    bytes_read += next_band_points_to_smooth_deserialized.second;
+
+    const auto transformed_band_surface_points_deserialized = DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
+    bytes_read += transformed_band_surface_points_deserialized.second;
+
+    const auto band_deserializer = [&](const std::vector<uint8_t>& buffer_internal, const uint64_t current_internal)
+    {
+        return RubberBand::Deserialize(buffer_internal, current_internal, template_band);
+    };
+    const auto tightened_transformed_bands_deserialized = DeserializeVector<RubberBand::Ptr>(buffer, current + bytes_read, band_deserializer);
+    bytes_read += tightened_transformed_bands_deserialized.second;
+
+    const auto tightened_transformed_bands_surface_deserialized = DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
+    bytes_read += tightened_transformed_bands_surface_deserialized.second;
+
+    const auto foh_changes_deserialized = DeserializeVector<bool>(buffer, current, &DeserializeFixedSizePOD<bool>);
+    bytes_read += foh_changes_deserialized.second;
+
+
+    const auto template_misalignment_dist_deserialized = DeserializeFixedSizePOD<double>(buffer, current + bytes_read);
+    bytes_read += template_misalignment_dist_deserialized.second;
+
+    const auto default_band_foh_result_deserialized = DeserializeFixedSizePOD<bool>(buffer, current + bytes_read);
+    bytes_read += default_band_foh_result_deserialized.second;
+
+    const auto default_band_dist_deserialized = DeserializeFixedSizePOD<double>(buffer, current + bytes_read);
+    bytes_read += default_band_dist_deserialized.second;
+
+    const auto entire_surface_mapable_deserialized = DeserializeFixedSizePOD<bool>(buffer, current + bytes_read);
+    bytes_read += entire_surface_mapable_deserialized.second;
+
+    const auto num_foh_changes_deserialized = DeserializeFixedSizePOD<int>(buffer, current + bytes_read);
+    bytes_read += num_foh_changes_deserialized.second;
+
+    TransitionAdaptationResult record =
+    {
+        default_next_band_deserialized.first,
+        next_band_deserialized.first,
+
+        invariant_transform_deserialized.first,
+        template_planned_band_aligned_deserialized.first,
+        next_band_points_to_smooth_deserialized.first,
+        transformed_band_surface_points_deserialized.first,
+        tightened_transformed_bands_deserialized.first,
+        tightened_transformed_bands_surface_deserialized.first,
+        foh_changes_deserialized.first,
+
+        template_misalignment_dist_deserialized.first,
+        default_band_foh_result_deserialized.first,
+        default_band_dist_deserialized.first,
+        entire_surface_mapable_deserialized.first,
+        num_foh_changes_deserialized.first
+    };
+    return {record, bytes_read};
+}
+
+bool TransitionEstimation::TransitionAdaptationResult::operator==(const TransitionAdaptationResult& other) const
+{
+    if (*default_next_band_ != *other.default_next_band_)
+    {
+        return false;
+    }
+    if (*result_ != *other.result_)
+    {
+        return false;
+    }
+    if (invariant_transform_.matrix() != other.invariant_transform_.matrix())
+    {
+        return false;
+    }
+    if (template_planned_band_aligned_to_target_ != other.template_planned_band_aligned_to_target_)
+    {
+        return false;
+    }
+    if (next_band_points_to_smooth_ != other.next_band_points_to_smooth_)
+    {
+        return false;
+    }
+    if (transformed_band_surface_points_ != other.transformed_band_surface_points_)
+    {
+        return false;
+    }
+    if (tightened_transformed_bands_.size() != other.tightened_transformed_bands_.size())
+    {
+        return false;
+    }
+    for (size_t idx = 0; idx < tightened_transformed_bands_.size(); ++idx)
+    {
+        if (tightened_transformed_bands_[idx] != other.tightened_transformed_bands_[idx])
+        {
+            return false;
+        }
+    }
+    if (foh_changes_ != other.foh_changes_)
+    {
+        return false;
+    }
+    if (template_misalignment_dist_ != other.template_misalignment_dist_)
+    {
+        return false;
+    }
+    if (default_band_foh_result_ != other.default_band_foh_result_)
+    {
+        return false;
+    }
+    if (default_band_dist_ != other.default_band_dist_)
+    {
+        return false;
+    }
+    if (entire_surface_mapable_ != other.entire_surface_mapable_)
+    {
+        return false;
+    }
+    if (num_foh_changes_ != other.num_foh_changes_)
+    {
+        return false;
+    }
+    return true;
+}
+
+bool TransitionEstimation::TransitionAdaptationResult::operator!=(const TransitionAdaptationResult& other) const
+{
+    return !(*this == other);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -574,13 +756,11 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
 
     // Create a new band based on the memorized ending state, once aligned.
     auto next_band = std::make_shared<RubberBand>(test_band_start);
+    const auto next_band_transformed_points = TransformData(transform, stored_trans.ending_state_.rubber_band_->getVectorRepresentation());
+    const auto next_band_points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(next_band_transformed_points, ending_gripper_positions, 1);
+    if (!next_band->setPointsAndSmooth(next_band_points_to_smooth))
     {
-        const auto transformed_points = TransformData(transform, stored_trans.ending_state_.rubber_band_->getVectorRepresentation());
-        const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_points, ending_gripper_positions, 1);
-        if (!next_band->setPointsAndSmooth(points_to_smooth))
-        {
-            throw_arc_exception(std::runtime_error, "Unable to smooth band");
-        }
+        throw_arc_exception(std::runtime_error, "Unable to smooth band");
     }
 
     // Measure the difference between this result, and the default next step
@@ -589,7 +769,7 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
 
     // Map the entire memorized band surface to the new environment, and check that all bands are "mapable"
     const auto stored_bands = stored_trans.microstep_band_history_;
-    std::vector<RubberBand::Ptr> transformed_bands_from_stored_bands(stored_bands.size(), nullptr);
+    std::vector<RubberBand::Ptr> tightened_transformed_bands_from_stored_bands(stored_bands.size(), nullptr);
     bool all_bands_mapable = true;
     for (size_t band_surface_idx = 0; band_surface_idx < stored_bands.size(); ++band_surface_idx)
     {
@@ -605,7 +785,7 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
         auto band = std::make_shared<RubberBand>(*stored_band);
         if (band->setPointsAndSmooth(points_to_smooth))
         {
-            transformed_bands_from_stored_bands[band_surface_idx] = band;
+            tightened_transformed_bands_from_stored_bands[band_surface_idx] = band;
         }
         else
         {
@@ -613,23 +793,39 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
         }
     }
 
+    std::vector<bool> foh_changes;
     int num_foh_changes = -1;
     if (all_bands_mapable)
     {
-        for (size_t idx = 0; idx < transformed_bands_from_stored_bands.size() - 1; ++idx)
+        for (size_t idx = 0; idx < tightened_transformed_bands_from_stored_bands.size() - 1; ++idx)
         {
-            RubberBand::Ptr b1 = transformed_bands_from_stored_bands[idx];
-            RubberBand::Ptr b2 = transformed_bands_from_stored_bands[idx];
+            RubberBand::Ptr b1 = tightened_transformed_bands_from_stored_bands[idx];
+            RubberBand::Ptr b2 = tightened_transformed_bands_from_stored_bands[idx];
             if (checkFirstOrderHomotopy(*b1, *b2))
             {
+                foh_changes.push_back(true);
                 ++num_foh_changes;
+            }
+            else
+            {
+                foh_changes.push_back(false);
             }
         }
     }
 
-    return TransitionAdaptationResult{
+    return TransitionAdaptationResult
+    {
         default_next_band,
         next_band,
+
+        transform,
+        template_planned_band_aligned_to_target,
+        next_band_points_to_smooth,
+        transform * RubberBand::AggregateBandPoints(stored_trans.microstep_band_history_),
+        tightened_transformed_bands_from_stored_bands,
+        RubberBand::AggregateBandPoints(tightened_transformed_bands_from_stored_bands),
+        foh_changes,
+
         template_misalignment_dist,
         foh_result,
         band_dist_sq,
