@@ -54,6 +54,7 @@ namespace smmap
             PairGripperPositions starting_gripper_positions_;
             PairGripperPositions ending_gripper_positions_;
             std::vector<WorldState> microstep_state_history_;
+            std::vector<RubberBand::Ptr> microstep_band_history_;
 
             uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
 
@@ -120,6 +121,22 @@ namespace smmap
         ////////////////////////////////////////////////////////////////////////
 
         const std::vector<StateTransition>& transitions() const;
+
+        struct TransitionAdaptationResult
+        {
+            RubberBand::Ptr default_next_band_;
+            RubberBand::Ptr result_;
+            double template_misalignment_dist_;
+            bool default_band_foh_result_;
+            double default_band_dist_;
+            bool entire_surface_mapable_;
+            int num_foh_changes_;
+        };
+
+        TransitionAdaptationResult generateTransition(
+                const StateTransition& stored_trans,
+                const RubberBand& test_band_start,
+                const PairGripperPositions& ending_gripper_positions) const;
 
         // Returns vector of potential outcomes of the action, and a relative
         // confidence from 0 (not likely) to 1 (input data exactly matched a

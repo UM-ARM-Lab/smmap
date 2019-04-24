@@ -127,6 +127,7 @@ uint64_t TransitionEstimation::StateTransition::serializeSelf(
     DeserializePair3dPositions(starting_gripper_positions_, buffer);
     DeserializePair3dPositions(ending_gripper_positions_, buffer);
     SerializeVector<WorldState>(microstep_state_history_, buffer, &WorldState::Serialize);
+    SerializeVector<RubberBand::Ptr>(microstep_band_history_, buffer, &RubberBand::Serialize);
     const uint64_t bytes_written = buffer.size() - starting_bytes;
 
     // Verify no mistakes were made
@@ -159,6 +160,16 @@ uint64_t TransitionEstimation::StateTransition::deserializeIntoSelf(
     const auto microsteps_deserialized = DeserializeVector<WorldState>(buffer, current + bytes_read, &WorldState::Deserialize);
     microstep_state_history_ = microsteps_deserialized.first;
     bytes_read += microsteps_deserialized.second;
+
+    const auto band_deserializer = [&](const std::vector<uint8_t>& buffer_internal, const uint64_t current_internal)
+    {
+        auto band = std::make_shared<RubberBand>(*starting_state_.rubber_band_);
+        const auto bytes = band->deserializeIntoSelf(buffer_internal, current_internal);
+        return std::make_pair(band, bytes);
+    };
+    const auto microsteps_bands_deserialized = DeserializeVector<RubberBand::Ptr>(buffer, current + bytes_read, band_deserializer);
+    microstep_band_history_ = microsteps_bands_deserialized.first;
+    bytes_read += microsteps_bands_deserialized.second;
 
     return bytes_read;
 }
@@ -231,6 +242,55 @@ std::string TransitionEstimation::StateTransition::toString() const
        << PrettyPrint::PrettyPrint(microstep_state_history_.back().rope_node_transforms_, true, "\n") << "\n";
 
     return ss.str();
+}
+
+//////// Other /////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <typename Derived, typename OtherDerived>
+typename internal::umeyama_transform_matrix_type<Derived, OtherDerived>::type
+InvariantTransform(const MatrixBase<Derived>& src, const MatrixBase<OtherDerived>& dst)
+{
+    typedef typename internal::umeyama_transform_matrix_type<Derived, OtherDerived>::type TransformationMatrixType;
+    typedef typename internal::traits<TransformationMatrixType>::Scalar Scalar;
+    typedef typename NumTraits<Scalar>::Real RealScalar;
+
+    EIGEN_STATIC_ASSERT(!NumTraits<Scalar>::IsComplex, NUMERIC_TYPE_MUST_BE_REAL)
+    EIGEN_STATIC_ASSERT((internal::is_same<Scalar, typename internal::traits<OtherDerived>::Scalar>::value),
+        YOU_MIXED_DIFFERENT_NUMERIC_TYPES__YOU_NEED_TO_USE_THE_CAST_METHOD_OF_MATRIXBASE_TO_CAST_NUMERIC_TYPES_EXPLICITLY)
+
+    enum { Dimension = EIGEN_SIZE_MIN_PREFER_DYNAMIC(Derived::RowsAtCompileTime, OtherDerived::RowsAtCompileTime) };
+
+    typedef Matrix<Scalar, Dimension, 1> VectorType;
+    typedef Matrix<Scalar, Dimension, Dimension> MatrixType;
+    typedef typename internal::plain_matrix_type_row_major<Derived>::type RowMajorMatrixType;
+
+    const Index m = src.rows(); // dimension
+    const Index n = src.cols(); // number of measurements
+
+    // required for demeaning ...
+    const RealScalar one_over_n = RealScalar(1) / static_cast<RealScalar>(n);
+
+    // computation of mean
+    const VectorType src_mean = src.rowwise().sum() * one_over_n;
+    const VectorType dst_mean = dst.rowwise().sum() * one_over_n;
+
+    // demeaning of src and dst points
+    const RowMajorMatrixType src_demean = src.colwise() - src_mean;
+    const RowMajorMatrixType dst_demean = dst.colwise() - dst_mean;
+
+    // Compute the covariance between the source and destination
+    const MatrixType sigma = one_over_n * dst_demean * src_demean.transpose();
+
+    const JacobiSVD<MatrixType> svd(sigma, ComputeFullU | ComputeFullV);
+
+    // Initialize the resulting transformation with an identity matrix...
+    TransformationMatrixType Rt = TransformationMatrixType::Identity(m + 1, m + 1);
+
+    // We want to allow mirroring the data, so ignore the possiblity of putting -1 in S
+    Rt.topLeftCorner(m, m) = svd.matrixU() * svd.matrixV().transpose();
+    Rt.topRightCorner(1, m).noalias() = dst_mean - Rt.topLeftCorner(m, m) * src_mean;
+
+    return Rt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -426,7 +486,8 @@ Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMo
                 end_state,
                 starting_gripper_positions,
                 ending_gripper_positions,
-                trajectory[idx].second
+                trajectory[idx].second,
+                reduceMicrostepsToBands(trajectory[idx].second)
             };
             return Maybe::Maybe<StateTransition>(transition);
         }
@@ -469,6 +530,112 @@ std::vector<RubberBand> TransitionEstimation::extractBandSurface(const StateTran
 const std::vector<TransitionEstimation::StateTransition>& TransitionEstimation::transitions() const
 {
     return learned_transitions_;
+}
+
+// Blindy applies the transition without regard for applicability
+TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateTransition(
+        const StateTransition& stored_trans,
+        const RubberBand& test_band_start,
+        const PairGripperPositions& ending_gripper_positions) const
+{
+    auto default_next_band = std::make_shared<RubberBand>(test_band_start);
+    default_next_band->forwardPropagate(ending_gripper_positions, false);
+
+    // Extract the best transform based on the invariants in the system
+    // (memorized data) into the target points (test data)
+    const auto num_gripper_steps = stored_trans.microstep_state_history_.size() / 4;
+    ObjectPointSet warping_template_points_planned = RubberBand::PointsFromBandAndGrippers(
+                *stored_trans.starting_state_.planned_rubber_band_,
+                stored_trans.starting_gripper_positions_,
+                stored_trans.ending_gripper_positions_,
+                num_gripper_steps);
+    ObjectPointSet warping_target_points = RubberBand::PointsFromBandAndGrippers(
+                test_band_start,
+                test_band_start.getEndpoints(),
+                ending_gripper_positions,
+                num_gripper_steps);
+
+    const Matrix3d xytransform = InvariantTransform(
+                warping_template_points_planned.topRows<2>(),
+                warping_target_points.topRows<2>());
+
+    const double z_shift =
+            warping_template_points_planned.bottomRows<1>().mean() -
+            warping_target_points.bottomRows<1>().mean();
+
+    Isometry3d transform = Isometry3d::Identity();
+    transform.matrix().topLeftCorner<2, 2>() = xytransform.topLeftCorner<2, 2>();
+    transform.matrix().topRightCorner<2, 1>() = xytransform.topRightCorner<2, 1>();
+    transform.matrix()(2, 3) = z_shift;
+
+    // Align the source (memorized) points to the target
+    const ObjectPointSet template_planned_band_aligned_to_target = transform * warping_template_points_planned;
+    const double template_misalignment_dist = (warping_target_points - template_planned_band_aligned_to_target).norm();
+
+    // Create a new band based on the memorized ending state, once aligned.
+    auto next_band = std::make_shared<RubberBand>(test_band_start);
+    {
+        const auto transformed_points = TransformData(transform, stored_trans.ending_state_.rubber_band_->getVectorRepresentation());
+        const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_points, ending_gripper_positions, 1);
+        if (!next_band->setPointsAndSmooth(points_to_smooth))
+        {
+            throw_arc_exception(std::runtime_error, "Unable to smooth band");
+        }
+    }
+
+    // Measure the difference between this result, and the default next step
+    const bool foh_result = checkFirstOrderHomotopy(*default_next_band, *next_band);
+    const auto band_dist_sq = default_next_band->distanceSq(*next_band);
+
+    // Map the entire memorized band surface to the new environment, and check that all bands are "mapable"
+    const auto stored_bands = stored_trans.microstep_band_history_;
+    std::vector<RubberBand::Ptr> transformed_bands_from_stored_bands(stored_bands.size(), nullptr);
+    bool all_bands_mapable = true;
+    for (size_t band_surface_idx = 0; band_surface_idx < stored_bands.size(); ++band_surface_idx)
+    {
+        // Transform the stored band into the test band space
+        const auto& stored_band = stored_bands[band_surface_idx];
+        const auto transformed_band = TransformData(transform, stored_band->getVectorRepresentation());
+        // Move the endpoints to the line along the test action vector
+        assert(stored_bands.size() > 1);
+        const double ratio = (double)band_surface_idx / (double)(stored_bands.size() - 1);
+        const auto gripper_targets = Interpolate(test_band_start.getEndpoints(), ending_gripper_positions, ratio);
+        const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_band, gripper_targets, 1);
+
+        auto band = std::make_shared<RubberBand>(*stored_band);
+        if (band->setPointsAndSmooth(points_to_smooth))
+        {
+            transformed_bands_from_stored_bands[band_surface_idx] = band;
+        }
+        else
+        {
+            all_bands_mapable = false;
+        }
+    }
+
+    int num_foh_changes = -1;
+    if (all_bands_mapable)
+    {
+        for (size_t idx = 0; idx < transformed_bands_from_stored_bands.size() - 1; ++idx)
+        {
+            RubberBand::Ptr b1 = transformed_bands_from_stored_bands[idx];
+            RubberBand::Ptr b2 = transformed_bands_from_stored_bands[idx];
+            if (checkFirstOrderHomotopy(*b1, *b2))
+            {
+                ++num_foh_changes;
+            }
+        }
+    }
+
+    return TransitionAdaptationResult{
+        default_next_band,
+        next_band,
+        template_misalignment_dist,
+        foh_result,
+        band_dist_sq,
+        all_bands_mapable,
+        num_foh_changes
+    };
 }
 
 std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTransitions(

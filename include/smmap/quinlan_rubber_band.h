@@ -156,6 +156,7 @@ namespace smmap
 
         uint64_t serialize(std::vector<uint8_t>& buffer) const;
         uint64_t deserializeIntoSelf(const std::vector<uint8_t>& buffer, const uint64_t current);
+        static uint64_t Serialize(const QuinlanRubberBand::ConstPtr& band, std::vector<uint8_t>& buffer);
 
         bool operator==(const QuinlanRubberBand& other) const;
         bool operator!=(const QuinlanRubberBand& other) const;

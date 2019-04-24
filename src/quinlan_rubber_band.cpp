@@ -1429,6 +1429,11 @@ namespace smmap
         return bytes_read;
     }
 
+    uint64_t QuinlanRubberBand::Serialize(const QuinlanRubberBand::ConstPtr& band, std::vector<uint8_t>& buffer)
+    {
+        return band->serialize(buffer);
+    }
+
     void QuinlanRubberBand::storeBand() const
     {
         try

@@ -137,17 +137,6 @@ namespace smmap
         public:
             SE3Prediction(const TransitionTesting& framework);
 
-            std::map<std::string, std::vector<RubberBand>> predictAll(
-                    const TransitionEstimation::StateTransition& stored_trans,
-                    const RubberBand& test_band_start,
-                    const PairGripperPositions& ending_gripper_positions);
-
-            void predictBasedOnPlannedBand(
-                    const TransitionEstimation::StateTransition& stored_trans);
-
-            void predictBasedOnExecutedBand(
-                    const TransitionEstimation::StateTransition& stored_trans);
-
             void visualizePrediction();
 
             bool prediction_valid_;
@@ -172,22 +161,5 @@ namespace smmap
             std::map<std::string, std::vector<RubberBand>> results_;
         };
         friend class SE3Prediction;
-
-        class TPSPrediction
-        {
-        public:
-            TPSPrediction(const TransitionTesting& framework);
-
-            std::map<std::string, std::vector<RubberBand>> predictAll(
-                    const TransitionEstimation::StateTransition& stored_trans,
-                    const RubberBand& starting_band,
-                    const PairGripperPositions& action);
-
-            const TransitionTesting& framework_;
-            static constexpr auto BASENAME = "TPS_WARPING";
-            std::vector<RubberBand> stored_bands_;
-            std::map<std::string, std::vector<RubberBand>> results_;
-        };
-        friend class TPSPrediction;
     };
 }

@@ -476,15 +476,15 @@ namespace smmap
 //                se3_predictor.visualizePrediction();
 //                PressKeyToContinue("SE3 Prediction Vis ");
 
-                RubberBand b = *sim_record.tested_.starting_state_.rubber_band_;
+//                RubberBand b = *sim_record.tested_.starting_state_.rubber_band_;
 //                b.forwardPropagate(b.getEndpoints(), false);
-                vis_->visualizePoints("TESTED_TRUE_RESULT",
-                                      sim_record.tested_.ending_state_.rubber_band_->upsampleBand(),
-                                      Visualizer::White(), 1, 0.002);
+//                vis_->visualizePoints("TESTED_TRUE_RESULT",
+//                                      sim_record.tested_.ending_state_.rubber_band_->upsampleBand(),
+//                                      Visualizer::White(), 1, 0.002);
 
-                transition_estimator_->estimateTransitions(
-                            b,
-                            sim_record.tested_.ending_gripper_positions_);
+//                transition_estimator_->estimateTransitions(
+//                            b,
+//                            sim_record.tested_.ending_gripper_positions_);
             }
             catch (const std::exception& ex)
             {
@@ -597,24 +597,27 @@ namespace smmap
                                                    ".compressed");
                         arc_utilities::CreateDirectory(folder);
 
-                        const auto test = framework_.robot_->toRosTransitionTest(
-                                    framework_.initial_world_state_.rope_node_transforms_,
-                                    framework_.initial_world_state_.all_grippers_single_pose_,
-                                    generateTestPath({gripper_a_starting_pose, gripper_b_starting_pose}),
-                                    {gripper_a_ending_pose, gripper_b_ending_pose});
-
-                        #pragma omp critical
+                        if (!boost::filesystem::is_regular_file(filename))
                         {
-                            // Add the test to the list waiting to be executed
-                            tests.push_back(test);
-                            filenames.push_back(filename);
+                            const auto test = framework_.robot_->toRosTransitionTest(
+                                        framework_.initial_world_state_.rope_node_transforms_,
+                                        framework_.initial_world_state_.all_grippers_single_pose_,
+                                        generateTestPath({gripper_a_starting_pose, gripper_b_starting_pose}),
+                                        {gripper_a_ending_pose, gripper_b_ending_pose});
 
-                            // Execute the tests if tehre are enough to run
-                            if (tests.size() == num_threads)
+                            #pragma omp critical
                             {
-                                framework_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
-                                tests.clear();
-                                filenames.clear();
+                                // Add the test to the list waiting to be executed
+                                tests.push_back(test);
+                                filenames.push_back(filename);
+
+                                // Execute the tests if tehre are enough to run
+                                if (tests.size() == num_threads)
+                                {
+                                    framework_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
+                                    tests.clear();
+                                    filenames.clear();
+                                }
                             }
                         }
                     }
@@ -635,6 +638,7 @@ namespace smmap
             const auto num_divisions = ROSHelpers::GetParamRequired<int>(*framework_.ph_, "perturbations/action_vectors/num_divisions", __func__).GetImmutable();
             const auto perturbations = Vec3dPerturbations(max_magnitude, num_divisions);
             std::cout << "Num action perturbations: " << perturbations.size() * perturbations.size()<< std::endl;
+            #pragma omp parallel for
             for (size_t a_idx = 0; a_idx < perturbations.size(); ++a_idx)
             {
                 const Vector3d gripper_a_action_vector = framework_.gripper_a_action_vector_ + perturbations[a_idx];
@@ -659,25 +663,29 @@ namespace smmap
                                                    ".compressed");
                         arc_utilities::CreateDirectory(folder);
 
-                        const auto test = framework_.robot_->toRosTransitionTest(
-                                    framework_.initial_world_state_.rope_node_transforms_,
-                                    framework_.initial_world_state_.all_grippers_single_pose_,
-                                    generateTestPath({framework_.gripper_a_starting_pose_, framework_.gripper_b_starting_pose_}),
-                                    {gripper_a_ending_pose, gripper_b_ending_pose});
-
-                        #pragma omp critical
+                        if (!boost::filesystem::is_regular_file(filename))
                         {
-                            // Add the test to the list waiting to be executed
-                            tests.push_back(test);
-                            filenames.push_back(filename);
+                            const auto test = framework_.robot_->toRosTransitionTest(
+                                        framework_.initial_world_state_.rope_node_transforms_,
+                                        framework_.initial_world_state_.all_grippers_single_pose_,
+                                        generateTestPath({framework_.gripper_a_starting_pose_, framework_.gripper_b_starting_pose_}),
+                                        {gripper_a_ending_pose, gripper_b_ending_pose});
 
-                            // Execute the tests if tehre are enough to run
-                            if (tests.size() == num_threads)
+                            #pragma omp critical
                             {
-                                framework_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
-                                tests.clear();
-                                filenames.clear();
+                                // Add the test to the list waiting to be executed
+                                tests.push_back(test);
+                                filenames.push_back(filename);
+
+                                // Execute the tests if tehre are enough to run
+                                if (tests.size() == num_threads)
+                                {
+                                    framework_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
+                                    tests.clear();
+                                    filenames.clear();
+                                }
                             }
+
                         }
                     }
                     catch (const std::runtime_error& ex)
@@ -833,115 +841,6 @@ namespace smmap
         : prediction_valid_(false)
         , framework_(framework)
     {}
-
-    std::map<std::string, std::vector<RubberBand>> TransitionTesting::SE3Prediction::predictAll(
-            const TransitionEstimation::StateTransition& stored_trans,
-            const RubberBand& test_band_start,
-            const PairGripperPositions& ending_gripper_positions)
-    {
-        test_band_ = std::make_shared<RubberBand>(test_band_start);
-        test_action_ = ending_gripper_positions;
-
-        num_gripper_steps_ = stored_trans.microstep_state_history_.size() / 4;
-        stored_bands_.clear();
-        stored_bands_.reserve(stored_trans.microstep_state_history_.size() + 1);
-        stored_bands_.push_back(*stored_trans.starting_state_.rubber_band_);
-        for (const auto& state : stored_trans.microstep_state_history_)
-        {
-            RubberBand temp_band(test_band_start);
-            assert(temp_band.resetBand(state));
-            stored_bands_.push_back(temp_band);
-        }
-
-        warping_target_points_ = RubberBand::PointsFromBandAndGrippers(
-                    test_band_start,
-                    test_band_start.getEndpoints(),
-                    ending_gripper_positions,
-                    num_gripper_steps_);
-
-        predictBasedOnExecutedBand(stored_trans);
-        predictBasedOnPlannedBand(stored_trans);
-        prediction_valid_ = true;
-        return results_;
-    }
-
-    void TransitionTesting::SE3Prediction::predictBasedOnPlannedBand(
-            const TransitionEstimation::StateTransition& stored_trans)
-    {
-        static const std::string transform_definition_name = "__PLANNED_BAND__";
-
-        // Extract the best SE(3) transform that transforms the template points
-        // (memorized data) into the target points (test data)
-        warping_template_points_planned_ = RubberBand::PointsFromBandAndGrippers(
-                    *stored_trans.starting_state_.planned_rubber_band_,
-                    stored_trans.starting_gripper_positions_,
-                    stored_trans.ending_gripper_positions_,
-                    num_gripper_steps_);
-
-        const Isometry3d transform =
-                Isometry3d(umeyama(warping_template_points_planned_, warping_target_points_, false));
-        template_planned_band_aligned_to_target_ = transform * warping_template_points_planned_;
-        stored_bands_planned_aligned_to_target_ = transform * RubberBand::AggregateBandPoints(stored_bands_);
-
-        // Apply the best SE(3) transform to the memorized stored bands
-        // Project the transformed points out of collision and retighten
-        std::vector<RubberBand> transformed_bands_from_stored_bands;
-        transformed_bands_from_stored_bands.reserve(stored_bands_.size());
-        for (size_t idx = 0; idx < stored_bands_.size(); ++idx)
-        {
-            // Transform the stored band into the test band space
-            const auto& stored_band = stored_bands_[idx];
-            const auto transformed_band = TransformData(transform, stored_band.getVectorRepresentation());
-            // Move the endpoints to the line along the test action vector
-            const double ratio = (double)idx / (double)(stored_bands_.size() - 1);
-            const auto gripper_targets = Interpolate(test_band_->getEndpoints(), test_action_, ratio);
-            const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_band, gripper_targets, 1);
-
-            RubberBand band(stored_band);
-            assert(band.setPointsAndSmooth(points_to_smooth));
-            transformed_bands_from_stored_bands.push_back(band);
-        }
-        results_[BASENAME + transform_definition_name + "STORED_BANDS"] = transformed_bands_from_stored_bands;
-    }
-
-    void TransitionTesting::SE3Prediction::predictBasedOnExecutedBand(
-            const TransitionEstimation::StateTransition& stored_trans)
-    {
-        static const std::string transform_definition_name = "__EXECUTED_BAND__";
-
-        // Extract the best SE(3) transform that transforms the template points
-        // (memorized data) into the target points (test data)
-        warping_template_points_executed_ = RubberBand::PointsFromBandAndGrippers(
-                    *stored_trans.starting_state_.rubber_band_,
-                    stored_trans.starting_gripper_positions_,
-                    stored_trans.ending_gripper_positions_,
-                    num_gripper_steps_);
-
-        const Isometry3d transform =
-                Isometry3d(umeyama(warping_template_points_executed_, warping_target_points_, false));
-        template_executed_band_aligned_to_target_ = transform * warping_template_points_executed_;
-        stored_bands_executed_aligned_to_target_ = transform * RubberBand::AggregateBandPoints(stored_bands_);
-
-        // Apply the best SE(3) transform to the memorized stored bands
-        // Project the transformed points out of collision and retighten
-        std::vector<RubberBand> transformed_bands_from_stored_bands;
-        transformed_bands_from_stored_bands.reserve(stored_bands_.size());
-        for (size_t idx = 0; idx < stored_bands_.size(); ++idx)
-        {
-            // Transform the stored band into the test band space
-            const auto& stored_band = stored_bands_[idx];
-            const auto transformed_band = TransformData(transform, stored_band.getVectorRepresentation());
-            // Move the endpoints to the line along the test action vector
-            const double ratio = (double)idx / (double)(stored_bands_.size() - 1);
-            const auto gripper_targets = Interpolate(test_band_->getEndpoints(), test_action_, ratio);
-            const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_band, gripper_targets, 1);
-
-            RubberBand band(stored_band);
-            assert(band.setPointsAndSmooth(points_to_smooth));
-            transformed_bands_from_stored_bands.push_back(band);
-        }
-        results_[BASENAME + transform_definition_name + "STORED_BANDS"] = transformed_bands_from_stored_bands;
-    }
 
     void TransitionTesting::SE3Prediction::visualizePrediction()
     {
