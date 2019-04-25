@@ -101,14 +101,14 @@ namespace smmap
         double totalLength() const;
         bool isOverstretched() const;
 
-        void visualize(
+        std::vector<Visualizer::NamespaceId> visualize(
                 const std::string& marker_name,
                 const std_msgs::ColorRGBA& safe_color,
                 const std_msgs::ColorRGBA& overstretched_color,
                 const int32_t id,
                 const bool visualization_enabled = true) const;
 
-        void visualize(
+        std::vector<Visualizer::NamespaceId> visualize(
                 const EigenHelpers::VectorVector3d& test_band,
                 const std::string& marker_name,
                 const std_msgs::ColorRGBA& safe_color,
@@ -116,14 +116,14 @@ namespace smmap
                 const int32_t id,
                 const bool visualization_enabled = true) const;
 
-        void visualizeWithBubbles(
+        std::vector<Visualizer::NamespaceId> visualizeWithBubbles(
                 const std::string& marker_name,
                 const std_msgs::ColorRGBA& safe_color,
                 const std_msgs::ColorRGBA& overstretched_color,
                 const int32_t id,
                 const bool visualization_enabled = true) const;
 
-        void visualizeWithBubbles(
+        std::vector<Visualizer::NamespaceId> visualizeWithBubbles(
                 const EigenHelpers::VectorVector3d& test_band,
                 const std::string& marker_name,
                 const std_msgs::ColorRGBA& safe_color,
@@ -131,7 +131,7 @@ namespace smmap
                 const int32_t id,
                 const bool visualization_enabled = true) const;
 
-        static void VisualizeBandSurface(
+        static std::vector<Visualizer::NamespaceId> VisualizeBandSurface(
                 const Visualizer::Ptr& vis,
                 const ObjectPointSet& band_surface,
                 const size_t num_bands,
@@ -140,7 +140,7 @@ namespace smmap
                 const std::string& ns,
                 const int32_t id = 1);
 
-        static void VisualizeBandSurface(
+        static std::vector<Visualizer::NamespaceId> VisualizeBandSurface(
                 const Visualizer::Ptr& vis,
                 const std::vector<QuinlanRubberBand>& bands,
                 const std_msgs::ColorRGBA& start_color,
@@ -148,7 +148,7 @@ namespace smmap
                 const std::string& ns,
                 const int32_t id = 1);
 
-        static void VisualizeBandSurface(
+        static std::vector<Visualizer::NamespaceId> VisualizeBandSurface(
                 const Visualizer::Ptr& vis,
                 const std::vector<QuinlanRubberBand::ConstPtr>& bands,
                 const std_msgs::ColorRGBA& start_color,

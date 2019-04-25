@@ -534,17 +534,17 @@ namespace smmap
         return totalLength() > max_safe_band_length_;
     }
 
-    void QuinlanRubberBand::visualize(
+    std::vector<Visualizer::NamespaceId> QuinlanRubberBand::visualize(
             const std::string& marker_name,
             const std_msgs::ColorRGBA& safe_color,
             const std_msgs::ColorRGBA& overstretched_color,
             const int32_t id,
             const bool visualization_enabled) const
     {
-        visualize(band_, marker_name, safe_color, overstretched_color, id, visualization_enabled);
+        return visualize(band_, marker_name, safe_color, overstretched_color, id, visualization_enabled);
     }
 
-    void QuinlanRubberBand::visualize(
+    std::vector<Visualizer::NamespaceId> QuinlanRubberBand::visualize(
             const EigenHelpers::VectorVector3d& test_band,
             const std::string& marker_name,
             const std_msgs::ColorRGBA& safe_color,
@@ -552,31 +552,32 @@ namespace smmap
             const int32_t id,
             const bool visualization_enabled) const
     {
-        if (visualization_enabled)
+        if (!visualization_enabled)
         {
-    //        vis_->visualizePoints(marker_name + "_points", test_band, Visualizer::Green(), 1, 0.002);
-            if (isOverstretched())
-            {
-                vis_->visualizeXYZTrajectory(marker_name, test_band, overstretched_color, id);
-            }
-            else
-            {
-                vis_->visualizeXYZTrajectory(marker_name, test_band, safe_color, id);
-            }
+            return {};
+        }
+
+        if (isOverstretched())
+        {
+            return vis_->visualizeXYZTrajectory(marker_name, test_band, overstretched_color, id);
+        }
+        else
+        {
+            return vis_->visualizeXYZTrajectory(marker_name, test_band, safe_color, id);
         }
     }
 
-    void QuinlanRubberBand::visualizeWithBubbles(
+    std::vector<Visualizer::NamespaceId> QuinlanRubberBand::visualizeWithBubbles(
             const std::string& marker_name,
             const std_msgs::ColorRGBA& safe_color,
             const std_msgs::ColorRGBA& overstretched_color,
             const int32_t id,
             const bool visualization_enabled) const
     {
-        visualizeWithBubbles(band_, marker_name, safe_color, overstretched_color, id, visualization_enabled);
+        return visualizeWithBubbles(band_, marker_name, safe_color, overstretched_color, id, visualization_enabled);
     }
 
-    void QuinlanRubberBand::visualizeWithBubbles(
+    std::vector<Visualizer::NamespaceId> QuinlanRubberBand::visualizeWithBubbles(
             const EigenHelpers::VectorVector3d& test_band,
             const std::string& marker_name,
             const std_msgs::ColorRGBA& safe_color,
@@ -584,37 +585,44 @@ namespace smmap
             const int32_t id,
             const bool visualization_enabled) const
     {
-        if (visualization_enabled)
+        if (!visualization_enabled)
         {
-            visualize(test_band, marker_name, safe_color, overstretched_color, id, visualization_enabled);
+            return {};
+        }
 
-            if (ENABLE_BAND_DEBUGGING_)
+        auto marker_ids = visualize(test_band, marker_name, safe_color, overstretched_color, id, visualization_enabled);
+
+        if (ENABLE_BAND_DEBUGGING_)
+        {
+            vis_->forcePublishNow();
+            // Delete all sphere, markers, probably from just this publisher, and then republish
             {
+                vis_->deleteObjects(marker_name + "_bubbles", 1, 505);
                 vis_->forcePublishNow();
-                // Delete all sphere, markers, probably from just this publisher, and then republish
-                {
-                    vis_->deleteObjects(marker_name + "_bubbles", 1, 505);
-                    vis_->forcePublishNow();
 
-                    std::vector<double> bubble_sizes(test_band.size());
-                    std::vector<std_msgs::ColorRGBA> colors(test_band.size());
-                    for (size_t idx = 0; idx < test_band.size(); ++idx)
-                    {
-                        bubble_sizes[idx] = getBubbleSize(test_band[idx]);
-                        colors[idx] = ColorBuilder::MakeFromFloatColors(
-                                    (float)idx / (float)(test_band.size() - 1),
-                                    0.0f,
-                                    (float)(test_band.size() - 1 - idx) / (float)(test_band.size() - 1),
-                                    0.3f);
-                    }
-                    vis_->visualizeSpheres(marker_name + "_bubbles", test_band, colors, id, bubble_sizes);
-                    vis_->forcePublishNow();
+                std::vector<double> bubble_sizes(test_band.size());
+                std::vector<std_msgs::ColorRGBA> colors(test_band.size());
+                for (size_t idx = 0; idx < test_band.size(); ++idx)
+                {
+                    bubble_sizes[idx] = getBubbleSize(test_band[idx]);
+                    colors[idx] = ColorBuilder::MakeFromFloatColors(
+                                (float)idx / (float)(test_band.size() - 1),
+                                0.0f,
+                                (float)(test_band.size() - 1 - idx) / (float)(test_band.size() - 1),
+                                0.3f);
                 }
+                const auto new_ids = vis_->visualizeSpheres(marker_name + "_bubbles", test_band, colors, id, bubble_sizes);
+                vis_->forcePublishNow();
+                marker_ids.insert(marker_ids.end(),
+                                  std::make_move_iterator(new_ids.begin()),
+                                  std::make_move_iterator(new_ids.end()));
             }
         }
+
+        return marker_ids;
     }
 
-    void QuinlanRubberBand::VisualizeBandSurface(
+    std::vector<Visualizer::NamespaceId> QuinlanRubberBand::VisualizeBandSurface(
             const Visualizer::Ptr& vis,
             const ObjectPointSet& band_surface,
             const size_t num_bands,
@@ -625,7 +633,7 @@ namespace smmap
     {
         if (num_bands == 0)
         {
-            return;
+            return {};
         }
         assert(band_surface.cols() % num_bands == 0);
         const size_t points_per_band = band_surface.cols() / num_bands;
@@ -636,10 +644,10 @@ namespace smmap
             const auto color = arc_helpers::InterpolateColor(start_color, end_color, ratio);
             colors.insert(colors.end(), points_per_band, color);
         }
-        vis->visualizePoints(ns, band_surface, colors, id, 0.002);
+        return vis->visualizePoints(ns, band_surface, colors, id, 0.002);
     }
 
-    void QuinlanRubberBand::VisualizeBandSurface(
+    std::vector<Visualizer::NamespaceId> QuinlanRubberBand::VisualizeBandSurface(
             const Visualizer::Ptr& vis,
             const std::vector<QuinlanRubberBand>& bands,
             const std_msgs::ColorRGBA& start_color,
@@ -649,13 +657,13 @@ namespace smmap
     {
         if (bands.empty())
         {
-            return;
+            return {};
         }
         const auto points = RubberBand::AggregateBandPoints(bands);
-        VisualizeBandSurface(vis, points, bands.size(), start_color, end_color, ns, id);
+        return VisualizeBandSurface(vis, points, bands.size(), start_color, end_color, ns, id);
     }
 
-    void QuinlanRubberBand::VisualizeBandSurface(
+    std::vector<Visualizer::NamespaceId> QuinlanRubberBand::VisualizeBandSurface(
             const Visualizer::Ptr& vis,
             const std::vector<QuinlanRubberBand::ConstPtr>& bands,
             const std_msgs::ColorRGBA& start_color,
@@ -665,10 +673,10 @@ namespace smmap
     {
         if (bands.empty())
         {
-            return;
+            return {};
         }
         const auto points = RubberBand::AggregateBandPoints(bands);
-        VisualizeBandSurface(vis, points, bands.size(), start_color, end_color, ns, id);
+        return VisualizeBandSurface(vis, points, bands.size(), start_color, end_color, ns, id);
     }
 
 

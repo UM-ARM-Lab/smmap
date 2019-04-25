@@ -40,8 +40,12 @@ namespace smmap
 
         bool operator==(const TransitionSimulationRecord& other) const;
 
-        void visualize(const Visualizer::Ptr& vis) const;
+        std::vector<Visualizer::NamespaceId> visualize(
+                const std::string& basename,
+                const Visualizer::Ptr& vis) const;
     };
+    typedef Eigen::aligned_allocator<TransitionSimulationRecord> TransitionSimulationRecordAlloc;
+    typedef std::map<std::string, TransitionSimulationRecord, std::less<std::string>, TransitionSimulationRecordAlloc> MapStringTransitionSimulationRecord;
 
     class TransitionTesting
     {
@@ -105,6 +109,9 @@ namespace smmap
         void runTests(const bool generate_new_test_data);
 
     private:
+
+        //// Data Generation ///////////////////////////////////////////////////
+
         class DataGeneration
         {
         public:
@@ -119,10 +126,40 @@ namespace smmap
         };
         friend class DataGeneration;
 
+        //// Data Processing ///////////////////////////////////////////////////
+
         class DataProcessing
         {
         public:
+            DataProcessing(const TransitionTesting& framework);
+
         private:
+            const TransitionTesting& fw_;
+
+            ros::ServiceServer set_source_;
+            ros::ServiceServer add_visualization_;
+            ros::ServiceServer remove_visualization_;
+
+            bool source_valid_;
+            std::string source_file_;
+            TransitionEstimation::StateTransition source_transition_;
+            ObjectPointSet source_band_surface_;
+
+            // Maps filenames to ns+ids
+            std::map<std::string, std::vector<Visualizer::NamespaceId>> visid_to_markers_;
+            int next_vis_prefix_;
+
+        public:
+            bool setSourceCallback(
+                    deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+                    deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
+            bool addVisualizationCallback(
+                    deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+                    deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
+            bool removeVisualizationCallback(
+                    deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+                    deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
+
         };
         friend class DataProcessing;
     };

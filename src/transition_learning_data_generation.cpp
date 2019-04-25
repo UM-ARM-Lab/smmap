@@ -17,6 +17,7 @@ using namespace arc_utilities;
 using namespace arc_helpers;
 using namespace Eigen;
 using namespace EigenHelpers;
+namespace dmm = deformable_manipulation_msgs;
 
 ////////////////////////////////////////////////////////////////////////////////
 //          Random Helpers
@@ -75,6 +76,71 @@ namespace smmap
         std::stringstream ss;
         ss << mat.x() << "_" << mat.y() << "_" << mat.z() ;
         return ss.str();
+    }
+
+    static TransitionEstimation::StateTransition ToStateTransition(
+            const dmm::TransitionTestResult& test,
+            RubberBand band)
+    {
+        const auto template_band = band;
+
+        const WorldState start = ConvertToEigenFeedback(test.start_after_following_path);
+        const std::vector<WorldState> microsteps_all = ConvertToEigenFeedback(test.microsteps_all);
+        const std::vector<WorldState> microsteps_last = ConvertToEigenFeedback(test.microsteps_last_action);
+        const WorldState& end = microsteps_all.back();
+
+        // Run the template band through the gripper actions up to the start of of transition test,
+        // updating the band only when the grippers move to account for the "microstepping".
+        // This gets us the planned band
+        auto prev_endpoints = band.getEndpoints();
+        for (size_t idx = 0; idx < microsteps_all.size() - microsteps_last.size(); ++idx)
+        {
+            const auto next_positions = ToGripperPositions(microsteps_all[idx].all_grippers_single_pose_);
+            if (next_positions != prev_endpoints)
+            {
+                band.forwardPropagate(next_positions, false);
+                prev_endpoints = next_positions;
+            }
+        }
+
+        const auto start_state = TransitionEstimation::State
+        {
+            start.object_configuration_,
+            RubberBand::BandFromWorldState(start, template_band),
+            std::make_shared<RubberBand>(band),
+            start.rope_node_transforms_
+        };
+
+        // Propagate the planned band the last step
+        band.forwardPropagate(ToGripperPositions(end.all_grippers_single_pose_), false);
+        const auto end_state = TransitionEstimation::State
+        {
+            end.object_configuration_,
+            RubberBand::BandFromWorldState(end, template_band),
+            std::make_shared<RubberBand>(band),
+            end.rope_node_transforms_
+        };
+
+        std::vector<RubberBand::Ptr> microsteps_bands;
+        microsteps_bands.reserve(microsteps_last.size());
+        for (size_t idx = 0; idx < microsteps_last.size(); ++idx)
+        {
+            microsteps_bands.push_back(std::make_shared<RubberBand>(template_band));
+            if (!microsteps_bands.back()->resetBand(microsteps_last[idx]))
+            {
+                throw_arc_exception(std::runtime_error, "Unable to extract surface");
+            }
+        }
+
+        return TransitionEstimation::StateTransition
+        {
+            start_state,
+            end_state,
+            start_state.planned_rubber_band_->getEndpoints(),
+            end_state.planned_rubber_band_->getEndpoints(),
+            microsteps_last,
+            microsteps_bands
+        };
     }
 }
 
@@ -170,6 +236,53 @@ namespace smmap
             return false;
         }
         return true;
+    }
+
+    std::vector<Visualizer::NamespaceId> TransitionSimulationRecord::visualize(
+            const std::string& basename,
+            const Visualizer::Ptr& vis) const
+    {
+        std::vector<Visualizer::NamespaceId> marker_ids;
+        // Template - starting planned band
+        {
+            const auto color = Visualizer::Green();
+            const auto name = basename + "template__start";
+            const auto new_ids = template_.starting_state_.planned_rubber_band_->visualize(name, color, color, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
+        // Template - ending executed band
+        {
+            const auto color = Visualizer::Cyan();
+            const auto name = basename + "template__executed";
+            const auto new_ids = template_.ending_state_.rubber_band_->visualize(name, color, color, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
+        // Template - Executed band surface
+        {
+            const auto start_color = Visualizer::Green();
+            const auto end_color = Visualizer::Cyan();
+            const auto name = basename + "template__band_surface";
+            const auto new_ids = RubberBand::VisualizeBandSurface(vis, template_band_surface_, template_.microstep_band_history_.size(), start_color, end_color, name, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
+        // Adaptation process - default next band
+        {
+            const auto color = Visualizer::Yellow();
+            const auto name = basename + "adaptation_process__default_next_band";
+            const auto new_ids = adaptation_result_.default_next_band_->visualize(name, color, color, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
+        // Adaptation process -
+
+        return marker_ids;
     }
 }
 
@@ -441,16 +554,29 @@ namespace smmap
             std::cout << "Time taken: " << stopwatch(READ) << std::endl;
         }
 
-        PressAnyKeyToContinue("Tested canonical position with perturbations");
-
-        const auto files = getDataFileList();
-        for (const auto& file : files)
+        auto data_processing = DataProcessing(*this);
         {
-            try
-            {
-                vis_->deleteAll();
+            dmm::TransitionTestingVisualizationRequest req;
+            req.data = "cannonical_straight_test/unmodified.compressed";
+            dmm::TransitionTestingVisualizationResponse res;
+            data_processing.setSourceCallback(req, res);
+        }
+        {
+            dmm::TransitionTestingVisualizationRequest req;
+            req.data = "cannonical_straight_test/perturbed_gripper_start_positions/gripper_a_0_0_0/gripper_b_0_0_0.compressed";
+            dmm::TransitionTestingVisualizationResponse res;
+            data_processing.addVisualizationCallback(req, res);
+            std::cout << res << std::endl;
+        }
+        PressAnyKeyToContinue("visualization testing");
 
-                const TransitionSimulationRecord sim_record = loadSimRecord(file);
+//        const auto files = getDataFileList();
+//        for (const auto& file : files)
+//        {
+//            try
+//            {
+//                vis_->deleteAll();
+//                const TransitionSimulationRecord sim_record = loadSimRecord(file);
 //                sim_record.visualize(vis_);
 //                PressKeyToContinue("Sim Record Vis ");
 
@@ -471,12 +597,12 @@ namespace smmap
 //                transition_estimator_->estimateTransitions(
 //                            b,
 //                            sim_record.tested_.ending_gripper_positions_);
-            }
-            catch (const std::exception& ex)
-            {
-                ROS_ERROR_STREAM("Error parsing file: " << file << ": " << ex.what());
-            }
-        }
+//            }
+//            catch (const std::exception& ex)
+//            {
+//                ROS_ERROR_STREAM("Error parsing file: " << file << ": " << ex.what());
+//            }
+//        }
     }
 }
 
@@ -516,13 +642,13 @@ namespace smmap
             const std::string& data_folder)
     {
         const auto num_threads = GetNumOMPThreads();
-        std::vector<deformable_manipulation_msgs::TransitionTest> tests;
+        std::vector<dmm::TransitionTest> tests;
         std::vector<std::string> filenames;
         tests.reserve(num_threads);
         filenames.reserve(num_threads);
 
-//        std::vector<deformable_manipulation_msgs::TransitionTestResult> results(tests.size());
-        const auto feedback_callback = [&] (const size_t test_id, const deformable_manipulation_msgs::TransitionTestResult& result)
+//        std::vector<dmm::TransitionTestResult> results(tests.size());
+        const auto feedback_callback = [&] (const size_t test_id, const dmm::TransitionTestResult& result)
         {
 //            std::cout << data_folder + "/" + test_descriptions[test_id] + ".compressed" << std::endl;
 ////            results[test_id] = result;
@@ -535,17 +661,22 @@ namespace smmap
 
         //// Generate the canonical example ////////////////////////////////////
         {
-            Isometry3d gripper_a_ending_pose_ = fw_.gripper_a_starting_pose_ * Translation3d(fw_.gripper_a_action_vector_);
-            Isometry3d gripper_b_ending_pose_ = fw_.gripper_b_starting_pose_ * Translation3d(fw_.gripper_b_action_vector_);
-            const auto canonical_test = fw_.robot_->toRosTransitionTest(
-                        fw_.initial_world_state_.rope_node_transforms_,
-                        fw_.initial_world_state_.all_grippers_single_pose_,
-                        generateTestPath({fw_.gripper_a_starting_pose_, fw_.gripper_b_starting_pose_}),
-                        {gripper_a_ending_pose_, gripper_b_ending_pose_});
-            tests.push_back(canonical_test);
-            filenames.push_back(data_folder +
-                                "/cannonical_straight_test"
-                                "/unmodified.compressed");
+            arc_utilities::CreateDirectory(data_folder + "/cannonical_straight_test");
+            const std::string filename(data_folder +
+                                       "/cannonical_straight_test"
+                                       "/unmodified.compressed");
+            if (!boost::filesystem::is_regular_file(filename))
+            {
+                Isometry3d gripper_a_ending_pose_ = fw_.gripper_a_starting_pose_ * Translation3d(fw_.gripper_a_action_vector_);
+                Isometry3d gripper_b_ending_pose_ = fw_.gripper_b_starting_pose_ * Translation3d(fw_.gripper_b_action_vector_);
+                const auto canonical_test = fw_.robot_->toRosTransitionTest(
+                            fw_.initial_world_state_.rope_node_transforms_,
+                            fw_.initial_world_state_.all_grippers_single_pose_,
+                            generateTestPath({fw_.gripper_a_starting_pose_, fw_.gripper_b_starting_pose_}),
+                            {gripper_a_ending_pose_, gripper_b_ending_pose_});
+                tests.push_back(canonical_test);
+                filenames.push_back(filename);
+            }
         }
 
         //// Generate versions with perturbed gripper start positions //////////
@@ -738,5 +869,83 @@ namespace smmap
 
 namespace smmap
 {
+    TransitionTesting::DataProcessing::DataProcessing(
+            const TransitionTesting& framework)
+        : fw_(framework)
+        , set_source_(fw_.nh_->advertiseService("transition_vis/set_source", &DataProcessing::setSourceCallback, this))
+        , add_visualization_(fw_.nh_->advertiseService("transition_vis/add_visualization", &DataProcessing::addVisualizationCallback, this))
+        , remove_visualization_(fw_.nh_->advertiseService("transition_vis/remove_visualization", &DataProcessing::removeVisualizationCallback, this))
+        , source_valid_(false)
+        , next_vis_prefix_(0)
+    {}
 
+    bool TransitionTesting::DataProcessing::setSourceCallback(
+            dmm::TransitionTestingVisualizationRequest& req,
+            dmm::TransitionTestingVisualizationResponse& res)
+    {
+        (void)res;
+
+        const std::string fullpath = fw_.data_folder_ + "/" + req.data;
+        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(fullpath);
+        const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+
+        source_file_ = req.data;
+        source_transition_ = ToStateTransition(test_result, *fw_.band_);
+        source_band_surface_ = RubberBand::AggregateBandPoints(source_transition_.microstep_band_history_);
+
+        return true;
+    }
+
+    bool TransitionTesting::DataProcessing::addVisualizationCallback(
+            deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+            deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res)
+    {
+        if (!source_valid_)
+        {
+            return false;
+        }
+
+        const std::string fullpath = fw_.data_folder_ + "/" + req.data;
+        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(fullpath);
+        const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+
+        const auto test_transition = ToStateTransition(test_result, *fw_.band_);
+        const auto adaptation_record = fw_.transition_estimator_->generateTransition(
+                    source_transition_,
+                    *test_transition.starting_state_.planned_rubber_band_,
+                    test_transition.ending_gripper_positions_);
+
+        const auto sim_record = TransitionSimulationRecord
+        {
+            source_transition_,
+            RubberBand::AggregateBandPoints(source_transition_.microstep_band_history_),
+            test_transition,
+            RubberBand::AggregateBandPoints(test_transition.microstep_band_history_),
+            adaptation_record
+        };
+        res.response = source_file_ + "____" + req.data;
+        visid_to_markers_[res.response] = sim_record.visualize(std::to_string(next_vis_prefix_) + "__", fw_.vis_);
+        ++next_vis_prefix_;
+        return true;
+    }
+
+    bool TransitionTesting::DataProcessing::removeVisualizationCallback(
+            deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+            deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res)
+    {
+        try
+        {
+            const auto markers_nsid = visid_to_markers_.at(req.data);
+            for (const auto& nsid : markers_nsid)
+            {
+                fw_.vis_->deleteObjects(nsid.first, nsid.second, nsid.second + 1);
+            }
+            visid_to_markers_.erase(req.data);
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
 }

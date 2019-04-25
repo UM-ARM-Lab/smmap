@@ -569,6 +569,7 @@ std::vector<RubberBand::Ptr> TransitionEstimation::reduceMicrostepsToBands(
     {
         if (microsteps[idx].all_grippers_single_pose_.size() == 0)
         {
+            // TODO: why is this here?
             continue;
         }
         bands.push_back(std::make_shared<RubberBand>(template_band_));
@@ -660,14 +661,12 @@ Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMo
         // and the planned rubber band are in the same first order homotopy class
         if (checkFirstOrderHomotopy(*start_state.rubber_band_, *end_state.planned_rubber_band_))
         {
-            const PairGripperPositions starting_gripper_positions = start_state.planned_rubber_band_->getEndpoints();
-            const PairGripperPositions ending_gripper_positions = end_state.planned_rubber_band_->getEndpoints();
-            StateTransition transition =
+            StateTransition transition
             {
                 start_state,
                 end_state,
-                starting_gripper_positions,
-                ending_gripper_positions,
+                start_state.planned_rubber_band_->getEndpoints(),
+                end_state.planned_rubber_band_->getEndpoints(),
                 trajectory[idx].second,
                 reduceMicrostepsToBands(trajectory[idx].second)
             };
