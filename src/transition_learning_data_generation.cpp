@@ -568,7 +568,7 @@ namespace smmap
             Stopwatch stopwatch;
             DataGeneration data_generator(*this);
             data_generator.generateTestData(data_folder_);
-            std::cout << "Time taken: " << stopwatch(READ) << std::endl;
+            std::cout << "Data generation time taken: " << stopwatch(READ) << std::endl;
         }
 
         auto data_processing = DataProcessing(*this);
@@ -588,34 +588,39 @@ namespace smmap
 //        }
 //        PressAnyKeyToContinue("visualization testing");
 
-        const auto files = getDataFileList();
-        #pragma omp parallel for
-        for (size_t idx = 0; idx < files.size(); ++idx)
+        // Generating transition approxmiations
         {
-            const auto& file = files[idx];
-            try
+            Stopwatch stopwatch;
+            const auto files = getDataFileList();
+            #pragma omp parallel for
+            for (size_t idx = 0; idx < files.size(); ++idx)
             {
-                const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(file);
-                const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
-
-                const auto test_transition = ToStateTransition(test_result, *band_);
-                const auto adaptation_record = transition_estimator_->generateTransition(
-                            data_processing.source_transition_,
-                            *test_transition.starting_state_.planned_rubber_band_,
-                            test_transition.ending_gripper_positions_);
-                // Save result to file
+                const auto& file = files[idx];
+                try
                 {
-                    std::vector<uint8_t> output_buffer;
-                    adaptation_record.serialize(output_buffer);
                     const auto output_file = file.substr(0, file.find(".compressed")) + "__adapatation_record.compressed";
-                    std::cout << "Writing to " << output_file << std::endl;
-                    ZlibHelpers::CompressAndWriteToFile(buffer, output_file);
+                    if (!boost::filesystem::is_regular_file(output_file))
+                    {
+                        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(file);
+                        const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+
+                        const auto test_transition = ToStateTransition(test_result, *band_);
+                        const auto adaptation_record = transition_estimator_->generateTransition(
+                                    data_processing.source_transition_,
+                                    *test_transition.starting_state_.planned_rubber_band_,
+                                    test_transition.ending_gripper_positions_);
+
+                        std::vector<uint8_t> output_buffer;
+                        adaptation_record.serialize(output_buffer);
+                        ZlibHelpers::CompressAndWriteToFile(buffer, output_file);
+                    }
+                }
+                catch (const std::exception& ex)
+                {
+                    ROS_ERROR_STREAM("Error parsing idx: " << idx << " file: " << file << ": " << ex.what());
                 }
             }
-            catch (const std::exception& ex)
-            {
-                ROS_ERROR_STREAM("Error parsing idx: " << idx << " file: " << file << ": " << ex.what());
-            }
+            std::cout << "Data processing time taken: " << stopwatch(READ) << std::endl;
         }
     }
 }
