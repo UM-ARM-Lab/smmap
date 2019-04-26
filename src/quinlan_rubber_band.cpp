@@ -107,11 +107,18 @@ namespace smmap
         ObjectPointSet points(3, points_per_band * bands.size());
         for (size_t band_idx = 0; band_idx < bands.size(); ++band_idx)
         {
-            const auto band_points = bands[band_idx]->upsampleBand();
-            for (size_t point_idx = 0; point_idx < band_points.size(); ++point_idx)
+            if (bands[band_idx] != nullptr)
             {
-                points.col(band_idx * points_per_band + point_idx) =
-                        band_points[point_idx];
+                const auto band_points = bands[band_idx]->upsampleBand();
+                for (size_t point_idx = 0; point_idx < band_points.size(); ++point_idx)
+                {
+                    points.col(band_idx * points_per_band + point_idx) =
+                            band_points[point_idx];
+                }
+            }
+            else
+            {
+                ROS_WARN_NAMED("rubber_band", "Invalid band in aggregate band points");
             }
         }
         return points;
@@ -129,11 +136,19 @@ namespace smmap
         ObjectPointSet points(3, points_per_band * bands.size());
         for (size_t band_idx = 0; band_idx < bands.size(); ++band_idx)
         {
-            const auto band_points = bands[band_idx]->upsampleBand();
-            for (size_t point_idx = 0; point_idx < band_points.size(); ++point_idx)
+            if (bands[band_idx] != nullptr)
             {
-                points.col(band_idx * points_per_band + point_idx) =
-                        band_points[point_idx];
+                const auto band_points = bands[band_idx]->upsampleBand();
+                for (size_t point_idx = 0; point_idx < band_points.size(); ++point_idx)
+                {
+                    points.col(band_idx * points_per_band + point_idx) =
+                            band_points[point_idx];
+                }
+
+            }
+            else
+            {
+                ROS_WARN_NAMED("rubber_band", "Invalid band in aggregate band points");
             }
         }
         return points;

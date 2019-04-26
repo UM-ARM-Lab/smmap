@@ -311,7 +311,6 @@ uint64_t TransitionEstimation::TransitionAdaptationResult::serialize(std::vector
     SerializeFixedSizePOD(template_misalignment_dist_, buffer);
     SerializeFixedSizePOD(default_band_foh_result_, buffer);
     SerializeFixedSizePOD(default_band_dist_, buffer);
-    SerializeFixedSizePOD(entire_surface_mapable_, buffer);
     SerializeFixedSizePOD(num_foh_changes_, buffer);
 
     const auto bytes_written = buffer.size() - starting_bytes;
@@ -377,9 +376,6 @@ std::pair<TransitionEstimation::TransitionAdaptationResult, uint64_t> Transition
     const auto default_band_dist_deserialized = DeserializeFixedSizePOD<double>(buffer, pos);
     pos += default_band_dist_deserialized.second;
 
-    const auto entire_surface_mapable_deserialized = DeserializeFixedSizePOD<bool>(buffer, pos);
-    pos += entire_surface_mapable_deserialized.second;
-
     const auto num_foh_changes_deserialized = DeserializeFixedSizePOD<int>(buffer, pos);
     pos += num_foh_changes_deserialized.second;
 
@@ -399,7 +395,6 @@ std::pair<TransitionEstimation::TransitionAdaptationResult, uint64_t> Transition
         template_misalignment_dist_deserialized.first,
         default_band_foh_result_deserialized.first,
         default_band_dist_deserialized.first,
-        entire_surface_mapable_deserialized.first,
         num_foh_changes_deserialized.first
     };
     return {record, pos - current};
@@ -455,10 +450,6 @@ bool TransitionEstimation::TransitionAdaptationResult::operator==(const Transiti
         return false;
     }
     if (default_band_dist_ != other.default_band_dist_)
-    {
-        return false;
-    }
-    if (entire_surface_mapable_ != other.entire_surface_mapable_)
     {
         return false;
     }
@@ -768,7 +759,6 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
     // Map the entire memorized band surface to the new environment, and check that all bands are "mapable"
     const auto stored_bands = stored_trans.microstep_band_history_;
     std::vector<RubberBand::Ptr> tightened_transformed_bands_from_stored_bands(stored_bands.size(), nullptr);
-    bool all_bands_mapable = true;
     for (size_t band_surface_idx = 0; band_surface_idx < stored_bands.size(); ++band_surface_idx)
     {
         // Transform the stored band into the test band space
@@ -781,33 +771,27 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
         const auto points_to_smooth = RubberBand::PointsFromBandPointsAndGripperTargets(transformed_band, gripper_targets, 1);
 
         auto band = std::make_shared<RubberBand>(*stored_band);
-        if (band->setPointsAndSmooth(points_to_smooth))
+        if (!band->setPointsAndSmooth(points_to_smooth))
         {
-            tightened_transformed_bands_from_stored_bands[band_surface_idx] = band;
+            throw_arc_exception(std::runtime_error, "Unable to map band surface");
         }
-        else
-        {
-            all_bands_mapable = false;
-        }
+        tightened_transformed_bands_from_stored_bands[band_surface_idx] = band;
     }
 
     std::vector<bool> foh_changes;
     int num_foh_changes = -1;
-    if (all_bands_mapable)
+    for (size_t idx = 0; idx < tightened_transformed_bands_from_stored_bands.size() - 1; ++idx)
     {
-        for (size_t idx = 0; idx < tightened_transformed_bands_from_stored_bands.size() - 1; ++idx)
+        RubberBand::Ptr b1 = tightened_transformed_bands_from_stored_bands[idx];
+        RubberBand::Ptr b2 = tightened_transformed_bands_from_stored_bands[idx];
+        if (checkFirstOrderHomotopy(*b1, *b2))
         {
-            RubberBand::Ptr b1 = tightened_transformed_bands_from_stored_bands[idx];
-            RubberBand::Ptr b2 = tightened_transformed_bands_from_stored_bands[idx];
-            if (checkFirstOrderHomotopy(*b1, *b2))
-            {
-                foh_changes.push_back(true);
-                ++num_foh_changes;
-            }
-            else
-            {
-                foh_changes.push_back(false);
-            }
+            foh_changes.push_back(true);
+            ++num_foh_changes;
+        }
+        else
+        {
+            foh_changes.push_back(false);
         }
     }
 
@@ -827,7 +811,6 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
         template_misalignment_dist,
         foh_result,
         band_dist_sq,
-        all_bands_mapable,
         num_foh_changes
     };
 }

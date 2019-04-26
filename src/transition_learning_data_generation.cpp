@@ -608,12 +608,13 @@ namespace smmap
                     std::vector<uint8_t> output_buffer;
                     adaptation_record.serialize(output_buffer);
                     const auto output_file = file.substr(0, file.find(".compressed")) + "__adapatation_record.compressed";
+                    std::cout << "Writing to " << output_file << std::endl;
                     ZlibHelpers::CompressAndWriteToFile(buffer, output_file);
                 }
             }
             catch (const std::exception& ex)
             {
-                ROS_ERROR_STREAM("Error parsing file: " << file << ": " << ex.what());
+                ROS_ERROR_STREAM("Error parsing idx: " << idx << " file: " << file << ": " << ex.what());
             }
         }
     }
@@ -907,11 +908,15 @@ namespace smmap
         source_band_surface_ = RubberBand::AggregateBandPoints(source_transition_.microstep_band_history_);
         source_valid_ = true;
 
-        // Ensure all bands have been upsampled to avoid race conditions in multithreading later
+        // Ensure all bands have been upsampled and resampled to avoid race conditions in multithreading later
         source_transition_.starting_state_.rubber_band_->upsampleBand();
+        source_transition_.starting_state_.rubber_band_->resampleBand();
         source_transition_.starting_state_.planned_rubber_band_->upsampleBand();
+        source_transition_.starting_state_.planned_rubber_band_->resampleBand();
         source_transition_.ending_state_.rubber_band_->upsampleBand();
+        source_transition_.ending_state_.rubber_band_->resampleBand();
         source_transition_.ending_state_.planned_rubber_band_->upsampleBand();
+        source_transition_.ending_state_.planned_rubber_band_->resampleBand();
 
         return true;
     }
