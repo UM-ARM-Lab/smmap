@@ -197,6 +197,7 @@ namespace smmap
             const Visualizer::Ptr& vis) const
     {
         std::vector<Visualizer::NamespaceId> marker_ids;
+
         // Template - starting planned band
         {
             const auto color = Visualizer::Green();
@@ -225,16 +226,90 @@ namespace smmap
                               std::make_move_iterator(new_ids.begin()),
                               std::make_move_iterator(new_ids.end()));
         }
-        // Adaptation process - default next band
+        // Test - start planned band
         {
             const auto color = Visualizer::Yellow();
-            const auto name = basename + "adaptation_process__default_next_band";
+            const auto name = basename + "tested__start";
+            const auto new_ids = tested_.starting_state_.planned_rubber_band_->visualize(name, color, color, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
+        // Test - start planned band
+        {
+            const auto color = Visualizer::Orange();
+            const auto name = basename + "tested__executed";
+            const auto new_ids = tested_.ending_state_.rubber_band_->visualize(name, color, color, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
+        // Test - Executed band surface
+        {
+            const auto start_color = Visualizer::Yellow();
+            const auto end_color = Visualizer::Orange();
+            const auto name = basename + "tested__band_surface";
+            const auto new_ids = RubberBand::VisualizeBandSurface(vis, tested_band_surface_, tested_.microstep_band_history_.size(), start_color, end_color, name, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
+        // Adaptation process - default next band
+        {
+            const auto color = Visualizer::Red();
+            const auto name = basename + "adaptation__default_next_band";
             const auto new_ids = adaptation_result_.default_next_band_->visualize(name, color, color, 1);
             marker_ids.insert(marker_ids.end(),
                               std::make_move_iterator(new_ids.begin()),
                               std::make_move_iterator(new_ids.end()));
         }
-        // Adaptation process -
+        // Adaptation process - template aligned
+        {
+            const auto color = Visualizer::Magenta();
+            const auto name = basename + "adaptation__template_aligned_to_target";
+            const auto new_ids = vis->visualizePoints(name, adaptation_result_.template_planned_band_aligned_to_target_, color, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
+        // Adaptation process - next_band_points_to_smooth_
+        {
+            const auto color = Visualizer::Seafoam();
+            const auto name = basename + "adaptation__next_band_points_to_smooth";
+            const auto new_ids = vis->visualizePoints(name, adaptation_result_.next_band_points_to_smooth_, color, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
+        // Adaptation process - next_band_points_to_smooth_
+        {
+            const auto start_color = Visualizer::Blue();
+            const auto end_color = Visualizer::Seafoam();
+            const auto name = basename + "adaptation__transformed_band_surface_points";
+            const auto new_ids = RubberBand::VisualizeBandSurface(vis, adaptation_result_.transformed_band_surface_points_, tested_.microstep_band_history_.size(), start_color, end_color, name, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
+        // Adaptation process - re-tightened band surface
+        {
+            const auto start_color = Visualizer::Olive();
+            const auto end_color = Visualizer::Coral();
+            const auto name = basename + "adaptation__tightened_transformed_bands_surface";
+            const auto new_ids = RubberBand::VisualizeBandSurface(vis, adaptation_result_.tightened_transformed_bands_surface_, tested_.microstep_band_history_.size(), start_color, end_color, name, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
+        // Adaptation process - final result
+        {
+            const auto color = Visualizer::Coral();
+            const auto name = basename + "adaptation__result";
+            const auto new_ids = adaptation_result_.result_->visualize(name, color, color, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
 
         return marker_ids;
     }
@@ -517,7 +592,7 @@ namespace smmap
         }
         {
             dmm::TransitionTestingVisualizationRequest req;
-            req.data = "cannonical_straight_test/perturbed_gripper_start_positions/gripper_a_0_0_0.05/gripper_b_-0.1_-0.05_-0.1.compressed";
+            req.data = "cannonical_straight_test/perturbed_gripper_start_positions/gripper_a_-0.1_-0.1_-0.1/gripper_b_-0.1_-0.1_-0.1.compressed";
             dmm::TransitionTestingVisualizationResponse res;
             data_processing.addVisualizationCallback(req, res);
         }

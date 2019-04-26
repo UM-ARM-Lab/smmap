@@ -741,8 +741,8 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
                 warping_target_points.topRows<2>());
 
     const double z_shift =
-            warping_template_points_planned.bottomRows<1>().mean() -
-            warping_target_points.bottomRows<1>().mean();
+            warping_target_points.bottomRows<1>().mean() -
+            warping_template_points_planned.bottomRows<1>().mean();
 
     Isometry3d transform = Isometry3d::Identity();
     transform.matrix().topLeftCorner<2, 2>() = xytransform.topLeftCorner<2, 2>();
