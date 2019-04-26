@@ -103,59 +103,42 @@ namespace smmap
         std::vector<std::string> getDataFileList();
 
     public:
-        void runTests(const bool generate_new_test_data);
+        void runTests(const bool generate_test_data,
+                      const bool generate_transition_approximations);
+        void generateTestData();
+        void generateTransitionApproximations();
 
     private:
 
         //// Data Generation ///////////////////////////////////////////////////
 
-        class DataGeneration
-        {
-        public:
-            DataGeneration(const TransitionTesting& framework);
-            void generateTestData(const std::string& data_folder);
+        AllGrippersPoseTrajectory generateTestPath(
+                const AllGrippersSinglePose& gripper_target_poses);
 
-        private:
-            const TransitionTesting& fw_;
+        //// Data Visualization ////////////////////////////////////////////////
 
-            AllGrippersPoseTrajectory generateTestPath(
-                    const AllGrippersSinglePose& gripper_target_poses);
-        };
-        friend class DataGeneration;
+        ros::ServiceServer set_source_;
+        ros::ServiceServer add_visualization_;
+        ros::ServiceServer remove_visualization_;
 
-        //// Data Processing ///////////////////////////////////////////////////
+        bool source_valid_;
+        std::string source_file_;
+        TransitionEstimation::StateTransition source_transition_;
+        ObjectPointSet source_band_surface_;
 
-        class DataProcessing
-        {
-        public:
-            DataProcessing(const TransitionTesting& framework);
+        // Maps filenames to ns+ids
+        std::map<std::string, std::vector<Visualizer::NamespaceId>> visid_to_markers_;
+        int next_vis_prefix_;
 
-            const TransitionTesting& fw_;
-
-            ros::ServiceServer set_source_;
-            ros::ServiceServer add_visualization_;
-            ros::ServiceServer remove_visualization_;
-
-            bool source_valid_;
-            std::string source_file_;
-            TransitionEstimation::StateTransition source_transition_;
-            ObjectPointSet source_band_surface_;
-
-            // Maps filenames to ns+ids
-            std::map<std::string, std::vector<Visualizer::NamespaceId>> visid_to_markers_;
-            int next_vis_prefix_;
-
-            bool setSourceCallback(
-                    deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
-                    deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
-            bool addVisualizationCallback(
-                    deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
-                    deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
-            bool removeVisualizationCallback(
-                    deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
-                    deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
-
-        };
-        friend class DataProcessing;
+    public:
+        bool setSourceCallback(
+                deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+                deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
+        bool addVisualizationCallback(
+                deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+                deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
+        bool removeVisualizationCallback(
+                deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+                deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
     };
 }

@@ -356,6 +356,12 @@ namespace smmap
         , initial_world_state_(robot_->start())
 
         , data_folder_(ROSHelpers::GetParam<std::string>(*ph_, "data_folder", "/tmp/transition_learning_data_generation"))
+
+        , set_source_(nh_->advertiseService("transition_vis/set_source", &TransitionTesting::setSourceCallback, this))
+        , add_visualization_(nh_->advertiseService("transition_vis/add_visualization", &TransitionTesting::addVisualizationCallback, this))
+        , remove_visualization_(nh_->advertiseService("transition_vis/remove_visualization", &TransitionTesting::removeVisualizationCallback, this))
+        , source_valid_(false)
+        , next_vis_prefix_(0)
     {
         std::srand((unsigned int)seed_);
         initialize(initial_world_state_);
@@ -560,66 +566,19 @@ namespace smmap
         return files;
     }
 
-    void TransitionTesting::runTests(const bool generate_new_test_data)
+    void TransitionTesting::runTests(const bool generate_test_data, const bool generate_transition_approximations)
     {
-
-        if (generate_new_test_data)
+        if (generate_test_data)
         {
             Stopwatch stopwatch;
-            DataGeneration data_generator(*this);
-            data_generator.generateTestData(data_folder_);
+            generateTestData();
             std::cout << "Data generation time taken: " << stopwatch(READ) << std::endl;
         }
 
-        auto data_processing = DataProcessing(*this);
-        {
-            dmm::TransitionTestingVisualizationRequest req;
-            req.data = "cannonical_straight_test/unmodified.compressed";
-            dmm::TransitionTestingVisualizationResponse res;
-            data_processing.setSourceCallback(req, res);
-        }
-
-
-//        {
-//            dmm::TransitionTestingVisualizationRequest req;
-//            req.data = "cannonical_straight_test/perturbed_gripper_start_positions/gripper_a_-0.1_-0.1_-0.1/gripper_b_-0.1_-0.1_-0.1.compressed";
-//            dmm::TransitionTestingVisualizationResponse res;
-//            data_processing.addVisualizationCallback(req, res);
-//        }
-//        PressAnyKeyToContinue("visualization testing");
-
-        // Generating transition approxmiations
+        if (generate_transition_approximations)
         {
             Stopwatch stopwatch;
-            const auto files = getDataFileList();
-            #pragma omp parallel for
-            for (size_t idx = 0; idx < files.size(); ++idx)
-            {
-                const auto& file = files[idx];
-                try
-                {
-                    const auto output_file = file.substr(0, file.find(".compressed")) + "__adapatation_record.compressed";
-                    if (!boost::filesystem::is_regular_file(output_file))
-                    {
-                        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(file);
-                        const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
-
-                        const auto test_transition = ToStateTransition(test_result, *band_);
-                        const auto adaptation_record = transition_estimator_->generateTransition(
-                                    data_processing.source_transition_,
-                                    *test_transition.starting_state_.planned_rubber_band_,
-                                    test_transition.ending_gripper_positions_);
-
-                        std::vector<uint8_t> output_buffer;
-                        adaptation_record.serialize(output_buffer);
-                        ZlibHelpers::CompressAndWriteToFile(buffer, output_file);
-                    }
-                }
-                catch (const std::exception& ex)
-                {
-                    ROS_ERROR_STREAM("Error parsing idx: " << idx << " file: " << file << ": " << ex.what());
-                }
-            }
+            generateTransitionApproximations();
             std::cout << "Data processing time taken: " << stopwatch(READ) << std::endl;
         }
     }
@@ -652,13 +611,7 @@ namespace smmap
         return perturbations;
     }
 
-    TransitionTesting::DataGeneration::DataGeneration(
-            const TransitionTesting& framework)
-        : fw_(framework)
-    {}
-
-    void TransitionTesting::DataGeneration::generateTestData(
-            const std::string& data_folder)
+    void TransitionTesting::generateTestData()
     {
         const auto num_threads = GetNumOMPThreads();
         std::vector<dmm::TransitionTest> tests;
@@ -669,29 +622,29 @@ namespace smmap
 //        std::vector<dmm::TransitionTestResult> results(tests.size());
         const auto feedback_callback = [&] (const size_t test_id, const dmm::TransitionTestResult& result)
         {
-//            std::cout << data_folder + "/" + test_descriptions[test_id] + ".compressed" << std::endl;
+//            std::cout << data_folder_ + "/" + test_descriptions[test_id] + ".compressed" << std::endl;
 ////            results[test_id] = result;
 //            std::vector<uint8_t> buffer;
 //            RosMessageSerializationWrapper(result, buffer);
-//            ZlibHelpers::CompressAndWriteToFile(buffer, data_folder + "//" + test_descriptions[test_id] + ".compressed");
+//            ZlibHelpers::CompressAndWriteToFile(buffer, data_folder_ + "//" + test_descriptions[test_id] + ".compressed");
             (void)test_id;
             (void)result;
         };
 
         //// Generate the canonical example ////////////////////////////////////
         {
-            arc_utilities::CreateDirectory(data_folder + "/cannonical_straight_test");
-            const std::string filename(data_folder +
+            arc_utilities::CreateDirectory(data_folder_ + "/cannonical_straight_test");
+            const std::string filename(data_folder_ +
                                        "/cannonical_straight_test"
                                        "/unmodified.compressed");
             if (!boost::filesystem::is_regular_file(filename))
             {
-                Isometry3d gripper_a_ending_pose_ = Translation3d(fw_.gripper_a_action_vector_) * fw_.gripper_a_starting_pose_;
-                Isometry3d gripper_b_ending_pose_ = Translation3d(fw_.gripper_b_action_vector_) * fw_.gripper_b_starting_pose_;
-                const auto canonical_test = fw_.robot_->toRosTransitionTest(
-                            fw_.initial_world_state_.rope_node_transforms_,
-                            fw_.initial_world_state_.all_grippers_single_pose_,
-                            generateTestPath({fw_.gripper_a_starting_pose_, fw_.gripper_b_starting_pose_}),
+                Isometry3d gripper_a_ending_pose_ = Translation3d(gripper_a_action_vector_) * gripper_a_starting_pose_;
+                Isometry3d gripper_b_ending_pose_ = Translation3d(gripper_b_action_vector_) * gripper_b_starting_pose_;
+                const auto canonical_test = robot_->toRosTransitionTest(
+                            initial_world_state_.rope_node_transforms_,
+                            initial_world_state_.all_grippers_single_pose_,
+                            generateTestPath({gripper_a_starting_pose_, gripper_b_starting_pose_}),
                             {gripper_a_ending_pose_, gripper_b_ending_pose_});
                 tests.push_back(canonical_test);
                 filenames.push_back(filename);
@@ -700,23 +653,23 @@ namespace smmap
 
         //// Generate versions with perturbed gripper start positions //////////
         {
-            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*fw_.ph_, "perturbations/gripper_positions/max_magnitude", __func__).GetImmutable();
-            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*fw_.ph_, "perturbations/gripper_positions/num_divisions", __func__).GetImmutable();
+            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*ph_, "perturbations/gripper_positions/max_magnitude", __func__).GetImmutable();
+            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*ph_, "perturbations/gripper_positions/num_divisions", __func__).GetImmutable();
             const auto perturbations = Vec3dPerturbations(max_magnitude, num_divisions);
             std::cout << "Num position perturbations: " << perturbations.size() * perturbations.size()<< std::endl;
             #pragma omp parallel for
             for (size_t a_idx = 0; a_idx < perturbations.size(); ++a_idx)
             {
-                const Isometry3d gripper_a_starting_pose = Translation3d(perturbations[a_idx]) * fw_.gripper_a_starting_pose_;
-                const Isometry3d gripper_a_ending_pose = Translation3d(fw_.gripper_a_action_vector_) * gripper_a_starting_pose;
+                const Isometry3d gripper_a_starting_pose = Translation3d(perturbations[a_idx]) * gripper_a_starting_pose_;
+                const Isometry3d gripper_a_ending_pose = Translation3d(gripper_a_action_vector_) * gripper_a_starting_pose;
                 for (size_t b_idx = 0; b_idx < perturbations.size(); ++b_idx)
                 {
                     try
                     {
-                        const Isometry3d gripper_b_starting_pose = Translation3d(perturbations[b_idx]) * fw_.gripper_b_starting_pose_;
-                        const Isometry3d gripper_b_ending_pose = Translation3d(fw_.gripper_b_action_vector_) * gripper_b_starting_pose;
+                        const Isometry3d gripper_b_starting_pose = Translation3d(perturbations[b_idx]) * gripper_b_starting_pose_;
+                        const Isometry3d gripper_b_ending_pose = Translation3d(gripper_b_action_vector_) * gripper_b_starting_pose;
 
-                        const std::string folder(data_folder +
+                        const std::string folder(data_folder_ +
                                                  "/cannonical_straight_test"
                                                  "/perturbed_gripper_start_positions"
                                                  "/gripper_a_" + ToString(perturbations[a_idx]));
@@ -727,9 +680,9 @@ namespace smmap
 
                         if (!boost::filesystem::is_regular_file(filename))
                         {
-                            const auto test = fw_.robot_->toRosTransitionTest(
-                                        fw_.initial_world_state_.rope_node_transforms_,
-                                        fw_.initial_world_state_.all_grippers_single_pose_,
+                            const auto test = robot_->toRosTransitionTest(
+                                        initial_world_state_.rope_node_transforms_,
+                                        initial_world_state_.all_grippers_single_pose_,
                                         generateTestPath({gripper_a_starting_pose, gripper_b_starting_pose}),
                                         {gripper_a_ending_pose, gripper_b_ending_pose});
 
@@ -742,7 +695,7 @@ namespace smmap
                                 // Execute the tests if tehre are enough to run
                                 if (tests.size() == num_threads)
                                 {
-                                    fw_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
+                                    robot_->generateTransitionData(tests, filenames, feedback_callback, false);
                                     tests.clear();
                                     filenames.clear();
                                 }
@@ -762,27 +715,27 @@ namespace smmap
 
         //// Generate versions with perturbed action vectors ///////////////////
         {
-            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*fw_.ph_, "perturbations/action_vectors/max_magnitude", __func__).GetImmutable();
-            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*fw_.ph_, "perturbations/action_vectors/num_divisions", __func__).GetImmutable();
+            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*ph_, "perturbations/action_vectors/max_magnitude", __func__).GetImmutable();
+            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*ph_, "perturbations/action_vectors/num_divisions", __func__).GetImmutable();
             const auto perturbations = Vec3dPerturbations(max_magnitude, num_divisions);
             std::cout << "Num action perturbations: " << perturbations.size() * perturbations.size()<< std::endl;
             #pragma omp parallel for
             for (size_t a_idx = 0; a_idx < perturbations.size(); ++a_idx)
             {
-                const Vector3d gripper_a_action_vector = fw_.gripper_a_action_vector_ + perturbations[a_idx];
+                const Vector3d gripper_a_action_vector = gripper_a_action_vector_ + perturbations[a_idx];
                 for (size_t b_idx = 0; b_idx < perturbations.size(); ++b_idx)
                 {
                     try
                     {
-                        const Vector3d gripper_b_action_vector = fw_.gripper_b_action_vector_ + perturbations[b_idx];
+                        const Vector3d gripper_b_action_vector = gripper_b_action_vector_ + perturbations[b_idx];
                         Vector3d gripper_a_action_vector_normalized = gripper_a_action_vector;
                         Vector3d gripper_b_action_vector_normalized = gripper_b_action_vector;
-                        fw_.clampGripperDeltas(gripper_a_action_vector_normalized, gripper_b_action_vector_normalized);
+                        clampGripperDeltas(gripper_a_action_vector_normalized, gripper_b_action_vector_normalized);
 
-                        const Isometry3d gripper_a_ending_pose = Translation3d(gripper_a_action_vector_normalized) * fw_.gripper_a_starting_pose_;
-                        const Isometry3d gripper_b_ending_pose = Translation3d(gripper_b_action_vector_normalized) * fw_.gripper_b_starting_pose_;
+                        const Isometry3d gripper_a_ending_pose = Translation3d(gripper_a_action_vector_normalized) * gripper_a_starting_pose_;
+                        const Isometry3d gripper_b_ending_pose = Translation3d(gripper_b_action_vector_normalized) * gripper_b_starting_pose_;
 
-                        const std::string folder(data_folder +
+                        const std::string folder(data_folder_ +
                                                  "/cannonical_straight_test"
                                                  "/perturbed_gripper_action_vectors"
                                                  "/gripper_a_" + ToString(perturbations[a_idx]));
@@ -793,10 +746,10 @@ namespace smmap
 
                         if (!boost::filesystem::is_regular_file(filename))
                         {
-                            const auto test = fw_.robot_->toRosTransitionTest(
-                                        fw_.initial_world_state_.rope_node_transforms_,
-                                        fw_.initial_world_state_.all_grippers_single_pose_,
-                                        generateTestPath({fw_.gripper_a_starting_pose_, fw_.gripper_b_starting_pose_}),
+                            const auto test = robot_->toRosTransitionTest(
+                                        initial_world_state_.rope_node_transforms_,
+                                        initial_world_state_.all_grippers_single_pose_,
+                                        generateTestPath({gripper_a_starting_pose_, gripper_b_starting_pose_}),
                                         {gripper_a_ending_pose, gripper_b_ending_pose});
 
                             #pragma omp critical
@@ -808,7 +761,7 @@ namespace smmap
                                 // Execute the tests if tehre are enough to run
                                 if (tests.size() == num_threads)
                                 {
-                                    fw_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
+                                    robot_->generateTransitionData(tests, filenames, feedback_callback, false);
                                     tests.clear();
                                     filenames.clear();
                                 }
@@ -830,42 +783,42 @@ namespace smmap
         // Run an tests left over
         if (tests.size() != 0)
         {
-            fw_.robot_->generateTransitionData(tests, filenames, feedback_callback, false);
+            robot_->generateTransitionData(tests, filenames, feedback_callback, false);
             tests.clear();
             filenames.clear();
         }
     }
 
-    AllGrippersPoseTrajectory TransitionTesting::DataGeneration::generateTestPath(
+    AllGrippersPoseTrajectory TransitionTesting::generateTestPath(
             const AllGrippersSinglePose& gripper_target_poses)
     {
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
-        auto band_rrt = BandRRT(fw_.nh_,
-                                fw_.ph_,
-                                *fw_.world_params_,
-                                fw_.planning_params_,
-                                fw_.smoothing_params_,
-                                fw_.task_params_,
-                                fw_.vis_,
+        auto band_rrt = BandRRT(nh_,
+                                ph_,
+                                *world_params_,
+                                planning_params_,
+                                smoothing_params_,
+                                task_params_,
+                                vis_,
                                 false);
 
         const auto gripper_config = RRTGrippersRepresentation(
-                    fw_.initial_world_state_.all_grippers_single_pose_[0],
-                    fw_.initial_world_state_.all_grippers_single_pose_[1]);
+                    initial_world_state_.all_grippers_single_pose_[0],
+                    initial_world_state_.all_grippers_single_pose_[1]);
 
         RRTRobotRepresentation robot_config(6);
         robot_config.head<3>() = gripper_config.first.translation();
         robot_config.tail<3>() = gripper_config.second.translation();
 
         const auto rubber_band = RubberBand::BandFromWorldState(
-                    fw_.initial_world_state_, *fw_.band_);
+                    initial_world_state_, *band_);
 
         const RRTNode start_config(
                     gripper_config,
                     robot_config,
                     rubber_band);
 
-        const std::chrono::duration<double> time_limit(GetRRTTimeout(*fw_.ph_));
+        const std::chrono::duration<double> time_limit(GetRRTTimeout(*ph_));
 
         const auto policy = band_rrt.plan(start_config,
                                           {gripper_target_poses[0], gripper_target_poses[1]},
@@ -888,28 +841,57 @@ namespace smmap
 
 namespace smmap
 {
-    TransitionTesting::DataProcessing::DataProcessing(
-            const TransitionTesting& framework)
-        : fw_(framework)
-        , set_source_(fw_.nh_->advertiseService("transition_vis/set_source", &DataProcessing::setSourceCallback, this))
-        , add_visualization_(fw_.nh_->advertiseService("transition_vis/add_visualization", &DataProcessing::addVisualizationCallback, this))
-        , remove_visualization_(fw_.nh_->advertiseService("transition_vis/remove_visualization", &DataProcessing::removeVisualizationCallback, this))
-        , source_valid_(false)
-        , next_vis_prefix_(0)
-    {}
+    void TransitionTesting::generateTransitionApproximations()
+    {
+        dmm::TransitionTestingVisualizationRequest req;
+        req.data = "cannonical_straight_test/unmodified.compressed";
+        dmm::TransitionTestingVisualizationResponse res;
+        setSourceCallback(req, res);
+        assert(source_valid_);
 
-    bool TransitionTesting::DataProcessing::setSourceCallback(
+        const auto files = getDataFileList();
+        #pragma omp parallel for
+        for (size_t idx = 0; idx < files.size(); ++idx)
+        {
+            const auto& file = files[idx];
+            try
+            {
+                const auto output_file = file.substr(0, file.find(".compressed")) + "__adapatation_record.compressed";
+                if (!boost::filesystem::is_regular_file(output_file))
+                {
+                    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(file);
+                    const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+
+                    const auto test_transition = ToStateTransition(test_result, *band_);
+                    const auto adaptation_record = transition_estimator_->generateTransition(
+                                source_transition_,
+                                *test_transition.starting_state_.planned_rubber_band_,
+                                test_transition.ending_gripper_positions_);
+
+                    std::vector<uint8_t> output_buffer;
+                    adaptation_record.serialize(output_buffer);
+                    ZlibHelpers::CompressAndWriteToFile(buffer, output_file);
+                }
+            }
+            catch (const std::exception& ex)
+            {
+                ROS_ERROR_STREAM("Error parsing idx: " << idx << " file: " << file << ": " << ex.what());
+            }
+        }
+    }
+
+    bool TransitionTesting::setSourceCallback(
             dmm::TransitionTestingVisualizationRequest& req,
             dmm::TransitionTestingVisualizationResponse& res)
     {
         (void)res;
 
-        const std::string fullpath = fw_.data_folder_ + "/" + req.data;
+        const std::string fullpath = data_folder_ + "/" + req.data;
         const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(fullpath);
         const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
 
         source_file_ = req.data;
-        source_transition_ = ToStateTransition(test_result, *fw_.band_);
+        source_transition_ = ToStateTransition(test_result, *band_);
         source_band_surface_ = RubberBand::AggregateBandPoints(source_transition_.microstep_band_history_);
         source_valid_ = true;
 
@@ -926,7 +908,7 @@ namespace smmap
         return true;
     }
 
-    bool TransitionTesting::DataProcessing::addVisualizationCallback(
+    bool TransitionTesting::addVisualizationCallback(
             deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
             deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res)
     {
@@ -937,12 +919,12 @@ namespace smmap
             return false;
         }
 
-        const std::string fullpath = fw_.data_folder_ + "/" + req.data;
+        const std::string fullpath = data_folder_ + "/" + req.data;
         const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(fullpath);
         const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
 
-        const auto test_transition = ToStateTransition(test_result, *fw_.band_);
-        const auto adaptation_record = fw_.transition_estimator_->generateTransition(
+        const auto test_transition = ToStateTransition(test_result, *band_);
+        const auto adaptation_record = transition_estimator_->generateTransition(
                     source_transition_,
                     *test_transition.starting_state_.planned_rubber_band_,
                     test_transition.ending_gripper_positions_);
@@ -956,12 +938,12 @@ namespace smmap
             adaptation_record
         };
         res.response = std::to_string(next_vis_prefix_);
-        visid_to_markers_[res.response] = sim_record.visualize(std::to_string(next_vis_prefix_) + "__", fw_.vis_);
+        visid_to_markers_[res.response] = sim_record.visualize(std::to_string(next_vis_prefix_) + "__", vis_);
         ++next_vis_prefix_;
         return true;
     }
 
-    bool TransitionTesting::DataProcessing::removeVisualizationCallback(
+    bool TransitionTesting::removeVisualizationCallback(
             deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
             deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res)
     {
@@ -971,7 +953,7 @@ namespace smmap
             const auto markers_nsid = visid_to_markers_.at(req.data);
             for (const auto& nsid : markers_nsid)
             {
-                fw_.vis_->deleteObjects(nsid.first, nsid.second, nsid.second + 1);
+                vis_->deleteObjects(nsid.first, nsid.second, nsid.second + 1);
             }
             visid_to_markers_.erase(req.data);
             return true;

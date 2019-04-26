@@ -2,6 +2,8 @@
 #include "smmap/transition_learning_data_generation.h"
 #include "smmap/robot_interface.h"
 
+namespace dmm = deformable_manipulation_msgs;
+
 std::vector<Eigen::VectorXd> getJointInfo()
 {
     const Eigen::VectorXd lower_limits = Eigen::VectorXd::Constant(6, -std::numeric_limits<double>::max());
@@ -38,8 +40,16 @@ int main(int argc, char* argv[])
                 nullptr);
     auto vis = std::make_shared<Visualizer>(nh, ph, true);
     auto transition_tester = TransitionTesting(nh, ph, robot, vis);
-    const bool generate_new_data = ROSHelpers::GetParam<bool>(*ph, "generate_new_data", false);
-    transition_tester.runTests(generate_new_data);
+    const bool generate_test_data = ROSHelpers::GetParam<bool>(*ph, "generate_test_data", false);
+    const bool generate_transition_approximations = ROSHelpers::GetParam<bool>(*ph, "generate_transitions", false);
+    transition_tester.runTests(generate_test_data, generate_transition_approximations);
+
+    // Set the source to make sense, if this file exists
+    dmm::TransitionTestingVisualizationRequest req;
+    req.data = "cannonical_straight_test/unmodified.compressed";
+    dmm::TransitionTestingVisualizationResponse res;
+    transition_tester.setSourceCallback(req, res);
+    ros::spin();
 
     return EXIT_SUCCESS;
 }
