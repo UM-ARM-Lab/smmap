@@ -25,52 +25,6 @@ namespace dmm = deformable_manipulation_msgs;
 
 namespace smmap
 {
-    static std::pair<RubberBand::Ptr,
-              std::pair<PairGripperPositions,
-                        PairGripperPositions>> BandAndGrippersFromTpsPoints(
-            const ObjectPointSet& tps_points,
-            const RubberBand& band_template)
-    {
-        const size_t num_band_points = band_template.upsampleBand().size();
-        assert(tps_points.size() == (ssize_t)num_band_points + 4);
-
-        // Extract the band portion
-        VectorVector3d band_points(num_band_points);
-        for (size_t band_idx = 0; band_idx < num_band_points; ++band_idx)
-        {
-            band_points[band_idx] = tps_points.col(band_idx);
-        }
-        const auto band = std::make_shared<RubberBand>(band_template);
-        band->setPointsAndSmooth(band_points);
-
-        // Extract the grippers portion
-        const PairGripperPositions grippers_start =
-        {
-            tps_points.col(num_band_points + 0),
-            tps_points.col(num_band_points + 1)
-        };
-        const PairGripperPositions grippers_end =
-        {
-            tps_points.col(num_band_points + 2),
-            tps_points.col(num_band_points + 3)
-        };
-        return {band, {grippers_start, grippers_end}};
-    }
-
-    static std::pair<AllGrippersSinglePose, AllGrippersSinglePose> ExtractGripperPosesFromTransition(
-            const TransitionEstimation::StateTransition& trans)
-    {
-        AllGrippersSinglePose starting_gripper_poses(2);
-        starting_gripper_poses[0] = trans.starting_state_.rope_node_transforms_.front();
-        starting_gripper_poses[0].translation() = trans.starting_gripper_positions_.first;
-        starting_gripper_poses[1] = trans.starting_state_.rope_node_transforms_.back();
-        starting_gripper_poses[1].translation() = trans.starting_gripper_positions_.second;
-        AllGrippersSinglePose target_gripper_poses = starting_gripper_poses;
-        target_gripper_poses[0].translation() = trans.ending_gripper_positions_.first;
-        target_gripper_poses[1].translation() = trans.ending_gripper_positions_.second;
-        return {starting_gripper_poses, target_gripper_poses};
-    }
-
     static std::string ToString(const Eigen::Vector3d& mat)
     {
         std::stringstream ss;
@@ -145,7 +99,7 @@ namespace smmap
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-//          Transition Test Results
+//          Transition Simulation Record
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace smmap
@@ -341,8 +295,8 @@ namespace smmap
         vis_->visualizeAxes("center_of_rotation",   experiment_center_of_rotation_, 0.1, 0.005, 1);
         vis_->visualizeAxes("gripper_a_start",      gripper_a_starting_pose_,       0.1, 0.005, 1);
         vis_->visualizeAxes("gripper_b_start",      gripper_b_starting_pose_,       0.1, 0.005, 1);
-        vis_->visualizeAxes("gripper_a_end",        gripper_a_starting_pose_ * Translation3d(gripper_a_action_vector_), 0.1, 0.005, 1);
-        vis_->visualizeAxes("gripper_b_end",        gripper_b_starting_pose_ * Translation3d(gripper_b_action_vector_), 0.1, 0.005, 1);
+        vis_->visualizeAxes("gripper_a_end",        Translation3d(gripper_a_action_vector_) * gripper_a_starting_pose_, 0.1, 0.005, 1);
+        vis_->visualizeAxes("gripper_b_end",        Translation3d(gripper_b_action_vector_) * gripper_b_starting_pose_, 0.1, 0.005, 1);
     }
 
     void TransitionTesting::initialize(const WorldState& world_state)
@@ -563,10 +517,9 @@ namespace smmap
         }
         {
             dmm::TransitionTestingVisualizationRequest req;
-            req.data = "cannonical_straight_test/perturbed_gripper_start_positions/gripper_a_0_0_0/gripper_b_0_0_0.compressed";
+            req.data = "cannonical_straight_test/perturbed_gripper_start_positions/gripper_a_0_0_0.05/gripper_b_-0.1_-0.05_-0.1.compressed";
             dmm::TransitionTestingVisualizationResponse res;
             data_processing.addVisualizationCallback(req, res);
-            std::cout << res << std::endl;
         }
         PressAnyKeyToContinue("visualization testing");
 
@@ -577,26 +530,6 @@ namespace smmap
 //            {
 //                vis_->deleteAll();
 //                const TransitionSimulationRecord sim_record = loadSimRecord(file);
-//                sim_record.visualize(vis_);
-//                PressKeyToContinue("Sim Record Vis ");
-
-//                SE3Prediction se3_predictor(*this);
-//                se3_predictor.predictAll(
-//                            sim_record.template_,
-//                            *sim_record.tested_.starting_state_.rubber_band_,
-//                            sim_record.tested_.ending_gripper_positions_);
-//                se3_predictor.visualizePrediction();
-//                PressKeyToContinue("SE3 Prediction Vis ");
-
-//                RubberBand b = *sim_record.tested_.starting_state_.rubber_band_;
-//                b.forwardPropagate(b.getEndpoints(), false);
-//                vis_->visualizePoints("TESTED_TRUE_RESULT",
-//                                      sim_record.tested_.ending_state_.rubber_band_->upsampleBand(),
-//                                      Visualizer::White(), 1, 0.002);
-
-//                transition_estimator_->estimateTransitions(
-//                            b,
-//                            sim_record.tested_.ending_gripper_positions_);
 //            }
 //            catch (const std::exception& ex)
 //            {
@@ -667,8 +600,8 @@ namespace smmap
                                        "/unmodified.compressed");
             if (!boost::filesystem::is_regular_file(filename))
             {
-                Isometry3d gripper_a_ending_pose_ = fw_.gripper_a_starting_pose_ * Translation3d(fw_.gripper_a_action_vector_);
-                Isometry3d gripper_b_ending_pose_ = fw_.gripper_b_starting_pose_ * Translation3d(fw_.gripper_b_action_vector_);
+                Isometry3d gripper_a_ending_pose_ = Translation3d(fw_.gripper_a_action_vector_) * fw_.gripper_a_starting_pose_;
+                Isometry3d gripper_b_ending_pose_ = Translation3d(fw_.gripper_b_action_vector_) * fw_.gripper_b_starting_pose_;
                 const auto canonical_test = fw_.robot_->toRosTransitionTest(
                             fw_.initial_world_state_.rope_node_transforms_,
                             fw_.initial_world_state_.all_grippers_single_pose_,
@@ -688,14 +621,14 @@ namespace smmap
             #pragma omp parallel for
             for (size_t a_idx = 0; a_idx < perturbations.size(); ++a_idx)
             {
-                const Isometry3d gripper_a_starting_pose = fw_.gripper_a_starting_pose_ * Translation3d(perturbations[a_idx]);
-                const Isometry3d gripper_a_ending_pose = gripper_a_starting_pose * Translation3d(fw_.gripper_a_action_vector_);
+                const Isometry3d gripper_a_starting_pose = Translation3d(perturbations[a_idx]) * fw_.gripper_a_starting_pose_;
+                const Isometry3d gripper_a_ending_pose = Translation3d(fw_.gripper_a_action_vector_) * gripper_a_starting_pose;
                 for (size_t b_idx = 0; b_idx < perturbations.size(); ++b_idx)
                 {
                     try
                     {
-                        const Isometry3d gripper_b_starting_pose = fw_.gripper_b_starting_pose_ * Translation3d(perturbations[b_idx]);
-                        const Isometry3d gripper_b_ending_pose = gripper_b_starting_pose * Translation3d(fw_.gripper_b_action_vector_);
+                        const Isometry3d gripper_b_starting_pose = Translation3d(perturbations[b_idx]) * fw_.gripper_b_starting_pose_;
+                        const Isometry3d gripper_b_ending_pose = Translation3d(fw_.gripper_b_action_vector_) * gripper_b_starting_pose;
 
                         const std::string folder(data_folder +
                                                  "/cannonical_straight_test"
@@ -760,8 +693,8 @@ namespace smmap
                         Vector3d gripper_b_action_vector_normalized = gripper_b_action_vector;
                         fw_.clampGripperDeltas(gripper_a_action_vector_normalized, gripper_b_action_vector_normalized);
 
-                        const Isometry3d gripper_a_ending_pose = fw_.gripper_a_starting_pose_ * Translation3d(gripper_a_action_vector_normalized);
-                        const Isometry3d gripper_b_ending_pose = fw_.gripper_b_starting_pose_ * Translation3d(gripper_b_action_vector_normalized);
+                        const Isometry3d gripper_a_ending_pose = Translation3d(gripper_a_action_vector_normalized) * fw_.gripper_a_starting_pose_;
+                        const Isometry3d gripper_b_ending_pose = Translation3d(gripper_b_action_vector_normalized) * fw_.gripper_b_starting_pose_;
 
                         const std::string folder(data_folder +
                                                  "/cannonical_straight_test"
@@ -892,6 +825,7 @@ namespace smmap
         source_file_ = req.data;
         source_transition_ = ToStateTransition(test_result, *fw_.band_);
         source_band_surface_ = RubberBand::AggregateBandPoints(source_transition_.microstep_band_history_);
+        source_valid_ = true;
 
         return true;
     }
@@ -902,6 +836,8 @@ namespace smmap
     {
         if (!source_valid_)
         {
+            ROS_WARN_NAMED("data_visualization", "Visualization requested, but transition source is invalid");
+            res.response = "Visualization requested, but transition source is invalid";
             return false;
         }
 
@@ -933,6 +869,7 @@ namespace smmap
             deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
             deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res)
     {
+        (void)res;
         try
         {
             const auto markers_nsid = visid_to_markers_.at(req.data);

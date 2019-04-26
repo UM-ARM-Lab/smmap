@@ -286,7 +286,7 @@ InvariantTransform(const MatrixBase<Derived>& src, const MatrixBase<OtherDerived
 
     // We want to allow mirroring the data, so ignore the possiblity of putting -1 in S
     Rt.topLeftCorner(m, m) = svd.matrixU() * svd.matrixV().transpose();
-    Rt.topRightCorner(1, m).noalias() = dst_mean - Rt.topLeftCorner(m, m) * src_mean;
+    Rt.topRightCorner(m, 1).noalias() = dst_mean - Rt.topLeftCorner(m, m) * src_mean;
 
     return Rt;
 }
