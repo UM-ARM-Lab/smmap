@@ -83,8 +83,6 @@ namespace smmap
         TransitionEstimation::Ptr transition_estimator_;
 
         const std::string data_folder_;
-        const std::string sim_test_result_suffix_;
-        const std::string prediction_result_suffix_;
 
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -103,7 +101,6 @@ namespace smmap
                 Eigen::Ref<Eigen::Vector3d> a_delta,
                 Eigen::Ref<Eigen::Vector3d> b_delta) const;
         std::vector<std::string> getDataFileList();
-        TransitionSimulationRecord loadSimRecord(const std::string& filename);
 
     public:
         void runTests(const bool generate_new_test_data);
@@ -133,7 +130,6 @@ namespace smmap
         public:
             DataProcessing(const TransitionTesting& framework);
 
-        private:
             const TransitionTesting& fw_;
 
             ros::ServiceServer set_source_;
@@ -149,7 +145,6 @@ namespace smmap
             std::map<std::string, std::vector<Visualizer::NamespaceId>> visid_to_markers_;
             int next_vis_prefix_;
 
-        public:
             bool setSourceCallback(
                     deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
                     deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);

@@ -298,26 +298,25 @@ InvariantTransform(const MatrixBase<Derived>& src, const MatrixBase<OtherDerived
 uint64_t TransitionEstimation::TransitionAdaptationResult::serialize(std::vector<uint8_t>& buffer) const
 {
     const auto starting_bytes = buffer.size();
-    uint64_t bytes_written = 0;
-    bytes_written += default_next_band_->serialize(buffer);
-    bytes_written += result_->serialize(buffer);
-    bytes_written += SerializeEigen(invariant_transform_, buffer);
-    bytes_written += SerializeEigen(template_planned_band_aligned_to_target_, buffer);
-    bytes_written += SerializeEigen(next_band_points_to_smooth_, buffer);
-    bytes_written += SerializeEigen(transformed_band_surface_points_, buffer);
-    bytes_written += SerializeVector<RubberBand::Ptr>(tightened_transformed_bands_, buffer, &RubberBand::Serialize);
-    bytes_written += SerializeEigen(tightened_transformed_bands_surface_, buffer);
-    bytes_written += SerializeVector<bool>(foh_changes_, buffer, &SerializeFixedSizePOD<bool>);
-    bytes_written += SerializeFixedSizePOD(template_misalignment_dist_, buffer);
-    bytes_written += SerializeFixedSizePOD(default_band_foh_result_, buffer);
-    bytes_written += SerializeFixedSizePOD(default_band_dist_, buffer);
-    bytes_written += SerializeFixedSizePOD(entire_surface_mapable_, buffer);
-    bytes_written += SerializeFixedSizePOD(num_foh_changes_, buffer);
 
-    const auto ending_bytes = buffer.size();
-    assert(ending_bytes - starting_bytes == bytes_written);
+    default_next_band_->serialize(buffer);
+    result_->serialize(buffer);
+    SerializeEigen(invariant_transform_, buffer);
+    SerializeEigen(template_planned_band_aligned_to_target_, buffer);
+    SerializeEigen(next_band_points_to_smooth_, buffer);
+    SerializeEigen(transformed_band_surface_points_, buffer);
+    SerializeVector<RubberBand::Ptr>(tightened_transformed_bands_, buffer, &RubberBand::Serialize);
+    SerializeEigen(tightened_transformed_bands_surface_, buffer);
+    SerializeVector<bool>(foh_changes_, buffer, &SerializeFixedSizePOD<bool>);
+    SerializeFixedSizePOD(template_misalignment_dist_, buffer);
+    SerializeFixedSizePOD(default_band_foh_result_, buffer);
+    SerializeFixedSizePOD(default_band_dist_, buffer);
+    SerializeFixedSizePOD(entire_surface_mapable_, buffer);
+    SerializeFixedSizePOD(num_foh_changes_, buffer);
+
+    const auto bytes_written = buffer.size() - starting_bytes;
     const auto deserialized = Deserialize(buffer, starting_bytes, *default_next_band_);
-    assert(bytes_written = deserialized.second);
+    assert(bytes_written == deserialized.second);
     assert(*this == deserialized.first);
     return bytes_written;
 }
@@ -334,60 +333,60 @@ std::pair<TransitionEstimation::TransitionAdaptationResult, uint64_t> Transition
         const uint64_t current,
         const RubberBand& template_band)
 {
-    uint64_t bytes_read = 0;
+    uint64_t pos = current;
 
-    const auto default_next_band_deserialized = RubberBand::Deserialize(buffer, current + bytes_read, template_band);
-    bytes_read += default_next_band_deserialized.second;
+    const auto default_next_band_deserialized = RubberBand::Deserialize(buffer, pos, template_band);
+    pos += default_next_band_deserialized.second;
 
-    const auto next_band_deserialized = RubberBand::Deserialize(buffer, current + bytes_read, template_band);
-    bytes_read += next_band_deserialized.second;
+    const auto result_band_deserialized = RubberBand::Deserialize(buffer, pos, template_band);
+    pos += result_band_deserialized.second;
 
 
-    const auto invariant_transform_deserialized = DeserializeEigen<Isometry3d>(buffer, current + bytes_read);
-    bytes_read += invariant_transform_deserialized.second;
+    const auto invariant_transform_deserialized = DeserializeEigen<Isometry3d>(buffer, pos);
+    pos += invariant_transform_deserialized.second;
 
-    const auto template_planned_band_aligned_deserialized = DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
-    bytes_read += template_planned_band_aligned_deserialized.second;
+    const auto template_planned_band_aligned_deserialized = DeserializeEigen<ObjectPointSet>(buffer, pos);
+    pos += template_planned_band_aligned_deserialized.second;
 
-    const auto next_band_points_to_smooth_deserialized = DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
-    bytes_read += next_band_points_to_smooth_deserialized.second;
+    const auto next_band_points_to_smooth_deserialized = DeserializeEigen<ObjectPointSet>(buffer, pos);
+    pos += next_band_points_to_smooth_deserialized.second;
 
-    const auto transformed_band_surface_points_deserialized = DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
-    bytes_read += transformed_band_surface_points_deserialized.second;
+    const auto transformed_band_surface_points_deserialized = DeserializeEigen<ObjectPointSet>(buffer, pos);
+    pos += transformed_band_surface_points_deserialized.second;
 
     const auto band_deserializer = [&](const std::vector<uint8_t>& buffer_internal, const uint64_t current_internal)
     {
         return RubberBand::Deserialize(buffer_internal, current_internal, template_band);
     };
-    const auto tightened_transformed_bands_deserialized = DeserializeVector<RubberBand::Ptr>(buffer, current + bytes_read, band_deserializer);
-    bytes_read += tightened_transformed_bands_deserialized.second;
+    const auto tightened_transformed_bands_deserialized = DeserializeVector<RubberBand::Ptr>(buffer, pos, band_deserializer);
+    pos += tightened_transformed_bands_deserialized.second;
 
-    const auto tightened_transformed_bands_surface_deserialized = DeserializeEigen<ObjectPointSet>(buffer, current + bytes_read);
-    bytes_read += tightened_transformed_bands_surface_deserialized.second;
+    const auto tightened_transformed_bands_surface_deserialized = DeserializeEigen<ObjectPointSet>(buffer, pos);
+    pos += tightened_transformed_bands_surface_deserialized.second;
 
-    const auto foh_changes_deserialized = DeserializeVector<bool>(buffer, current, &DeserializeFixedSizePOD<bool>);
-    bytes_read += foh_changes_deserialized.second;
+    const auto foh_changes_deserialized = DeserializeVector<bool>(buffer, pos, &DeserializeFixedSizePOD<bool>);
+    pos += foh_changes_deserialized.second;
 
 
-    const auto template_misalignment_dist_deserialized = DeserializeFixedSizePOD<double>(buffer, current + bytes_read);
-    bytes_read += template_misalignment_dist_deserialized.second;
+    const auto template_misalignment_dist_deserialized = DeserializeFixedSizePOD<double>(buffer, pos);
+    pos += template_misalignment_dist_deserialized.second;
 
-    const auto default_band_foh_result_deserialized = DeserializeFixedSizePOD<bool>(buffer, current + bytes_read);
-    bytes_read += default_band_foh_result_deserialized.second;
+    const auto default_band_foh_result_deserialized = DeserializeFixedSizePOD<bool>(buffer, pos);
+    pos += default_band_foh_result_deserialized.second;
 
-    const auto default_band_dist_deserialized = DeserializeFixedSizePOD<double>(buffer, current + bytes_read);
-    bytes_read += default_band_dist_deserialized.second;
+    const auto default_band_dist_deserialized = DeserializeFixedSizePOD<double>(buffer, pos);
+    pos += default_band_dist_deserialized.second;
 
-    const auto entire_surface_mapable_deserialized = DeserializeFixedSizePOD<bool>(buffer, current + bytes_read);
-    bytes_read += entire_surface_mapable_deserialized.second;
+    const auto entire_surface_mapable_deserialized = DeserializeFixedSizePOD<bool>(buffer, pos);
+    pos += entire_surface_mapable_deserialized.second;
 
-    const auto num_foh_changes_deserialized = DeserializeFixedSizePOD<int>(buffer, current + bytes_read);
-    bytes_read += num_foh_changes_deserialized.second;
+    const auto num_foh_changes_deserialized = DeserializeFixedSizePOD<int>(buffer, pos);
+    pos += num_foh_changes_deserialized.second;
 
     TransitionAdaptationResult record =
     {
         default_next_band_deserialized.first,
-        next_band_deserialized.first,
+        result_band_deserialized.first,
 
         invariant_transform_deserialized.first,
         template_planned_band_aligned_deserialized.first,
@@ -403,7 +402,7 @@ std::pair<TransitionEstimation::TransitionAdaptationResult, uint64_t> Transition
         entire_surface_mapable_deserialized.first,
         num_foh_changes_deserialized.first
     };
-    return {record, bytes_read};
+    return {record, pos - current};
 }
 
 bool TransitionEstimation::TransitionAdaptationResult::operator==(const TransitionAdaptationResult& other) const
@@ -438,7 +437,7 @@ bool TransitionEstimation::TransitionAdaptationResult::operator==(const Transiti
     }
     for (size_t idx = 0; idx < tightened_transformed_bands_.size(); ++idx)
     {
-        if (tightened_transformed_bands_[idx] != other.tightened_transformed_bands_[idx])
+        if (*tightened_transformed_bands_[idx] != *other.tightened_transformed_bands_[idx])
         {
             return false;
         }

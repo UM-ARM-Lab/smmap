@@ -356,8 +356,6 @@ namespace smmap
         , initial_world_state_(robot_->start())
 
         , data_folder_(ROSHelpers::GetParam<std::string>(*ph_, "data_folder", "/tmp/transition_learning_data_generation"))
-        , sim_test_result_suffix_("_results.compressed")
-        , prediction_result_suffix_("_prediction.compressed")
     {
         std::srand((unsigned int)seed_);
         initialize(initial_world_state_);
@@ -535,20 +533,21 @@ namespace smmap
 
     std::vector<std::string> TransitionTesting::getDataFileList()
     {
-        const auto substr_len = sim_test_result_suffix_.size();
-
         std::vector<std::string> files;
-        const boost::filesystem::path p(data_folder_);
-        const boost::filesystem::directory_iterator start(p);
-        const boost::filesystem::directory_iterator end;
+        const boost::filesystem::path p(data_folder_ + "/cannonical_straight_test");
+        const boost::filesystem::recursive_directory_iterator start(p);
+        const boost::filesystem::recursive_directory_iterator end;
         for (auto itr = start; itr != end; ++itr)
         {
             if (boost::filesystem::is_regular_file(itr->status()))
             {
                 const auto filename = itr->path().string();
-                if (filename.substr(filename.size() - substr_len, std::string::npos) == sim_test_result_suffix_)
+                if (filename.find("compressed") != std::string::npos)
                 {
-                    files.push_back(filename);
+                    if (filename.find("adapatation_record.compressed") == std::string::npos)
+                    {
+                        files.push_back(filename);
+                    }
                 }
                 else
                 {
@@ -559,17 +558,6 @@ namespace smmap
         std::sort(files.begin(), files.end());
         ROS_INFO_STREAM("Found " << files.size() << " possible data files in " << data_folder_);
         return files;
-    }
-
-    TransitionSimulationRecord TransitionTesting::loadSimRecord(const std::string& filename)
-    {
-        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
-        const auto record = TransitionSimulationRecord::Deserialize(buffer, 0, *band_);
-        if (record.second != buffer.size())
-        {
-            throw_arc_exception(std::invalid_argument, "Buffer size mismatch: " + filename);
-        }
-        return record.first;
     }
 
     void TransitionTesting::runTests(const bool generate_new_test_data)
@@ -590,27 +578,44 @@ namespace smmap
             dmm::TransitionTestingVisualizationResponse res;
             data_processing.setSourceCallback(req, res);
         }
-        {
-            dmm::TransitionTestingVisualizationRequest req;
-            req.data = "cannonical_straight_test/perturbed_gripper_start_positions/gripper_a_-0.1_-0.1_-0.1/gripper_b_-0.1_-0.1_-0.1.compressed";
-            dmm::TransitionTestingVisualizationResponse res;
-            data_processing.addVisualizationCallback(req, res);
-        }
-        PressAnyKeyToContinue("visualization testing");
 
-//        const auto files = getDataFileList();
-//        for (const auto& file : files)
+
 //        {
-//            try
-//            {
-//                vis_->deleteAll();
-//                const TransitionSimulationRecord sim_record = loadSimRecord(file);
-//            }
-//            catch (const std::exception& ex)
-//            {
-//                ROS_ERROR_STREAM("Error parsing file: " << file << ": " << ex.what());
-//            }
+//            dmm::TransitionTestingVisualizationRequest req;
+//            req.data = "cannonical_straight_test/perturbed_gripper_start_positions/gripper_a_-0.1_-0.1_-0.1/gripper_b_-0.1_-0.1_-0.1.compressed";
+//            dmm::TransitionTestingVisualizationResponse res;
+//            data_processing.addVisualizationCallback(req, res);
 //        }
+//        PressAnyKeyToContinue("visualization testing");
+
+        const auto files = getDataFileList();
+        #pragma omp parallel for
+        for (size_t idx = 0; idx < files.size(); ++idx)
+        {
+            const auto& file = files[idx];
+            try
+            {
+                const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(file);
+                const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+
+                const auto test_transition = ToStateTransition(test_result, *band_);
+                const auto adaptation_record = transition_estimator_->generateTransition(
+                            data_processing.source_transition_,
+                            *test_transition.starting_state_.planned_rubber_band_,
+                            test_transition.ending_gripper_positions_);
+                // Save result to file
+                {
+                    std::vector<uint8_t> output_buffer;
+                    adaptation_record.serialize(output_buffer);
+                    const auto output_file = file.substr(0, file.find(".compressed")) + "__adapatation_record.compressed";
+                    ZlibHelpers::CompressAndWriteToFile(buffer, output_file);
+                }
+            }
+            catch (const std::exception& ex)
+            {
+                ROS_ERROR_STREAM("Error parsing file: " << file << ": " << ex.what());
+            }
+        }
     }
 }
 
@@ -902,6 +907,12 @@ namespace smmap
         source_band_surface_ = RubberBand::AggregateBandPoints(source_transition_.microstep_band_history_);
         source_valid_ = true;
 
+        // Ensure all bands have been upsampled to avoid race conditions in multithreading later
+        source_transition_.starting_state_.rubber_band_->upsampleBand();
+        source_transition_.starting_state_.planned_rubber_band_->upsampleBand();
+        source_transition_.ending_state_.rubber_band_->upsampleBand();
+        source_transition_.ending_state_.planned_rubber_band_->upsampleBand();
+
         return true;
     }
 
@@ -934,7 +945,7 @@ namespace smmap
             RubberBand::AggregateBandPoints(test_transition.microstep_band_history_),
             adaptation_record
         };
-        res.response = source_file_ + "____" + req.data;
+        res.response = std::to_string(next_vis_prefix_);
         visid_to_markers_[res.response] = sim_record.visualize(std::to_string(next_vis_prefix_) + "__", fw_.vis_);
         ++next_vis_prefix_;
         return true;
