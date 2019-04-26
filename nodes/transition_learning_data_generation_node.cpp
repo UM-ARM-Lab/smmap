@@ -49,6 +49,7 @@ int main(int argc, char* argv[])
     req.data = "cannonical_straight_test/unmodified.compressed";
     dmm::TransitionTestingVisualizationResponse res;
     transition_tester.setSourceCallback(req, res);
+    ROS_INFO("Waiting for visualization requests...");
     ros::spin();
 
     return EXIT_SUCCESS;
