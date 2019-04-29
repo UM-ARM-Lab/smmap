@@ -5,6 +5,7 @@
 #include <arc_utilities/timing.hpp>
 #include <arc_utilities/serialization_ros.hpp>
 #include <arc_utilities/filesystem.hpp>
+#include <arc_utilities/log.hpp>
 #include <smmap_utilities/neighbours.h>
 #include <boost/filesystem.hpp>
 #include <deformable_manipulation_experiment_params/conversions.hpp>
@@ -850,33 +851,83 @@ namespace smmap
         assert(source_valid_);
 
         const auto files = getDataFileList();
+        enum
+        {
+            FILENAME,
+            ERROR_STRING,
+            TEMPLATE_MISALIGNMENT_EUCLIDEAN,
+            DEFAULT_VS_ADAPTATION_FOH,
+            DEFAULT_VS_ADAPTATION_EUCLIDEAN,
+            SOURCE_NUM_FOH_CHANGES,
+            RESULT_NUM_FOH_CHANGES,
+            TRUE_VS_ADAPATION_FOH,
+            TRUE_VS_ADAPATION_EUCLIDEAN,
+        };
+        std::vector<std::vector<std::string>> dists_etc(files.size(), std::vector<std::string>(9, ""));
         #pragma omp parallel for
         for (size_t idx = 0; idx < files.size(); ++idx)
         {
             const auto& file = files[idx];
+            dists_etc[idx][FILENAME] = file;
             try
             {
-                const auto output_file = file.substr(0, file.find(".compressed")) + "__adapatation_record.compressed";
-                if (!boost::filesystem::is_regular_file(output_file))
+                // Load the test record
+                const dmm::TransitionTestResult test_result = [&] ()
                 {
                     const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(file);
-                    const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+                    return arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+                }();
+                // Load the adapation record, if needed generate it first
+                const TransitionEstimation::TransitionAdaptationResult adaptation_record = [&] ()
+                {
+                    const auto adapatation_record_file = file.substr(0, file.find(".compressed")) + "__adapatation_record.compressed";
+//                    if (!boost::filesystem::is_regular_file(adapatation_record_file))
+//                    {
+                        const auto test_transition = ToStateTransition(test_result, *band_);
+                        const auto ar = transition_estimator_->generateTransition(
+                                    source_transition_,
+                                    *test_transition.starting_state_.planned_rubber_band_,
+                                    test_transition.ending_gripper_positions_);
 
-                    const auto test_transition = ToStateTransition(test_result, *band_);
-                    const auto adaptation_record = transition_estimator_->generateTransition(
-                                source_transition_,
-                                *test_transition.starting_state_.planned_rubber_band_,
-                                test_transition.ending_gripper_positions_);
+                        std::vector<uint8_t> output_buffer;
+                        ar.serialize(output_buffer);
+                        ZlibHelpers::CompressAndWriteToFile(output_buffer, adapatation_record_file);
+                        return ar;
+//                    }
+//                    else
+//                    {
+//                        const auto adaptation_record_buffer = ZlibHelpers::LoadFromFileAndDecompress(adapatation_record_file);
+//                        const auto ar = TransitionEstimation::TransitionAdaptationResult::Deserialize(adaptation_record_buffer, 0, *band_).first;
+//                        return ar;
+//                    }
+                }();
 
-                    std::vector<uint8_t> output_buffer;
-                    adaptation_record.serialize(output_buffer);
-                    ZlibHelpers::CompressAndWriteToFile(buffer, output_file);
+                const auto test_band_start = RubberBand::BandFromWorldState(ConvertToEigenFeedback(test_result.start_after_following_path), *band_);
+                if (test_band_start->isOverstretched())
+                {
+                    throw_arc_exception(std::runtime_error, "");
                 }
+                const auto test_band_end = RubberBand::BandFromWorldState(ConvertToEigenFeedback(test_result.microsteps_last_action.back()), *band_);
+
+                dists_etc[idx][TEMPLATE_MISALIGNMENT_EUCLIDEAN] = std::to_string(adaptation_record.template_misalignment_dist_);
+                dists_etc[idx][DEFAULT_VS_ADAPTATION_FOH] = std::to_string(adaptation_record.default_band_foh_result_);
+                dists_etc[idx][DEFAULT_VS_ADAPTATION_EUCLIDEAN] = std::to_string(adaptation_record.default_band_dist_);
+                dists_etc[idx][SOURCE_NUM_FOH_CHANGES] = std::to_string(source_num_foh_changes_);
+                dists_etc[idx][RESULT_NUM_FOH_CHANGES] = std::to_string(adaptation_record.num_foh_changes_);
+
+                dists_etc[idx][TRUE_VS_ADAPATION_FOH] = std::to_string(transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.result_, *test_band_end));
+                dists_etc[idx][TRUE_VS_ADAPATION_EUCLIDEAN] = std::to_string(adaptation_record.result_->distance(*test_band_end));
             }
             catch (const std::exception& ex)
             {
                 ROS_ERROR_STREAM("Error parsing idx: " << idx << " file: " << file << ": " << ex.what());
+                dists_etc[idx][ERROR_STRING] = ex.what();
             }
+        }
+        Log::Log logger(data_folder_ + "/dists_etc.txt", false);
+        for (const auto& data_line : dists_etc)
+        {
+            LOG(logger, PrettyPrint::PrettyPrint(data_line, false, ", "));
         }
     }
 
@@ -893,7 +944,17 @@ namespace smmap
         source_file_ = req.data;
         source_transition_ = ToStateTransition(test_result, *band_);
         source_band_surface_ = RubberBand::AggregateBandPoints(source_transition_.microstep_band_history_);
-        source_valid_ = true;
+
+        source_num_foh_changes_ = 0;
+        for (size_t idx = 0; idx < source_transition_.microstep_band_history_.size() - 1; ++idx)
+        {
+            RubberBand::Ptr b1 = source_transition_.microstep_band_history_[idx];
+            RubberBand::Ptr b2 = source_transition_.microstep_band_history_[idx];
+            if (transition_estimator_->checkFirstOrderHomotopy(*b1, *b2))
+            {
+                ++source_num_foh_changes_;
+            }
+        }
 
         // Ensure all bands have been upsampled and resampled to avoid race conditions in multithreading later
         source_transition_.starting_state_.rubber_band_->upsampleBand();
@@ -905,6 +966,7 @@ namespace smmap
         source_transition_.ending_state_.planned_rubber_band_->upsampleBand();
         source_transition_.ending_state_.planned_rubber_band_->resampleBand();
 
+        source_valid_ = true;
         return true;
     }
 

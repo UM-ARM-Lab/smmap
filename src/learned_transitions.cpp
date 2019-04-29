@@ -779,7 +779,7 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
     }
 
     std::vector<bool> foh_changes;
-    int num_foh_changes = -1;
+    int num_foh_changes = 0;
     for (size_t idx = 0; idx < tightened_transformed_bands_from_stored_bands.size() - 1; ++idx)
     {
         RubberBand::Ptr b1 = tightened_transformed_bands_from_stored_bands[idx];

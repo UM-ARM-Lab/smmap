@@ -125,6 +125,7 @@ namespace smmap
         std::string source_file_;
         TransitionEstimation::StateTransition source_transition_;
         ObjectPointSet source_band_surface_;
+        int source_num_foh_changes_;
 
         // Maps filenames to ns+ids
         std::map<std::string, std::vector<Visualizer::NamespaceId>> visid_to_markers_;
