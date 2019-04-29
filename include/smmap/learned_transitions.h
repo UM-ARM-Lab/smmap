@@ -143,6 +143,7 @@ namespace smmap
             double template_misalignment_dist_;
             bool default_band_foh_result_;
             double default_band_dist_;
+            double band_tighten_delta_;
             int num_foh_changes_;
 
             uint64_t serialize(std::vector<uint8_t>& buffer) const;

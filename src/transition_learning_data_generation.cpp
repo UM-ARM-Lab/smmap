@@ -863,7 +863,16 @@ namespace smmap
             TRUE_VS_ADAPATION_FOH,
             TRUE_VS_ADAPATION_EUCLIDEAN,
         };
-        Log::Log logger(data_folder_ + "/dists_etc.txt", false);
+        Log::Log logger(data_folder_ + "cannonical_straight_test/dists_etc.txt", false);
+        LOG(logger, "FILENAME, "
+                    "ERROR_STRING, "
+                    "TEMPLATE_MISALIGNMENT_EUCLIDEAN, "
+                    "DEFAULT_VS_ADAPTATION_FOH, "
+                    "DEFAULT_VS_ADAPTATION_EUCLIDEAN, "
+                    "SOURCE_NUM_FOH_CHANGES, "
+                    "RESULT_NUM_FOH_CHANGES, "
+                    "TRUE_VS_ADAPATION_FOH, "
+                    "TRUE_VS_ADAPATION_EUCLIDEAN");
         #pragma omp parallel for
         for (size_t idx = 0; idx < files.size(); ++idx)
         {
@@ -906,7 +915,7 @@ namespace smmap
                 const auto test_band_start = RubberBand::BandFromWorldState(ConvertToEigenFeedback(test_result.start_after_following_path), *band_);
                 if (test_band_start->isOverstretched())
                 {
-                    throw_arc_exception(std::runtime_error, "");
+                    throw_arc_exception(std::runtime_error, "Starting configuration of test band is overstretched");
                 }
                 const auto test_band_end = RubberBand::BandFromWorldState(ConvertToEigenFeedback(test_result.microsteps_last_action.back()), *band_);
 

@@ -311,6 +311,7 @@ uint64_t TransitionEstimation::TransitionAdaptationResult::serialize(std::vector
     SerializeFixedSizePOD(template_misalignment_dist_, buffer);
     SerializeFixedSizePOD(default_band_foh_result_, buffer);
     SerializeFixedSizePOD(default_band_dist_, buffer);
+    SerializeFixedSizePOD(band_tighten_delta_, buffer);
     SerializeFixedSizePOD(num_foh_changes_, buffer);
 
     const auto bytes_written = buffer.size() - starting_bytes;
@@ -376,6 +377,9 @@ std::pair<TransitionEstimation::TransitionAdaptationResult, uint64_t> Transition
     const auto default_band_dist_deserialized = DeserializeFixedSizePOD<double>(buffer, pos);
     pos += default_band_dist_deserialized.second;
 
+    const auto band_tighten_delta_deserialized = DeserializeFixedSizePOD<double>(buffer, pos);
+    pos += band_tighten_delta_deserialized.second;
+
     const auto num_foh_changes_deserialized = DeserializeFixedSizePOD<int>(buffer, pos);
     pos += num_foh_changes_deserialized.second;
 
@@ -395,6 +399,7 @@ std::pair<TransitionEstimation::TransitionAdaptationResult, uint64_t> Transition
         template_misalignment_dist_deserialized.first,
         default_band_foh_result_deserialized.first,
         default_band_dist_deserialized.first,
+        band_tighten_delta_deserialized.first,
         num_foh_changes_deserialized.first
     };
     return {record, pos - current};
@@ -753,8 +758,11 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
     }
 
     // Measure the difference between this result, and the default next step
-    const bool foh_result = checkFirstOrderHomotopy(*default_next_band, *next_band);
-    const auto band_dist_sq = default_next_band->distanceSq(*next_band);
+    const bool default_band_foh_result = checkFirstOrderHomotopy(*default_next_band, *next_band);
+    const auto default_band_dist_sq = default_next_band->distanceSq(*next_band);
+
+    // Measure how much we changed the band when we re-tightened
+    const double band_tighten_delta = next_band->distance(TransformData(transform, stored_trans.ending_state_.rubber_band_->upsampleBand()));
 
     // Map the entire memorized band surface to the new environment, and check that all bands are "mapable"
     const auto stored_bands = stored_trans.microstep_band_history_;
@@ -808,8 +816,9 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
         foh_values,
 
         template_misalignment_dist,
-        foh_result,
-        band_dist_sq,
+        default_band_foh_result,
+        default_band_dist_sq,
+        band_tighten_delta,
         num_foh_changes
     };
 }
