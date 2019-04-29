@@ -137,7 +137,7 @@ namespace smmap
             ObjectPointSet transformed_band_surface_points_;
             std::vector<RubberBand::Ptr> tightened_transformed_bands_;
             ObjectPointSet tightened_transformed_bands_surface_;
-            std::vector<bool> foh_changes_;
+            std::vector<bool> foh_values_;
 
             // "Distance" evaluations
             double template_misalignment_dist_;

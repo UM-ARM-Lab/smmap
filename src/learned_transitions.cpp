@@ -307,7 +307,7 @@ uint64_t TransitionEstimation::TransitionAdaptationResult::serialize(std::vector
     SerializeEigen(transformed_band_surface_points_, buffer);
     SerializeVector<RubberBand::Ptr>(tightened_transformed_bands_, buffer, &RubberBand::Serialize);
     SerializeEigen(tightened_transformed_bands_surface_, buffer);
-    SerializeVector<bool>(foh_changes_, buffer, &SerializeFixedSizePOD<bool>);
+    SerializeVector<bool>(foh_values_, buffer, &SerializeFixedSizePOD<bool>);
     SerializeFixedSizePOD(template_misalignment_dist_, buffer);
     SerializeFixedSizePOD(default_band_foh_result_, buffer);
     SerializeFixedSizePOD(default_band_dist_, buffer);
@@ -437,7 +437,7 @@ bool TransitionEstimation::TransitionAdaptationResult::operator==(const Transiti
             return false;
         }
     }
-    if (foh_changes_ != other.foh_changes_)
+    if (foh_values_ != other.foh_values_)
     {
         return false;
     }
@@ -778,20 +778,19 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
         tightened_transformed_bands_from_stored_bands[band_surface_idx] = band;
     }
 
-    std::vector<bool> foh_changes;
-    int num_foh_changes = 0;
+    std::vector<bool> foh_values;
     for (size_t idx = 0; idx < tightened_transformed_bands_from_stored_bands.size() - 1; ++idx)
     {
         RubberBand::Ptr b1 = tightened_transformed_bands_from_stored_bands[idx];
         RubberBand::Ptr b2 = tightened_transformed_bands_from_stored_bands[idx];
-        if (checkFirstOrderHomotopy(*b1, *b2))
+        foh_values.push_back(checkFirstOrderHomotopy(*b1, *b2));
+    }
+    int num_foh_changes = 0;
+    for (size_t idx = 0; idx < foh_values.size() - 1; ++idx)
+    {
+        if (foh_values[idx] != foh_values[idx + 1])
         {
-            foh_changes.push_back(true);
             ++num_foh_changes;
-        }
-        else
-        {
-            foh_changes.push_back(false);
         }
     }
 
@@ -806,7 +805,7 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
         transform * RubberBand::AggregateBandPoints(stored_trans.microstep_band_history_),
         tightened_transformed_bands_from_stored_bands,
         RubberBand::AggregateBandPoints(tightened_transformed_bands_from_stored_bands),
-        foh_changes,
+        foh_values,
 
         template_misalignment_dist,
         foh_result,

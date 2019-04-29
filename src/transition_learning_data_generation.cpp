@@ -943,12 +943,17 @@ namespace smmap
         source_transition_ = ToStateTransition(test_result, *band_);
         source_band_surface_ = RubberBand::AggregateBandPoints(source_transition_.microstep_band_history_);
 
-        source_num_foh_changes_ = 0;
+        std::vector<bool> foh_values;
         for (size_t idx = 0; idx < source_transition_.microstep_band_history_.size() - 1; ++idx)
         {
             RubberBand::Ptr b1 = source_transition_.microstep_band_history_[idx];
             RubberBand::Ptr b2 = source_transition_.microstep_band_history_[idx];
-            if (transition_estimator_->checkFirstOrderHomotopy(*b1, *b2))
+            foh_values.push_back(transition_estimator_->checkFirstOrderHomotopy(*b1, *b2));
+        }
+        source_num_foh_changes_ = 0;
+        for (size_t idx = 0; idx < foh_values.size() - 1; ++idx)
+        {
+            if (foh_values[idx] != foh_values[idx + 1])
             {
                 ++source_num_foh_changes_;
             }
