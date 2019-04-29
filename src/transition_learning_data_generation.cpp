@@ -863,12 +863,13 @@ namespace smmap
             TRUE_VS_ADAPATION_FOH,
             TRUE_VS_ADAPATION_EUCLIDEAN,
         };
-        std::vector<std::vector<std::string>> dists_etc(files.size(), std::vector<std::string>(9, ""));
+        Log::Log logger(data_folder_ + "/dists_etc.txt", false);
         #pragma omp parallel for
         for (size_t idx = 0; idx < files.size(); ++idx)
         {
             const auto& file = files[idx];
-            dists_etc[idx][FILENAME] = file;
+            std::vector<std::string> dists_etc(9, "");
+            dists_etc[FILENAME] = file;
             try
             {
                 // Load the test record
@@ -909,25 +910,22 @@ namespace smmap
                 }
                 const auto test_band_end = RubberBand::BandFromWorldState(ConvertToEigenFeedback(test_result.microsteps_last_action.back()), *band_);
 
-                dists_etc[idx][TEMPLATE_MISALIGNMENT_EUCLIDEAN] = std::to_string(adaptation_record.template_misalignment_dist_);
-                dists_etc[idx][DEFAULT_VS_ADAPTATION_FOH] = std::to_string(adaptation_record.default_band_foh_result_);
-                dists_etc[idx][DEFAULT_VS_ADAPTATION_EUCLIDEAN] = std::to_string(adaptation_record.default_band_dist_);
-                dists_etc[idx][SOURCE_NUM_FOH_CHANGES] = std::to_string(source_num_foh_changes_);
-                dists_etc[idx][RESULT_NUM_FOH_CHANGES] = std::to_string(adaptation_record.num_foh_changes_);
+                dists_etc[TEMPLATE_MISALIGNMENT_EUCLIDEAN] = std::to_string(adaptation_record.template_misalignment_dist_);
+                dists_etc[DEFAULT_VS_ADAPTATION_FOH] = std::to_string(adaptation_record.default_band_foh_result_);
+                dists_etc[DEFAULT_VS_ADAPTATION_EUCLIDEAN] = std::to_string(adaptation_record.default_band_dist_);
+                dists_etc[SOURCE_NUM_FOH_CHANGES] = std::to_string(source_num_foh_changes_);
+                dists_etc[RESULT_NUM_FOH_CHANGES] = std::to_string(adaptation_record.num_foh_changes_);
 
-                dists_etc[idx][TRUE_VS_ADAPATION_FOH] = std::to_string(transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.result_, *test_band_end));
-                dists_etc[idx][TRUE_VS_ADAPATION_EUCLIDEAN] = std::to_string(adaptation_record.result_->distance(*test_band_end));
+                dists_etc[TRUE_VS_ADAPATION_FOH] = std::to_string(transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.result_, *test_band_end));
+                dists_etc[TRUE_VS_ADAPATION_EUCLIDEAN] = std::to_string(adaptation_record.result_->distance(*test_band_end));
             }
             catch (const std::exception& ex)
             {
                 ROS_ERROR_STREAM("Error parsing idx: " << idx << " file: " << file << ": " << ex.what());
-                dists_etc[idx][ERROR_STRING] = ex.what();
+                dists_etc[ERROR_STRING] = ex.what();
             }
-        }
-        Log::Log logger(data_folder_ + "/dists_etc.txt", false);
-        for (const auto& data_line : dists_etc)
-        {
-            LOG(logger, PrettyPrint::PrettyPrint(data_line, false, ", "));
+
+            LOG(logger, PrettyPrint::PrettyPrint(dists_etc, false, ", "));
         }
     }
 
