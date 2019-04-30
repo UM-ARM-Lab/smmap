@@ -952,6 +952,8 @@ namespace smmap
     {
         (void)res;
 
+        source_valid_ = false;
+
         const std::string fullpath = data_folder_ + "/" + req.data;
         const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(fullpath);
         const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
@@ -987,6 +989,7 @@ namespace smmap
         source_transition_.ending_state_.planned_rubber_band_->resampleBand();
 
         source_valid_ = true;
+        ROS_INFO_STREAM("Source transition set to " << req.data);
         return true;
     }
 
@@ -1022,6 +1025,8 @@ namespace smmap
         res.response = std::to_string(next_vis_prefix_);
         visid_to_markers_[res.response] = sim_record.visualize(std::to_string(next_vis_prefix_) + "__", vis_);
         ++next_vis_prefix_;
+
+        ROS_INFO_STREAM("Added vis id: " << res.response << " for file " << req.data);
         return true;
     }
 
@@ -1035,13 +1040,15 @@ namespace smmap
             const auto markers_nsid = visid_to_markers_.at(req.data);
             for (const auto& nsid : markers_nsid)
             {
-                vis_->deleteObjects(nsid.first, nsid.second, nsid.second + 1);
+                vis_->deleteObject(nsid.first, nsid.second);
             }
             visid_to_markers_.erase(req.data);
+            ROS_INFO_STREAM("Removed vis id: " << req.data);
             return true;
         }
         catch (...)
         {
+            res.response = "Invalid vis id";
             return false;
         }
     }
