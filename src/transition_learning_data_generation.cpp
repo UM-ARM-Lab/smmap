@@ -883,7 +883,7 @@ namespace smmap
         {
             const auto& file = files[idx];
             std::vector<std::string> dists_etc(DUMMY_ITEM, "");
-            dists_etc[FILENAME] = file;
+            dists_etc[FILENAME] = file.substr(data_folder_.length() + 1);
             try
             {
                 // Load the test record
@@ -930,8 +930,8 @@ namespace smmap
                 dists_etc[SOURCE_NUM_FOH_CHANGES] = std::to_string(source_num_foh_changes_);
                 dists_etc[RESULT_NUM_FOH_CHANGES] = std::to_string(adaptation_record.num_foh_changes_);
 
-                dists_etc[TRUE_VS_ADAPATION_FOH] = std::to_string(transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.default_next_band_, *test_band_end));
-                dists_etc[TRUE_VS_ADAPATION_EUCLIDEAN] = std::to_string(adaptation_record.default_next_band_->distance(*test_band_end));
+                dists_etc[TRUE_VS_DEFAULT_FOH] = std::to_string(transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.default_next_band_, *test_band_end));
+                dists_etc[TRUE_VS_DEFAULT_EUCLIDEAN] = std::to_string(adaptation_record.default_next_band_->distance(*test_band_end));
 
                 dists_etc[TRUE_VS_ADAPATION_FOH] = std::to_string(transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.result_, *test_band_end));
                 dists_etc[TRUE_VS_ADAPATION_EUCLIDEAN] = std::to_string(adaptation_record.result_->distance(*test_band_end));
