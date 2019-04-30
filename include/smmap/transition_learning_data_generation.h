@@ -112,8 +112,7 @@ namespace smmap
 
         //// Data Generation ///////////////////////////////////////////////////
 
-        AllGrippersPoseTrajectory generateTestPath(
-                const AllGrippersSinglePose& gripper_target_poses);
+        RRTPath generateTestPath(const AllGrippersSinglePose& gripper_target_poses);
 
         //// Data Visualization ////////////////////////////////////////////////
 

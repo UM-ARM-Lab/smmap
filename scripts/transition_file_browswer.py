@@ -5,8 +5,6 @@ import rospy
 import signal
 from copy import deepcopy
 from deformable_manipulation_msgs.srv import TransitionTestingVisualization
-from IPython import embed
-
 
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QStandardItem, QStandardItemModel
@@ -124,11 +122,12 @@ class Widget(QWidget):
             rospy.wait_for_service("transition_vis/remove_visualization", timeout=1.0)
             remove_visualization = rospy.ServiceProxy("transition_vis/remove_visualization", TransitionTestingVisualization)
             remove_visualization(id_item.text())
-            self.vis_id_model.removeRow(id_item.row())
         except rospy.ROSException as e:
             print e
         except rospy.ServiceException, e:
             print "remove_visualization service call failed: ", e
+        finally:
+            self.vis_id_model.removeRow(id_item.row())
 
 
 if __name__ == "__main__":

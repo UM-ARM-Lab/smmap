@@ -131,6 +131,8 @@ namespace smmap
             RubberBand::Ptr result_;
 
             // Intermediary calculations
+            ObjectPointSet target_points_to_match_;
+            ObjectPointSet template_points_to_align_;
             Eigen::Isometry3d invariant_transform_;
             ObjectPointSet template_planned_band_aligned_to_target_;
             ObjectPointSet next_band_points_to_smooth_;

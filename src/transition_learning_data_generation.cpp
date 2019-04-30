@@ -19,6 +19,7 @@ using namespace arc_helpers;
 using namespace Eigen;
 using namespace EigenHelpers;
 namespace dmm = deformable_manipulation_msgs;
+using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
 ////////////////////////////////////////////////////////////////////////////////
 //          Random Helpers
@@ -35,53 +36,40 @@ namespace smmap
 
     static TransitionEstimation::StateTransition ToStateTransition(
             const dmm::TransitionTestResult& test,
-            RubberBand band)
+            const RRTPath& path)
     {
-        const auto template_band = band;
+        const auto template_band = *path.back().band();
 
         const WorldState start = ConvertToEigenFeedback(test.start_after_following_path);
         const std::vector<WorldState> microsteps_all = ConvertToEigenFeedback(test.microsteps_all);
         const std::vector<WorldState> microsteps_last = ConvertToEigenFeedback(test.microsteps_last_action);
         const WorldState& end = microsteps_all.back();
 
-        // Run the template band through the gripper actions up to the start of of transition test,
-        // updating the band only when the grippers move to account for the "microstepping".
-        // This gets us the planned band
-        auto prev_endpoints = band.getEndpoints();
-        for (size_t idx = 0; idx < microsteps_all.size() - microsteps_last.size(); ++idx)
-        {
-            const auto next_positions = ToGripperPositions(microsteps_all[idx].all_grippers_single_pose_);
-            if (next_positions != prev_endpoints)
-            {
-                band.forwardPropagate(next_positions, false);
-                prev_endpoints = next_positions;
-            }
-        }
-
         const auto start_state = TransitionEstimation::State
         {
             start.object_configuration_,
             RubberBand::BandFromWorldState(start, template_band),
-            std::make_shared<RubberBand>(band),
+            std::make_shared<RubberBand>(*path.back().band()),
             start.rope_node_transforms_
         };
 
         // Propagate the planned band the last step
-        band.forwardPropagate(ToGripperPositions(end.all_grippers_single_pose_), false);
+        auto band = std::make_shared<RubberBand>(*path.back().band());
+        band->forwardPropagate(ToGripperPositions(end.all_grippers_single_pose_), false);
         const auto end_state = TransitionEstimation::State
         {
             end.object_configuration_,
             RubberBand::BandFromWorldState(end, template_band),
-            std::make_shared<RubberBand>(band),
+            band,
             end.rope_node_transforms_
         };
 
-        std::vector<RubberBand::Ptr> microsteps_bands;
-        microsteps_bands.reserve(microsteps_last.size());
+        std::vector<RubberBand::Ptr> microsteps_last_bands;
+        microsteps_last_bands.reserve(microsteps_last.size());
         for (size_t idx = 0; idx < microsteps_last.size(); ++idx)
         {
-            microsteps_bands.push_back(std::make_shared<RubberBand>(template_band));
-            if (!microsteps_bands.back()->resetBand(microsteps_last[idx]))
+            microsteps_last_bands.push_back(std::make_shared<RubberBand>(template_band));
+            if (!microsteps_last_bands.back()->resetBand(microsteps_last[idx]))
             {
                 throw_arc_exception(std::runtime_error, "Unable to extract surface");
             }
@@ -94,7 +82,7 @@ namespace smmap
             start_state.planned_rubber_band_->getEndpoints(),
             end_state.planned_rubber_band_->getEndpoints(),
             microsteps_last,
-            microsteps_bands
+            microsteps_last_bands
         };
     }
 }
@@ -264,10 +252,43 @@ namespace smmap
                               std::make_move_iterator(new_ids.begin()),
                               std::make_move_iterator(new_ids.end()));
         }
+        // Adaptation process - target band and action
+        {
+            const auto color = Visualizer::Yellow();
+            const auto name = basename + "adaptation__target_points_to_match";
+//            std::vector<std_msgs::ColorRGBA> colors;
+//            for (size_t idx = 0; idx < adaptation_result_.target_points_to_match_.cols(); ++idx)
+//            {
+//                colors.push_back(ColorBuilder::InterpolateHotToCold((double)idx / (adaptation_result_.target_points_to_match_.size() - 1)));
+//            }
+            const auto new_ids = vis->visualizePoints(name, adaptation_result_.target_points_to_match_, color, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
+        // Adaptation process - template band and action
+        {
+            const auto color = Visualizer::Green();
+            const auto name = basename + "adaptation__template_points_to_align";
+//            std::vector<std_msgs::ColorRGBA> colors;
+//            for (size_t idx = 0; idx < adaptation_result_.template_points_to_align_.cols(); ++idx)
+//            {
+//                colors.push_back(ColorBuilder::InterpolateHotToCold((double)idx / (adaptation_result_.template_points_to_align_.size() - 1)));
+//            }
+            const auto new_ids = vis->visualizePoints(name, adaptation_result_.template_points_to_align_, color, 1);
+            marker_ids.insert(marker_ids.end(),
+                              std::make_move_iterator(new_ids.begin()),
+                              std::make_move_iterator(new_ids.end()));
+        }
         // Adaptation process - template aligned
         {
             const auto color = Visualizer::Magenta();
             const auto name = basename + "adaptation__template_aligned_to_target";
+//            std::vector<std_msgs::ColorRGBA> colors;
+//            for (size_t idx = 0; idx < adaptation_result_.template_planned_band_aligned_to_target_.cols(); ++idx)
+//            {
+//                colors.push_back(ColorBuilder::InterpolateHotToCold((double)idx / (adaptation_result_.template_planned_band_aligned_to_target_.size() - 1)));
+//            }
             const auto new_ids = vis->visualizePoints(name, adaptation_result_.template_planned_band_aligned_to_target_, color, 1);
             marker_ids.insert(marker_ids.end(),
                               std::make_move_iterator(new_ids.begin()),
@@ -282,7 +303,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.begin()),
                               std::make_move_iterator(new_ids.end()));
         }
-        // Adaptation process - next_band_points_to_smooth_
+        // Adaptation process - transformed_band_surface_points
         {
             const auto start_color = Visualizer::Blue();
             const auto end_color = Visualizer::Seafoam();
@@ -549,16 +570,14 @@ namespace smmap
             if (boost::filesystem::is_regular_file(itr->status()))
             {
                 const auto filename = itr->path().string();
-                if (filename.find("compressed") != std::string::npos)
-                {
-                    if (filename.find("adapatation_record.compressed") == std::string::npos)
-                    {
-                        files.push_back(filename);
-                    }
-                }
-                else
+                // Only warn about file types that are not expected
+                if (filename.find("compressed") == std::string::npos)
                 {
                     ROS_WARN_STREAM("Ignoring file: " << filename);
+                }
+                if (filename.find("test_results.compressed") != std::string::npos)
+                {
+                    files.push_back(filename);
                 }
             }
         }
@@ -620,35 +639,43 @@ namespace smmap
         tests.reserve(num_threads);
         filenames.reserve(num_threads);
 
-//        std::vector<dmm::TransitionTestResult> results(tests.size());
+        // Ignore the feedback as the action sever saves the results to file anyway
         const auto feedback_callback = [&] (const size_t test_id, const dmm::TransitionTestResult& result)
         {
-//            std::cout << data_folder_ + "/" + test_descriptions[test_id] + ".compressed" << std::endl;
-////            results[test_id] = result;
-//            std::vector<uint8_t> buffer;
-//            RosMessageSerializationWrapper(result, buffer);
-//            ZlibHelpers::CompressAndWriteToFile(buffer, data_folder_ + "//" + test_descriptions[test_id] + ".compressed");
             (void)test_id;
             (void)result;
         };
 
         //// Generate the canonical example ////////////////////////////////////
         {
-            arc_utilities::CreateDirectory(data_folder_ + "/cannonical_straight_test");
-            const std::string filename(data_folder_ +
-                                       "/cannonical_straight_test"
-                                       "/unmodified.compressed");
-            if (!boost::filesystem::is_regular_file(filename))
+            const std::string folder(data_folder_ + "/cannonical_straight_test");
+            const std::string test_id("/unmodified");
+            const std::string test_results_filename = folder + test_id + "__test_results.compressed";
+            const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
+            arc_utilities::CreateDirectory(folder);
+
+            if (!boost::filesystem::is_regular_file(test_results_filename))
             {
                 Isometry3d gripper_a_ending_pose_ = Translation3d(gripper_a_action_vector_) * gripper_a_starting_pose_;
                 Isometry3d gripper_b_ending_pose_ = Translation3d(gripper_b_action_vector_) * gripper_b_starting_pose_;
+
+                // Generate a path and convert the test to a ROS format
+                const RRTPath path_to_start_of_test =
+                        generateTestPath({gripper_a_starting_pose_, gripper_b_starting_pose_});
                 const auto canonical_test = robot_->toRosTransitionTest(
                             initial_world_state_.rope_node_transforms_,
                             initial_world_state_.all_grippers_single_pose_,
-                            generateTestPath({gripper_a_starting_pose_, gripper_b_starting_pose_}),
+                            RRTPathToGrippersPoseTrajectory(path_to_start_of_test),
                             {gripper_a_ending_pose_, gripper_b_ending_pose_});
+
+                // Save the generated path to file
+                std::vector<uint8_t> buffer;
+                SerializeVector<RRTNode>(path_to_start_of_test, buffer, &RRTNode::Serialize);
+                ZlibHelpers::CompressAndWriteToFile(buffer, path_to_start_filename);
+
+                // Add the test to the list waiting to be executed
                 tests.push_back(canonical_test);
-                filenames.push_back(filename);
+                filenames.push_back(test_results_filename);
             }
         }
 
@@ -663,6 +690,13 @@ namespace smmap
             {
                 const Isometry3d gripper_a_starting_pose = Translation3d(perturbations[a_idx]) * gripper_a_starting_pose_;
                 const Isometry3d gripper_a_ending_pose = Translation3d(gripper_a_action_vector_) * gripper_a_starting_pose;
+
+                const std::string folder(data_folder_ +
+                                         "/cannonical_straight_test"
+                                         "/perturbed_gripper_start_positions"
+                                         "/gripper_a_" + ToString(perturbations[a_idx]));
+                arc_utilities::CreateDirectory(folder);
+
                 for (size_t b_idx = 0; b_idx < perturbations.size(); ++b_idx)
                 {
                     try
@@ -670,28 +704,31 @@ namespace smmap
                         const Isometry3d gripper_b_starting_pose = Translation3d(perturbations[b_idx]) * gripper_b_starting_pose_;
                         const Isometry3d gripper_b_ending_pose = Translation3d(gripper_b_action_vector_) * gripper_b_starting_pose;
 
-                        const std::string folder(data_folder_ +
-                                                 "/cannonical_straight_test"
-                                                 "/perturbed_gripper_start_positions"
-                                                 "/gripper_a_" + ToString(perturbations[a_idx]));
-                        const std::string filename(folder +
-                                                   "/gripper_b_" + ToString(perturbations[b_idx]) +
-                                                   ".compressed");
-                        arc_utilities::CreateDirectory(folder);
+                        const std::string test_id("/gripper_b_" + ToString(perturbations[b_idx]));
+                        const std::string test_results_filename = folder + test_id + "__test_results.compressed";
+                        const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
 
-                        if (!boost::filesystem::is_regular_file(filename))
+                        if (!boost::filesystem::is_regular_file(test_results_filename))
                         {
+                            // Generate a path and convert the test to a ROS format
+                            const RRTPath path_to_start_of_test =
+                                    generateTestPath({gripper_a_starting_pose, gripper_b_starting_pose});
                             const auto test = robot_->toRosTransitionTest(
                                         initial_world_state_.rope_node_transforms_,
                                         initial_world_state_.all_grippers_single_pose_,
-                                        generateTestPath({gripper_a_starting_pose, gripper_b_starting_pose}),
+                                        RRTPathToGrippersPoseTrajectory(path_to_start_of_test),
                                         {gripper_a_ending_pose, gripper_b_ending_pose});
+
+                            // Save the generated path to file
+                            std::vector<uint8_t> buffer;
+                            SerializeVector<RRTNode>(path_to_start_of_test, buffer, &RRTNode::Serialize);
+                            ZlibHelpers::CompressAndWriteToFile(buffer, path_to_start_filename);
 
                             #pragma omp critical
                             {
                                 // Add the test to the list waiting to be executed
                                 tests.push_back(test);
-                                filenames.push_back(filename);
+                                filenames.push_back(test_results_filename);
 
                                 // Execute the tests if tehre are enough to run
                                 if (tests.size() == num_threads)
@@ -740,24 +777,32 @@ namespace smmap
                                                  "/cannonical_straight_test"
                                                  "/perturbed_gripper_action_vectors"
                                                  "/gripper_a_" + ToString(perturbations[a_idx]));
-                        const std::string filename(folder +
-                                                   "/gripper_b_" + ToString(perturbations[b_idx]) +
-                                                   ".compressed");
+                        const std::string test_id(folder + "/gripper_b_" + ToString(perturbations[b_idx]));
+                        const std::string test_results_filename = folder + test_id + "__test_results.compressed";
+                        const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
                         arc_utilities::CreateDirectory(folder);
 
-                        if (!boost::filesystem::is_regular_file(filename))
+                        if (!boost::filesystem::is_regular_file(test_results_filename))
                         {
+                            // Generate a path and convert the test to a ROS format
+                            const RRTPath path_to_start_of_test =
+                                    generateTestPath({gripper_a_starting_pose_, gripper_b_starting_pose_});
                             const auto test = robot_->toRosTransitionTest(
                                         initial_world_state_.rope_node_transforms_,
                                         initial_world_state_.all_grippers_single_pose_,
-                                        generateTestPath({gripper_a_starting_pose_, gripper_b_starting_pose_}),
+                                        RRTPathToGrippersPoseTrajectory(path_to_start_of_test),
                                         {gripper_a_ending_pose, gripper_b_ending_pose});
+
+                            // Save the generated path to file
+                            std::vector<uint8_t> buffer;
+                            SerializeVector<RRTNode>(path_to_start_of_test, buffer, &RRTNode::Serialize);
+                            ZlibHelpers::CompressAndWriteToFile(buffer, path_to_start_filename);
 
                             #pragma omp critical
                             {
                                 // Add the test to the list waiting to be executed
                                 tests.push_back(test);
-                                filenames.push_back(filename);
+                                filenames.push_back(test_results_filename);
 
                                 // Execute the tests if tehre are enough to run
                                 if (tests.size() == num_threads)
@@ -790,7 +835,7 @@ namespace smmap
         }
     }
 
-    AllGrippersPoseTrajectory TransitionTesting::generateTestPath(
+    RRTPath TransitionTesting::generateTestPath(
             const AllGrippersSinglePose& gripper_target_poses)
     {
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
@@ -832,7 +877,7 @@ namespace smmap
         {
             throw_arc_exception(std::runtime_error, "Multiple paths returned by RRT. Weird.");
         }
-        return RRTPathToGrippersPoseTrajectory(policy[0].first);
+        return policy[0].first;
     }
 }
 
@@ -881,24 +926,32 @@ namespace smmap
         #pragma omp parallel for
         for (size_t idx = 0; idx < files.size(); ++idx)
         {
-            const auto& file = files[idx];
+            const auto& test_result_file = files[idx];
             std::vector<std::string> dists_etc(DUMMY_ITEM, "");
-            dists_etc[FILENAME] = file.substr(data_folder_.length() + 1);
+            dists_etc[FILENAME] = test_result_file.substr(data_folder_.length() + 1);
             try
             {
                 // Load the test record
                 const dmm::TransitionTestResult test_result = [&] ()
                 {
-                    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(file);
+                    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
                     return arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
                 }();
                 // Load the adapation record, if needed generate it first
                 const TransitionEstimation::TransitionAdaptationResult adaptation_record = [&] ()
                 {
-                    const auto adapatation_record_file = file.substr(0, file.find(".compressed")) + "__adapatation_record.compressed";
+                    const auto adapatation_record_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__adapatation_record.compressed";
+                    const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
+                    const auto decompressed_path = ZlibHelpers::LoadFromFileAndDecompress(path_to_start_file);
+                    const auto node_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
+                    {
+                        return RRTNode::Deserialize(buf, cur, *band_);
+                    };
+                    const auto path_to_start = DeserializeVector<RRTNode, aligned_allocator<smmap::RRTNode>>(decompressed_path, 0, node_deserializer).first;
+
 //                    if (!boost::filesystem::is_regular_file(adapatation_record_file))
 //                    {
-                        const auto test_transition = ToStateTransition(test_result, *band_);
+                        const auto test_transition = ToStateTransition(test_result, path_to_start);
                         const auto ar = transition_estimator_->generateTransition(
                                     source_transition_,
                                     *test_transition.starting_state_.planned_rubber_band_,
@@ -938,7 +991,7 @@ namespace smmap
             }
             catch (const std::exception& ex)
             {
-                ROS_ERROR_STREAM("Error parsing idx: " << idx << " file: " << file << ": " << ex.what());
+                ROS_ERROR_STREAM("Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
                 dists_etc[ERROR_STRING] = ex.what();
             }
 
@@ -954,12 +1007,19 @@ namespace smmap
 
         source_valid_ = false;
 
-        const std::string fullpath = data_folder_ + "/" + req.data;
-        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(fullpath);
-        const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+        const std::string test_result_file = data_folder_ + "/" + req.data;
+        const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
+        const auto decompressed_path = ZlibHelpers::LoadFromFileAndDecompress(path_to_start_file);
+        const auto node_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
+        {
+            return RRTNode::Deserialize(buf, cur, *band_);
+        };
+        const auto path_to_start = DeserializeVector<RRTNode, aligned_allocator<smmap::RRTNode>>(decompressed_path, 0, node_deserializer).first;
+        const auto decompressed_test_result = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
+        const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(decompressed_test_result, 0).first.test_result;
 
         source_file_ = req.data;
-        source_transition_ = ToStateTransition(test_result, *band_);
+        source_transition_ = ToStateTransition(test_result, path_to_start);
         source_band_surface_ = RubberBand::AggregateBandPoints(source_transition_.microstep_band_history_);
 
         std::vector<bool> foh_values;
@@ -1004,11 +1064,18 @@ namespace smmap
             return false;
         }
 
-        const std::string fullpath = data_folder_ + "/" + req.data;
-        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(fullpath);
-        const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+        const std::string test_result_file = data_folder_ + "/" + req.data;
+        const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
+        const auto decompressed_path = ZlibHelpers::LoadFromFileAndDecompress(path_to_start_file);
+        const auto node_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
+        {
+            return RRTNode::Deserialize(buf, cur, *band_);
+        };
+        const auto path_to_start = DeserializeVector<RRTNode, aligned_allocator<smmap::RRTNode>>(decompressed_path, 0, node_deserializer).first;
+        const auto decompressed_test_result = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
+        const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(decompressed_test_result, 0).first.test_result;
 
-        const auto test_transition = ToStateTransition(test_result, *band_);
+        const auto test_transition = ToStateTransition(test_result, path_to_start);
         const auto adaptation_record = transition_estimator_->generateTransition(
                     source_transition_,
                     *test_transition.starting_state_.planned_rubber_band_,

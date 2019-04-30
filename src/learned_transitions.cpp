@@ -301,6 +301,8 @@ uint64_t TransitionEstimation::TransitionAdaptationResult::serialize(std::vector
 
     default_next_band_->serialize(buffer);
     result_->serialize(buffer);
+    SerializeEigen(target_points_to_match_, buffer);
+    SerializeEigen(template_points_to_align_, buffer);
     SerializeEigen(invariant_transform_, buffer);
     SerializeEigen(template_planned_band_aligned_to_target_, buffer);
     SerializeEigen(next_band_points_to_smooth_, buffer);
@@ -341,6 +343,12 @@ std::pair<TransitionEstimation::TransitionAdaptationResult, uint64_t> Transition
     const auto result_band_deserialized = RubberBand::Deserialize(buffer, pos, template_band);
     pos += result_band_deserialized.second;
 
+
+    const auto target_points_to_match_deserialized = DeserializeEigen<ObjectPointSet>(buffer, pos);
+    pos += target_points_to_match_deserialized.second;
+
+    const auto template_points_to_align_deserialized = DeserializeEigen<ObjectPointSet>(buffer, pos);
+    pos += template_points_to_align_deserialized.second;
 
     const auto invariant_transform_deserialized = DeserializeEigen<Isometry3d>(buffer, pos);
     pos += invariant_transform_deserialized.second;
@@ -383,11 +391,13 @@ std::pair<TransitionEstimation::TransitionAdaptationResult, uint64_t> Transition
     const auto num_foh_changes_deserialized = DeserializeFixedSizePOD<int>(buffer, pos);
     pos += num_foh_changes_deserialized.second;
 
-    TransitionAdaptationResult record =
+    TransitionAdaptationResult record
     {
         default_next_band_deserialized.first,
         result_band_deserialized.first,
 
+        target_points_to_match_deserialized.first,
+        template_points_to_align_deserialized.first,
         invariant_transform_deserialized.first,
         template_planned_band_aligned_deserialized.first,
         next_band_points_to_smooth_deserialized.first,
@@ -720,15 +730,15 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
     // Extract the best transform based on the invariants in the system
     // (memorized data) into the target points (test data)
     const auto num_gripper_steps = stored_trans.microstep_state_history_.size() / 4;
-    ObjectPointSet warping_template_points_planned = RubberBand::PointsFromBandAndGrippers(
-                *stored_trans.starting_state_.planned_rubber_band_,
-                stored_trans.starting_gripper_positions_,
-                stored_trans.ending_gripper_positions_,
-                num_gripper_steps);
-    ObjectPointSet warping_target_points = RubberBand::PointsFromBandAndGrippers(
+    const ObjectPointSet warping_target_points = RubberBand::PointsFromBandAndGrippers(
                 test_band_start,
                 test_band_start.getEndpoints(),
                 ending_gripper_positions,
+                num_gripper_steps);
+    const ObjectPointSet warping_template_points_planned = RubberBand::PointsFromBandAndGrippers(
+                *stored_trans.starting_state_.planned_rubber_band_,
+                stored_trans.starting_gripper_positions_,
+                stored_trans.ending_gripper_positions_,
                 num_gripper_steps);
 
     const Matrix3d xytransform = InvariantTransform(
@@ -807,6 +817,8 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
         default_next_band,
         next_band,
 
+        warping_target_points,
+        warping_template_points_planned,
         transform,
         template_planned_band_aligned_to_target,
         next_band_points_to_smooth,
