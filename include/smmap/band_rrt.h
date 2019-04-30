@@ -1,7 +1,7 @@
 #pragma once
 
 #include <random>
-#include <arc_utilities/eigen_helpers.hpp>
+#include <arc_utilities/eigen_typedefs.hpp>
 #include <smmap_utilities/visualization_tools.h>
 
 #include <flann/flann.hpp>

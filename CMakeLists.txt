@@ -89,6 +89,7 @@ add_library(${PROJECT_NAME}_infrastructure
     src/ros_communication_helpers.cpp
     src/task_specification.cpp
     src/task_specification_implementations.cpp
+    src/trajectory.cpp
 )
 add_dependencies(${PROJECT_NAME}_infrastructure ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_infrastructure ${catkin_LIBRARIES})

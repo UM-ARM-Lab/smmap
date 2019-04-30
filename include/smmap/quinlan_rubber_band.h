@@ -1,7 +1,7 @@
 #ifndef QUINLAN_RUBBER_BAND
 #define QUINLAN_RUBBER_BAND
 
-#include <arc_utilities/eigen_helpers.hpp>
+#include <arc_utilities/eigen_typedefs.hpp>
 #include <sdf_tools/sdf.hpp>
 #include <deformable_manipulation_experiment_params/xyzgrid.h>
 #include <smmap_utilities/visualization_tools.h>

@@ -1,6 +1,7 @@
 #include "smmap/adaptive_jacobian_model.h"
 
 #include <ros/ros.h>
+#include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 
 using namespace smmap;

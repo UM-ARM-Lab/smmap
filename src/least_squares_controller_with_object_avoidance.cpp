@@ -1,4 +1,5 @@
 #include "smmap/least_squares_controller_with_object_avoidance.h"
+#include <arc_utilities/eigen_helpers.hpp>
 #include <smmap_utilities/gurobi_solvers.h>
 
 using namespace smmap;

@@ -860,8 +860,11 @@ namespace smmap
             DEFAULT_VS_ADAPTATION_EUCLIDEAN,
             SOURCE_NUM_FOH_CHANGES,
             RESULT_NUM_FOH_CHANGES,
+            TRUE_VS_DEFAULT_FOH,
+            TRUE_VS_DEFAULT_EUCLIDEAN,
             TRUE_VS_ADAPATION_FOH,
             TRUE_VS_ADAPATION_EUCLIDEAN,
+            DUMMY_ITEM
         };
         Log::Log logger(data_folder_ + "cannonical_straight_test/dists_etc.csv", false);
         LOG(logger, "FILENAME, "
@@ -871,13 +874,15 @@ namespace smmap
                     "DEFAULT_VS_ADAPTATION_EUCLIDEAN, "
                     "SOURCE_NUM_FOH_CHANGES, "
                     "RESULT_NUM_FOH_CHANGES, "
+                    "TRUE_VS_DEFAULT_FOH, "
+                    "TRUE_VS_DEFAULT_EUCLIDEAN, "
                     "TRUE_VS_ADAPATION_FOH, "
                     "TRUE_VS_ADAPATION_EUCLIDEAN");
         #pragma omp parallel for
         for (size_t idx = 0; idx < files.size(); ++idx)
         {
             const auto& file = files[idx];
-            std::vector<std::string> dists_etc(9, "");
+            std::vector<std::string> dists_etc(DUMMY_ITEM, "");
             dists_etc[FILENAME] = file;
             try
             {
@@ -924,6 +929,9 @@ namespace smmap
                 dists_etc[DEFAULT_VS_ADAPTATION_EUCLIDEAN] = std::to_string(adaptation_record.default_band_dist_);
                 dists_etc[SOURCE_NUM_FOH_CHANGES] = std::to_string(source_num_foh_changes_);
                 dists_etc[RESULT_NUM_FOH_CHANGES] = std::to_string(adaptation_record.num_foh_changes_);
+
+                dists_etc[TRUE_VS_ADAPATION_FOH] = std::to_string(transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.default_next_band_, *test_band_end));
+                dists_etc[TRUE_VS_ADAPATION_EUCLIDEAN] = std::to_string(adaptation_record.default_next_band_->distance(*test_band_end));
 
                 dists_etc[TRUE_VS_ADAPATION_FOH] = std::to_string(transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.result_, *test_band_end));
                 dists_etc[TRUE_VS_ADAPATION_EUCLIDEAN] = std::to_string(adaptation_record.result_->distance(*test_band_end));
