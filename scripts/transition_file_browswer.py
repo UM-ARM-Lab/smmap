@@ -89,16 +89,18 @@ class Widget(QWidget):
         text_field.setText(file[len(self.data_folder) + 1:])
 
     def setSourceTransition(self, text_field):
-        rospy.wait_for_service("transition_vis/set_source")
         try:
+            rospy.wait_for_service("transition_vis/set_source", timeout=1.0)
             set_source = rospy.ServiceProxy("transition_vis/set_source", TransitionTestingVisualization)
             set_source(text_field.text())
-        except rospy.ServiceException, e:
+        except rospy.ROSException as e:
+            print e
+        except rospy.ServiceException as e:
             print "set_source service call failed: ", e
 
     def addVisualization(self, text_field):
-        rospy.wait_for_service("transition_vis/add_visualization")
         try:
+            rospy.wait_for_service("transition_vis/add_visualization", timeout=1.0)
             add_visualization = rospy.ServiceProxy("transition_vis/add_visualization", TransitionTestingVisualization)
             filename = text_field.text()
             id = add_visualization(filename).response
@@ -109,19 +111,22 @@ class Widget(QWidget):
 
             delete_button = QPushButton()
             delete_button.setText("Delete")
-            delete_button.clicked.connect(lambda: self.removeVisualization(id))
+            delete_button.clicked.connect(lambda: self.removeVisualization(id_item))
             delete_button_index = self.vis_id_model.index(id_item.row(), self.DELETE_IDX)
             self.vis_id_view.setIndexWidget(delete_button_index, delete_button)
-
+        except rospy.ROSException as e:
+            print e
         except rospy.ServiceException, e:
             print "add_visualization service call failed: ", e
 
-    def removeVisualization(self, id):
-        rospy.wait_for_service("transition_vis/remove_visualization")
+    def removeVisualization(self, id_item):
         try:
+            rospy.wait_for_service("transition_vis/remove_visualization", timeout=1.0)
             remove_visualization = rospy.ServiceProxy("transition_vis/remove_visualization", TransitionTestingVisualization)
-            remove_visualization(id)
-
+            remove_visualization(id_item.text())
+            self.vis_id_model.removeRow(id_item.row())
+        except rospy.ROSException as e:
+            print e
         except rospy.ServiceException, e:
             print "remove_visualization service call failed: ", e
 
