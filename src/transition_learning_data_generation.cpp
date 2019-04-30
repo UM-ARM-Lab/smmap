@@ -890,7 +890,7 @@ namespace smmap
     void TransitionTesting::generateTransitionApproximations()
     {
         dmm::TransitionTestingVisualizationRequest req;
-        req.data = "cannonical_straight_test/unmodified.compressed";
+        req.data = "cannonical_straight_test/unmodified__test_results.compressed";
         dmm::TransitionTestingVisualizationResponse res;
         setSourceCallback(req, res);
         assert(source_valid_);

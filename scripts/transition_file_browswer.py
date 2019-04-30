@@ -83,7 +83,7 @@ class Widget(QWidget):
         self.vis_id_box.setLayout(layout)
 
     def fileBrowse(self, text_field, directory=None):
-        file, filter = QFileDialog.getOpenFileName(parent=self, directory=directory, filter="*.compressed")
+        file, filter = QFileDialog.getOpenFileName(parent=self, directory=directory, filter="*test_results.compressed")
         text_field.setText(file[len(self.data_folder) + 1:])
 
     def setSourceTransition(self, text_field):
