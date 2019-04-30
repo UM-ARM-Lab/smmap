@@ -866,7 +866,7 @@ namespace smmap
             TRUE_VS_ADAPATION_EUCLIDEAN,
             DUMMY_ITEM
         };
-        Log::Log logger(data_folder_ + "cannonical_straight_test/dists_etc.csv", false);
+        Log::Log logger(data_folder_ + "/cannonical_straight_test/dists_etc.csv", false);
         LOG(logger, "FILENAME, "
                     "ERROR_STRING, "
                     "TEMPLATE_MISALIGNMENT_EUCLIDEAN, "
