@@ -1,6 +1,5 @@
 #include "smmap/transition_learning_data_generation.h"
 #include <arc_utilities/arc_helpers.hpp>
-#include <arc_utilities/thin_plate_spline.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/timing.hpp>
 #include <arc_utilities/serialization_ros.hpp>
