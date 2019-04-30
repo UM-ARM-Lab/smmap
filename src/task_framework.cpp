@@ -13,6 +13,7 @@
 #include <arc_utilities/timing.hpp>
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
+#include <arc_utilities/eigen_helpers.hpp>
 #include <deformable_manipulation_experiment_params/utility.hpp>
 
 #include "smmap/diminishing_rigidity_model.h"

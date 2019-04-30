@@ -3,6 +3,7 @@
 #include <arc_utilities/arc_exceptions.hpp>
 #include <arc_utilities/log.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
+#include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/timing.hpp>
 #include <deformable_manipulation_msgs/messages.h>
 #include <deformable_manipulation_experiment_params/ros_params.hpp>

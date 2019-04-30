@@ -7,6 +7,7 @@
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/path_utils.hpp>
+#include <arc_utilities/eigen_helpers.hpp>
 #include <deformable_manipulation_experiment_params/utility.hpp>
 
 using namespace smmap;

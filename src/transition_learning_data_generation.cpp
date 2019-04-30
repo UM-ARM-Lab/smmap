@@ -5,6 +5,7 @@
 #include <arc_utilities/serialization_ros.hpp>
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/log.hpp>
+#include <arc_utilities/math_helpers.hpp>
 #include <smmap_utilities/neighbours.h>
 #include <boost/filesystem.hpp>
 #include <deformable_manipulation_experiment_params/conversions.hpp>

@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <arc_utilities/arc_exceptions.hpp>
+#include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/timing.hpp>
 
 using namespace smmap;

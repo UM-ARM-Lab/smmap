@@ -1,4 +1,5 @@
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
+#include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <smmap_utilities/nomad_solvers.h>
 #include <smmap_utilities/gurobi_solvers.h>

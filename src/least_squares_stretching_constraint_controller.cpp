@@ -1,3 +1,4 @@
+#include <arc_utilities/eigen_helpers.hpp>
 #include <smmap_utilities/gurobi_solvers.h>
 
 #include "smmap/least_squares_stretching_constraint_controller.h"
