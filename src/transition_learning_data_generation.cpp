@@ -760,6 +760,12 @@ namespace smmap
             #pragma omp parallel for
             for (size_t a_idx = 0; a_idx < perturbations.size(); ++a_idx)
             {
+                const std::string folder(data_folder_ +
+                                         "/cannonical_straight_test"
+                                         "/perturbed_gripper_action_vectors"
+                                         "/gripper_a_" + ToString(perturbations[a_idx]));
+                arc_utilities::CreateDirectory(folder);
+
                 const Vector3d gripper_a_action_vector = gripper_a_action_vector_ + perturbations[a_idx];
                 for (size_t b_idx = 0; b_idx < perturbations.size(); ++b_idx)
                 {
@@ -773,14 +779,9 @@ namespace smmap
                         const Isometry3d gripper_a_ending_pose = Translation3d(gripper_a_action_vector_normalized) * gripper_a_starting_pose_;
                         const Isometry3d gripper_b_ending_pose = Translation3d(gripper_b_action_vector_normalized) * gripper_b_starting_pose_;
 
-                        const std::string folder(data_folder_ +
-                                                 "/cannonical_straight_test"
-                                                 "/perturbed_gripper_action_vectors"
-                                                 "/gripper_a_" + ToString(perturbations[a_idx]));
-                        const std::string test_id(folder + "/gripper_b_" + ToString(perturbations[b_idx]));
+                        const std::string test_id("/gripper_b_" + ToString(perturbations[b_idx]));
                         const std::string test_results_filename = folder + test_id + "__test_results.compressed";
                         const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
-                        arc_utilities::CreateDirectory(folder);
 
                         if (!boost::filesystem::is_regular_file(test_results_filename))
                         {
