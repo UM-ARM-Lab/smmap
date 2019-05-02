@@ -800,7 +800,7 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
     for (size_t idx = 0; idx < tightened_transformed_bands_from_stored_bands.size() - 1; ++idx)
     {
         RubberBand::Ptr b1 = tightened_transformed_bands_from_stored_bands[idx];
-        RubberBand::Ptr b2 = tightened_transformed_bands_from_stored_bands[idx];
+        RubberBand::Ptr b2 = tightened_transformed_bands_from_stored_bands[idx + 1];
         foh_values.push_back(checkFirstOrderHomotopy(*b1, *b2));
     }
     int num_foh_changes = 0;

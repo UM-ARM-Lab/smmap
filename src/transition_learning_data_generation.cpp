@@ -256,12 +256,13 @@ namespace smmap
         {
             const auto color = Visualizer::Yellow();
             const auto name = basename + "adaptation__target_points_to_match";
-//            std::vector<std_msgs::ColorRGBA> colors;
-//            for (size_t idx = 0; idx < adaptation_result_.target_points_to_match_.cols(); ++idx)
-//            {
-//                colors.push_back(ColorBuilder::InterpolateHotToCold((double)idx / (adaptation_result_.target_points_to_match_.size() - 1)));
-//            }
-            const auto new_ids = vis->visualizePoints(name, adaptation_result_.target_points_to_match_, color, 1);
+            std::vector<std_msgs::ColorRGBA> colors;
+            const auto num_divs = (adaptation_result_.target_points_to_match_.cols() - 1);
+            for (size_t idx = 0; idx <= num_divs; ++idx)
+            {
+                colors.push_back(InterpolateColor(color, Visualizer::Red(), (float)idx / (float)num_divs));
+            }
+            const auto new_ids = vis->visualizePoints(name, adaptation_result_.target_points_to_match_, colors, 1);
             marker_ids.insert(marker_ids.end(),
                               std::make_move_iterator(new_ids.begin()),
                               std::make_move_iterator(new_ids.end()));
@@ -270,12 +271,13 @@ namespace smmap
         {
             const auto color = Visualizer::Green();
             const auto name = basename + "adaptation__template_points_to_align";
-//            std::vector<std_msgs::ColorRGBA> colors;
-//            for (size_t idx = 0; idx < adaptation_result_.template_points_to_align_.cols(); ++idx)
-//            {
-//                colors.push_back(ColorBuilder::InterpolateHotToCold((double)idx / (adaptation_result_.template_points_to_align_.size() - 1)));
-//            }
-            const auto new_ids = vis->visualizePoints(name, adaptation_result_.template_points_to_align_, color, 1);
+            std::vector<std_msgs::ColorRGBA> colors;
+            const auto num_divs = adaptation_result_.template_points_to_align_.cols() - 1;
+            for (size_t idx = 0; idx <= num_divs; ++idx)
+            {
+                colors.push_back(InterpolateColor(color, Visualizer::Red(), (float)idx / (float)num_divs));
+            }
+            const auto new_ids = vis->visualizePoints(name, adaptation_result_.template_points_to_align_, colors, 1);
             marker_ids.insert(marker_ids.end(),
                               std::make_move_iterator(new_ids.begin()),
                               std::make_move_iterator(new_ids.end()));
@@ -284,12 +286,13 @@ namespace smmap
         {
             const auto color = Visualizer::Magenta();
             const auto name = basename + "adaptation__template_aligned_to_target";
-//            std::vector<std_msgs::ColorRGBA> colors;
-//            for (size_t idx = 0; idx < adaptation_result_.template_planned_band_aligned_to_target_.cols(); ++idx)
-//            {
-//                colors.push_back(ColorBuilder::InterpolateHotToCold((double)idx / (adaptation_result_.template_planned_band_aligned_to_target_.size() - 1)));
-//            }
-            const auto new_ids = vis->visualizePoints(name, adaptation_result_.template_planned_band_aligned_to_target_, color, 1);
+            std::vector<std_msgs::ColorRGBA> colors;
+            const auto num_divs = adaptation_result_.template_planned_band_aligned_to_target_.cols() - 1;
+            for (size_t idx = 0; idx <= num_divs; ++idx)
+            {
+                colors.push_back(InterpolateColor(color, Visualizer::Red(), (float)idx / (float)num_divs));
+            }
+            const auto new_ids = vis->visualizePoints(name, adaptation_result_.template_planned_band_aligned_to_target_, colors, 1);
             marker_ids.insert(marker_ids.end(),
                               std::make_move_iterator(new_ids.begin()),
                               std::make_move_iterator(new_ids.end()));
@@ -308,7 +311,7 @@ namespace smmap
             const auto start_color = Visualizer::Blue();
             const auto end_color = Visualizer::Seafoam();
             const auto name = basename + "adaptation__transformed_band_surface_points";
-            const auto new_ids = RubberBand::VisualizeBandSurface(vis, adaptation_result_.transformed_band_surface_points_, tested_.microstep_band_history_.size(), start_color, end_color, name, 1);
+            const auto new_ids = RubberBand::VisualizeBandSurface(vis, adaptation_result_.transformed_band_surface_points_, template_.microstep_band_history_.size(), start_color, end_color, name, 1);
             marker_ids.insert(marker_ids.end(),
                               std::make_move_iterator(new_ids.begin()),
                               std::make_move_iterator(new_ids.end()));
@@ -318,7 +321,7 @@ namespace smmap
             const auto start_color = Visualizer::Olive();
             const auto end_color = Visualizer::Coral();
             const auto name = basename + "adaptation__tightened_transformed_bands_surface";
-            const auto new_ids = RubberBand::VisualizeBandSurface(vis, adaptation_result_.tightened_transformed_bands_surface_, tested_.microstep_band_history_.size(), start_color, end_color, name, 1);
+            const auto new_ids = RubberBand::VisualizeBandSurface(vis, adaptation_result_.tightened_transformed_bands_surface_, template_.microstep_band_history_.size(), start_color, end_color, name, 1);
             marker_ids.insert(marker_ids.end(),
                               std::make_move_iterator(new_ids.begin()),
                               std::make_move_iterator(new_ids.end()));
@@ -1027,7 +1030,7 @@ namespace smmap
         for (size_t idx = 0; idx < source_transition_.microstep_band_history_.size() - 1; ++idx)
         {
             RubberBand::Ptr b1 = source_transition_.microstep_band_history_[idx];
-            RubberBand::Ptr b2 = source_transition_.microstep_band_history_[idx];
+            RubberBand::Ptr b2 = source_transition_.microstep_band_history_[idx + 1];
             foh_values.push_back(transition_estimator_->checkFirstOrderHomotopy(*b1, *b2));
         }
         source_num_foh_changes_ = 0;
