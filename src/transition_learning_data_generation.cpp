@@ -922,7 +922,7 @@ namespace smmap
                     "TEMPLATE_MISALIGNMENT_EUCLIDEAN, "
                     "DEFAULT_VS_ADAPTATION_FOH, "
                     "DEFAULT_VS_ADAPTATION_EUCLIDEAN, "
-                    "BAND_TIGHTEN_DELTA"
+                    "BAND_TIGHTEN_DELTA, "
                     "SOURCE_NUM_FOH_CHANGES, "
                     "RESULT_NUM_FOH_CHANGES, "
                     "TRUE_VS_DEFAULT_FOH, "

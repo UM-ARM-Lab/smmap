@@ -729,7 +729,8 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
 
     // Extract the best transform based on the invariants in the system
     // (memorized data) into the target points (test data)
-    const auto num_gripper_steps = stored_trans.microstep_state_history_.size() / 4;
+    #warning "Hard-coded div 4 to account for num simsteps per gripper command"
+    const auto num_gripper_steps = stored_trans.microstep_state_history_.size() / 4 * 100;
     const ObjectPointSet warping_target_points = RubberBand::PointsFromBandAndGrippers(
                 test_band_start,
                 test_band_start.getEndpoints(),
