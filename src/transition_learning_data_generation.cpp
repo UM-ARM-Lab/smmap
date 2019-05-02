@@ -258,7 +258,7 @@ namespace smmap
             const auto name = basename + "adaptation__target_points_to_match";
             std::vector<std_msgs::ColorRGBA> colors;
             const auto num_divs = (adaptation_result_.target_points_to_match_.cols() - 1);
-            for (size_t idx = 0; idx <= num_divs; ++idx)
+            for (ssize_t idx = 0; idx <= num_divs; ++idx)
             {
                 colors.push_back(InterpolateColor(color, Visualizer::Red(), (float)idx / (float)num_divs));
             }
@@ -273,7 +273,7 @@ namespace smmap
             const auto name = basename + "adaptation__template_points_to_align";
             std::vector<std_msgs::ColorRGBA> colors;
             const auto num_divs = adaptation_result_.template_points_to_align_.cols() - 1;
-            for (size_t idx = 0; idx <= num_divs; ++idx)
+            for (ssize_t idx = 0; idx <= num_divs; ++idx)
             {
                 colors.push_back(InterpolateColor(color, Visualizer::Red(), (float)idx / (float)num_divs));
             }
@@ -288,7 +288,7 @@ namespace smmap
             const auto name = basename + "adaptation__template_aligned_to_target";
             std::vector<std_msgs::ColorRGBA> colors;
             const auto num_divs = adaptation_result_.template_planned_band_aligned_to_target_.cols() - 1;
-            for (size_t idx = 0; idx <= num_divs; ++idx)
+            for (ssize_t idx = 0; idx <= num_divs; ++idx)
             {
                 colors.push_back(InterpolateColor(color, Visualizer::Red(), (float)idx / (float)num_divs));
             }
@@ -907,6 +907,7 @@ namespace smmap
             TEMPLATE_MISALIGNMENT_EUCLIDEAN,
             DEFAULT_VS_ADAPTATION_FOH,
             DEFAULT_VS_ADAPTATION_EUCLIDEAN,
+            BAND_TIGHTEN_DELTA,
             SOURCE_NUM_FOH_CHANGES,
             RESULT_NUM_FOH_CHANGES,
             TRUE_VS_DEFAULT_FOH,
@@ -921,6 +922,7 @@ namespace smmap
                     "TEMPLATE_MISALIGNMENT_EUCLIDEAN, "
                     "DEFAULT_VS_ADAPTATION_FOH, "
                     "DEFAULT_VS_ADAPTATION_EUCLIDEAN, "
+                    "BAND_TIGHTEN_DELTA"
                     "SOURCE_NUM_FOH_CHANGES, "
                     "RESULT_NUM_FOH_CHANGES, "
                     "TRUE_VS_DEFAULT_FOH, "
@@ -984,6 +986,8 @@ namespace smmap
                 dists_etc[TEMPLATE_MISALIGNMENT_EUCLIDEAN] = std::to_string(adaptation_record.template_misalignment_dist_);
                 dists_etc[DEFAULT_VS_ADAPTATION_FOH] = std::to_string(adaptation_record.default_band_foh_result_);
                 dists_etc[DEFAULT_VS_ADAPTATION_EUCLIDEAN] = std::to_string(adaptation_record.default_band_dist_);
+
+                dists_etc[BAND_TIGHTEN_DELTA] = std::to_string(adaptation_record.band_tighten_delta_);
                 dists_etc[SOURCE_NUM_FOH_CHANGES] = std::to_string(source_num_foh_changes_);
                 dists_etc[RESULT_NUM_FOH_CHANGES] = std::to_string(adaptation_record.num_foh_changes_);
 
@@ -1097,7 +1101,18 @@ namespace smmap
         visid_to_markers_[res.response] = sim_record.visualize(std::to_string(next_vis_prefix_) + "__", vis_);
         ++next_vis_prefix_;
 
-        ROS_INFO_STREAM("Added vis id: " << res.response << " for file " << req.data);
+        const auto test_band_end = RubberBand::BandFromWorldState(ConvertToEigenFeedback(test_result.microsteps_last_action.back()), *band_);
+        ROS_INFO_STREAM("Added vis id: " << res.response << " for file " << req.data << std::endl
+                        << "Template alignment dist: " << adaptation_record.template_misalignment_dist_ << std::endl
+                        << "Default band FOH:        " << adaptation_record.default_band_foh_result_ << std::endl
+                        << "Default band dist:       " << adaptation_record.default_band_dist_ << std::endl
+                        << "Band tighten delta:      " << adaptation_record.band_tighten_delta_ << std::endl
+                        << "Source FOH changes:      " << source_num_foh_changes_ << std::endl
+                        << "Adaptation FOH changes:  " << adaptation_record.num_foh_changes_ << std::endl
+                        << "True vs default FOH:     " << transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.default_next_band_, *test_band_end) << std::endl
+                        << "True vs default dist:    " << adaptation_record.default_next_band_->distance(*test_band_end) << std::endl
+                        << "True vs adaptation FOH:  " << transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.result_, *test_band_end) << std::endl
+                        << "True vs adaptation dist: " << adaptation_record.result_->distance(*test_band_end) << std::endl);
         return true;
     }
 
