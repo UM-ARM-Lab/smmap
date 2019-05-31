@@ -2,6 +2,7 @@
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include <arc_utilities/serialization_eigen.hpp>
+#include "smmap/ros_communication_helpers.h"
 
 namespace smmap
 {
@@ -144,7 +145,7 @@ namespace smmap
         WorldState feedback_eigen;
 
         feedback_eigen.object_configuration_ =
-                EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(feedback_ros.object_configuration);
+                SensorPointCloud2ToEigenMatrix3Xd(feedback_ros.object_configuration);
 
         feedback_eigen.rope_node_transforms_ =
                 EigenHelpersConversions::VectorGeometryPoseToVectorIsometry3d(feedback_ros.rope_node_transforms);

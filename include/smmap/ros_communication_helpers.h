@@ -17,6 +17,9 @@ namespace smmap
 {
     std::vector<GripperData> GetGrippersData(ros::NodeHandle& nh);
 
+    // Warning!! This code assumes that the data is laid out in (x,y,z) format, and contains floats
+    Eigen::Matrix3Xd SensorPointCloud2ToEigenMatrix3Xd(const sensor_msgs::PointCloud2& ros);
+
     ObjectPointSet GetObjectInitialConfiguration(ros::NodeHandle& nh);
 
     std::vector<geometry_msgs::Pose> GetRopeNodeTransforms(ros::NodeHandle& nh);

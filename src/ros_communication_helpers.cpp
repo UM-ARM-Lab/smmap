@@ -82,6 +82,22 @@ namespace smmap
         return grippers_data;
     }
 
+    // Warning!! This code assumes that the data is laid out in (x,y,z) format, and contains floats
+    Eigen::Matrix3Xd SensorPointCloud2ToEigenMatrix3Xd(const sensor_msgs::PointCloud2& ros)
+    {
+        assert(ros.fields.size() == 3);
+        assert(ros.fields[0].name == "x");
+        assert(ros.fields[1].name == "y");
+        assert(ros.fields[2].name == "z");
+        assert(ros.fields[0].datatype == sensor_msgs::PointField::FLOAT32);
+        assert(ros.fields[1].datatype == sensor_msgs::PointField::FLOAT32);
+        assert(ros.fields[2].datatype == sensor_msgs::PointField::FLOAT32);
+
+        const auto num_points = ros.width * ros.height;
+        const Eigen::Map<const Eigen::Matrix3Xf> eigen((const float *)ros.data.data(), 3, num_points);
+        return eigen.cast<double>();
+    }
+
     ObjectPointSet GetObjectInitialConfiguration(ros::NodeHandle& nh)
     {
         ROS_INFO_NAMED("ros_comms_helpers" , "Getting object initial configuration");
@@ -93,10 +109,10 @@ namespace smmap
         deformable_manipulation_msgs::GetPointSet srv_data;
         client.call(srv_data);
 
-        ROS_INFO_NAMED("ros_comms_helpers" , "Number of points on object: %zu", srv_data.response.points.size());
-        CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), srv_data.response.header.frame_id);
+        ROS_INFO_NAMED("ros_comms_helpers" , "Number of points on object: %zu", srv_data.response.points.width * srv_data.response.points.height);
+        CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), srv_data.response.points.header.frame_id);
 
-        return EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(srv_data.response.points);
+        return SensorPointCloud2ToEigenMatrix3Xd(srv_data.response.points);
     }
 
     std::vector<geometry_msgs::Pose> GetRopeNodeTransforms(ros::NodeHandle& nh)
@@ -125,13 +141,11 @@ namespace smmap
 
         deformable_manipulation_msgs::GetPointSet srv_data;
         cover_points_client.call(srv_data);
-        ObjectPointSet cover_points =
-            EigenHelpersConversions::VectorGeometryPointToEigenMatrix3Xd(srv_data.response.points);
 
-        ROS_INFO_NAMED("ros_comms_helpers" , "Number of cover points: %zu", srv_data.response.points.size());
-        CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), srv_data.response.header.frame_id);
+        ROS_INFO_NAMED("ros_comms_helpers" , "Number of cover points: %zu", srv_data.response.points.width * srv_data.response.points.height);
+        CHECK_FRAME_NAME("ros_comms_helpers", GetWorldFrameName(), srv_data.response.points.header.frame_id);
 
-        return cover_points;
+        return SensorPointCloud2ToEigenMatrix3Xd(srv_data.response.points);;
     }
 
     ObjectPointSet GetCoverPointNormals(ros::NodeHandle& nh)
@@ -146,8 +160,7 @@ namespace smmap
 
         deformable_manipulation_msgs::GetVector3Set srv_data;
         cover_point_normal_vectors_client.call(srv_data);
-        ObjectPointSet cover_point_normals =
-            EigenHelpersConversions::VectorGeometryVector3ToEigenMatrix3Xd(srv_data.response.vectors);
+        ObjectPointSet cover_point_normals = EigenHelpersConversions::VectorGeometryVector3ToEigenMatrix3Xd(srv_data.response.vectors);
         for (ssize_t col_ind = 0; col_ind < cover_point_normals.cols(); ++col_ind)
         {
             cover_point_normals.col(col_ind).normalize();
