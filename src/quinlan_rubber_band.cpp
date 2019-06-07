@@ -234,7 +234,7 @@ namespace smmap
         auto band = std::make_shared<QuinlanRubberBand>(template_band);
         if (!band->resetBand(pointset, grippers_position))
         {
-            assert(false && "Unable to build band");
+            throw_arc_exception(std::runtime_error, "Unable to build band");
         }
         return band;
     }
@@ -246,7 +246,7 @@ namespace smmap
         auto band = std::make_shared<QuinlanRubberBand>(template_band);
         if (!band->resetBand(world_state))
         {
-            assert(false && "Unable to build band");
+            throw_arc_exception(std::runtime_error, "Unable to build band");
         }
         return band;
     }
