@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 
+#include <std_msgs/Int32.h>
 #include <arc_utilities/arc_helpers.hpp>
 #include <deformable_manipulation_msgs/TransitionTest.h>
 #include <smmap_utilities/visualization_tools.h>
@@ -127,10 +128,12 @@ namespace smmap
         int source_num_foh_changes_;
 
         // Maps filenames to ns+ids
+        ros::Subscriber next_vis_id_sub_;
         std::map<std::string, std::vector<Visualizer::NamespaceId>> visid_to_markers_;
         int next_vis_prefix_;
 
     public:
+        void setNextVisId(const std_msgs::Int32& msg);
         bool setSourceCallback(
                 deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
                 deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);

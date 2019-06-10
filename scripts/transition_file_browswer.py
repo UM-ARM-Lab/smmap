@@ -5,9 +5,10 @@ import rospy
 import signal
 from copy import deepcopy
 from deformable_manipulation_msgs.srv import TransitionTestingVisualization
+import std_msgs.msg
 
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QStandardItem, QStandardItemModel
+from PyQt5.QtGui import QStandardItem, QStandardItemModel, QFont
 
 
 class Widget(QWidget):
@@ -17,22 +18,28 @@ class Widget(QWidget):
         self.data_folder = rospy.get_param("transition_learning_data_generation_node/data_folder", "/tmp")
         self.last_folder_used = deepcopy(self.data_folder)
 
+        self.font = QFont("unexistent")
+        self.font.setStyleHint(QFont.Monospace)
+
         self.createSourceFileBox()
         self.createTestFileBox()
+        self.createTestFileListBox()
         self.createVisIdFeedbackBox()
 
         self.layout = QGridLayout()
         self.layout.addWidget(self.source_file_box)
         self.layout.addWidget(self.test_file_box)
+        self.layout.addWidget(self.test_file_list_box)
         self.layout.addWidget(self.vis_id_box)
 
         self.setLayout(self.layout)
-        self.resize(1000, 700)
+        self.resize(1600, 700)
 
     def createSourceFileBox(self):
         self.source_file_box = QGroupBox("Source Transition")
 
         text_field = QLineEdit()
+        text_field.setFont(self.font)
         set_button = QPushButton("Set")
         browse_button = QPushButton("Browse")
 
@@ -42,24 +49,47 @@ class Widget(QWidget):
         layout.addWidget(browse_button, 0, 2)
         self.source_file_box.setLayout(layout)
 
-        browse_button.clicked.connect(lambda: self.fileBrowse(text_field, self.last_folder_used))
         set_button.clicked.connect(lambda: self.setSourceTransition(text_field))
+        browse_button.clicked.connect(lambda: self.fileBrowse(text_field, self.last_folder_used))
 
     def createTestFileBox(self):
         self.test_file_box = QGroupBox("Test Transition")
 
         text_field = QLineEdit()
+        text_field.setFont(self.font)
+        add_vis0_button = QPushButton("Add Id 0")
         add_button = QPushButton("Add")
         browse_button = QPushButton("Browse")
 
         layout = QGridLayout()
         layout.addWidget(text_field, 0, 0)
-        layout.addWidget(add_button, 0, 1)
-        layout.addWidget(browse_button, 0, 2)
+        layout.addWidget(add_vis0_button, 0, 1)
+        layout.addWidget(add_button, 0, 2)
+        layout.addWidget(browse_button, 0, 3)
         self.test_file_box.setLayout(layout)
 
+        add_vis0_button.clicked.connect(lambda: self.addVisualizationVisId0(text_field=text_field))
+        add_button.clicked.connect(lambda: self.addVisualization(text_field=text_field))
         browse_button.clicked.connect(lambda: self.fileBrowse(text_field, self.last_folder_used))
-        add_button.clicked.connect(lambda: self.addVisualization(text_field))
+
+    def createTestFileListBox(self):
+        self.test_file_list_box = QGroupBox("Test Transition List")
+
+        text_field = QPlainTextEdit()
+        text_field.setFont(self.font)
+        # text_field.setAcceptRichText(False)
+        # text_field.setFont
+        add_button = QPushButton("Add")
+        clear_button = QPushButton("Clear")
+
+        layout = QGridLayout()
+        layout.addWidget(text_field, 0, 0, 1, 3)
+        layout.addWidget(add_button, 1, 1)
+        layout.addWidget(clear_button, 1, 2)
+        self.test_file_list_box.setLayout(layout)
+
+        add_button.clicked.connect(lambda: self.addMultipleFiles(text_field))
+        clear_button.clicked.connect(lambda: text_field.setPlainText(""))
 
     def createVisIdFeedbackBox(self):
         self.vis_id_box = QGroupBox("Visualized Adapatations")
@@ -96,15 +126,23 @@ class Widget(QWidget):
         except rospy.ServiceException as e:
             print "set_source service call failed: ", e
 
-    def addVisualization(self, text_field):
+    def addVisualizationVisId0(self, filename=None, text_field=None):
+        self.vis_id_pub = rospy.Publisher("transition_vis/set_next_vis_id", std_msgs.msg.Int32, queue_size=1, latch=True)
+        self.vis_id_pub.publish(0)
+        self.addVisualization(filename, text_field)
+
+    def addVisualization(self, filename=None, text_field=None):
+        if filename is None:
+            filename = text_field.text()
         try:
             rospy.wait_for_service("transition_vis/add_visualization", timeout=1.0)
             add_visualization = rospy.ServiceProxy("transition_vis/add_visualization", TransitionTestingVisualization)
-            filename = text_field.text()
             id = add_visualization(filename).response
 
             id_item = QStandardItem(id)
+            id_item.setFont(self.font)
             filename_item = QStandardItem(filename)
+            filename_item.setFont(self.font)
             self.vis_id_model.appendRow([id_item, QStandardItem(), filename_item])
 
             delete_button = QPushButton()
@@ -129,6 +167,22 @@ class Widget(QWidget):
         finally:
             self.vis_id_model.removeRow(id_item.row())
 
+    def parseFilename(self, text):
+        text = str(text)
+        text = text.strip()
+        if text[0] == '"':
+            text = text[1:]
+        if text[-1] == '"':
+            text = text[:-1]
+        return text
+
+    def addMultipleFiles(self, text_field):
+        text = str(text_field.toPlainText())
+        filelist = str.splitlines(text)
+        filelist = [self.parseFilename(file) for file in filelist]
+        text_field.setPlainText("\n".join(filelist))
+        for file in filelist:
+            self.addVisualization(file)
 
 if __name__ == "__main__":
     rospy.init_node("transition_file_browser", anonymous=True)

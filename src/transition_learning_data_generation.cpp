@@ -188,6 +188,7 @@ namespace smmap
         std::vector<Visualizer::NamespaceId> marker_ids;
 
         // Template - starting planned band
+        if (false)
         {
             const auto color = Visualizer::Green();
             const auto name = basename + "template__start";
@@ -197,6 +198,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Template - ending executed band
+        if (false)
         {
             const auto color = Visualizer::Cyan();
             const auto name = basename + "template__executed";
@@ -206,6 +208,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Template - Executed band surface
+        if (false)
         {
             const auto start_color = Visualizer::Green();
             const auto end_color = Visualizer::Cyan();
@@ -216,6 +219,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Test - start planned band
+        if (true)
         {
             const auto color = Visualizer::Yellow();
             const auto name = basename + "tested__start";
@@ -224,7 +228,8 @@ namespace smmap
                               std::make_move_iterator(new_ids.begin()),
                               std::make_move_iterator(new_ids.end()));
         }
-        // Test - start planned band
+        // Test - exectued band
+        if (true)
         {
             const auto color = Visualizer::Orange();
             const auto name = basename + "tested__executed";
@@ -234,6 +239,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Test - Executed band surface
+        if (true)
         {
             const auto start_color = Visualizer::Yellow();
             const auto end_color = Visualizer::Orange();
@@ -244,6 +250,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - default next band
+        if (true)
         {
             const auto color = Visualizer::Red();
             const auto name = basename + "adaptation__default_next_band";
@@ -253,6 +260,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - target band and action
+        if (true)
         {
             const auto color = Visualizer::Yellow();
             const auto name = basename + "adaptation__target_points_to_match";
@@ -268,6 +276,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - template band and action
+        if (true)
         {
             const auto color = Visualizer::Green();
             const auto name = basename + "adaptation__template_points_to_align";
@@ -283,6 +292,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - template aligned
+        if (true)
         {
             const auto color = Visualizer::Magenta();
             const auto name = basename + "adaptation__template_aligned_to_target";
@@ -298,6 +308,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - next_band_points_to_smooth_
+        if (true)
         {
             const auto color = Visualizer::Seafoam();
             const auto name = basename + "adaptation__next_band_points_to_smooth";
@@ -307,6 +318,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - transformed_band_surface_points
+        if (true)
         {
             const auto start_color = Visualizer::Blue();
             const auto end_color = Visualizer::Seafoam();
@@ -317,6 +329,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - re-tightened band surface
+        if (true)
         {
             const auto start_color = Visualizer::Olive();
             const auto end_color = Visualizer::Coral();
@@ -327,6 +340,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - final result
+        if (true)
         {
             const auto color = Visualizer::Coral();
             const auto name = basename + "adaptation__result";
@@ -386,6 +400,7 @@ namespace smmap
         , add_visualization_(nh_->advertiseService("transition_vis/add_visualization", &TransitionTesting::addVisualizationCallback, this))
         , remove_visualization_(nh_->advertiseService("transition_vis/remove_visualization", &TransitionTesting::removeVisualizationCallback, this))
         , source_valid_(false)
+        , next_vis_id_sub_(nh_->subscribe("transition_vis/set_next_vis_id", 1, &TransitionTesting::setNextVisId, this))
         , next_vis_prefix_(0)
     {
         std::srand((unsigned int)seed_);
@@ -1005,6 +1020,12 @@ namespace smmap
 
             LOG(logger, PrettyPrint::PrettyPrint(dists_etc, false, ", "));
         }
+    }
+
+    void TransitionTesting::setNextVisId(const std_msgs::Int32& msg)
+    {
+        next_vis_prefix_ = msg.data;
+        ROS_INFO_STREAM("Next vis id: " << next_vis_prefix_);
     }
 
     bool TransitionTesting::setSourceCallback(
