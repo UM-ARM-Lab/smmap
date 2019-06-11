@@ -188,7 +188,7 @@ namespace smmap
         std::vector<Visualizer::NamespaceId> marker_ids;
 
         // Template - starting planned band
-        if (false)
+        if (true)
         {
             const auto color = Visualizer::Green();
             const auto name = basename + "template__start";
@@ -198,7 +198,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Template - ending executed band
-        if (false)
+        if (true)
         {
             const auto color = Visualizer::Cyan();
             const auto name = basename + "template__executed";
@@ -208,7 +208,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Template - Executed band surface
-        if (false)
+        if (true)
         {
             const auto start_color = Visualizer::Green();
             const auto end_color = Visualizer::Cyan();
@@ -677,19 +677,16 @@ namespace smmap
                 Isometry3d gripper_a_ending_pose_ = Translation3d(gripper_a_action_vector_) * gripper_a_starting_pose_;
                 Isometry3d gripper_b_ending_pose_ = Translation3d(gripper_b_action_vector_) * gripper_b_starting_pose_;
 
-                // Generate a path and convert the test to a ROS format
-                const RRTPath path_to_start_of_test =
-                        generateTestPath({gripper_a_starting_pose_, gripper_b_starting_pose_});
+                // Generate a path and convert the test to a ROS format (if needed)
+                const RRTPath path_to_start_of_test = loadOrGeneratePath(
+                            path_to_start_filename,
+                            {gripper_a_starting_pose_, gripper_b_starting_pose_});
+
                 const auto canonical_test = robot_->toRosTransitionTest(
                             initial_world_state_.rope_node_transforms_,
                             initial_world_state_.all_grippers_single_pose_,
                             RRTPathToGrippersPoseTrajectory(path_to_start_of_test),
                             {gripper_a_ending_pose_, gripper_b_ending_pose_});
-
-                // Save the generated path to file
-                std::vector<uint8_t> buffer;
-                SerializeVector<RRTNode>(path_to_start_of_test, buffer, &RRTNode::Serialize);
-                ZlibHelpers::CompressAndWriteToFile(buffer, path_to_start_filename);
 
                 // Add the test to the list waiting to be executed
                 tests.push_back(canonical_test);
@@ -728,19 +725,16 @@ namespace smmap
 
                         if (!boost::filesystem::is_regular_file(test_results_filename))
                         {
-                            // Generate a path and convert the test to a ROS format
-                            const RRTPath path_to_start_of_test =
-                                    generateTestPath({gripper_a_starting_pose, gripper_b_starting_pose});
+                            // Generate a path and convert the test to a ROS format (if needed)
+                            const RRTPath path_to_start_of_test = loadOrGeneratePath(
+                                        path_to_start_filename,
+                                        {gripper_a_starting_pose, gripper_b_starting_pose});
+
                             const auto test = robot_->toRosTransitionTest(
                                         initial_world_state_.rope_node_transforms_,
                                         initial_world_state_.all_grippers_single_pose_,
                                         RRTPathToGrippersPoseTrajectory(path_to_start_of_test),
                                         {gripper_a_ending_pose, gripper_b_ending_pose});
-
-                            // Save the generated path to file
-                            std::vector<uint8_t> buffer;
-                            SerializeVector<RRTNode>(path_to_start_of_test, buffer, &RRTNode::Serialize);
-                            ZlibHelpers::CompressAndWriteToFile(buffer, path_to_start_filename);
 
                             #pragma omp critical
                             {
@@ -803,19 +797,16 @@ namespace smmap
 
                         if (!boost::filesystem::is_regular_file(test_results_filename))
                         {
-                            // Generate a path and convert the test to a ROS format
-                            const RRTPath path_to_start_of_test =
-                                    generateTestPath({gripper_a_starting_pose_, gripper_b_starting_pose_});
+                            // Generate a path and convert the test to a ROS format (if needed)
+                            const RRTPath path_to_start_of_test = loadOrGeneratePath(
+                                        path_to_start_filename,
+                                        {gripper_a_starting_pose_, gripper_b_starting_pose_});
+
                             const auto test = robot_->toRosTransitionTest(
                                         initial_world_state_.rope_node_transforms_,
                                         initial_world_state_.all_grippers_single_pose_,
                                         RRTPathToGrippersPoseTrajectory(path_to_start_of_test),
                                         {gripper_a_ending_pose, gripper_b_ending_pose});
-
-                            // Save the generated path to file
-                            std::vector<uint8_t> buffer;
-                            SerializeVector<RRTNode>(path_to_start_of_test, buffer, &RRTNode::Serialize);
-                            ZlibHelpers::CompressAndWriteToFile(buffer, path_to_start_filename);
 
                             #pragma omp critical
                             {
@@ -851,6 +842,33 @@ namespace smmap
             robot_->generateTransitionData(tests, filenames, feedback_callback, false);
             tests.clear();
             filenames.clear();
+        }
+    }
+
+    RRTPath TransitionTesting::loadOrGeneratePath(
+            const std::string& filename,
+            const AllGrippersSinglePose& gripper_target_poses)
+    {
+        if (boost::filesystem::is_regular_file(filename))
+        {
+            const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
+            const auto deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
+            {
+                return RRTNode::Deserialize(buf, cur, *band_);
+            };
+            const auto path_deserialized = DeserializeVector<RRTNode, Eigen::aligned_allocator<RRTNode>>(buffer, 0, deserializer);
+            return path_deserialized.first;
+        }
+        else
+        {
+            const auto path = generateTestPath(gripper_target_poses);
+
+            // Save the generated path to file
+            std::vector<uint8_t> buffer;
+            SerializeVector<RRTNode>(path, buffer, &RRTNode::Serialize);
+            ZlibHelpers::CompressAndWriteToFile(buffer, filename);
+
+            return path;
         }
     }
 
@@ -927,8 +945,8 @@ namespace smmap
             RESULT_NUM_FOH_CHANGES,
             TRUE_VS_DEFAULT_FOH,
             TRUE_VS_DEFAULT_EUCLIDEAN,
-            TRUE_VS_ADAPATION_FOH,
-            TRUE_VS_ADAPATION_EUCLIDEAN,
+            TRUE_VS_ADAPTATION_FOH,
+            TRUE_VS_ADAPTATION_EUCLIDEAN,
             DUMMY_ITEM
         };
         Log::Log logger(data_folder_ + "/cannonical_straight_test/dists_etc.csv", false);
@@ -942,8 +960,8 @@ namespace smmap
                     "RESULT_NUM_FOH_CHANGES, "
                     "TRUE_VS_DEFAULT_FOH, "
                     "TRUE_VS_DEFAULT_EUCLIDEAN, "
-                    "TRUE_VS_ADAPATION_FOH, "
-                    "TRUE_VS_ADAPATION_EUCLIDEAN");
+                    "TRUE_VS_ADAPTATION_FOH, "
+                    "TRUE_VS_ADAPTATION_EUCLIDEAN");
         #pragma omp parallel for
         for (size_t idx = 0; idx < files.size(); ++idx)
         {
@@ -953,15 +971,15 @@ namespace smmap
             try
             {
                 // Load the test record
-                const dmm::TransitionTestResult test_result = [&] ()
+                const dmm::TransitionTestResult test_result = [&]
                 {
                     const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
                     return arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
                 }();
-                // Load the adapation record, if needed generate it first
-                const TransitionEstimation::TransitionAdaptationResult adaptation_record = [&] ()
+                // Load the adaptation record, if needed generate it first
+                const TransitionEstimation::TransitionAdaptationResult adaptation_record = [&]
                 {
-                    const auto adapatation_record_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__adapatation_record.compressed";
+                    const auto adaptation_record_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__adaptation_record.compressed";
                     const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
                     const auto decompressed_path = ZlibHelpers::LoadFromFileAndDecompress(path_to_start_file);
                     const auto node_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
@@ -970,8 +988,8 @@ namespace smmap
                     };
                     const auto path_to_start = DeserializeVector<RRTNode, aligned_allocator<smmap::RRTNode>>(decompressed_path, 0, node_deserializer).first;
 
-//                    if (!boost::filesystem::is_regular_file(adapatation_record_file))
-//                    {
+                    if (!boost::filesystem::is_regular_file(adaptation_record_file))
+                    {
                         const auto test_transition = ToStateTransition(test_result, path_to_start);
                         const auto ar = transition_estimator_->generateTransition(
                                     source_transition_,
@@ -980,15 +998,15 @@ namespace smmap
 
                         std::vector<uint8_t> output_buffer;
                         ar.serialize(output_buffer);
-                        ZlibHelpers::CompressAndWriteToFile(output_buffer, adapatation_record_file);
+                        ZlibHelpers::CompressAndWriteToFile(output_buffer, adaptation_record_file);
                         return ar;
-//                    }
-//                    else
-//                    {
-//                        const auto adaptation_record_buffer = ZlibHelpers::LoadFromFileAndDecompress(adapatation_record_file);
-//                        const auto ar = TransitionEstimation::TransitionAdaptationResult::Deserialize(adaptation_record_buffer, 0, *band_).first;
-//                        return ar;
-//                    }
+                    }
+                    else
+                    {
+                        const auto adaptation_record_buffer = ZlibHelpers::LoadFromFileAndDecompress(adaptation_record_file);
+                        const auto ar = TransitionEstimation::TransitionAdaptationResult::Deserialize(adaptation_record_buffer, 0, *band_).first;
+                        return ar;
+                    }
                 }();
 
                 const auto test_band_start = RubberBand::BandFromWorldState(ConvertToEigenFeedback(test_result.start_after_following_path), *band_);
@@ -1009,8 +1027,8 @@ namespace smmap
                 dists_etc[TRUE_VS_DEFAULT_FOH] = std::to_string(transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.default_next_band_, *test_band_end));
                 dists_etc[TRUE_VS_DEFAULT_EUCLIDEAN] = std::to_string(adaptation_record.default_next_band_->distance(*test_band_end));
 
-                dists_etc[TRUE_VS_ADAPATION_FOH] = std::to_string(transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.result_, *test_band_end));
-                dists_etc[TRUE_VS_ADAPATION_EUCLIDEAN] = std::to_string(adaptation_record.result_->distance(*test_band_end));
+                dists_etc[TRUE_VS_ADAPTATION_FOH] = std::to_string(transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.result_, *test_band_end));
+                dists_etc[TRUE_VS_ADAPTATION_EUCLIDEAN] = std::to_string(adaptation_record.result_->distance(*test_band_end));
             }
             catch (const std::exception& ex)
             {

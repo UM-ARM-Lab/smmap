@@ -34,6 +34,7 @@ class Widget(QWidget):
 
         self.setLayout(self.layout)
         self.resize(1600, 700)
+        self.move(2000, 100)
 
     def createSourceFileBox(self):
         self.source_file_box = QGroupBox("Source Transition")
