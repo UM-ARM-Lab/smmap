@@ -26,6 +26,8 @@ class Widget(QWidget):
         self.createTestFileListBox()
         self.createVisIdFeedbackBox()
 
+        self.vis_id_to_item = {}
+
         self.layout = QGridLayout()
         self.layout.addWidget(self.source_file_box)
         self.layout.addWidget(self.test_file_box)
@@ -80,15 +82,18 @@ class Widget(QWidget):
         text_field.setFont(self.font)
         # text_field.setAcceptRichText(False)
         # text_field.setFont
+        add_vis0_button = QPushButton("Add Slowly Id 0")
         add_button = QPushButton("Add")
         clear_button = QPushButton("Clear")
 
         layout = QGridLayout()
         layout.addWidget(text_field, 0, 0, 1, 3)
+        layout.addWidget(add_vis0_button, 1, 0)
         layout.addWidget(add_button, 1, 1)
         layout.addWidget(clear_button, 1, 2)
         self.test_file_list_box.setLayout(layout)
 
+        add_vis0_button.clicked.connect(lambda: self.addMultipleFilesVisId0(text_field))
         add_button.clicked.connect(lambda: self.addMultipleFiles(text_field))
         clear_button.clicked.connect(lambda: text_field.setPlainText(""))
 
@@ -130,6 +135,7 @@ class Widget(QWidget):
     def addVisualizationVisId0(self, filename=None, text_field=None):
         self.vis_id_pub = rospy.Publisher("transition_vis/set_next_vis_id", std_msgs.msg.Int32, queue_size=1, latch=True)
         self.vis_id_pub.publish(0)
+        rospy.sleep(0.1)
         self.addVisualization(filename, text_field)
 
     def addVisualization(self, filename=None, text_field=None):
@@ -139,6 +145,9 @@ class Widget(QWidget):
             rospy.wait_for_service("transition_vis/add_visualization", timeout=1.0)
             add_visualization = rospy.ServiceProxy("transition_vis/add_visualization", TransitionTestingVisualization)
             id = add_visualization(filename).response
+
+            if id in self.vis_id_to_item.keys():
+                self.vis_id_model.removeRow(self.vis_id_to_item[id].row())
 
             id_item = QStandardItem(id)
             id_item.setFont(self.font)
@@ -151,6 +160,9 @@ class Widget(QWidget):
             delete_button.clicked.connect(lambda: self.removeVisualization(id_item))
             delete_button_index = self.vis_id_model.index(id_item.row(), self.DELETE_IDX)
             self.vis_id_view.setIndexWidget(delete_button_index, delete_button)
+
+            self.vis_id_to_item[id] = id_item
+
         except rospy.ROSException as e:
             print e
         except rospy.ServiceException, e:
@@ -166,6 +178,7 @@ class Widget(QWidget):
         except rospy.ServiceException, e:
             print "remove_visualization service call failed: ", e
         finally:
+            self.vis_id_to_item.pop(id_item.text())
             self.vis_id_model.removeRow(id_item.row())
 
     def parseFilename(self, text):
@@ -177,13 +190,22 @@ class Widget(QWidget):
             text = text[:-1]
         return text
 
+    def addMultipleFilesVisId0(self, text_field):
+        text = str(text_field.toPlainText())
+        filelist = str.splitlines(text)
+        filelist = [self.parseFilename(file) for file in filelist]
+        text_field.setPlainText("\n".join(filelist))
+        for file in filelist:
+            self.addVisualizationVisId0(filename=file)
+            raw_input("Press Enter to continue...")
+
     def addMultipleFiles(self, text_field):
         text = str(text_field.toPlainText())
         filelist = str.splitlines(text)
         filelist = [self.parseFilename(file) for file in filelist]
         text_field.setPlainText("\n".join(filelist))
         for file in filelist:
-            self.addVisualization(file)
+            self.addVisualization(filename=file)
 
 if __name__ == "__main__":
     rospy.init_node("transition_file_browser", anonymous=True)
