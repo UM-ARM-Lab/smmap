@@ -52,12 +52,14 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::CLOTH_COLAB_FOLDING:
             return std::make_shared<ClothColabFolding>(nh, ph, vis);
 
+        case TaskType::ROPE_SIMPLE_COVERAGE_TWO_GRIPPERS:
         case TaskType::ROPE_CYLINDER_COVERAGE:
         case TaskType::ROPE_CYLINDER_COVERAGE_TWO_GRIPPERS:
-            return std::make_shared<RopeCylinderCoverage>(nh, ph, vis);
+            return std::make_shared<RopeDirectCoverage>(nh, ph, vis);
 
+        case TaskType::CLOTH_MFLAG_LIVE_ROBOT:
         case TaskType::CLOTH_TABLE_COVERAGE:
-            return std::make_shared<ClothTableCoverage>(nh, ph, vis);
+            return std::make_shared<ClothDirectCoverage>(nh, ph, vis);
 
         case TaskType::CLOTH_CYLINDER_COVERAGE:
         case TaskType::CLOTH_WAFR:

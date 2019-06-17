@@ -40,14 +40,13 @@ namespace smmap
             static std::map<long, long> CreateMirrorMap(ros::NodeHandle& nh, const PointReflector& point_reflector);
     };
 
-
     /**
-     * @brief The RopeCylinderCoverage class
+     * @brief The RopeDirectCoverage class
      */
-    class RopeCylinderCoverage : public DirectCoverageTask
+    class RopeDirectCoverage : public DirectCoverageTask
     {
         public:
-            RopeCylinderCoverage(
+            RopeDirectCoverage(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
                     Visualizer::Ptr vis);
@@ -62,12 +61,12 @@ namespace smmap
     };
 
     /**
-     * @brief The ClothTableCoverage class
+     * @brief The ClothDirectCoverage class
      */
-    class ClothTableCoverage : public DirectCoverageTask
+    class ClothDirectCoverage : public DirectCoverageTask
     {
         public:
-            ClothTableCoverage(
+            ClothDirectCoverage(
                     std::shared_ptr<ros::NodeHandle> nh,
                     std::shared_ptr<ros::NodeHandle> ph,
                     Visualizer::Ptr vis);

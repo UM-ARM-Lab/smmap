@@ -167,7 +167,7 @@ void TaskFramework::execute()
 
     if (enable_stuck_detection_)
     {
-        assert(dijkstras_task_ != nullptr);
+        assert(enable_stuck_detection_ && dijkstras_task_ != nullptr);
 
         // TODO: Assumptions in the implementation that need be addressed later
         assert(robot_->getGrippersData().size() == 2);
@@ -265,20 +265,20 @@ void TaskFramework::execute()
 WorldState TaskFramework::sendNextCommand(
         WorldState world_state)
 {
-    static bool paused = false;
-    if (!paused && world_state.sim_time_ > 4.0)
-    {
-        int32_t id = 1;
-        for (size_t idx = 0; idx < rrt_executed_path_.size(); ++idx)
-        {
-            for (size_t idx2 = 0; idx2 < rrt_executed_path_[idx].second.size(); ++idx2)
-            {
-                vis_->visualizePoints("path_microsteps", rrt_executed_path_[idx].second[idx2].object_configuration_, Visualizer::Green(), id++);
-            }
-        }
-        PressAnyKeyToContinue("Sim time 4.0. Press any key ... ");
-        paused = true;
-    }
+//    static bool paused = false;
+//    if (!paused && world_state.sim_time_ > 4.0)
+//    {
+//        int32_t id = 1;
+//        for (size_t idx = 0; idx < rrt_executed_path_.size(); ++idx)
+//        {
+//            for (size_t idx2 = 0; idx2 < rrt_executed_path_[idx].second.size(); ++idx2)
+//            {
+//                vis_->visualizePoints("path_microsteps", rrt_executed_path_[idx].second[idx2].object_configuration_, Visualizer::Green(), id++);
+//            }
+//        }
+//        PressAnyKeyToContinue("Sim time 4.0. Press any key ... ");
+//        paused = true;
+//    }
 
 #if ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE
     if (useStoredWorldState())

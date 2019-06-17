@@ -115,7 +115,7 @@ bool ClothColabFolding::taskDone_impl(
 // Rope cylinder coverage
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-RopeCylinderCoverage::RopeCylinderCoverage(
+RopeDirectCoverage::RopeDirectCoverage(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
         Visualizer::Ptr vis)
@@ -123,12 +123,12 @@ RopeCylinderCoverage::RopeCylinderCoverage(
     , neighbours_(num_nodes_)
 {}
 
-std::vector<ssize_t> RopeCylinderCoverage::getNodeNeighbours_impl(const ssize_t node) const
+std::vector<ssize_t> RopeDirectCoverage::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
 }
 
-bool RopeCylinderCoverage::taskDone_impl(
+bool RopeDirectCoverage::taskDone_impl(
         const WorldState& world_state)
 {
     return calculateError(world_state) < error_threshold_task_done_;
@@ -138,7 +138,7 @@ bool RopeCylinderCoverage::taskDone_impl(
 // Cloth table coverage
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ClothTableCoverage::ClothTableCoverage(
+ClothDirectCoverage::ClothDirectCoverage(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
         Visualizer::Ptr vis)
@@ -146,12 +146,12 @@ ClothTableCoverage::ClothTableCoverage(
     , neighbours_(num_nodes_, GetClothNumControlPointsX(*nh_))
 {}
 
-std::vector<ssize_t> ClothTableCoverage::getNodeNeighbours_impl(const ssize_t node) const
+std::vector<ssize_t> ClothDirectCoverage::getNodeNeighbours_impl(const ssize_t node) const
 {
     return neighbours_.getNodeNeighbours(node);
 }
 
-bool ClothTableCoverage::taskDone_impl(
+bool ClothDirectCoverage::taskDone_impl(
         const WorldState& world_state)
 {
     return calculateError(world_state) < error_threshold_task_done_;
