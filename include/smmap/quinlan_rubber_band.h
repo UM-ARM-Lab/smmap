@@ -150,6 +150,14 @@ namespace smmap
 
         static std::vector<Visualizer::NamespaceId> VisualizeBandSurface(
                 const Visualizer::Ptr& vis,
+                const std::vector<QuinlanRubberBand::Ptr>& bands,
+                const std_msgs::ColorRGBA& start_color,
+                const std_msgs::ColorRGBA& end_color,
+                const std::string& ns,
+                const int32_t id = 1);
+
+        static std::vector<Visualizer::NamespaceId> VisualizeBandSurface(
+                const Visualizer::Ptr& vis,
                 const std::vector<QuinlanRubberBand::ConstPtr>& bands,
                 const std_msgs::ColorRGBA& start_color,
                 const std_msgs::ColorRGBA& end_color,

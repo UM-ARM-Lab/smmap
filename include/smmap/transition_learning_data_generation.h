@@ -80,7 +80,7 @@ namespace smmap
         const TaskType task_type_;
 
         const WorldState initial_world_state_;
-        RubberBand::Ptr band_;
+        RubberBand::Ptr initial_band_;
         TransitionEstimation::Ptr transition_estimator_;
 
         const std::string data_folder_;
@@ -105,9 +105,16 @@ namespace smmap
 
     public:
         void runTests(const bool generate_test_data,
-                      const bool generate_transition_approximations);
+                      const bool generate_last_step_transition_approximations,
+                      const bool generate_meaningful_mistake_examples);
         void generateTestData();
-        void generateTransitionApproximations();
+        void generateLastStepTransitionApproximations();
+        void generateMeaningfulMistakeExamples();
+
+//        typedef std::pair<TransitionEstimation::State, std::vector<WorldState>> StateMicrostepsPair;
+        std::vector<std::pair<TransitionEstimation::State, std::vector<WorldState>>> toTrajectory(
+                const deformable_manipulation_msgs::TransitionTestResult& test,
+                const RRTPath& path);
 
     private:
 

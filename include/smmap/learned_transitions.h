@@ -110,7 +110,8 @@ namespace smmap
         ////////////////////////////////////////////////////////////////////////
 
         Maybe::Maybe<StateTransition> findMostRecentBadTransition(
-                const std::vector<std::pair<State, std::vector<WorldState>>>& trajectory) const;
+                const std::vector<std::pair<State, std::vector<WorldState>>>& trajectory,
+                const bool visualize = false) const;
 
         void learnTransition(const StateTransition& transition);
 

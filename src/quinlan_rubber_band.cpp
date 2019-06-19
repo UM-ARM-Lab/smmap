@@ -681,6 +681,22 @@ namespace smmap
 
     std::vector<Visualizer::NamespaceId> QuinlanRubberBand::VisualizeBandSurface(
             const Visualizer::Ptr& vis,
+            const std::vector<QuinlanRubberBand::Ptr>& bands,
+            const std_msgs::ColorRGBA& start_color,
+            const std_msgs::ColorRGBA& end_color,
+            const std::string& ns,
+            const int32_t id)
+    {
+        if (bands.empty())
+        {
+            return {};
+        }
+        const auto points = RubberBand::AggregateBandPoints(bands);
+        return VisualizeBandSurface(vis, points, bands.size(), start_color, end_color, ns, id);
+    }
+
+    std::vector<Visualizer::NamespaceId> QuinlanRubberBand::VisualizeBandSurface(
+            const Visualizer::Ptr& vis,
             const std::vector<QuinlanRubberBand::ConstPtr>& bands,
             const std_msgs::ColorRGBA& start_color,
             const std_msgs::ColorRGBA& end_color,

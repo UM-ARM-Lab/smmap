@@ -591,8 +591,8 @@ std::vector<RubberBand::Ptr> TransitionEstimation::reduceMicrostepsToBands(
 /////// Learning transitions ///////////////////////////////////////////////////////////////////////////////////////////
 
 Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMostRecentBadTransition(
-        const std::vector<std::pair<TransitionEstimation::State,
-                                    std::vector<WorldState>>>& trajectory) const
+        const std::vector<std::pair<TransitionEstimation::State, std::vector<WorldState>>>& trajectory,
+        const bool visualize) const
 {
     // We can only learn a transition if there are at least states
     if (trajectory.size() < 2)
@@ -612,23 +612,10 @@ Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMo
     {
         ROS_WARN_STREAM_NAMED("transitions",
                               "Finding most recent bad transition. "
-                              << "Last state in MDP does not have a homotopy mismatch, "
+                              << "Last state does not have a homotopy mismatch, "
                               << "returning no transition");
         return Maybe::Maybe<StateTransition>();
     }
-
-//    trajectory.back().first.planned_rubber_band_->visualize(
-//                "TRANSITION_LEARNING_LOOKING_BACK_PLANNED",
-//                Visualizer::Blue(),
-//                Visualizer::Blue(),
-//                (int32_t)(trajectory.size() - 1));
-
-//    trajectory.back().first.rubber_band_->visualize(
-//                "TRANSITION_LEARNING_LOOKING_BACK_EXECUTED",
-//                Visualizer::Yellow(),
-//                Visualizer::Yellow(),
-//                (int32_t)(trajectory.size() - 1));
-
 
     // Search backwards through the list for the last time we transitioned
     // from a matching first order homotopy to not matching
@@ -637,29 +624,40 @@ Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMo
         const auto& start_state = trajectory[idx - 1].first;
         const auto& end_state = trajectory[idx].first;
 
-        start_state.planned_rubber_band_->visualize(
-                    "TRANSITION_LEARNING_LOOKING_BACK_PLANNED",
-                    Visualizer::Blue(),
-                    Visualizer::Blue(),
-                    1);
+        if (visualize)
+        {
+            start_state.planned_rubber_band_->visualize(
+                        "TRANSITION_LEARNING_LOOKING_BACK_PLANNED",
+                        Visualizer::Blue(),
+                        Visualizer::Blue(),
+                        1);
 
-        start_state.rubber_band_->visualize(
-                    "TRANSITION_LEARNING_LOOKING_BACK_EXECUTED",
-                    Visualizer::Yellow(),
-                    Visualizer::Yellow(),
-                    1);
+            start_state.rubber_band_->visualize(
+                        "TRANSITION_LEARNING_LOOKING_BACK_EXECUTED",
+                        Visualizer::Yellow(),
+                        Visualizer::Yellow(),
+                        1);
 
-        end_state.planned_rubber_band_->visualize(
-                    "TRANSITION_LEARNING_LOOKING_BACK_PLANNED",
-                    Visualizer::Blue(),
-                    Visualizer::Blue(),
-                    2);
+            end_state.planned_rubber_band_->visualize(
+                        "TRANSITION_LEARNING_LOOKING_BACK_PLANNED",
+                        Visualizer::Blue(),
+                        Visualizer::Blue(),
+                        2);
 
-        end_state.rubber_band_->visualize(
-                    "TRANSITION_LEARNING_LOOKING_BACK_EXECUTED",
-                    Visualizer::Yellow(),
-                    Visualizer::Yellow(),
-                    2);
+            end_state.rubber_band_->visualize(
+                        "TRANSITION_LEARNING_LOOKING_BACK_EXECUTED",
+                        Visualizer::Yellow(),
+                        Visualizer::Yellow(),
+                        2);
+
+            RubberBand::VisualizeBandSurface(
+                        vis_,
+                        reduceMicrostepsToBands(trajectory[idx].second),
+                        Visualizer::Green(),
+                        Visualizer::Red(),
+                        "TRANSITION_LEARNING_LOOKING_BACK_BAND_SURFACE",
+                        1);
+        }
 
 
         // If the first order homotopy check passes, then the actual rubber band
@@ -678,7 +676,10 @@ Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMo
             return Maybe::Maybe<StateTransition>(transition);
         }
 
-        arc_helpers::Sleep(1.0);
+        if (visualize)
+        {
+            arc_helpers::Sleep(1.0);
+        }
     }
 
     ROS_WARN_STREAM_NAMED("transitions",

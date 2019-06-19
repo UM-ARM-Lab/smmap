@@ -18,11 +18,12 @@ using namespace arc_utilities;
 using namespace arc_helpers;
 using namespace Eigen;
 using namespace EigenHelpers;
+using namespace EigenHelpersConversions;
 namespace dmm = deformable_manipulation_msgs;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
 ////////////////////////////////////////////////////////////////////////////////
-//          Random Helpers
+//          Conversions and Random Helpers
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace smmap
@@ -84,6 +85,100 @@ namespace smmap
             microsteps_last,
             microsteps_last_bands
         };
+    }
+
+    typedef std::pair<TransitionEstimation::State, std::vector<WorldState>> StateMicrostepsPair;
+    std::vector<StateMicrostepsPair> TransitionTesting::toTrajectory(
+            const dmm::TransitionTestResult& test_result,
+            const RRTPath& path)
+    {
+        const auto gripper_a_ending_pose = GeometryPoseToEigenIsometry3d(test_result.microsteps_last_action.back().gripper_poses.at(0));
+        const auto gripper_b_ending_pose = GeometryPoseToEigenIsometry3d(test_result.microsteps_last_action.back().gripper_poses.at(1));
+        const auto test = robot_->toRosTransitionTest(
+                    initial_world_state_.rope_node_transforms_,
+                    initial_world_state_.all_grippers_single_pose_,
+                    RRTPathToGrippersPoseTrajectory(path),
+                    {gripper_a_ending_pose, gripper_b_ending_pose});
+        const auto path_num_steps = path.size();
+        const auto simsteps_per_gripper_cmd = ROSHelpers::GetParamRequiredDebugLog<int>(*nh_, "deform_simulator_node/num_simsteps_per_gripper_command", __func__).Get();
+        const auto path_total_substeps = std::accumulate(test.path_num_substeps.begin(), test.path_num_substeps.end(), test.final_num_substeps);
+        const auto path_cummulative_substeps = [&]
+        {
+            auto res = std::vector<int>(path_num_steps);
+            std::partial_sum(test.path_num_substeps.begin(), test.path_num_substeps.end(), res.begin());
+            return res;
+        }();
+
+        // Make sure that the data is in the format we're expecting
+        assert(test.path_num_substeps.size() == path_num_steps);
+        assert((int)test_result.microsteps_all.size() == (path_total_substeps * simsteps_per_gripper_cmd));
+        assert(test.path_num_substeps.at(0) == 0); // I.e.; the path starts at the same place that the grippers are already at
+
+        // Add an extra state for the start, remove one to exclude the 'dud' first step in the path,
+        // and add one for the last step after reaching the end of the path
+        std::vector<StateMicrostepsPair> trajectory;
+        trajectory.reserve(path_num_steps + 1);
+
+        // Add the first state with no history
+        {
+            const TransitionEstimation::State tes =
+            {
+                initial_world_state_.object_configuration_,
+                std::make_shared<RubberBand>(*initial_band_),
+                std::make_shared<RubberBand>(*initial_band_),
+                initial_world_state_.rope_node_transforms_
+            };
+            trajectory.push_back({tes, std::vector<WorldState>(0)});
+        }
+
+        // Add the rest of the states other than the last step
+        for (size_t idx = 1; idx < path_num_steps; ++idx)
+        {
+            const auto microsteps_start_idx = path_cummulative_substeps[idx - 1] * simsteps_per_gripper_cmd;
+            const auto microsteps_end_idx = path_cummulative_substeps[idx] * simsteps_per_gripper_cmd;
+
+            if (microsteps_end_idx == microsteps_start_idx)
+            {
+                continue;
+            }
+
+            // Ensure that we don't overflow the end of the vector (assuming one set of data at the end for the "last step")
+            // Given the earlier assertions; only a logic error in this function would trigger this
+            assert(test_result.microsteps_all.begin() + microsteps_start_idx <= test_result.microsteps_all.end() - (test.final_num_substeps * simsteps_per_gripper_cmd));
+            assert(test_result.microsteps_all.begin() + microsteps_end_idx <= test_result.microsteps_all.end() - (test.final_num_substeps * simsteps_per_gripper_cmd));
+
+            const std::vector<dmm::WorldState> dmm_microsteps(
+                        test_result.microsteps_all.begin() + microsteps_start_idx,
+                        test_result.microsteps_all.begin() + microsteps_end_idx);
+            const auto microsteps = ConvertToEigenFeedback(dmm_microsteps);
+
+            const TransitionEstimation::State tes =
+            {
+                microsteps.back().object_configuration_,
+                RubberBand::BandFromWorldState(microsteps.back(), *initial_band_),
+                std::make_shared<RubberBand>(*path[idx].band()),
+                microsteps.back().rope_node_transforms_,
+            };
+            trajectory.push_back({tes, microsteps});
+        }
+
+        // Propagate the planned band the last step, and record the resulting state
+        {
+            const WorldState end = ConvertToEigenFeedback(test_result.microsteps_last_action.back());
+
+            auto planned_band = std::make_shared<RubberBand>(*path.back().band());
+            planned_band->forwardPropagate(ToGripperPositions(VectorGeometryPoseToVectorIsometry3d(test.final_gripper_targets)), false);
+            const auto tes = TransitionEstimation::State
+            {
+                end.object_configuration_,
+                RubberBand::BandFromWorldState(end, *initial_band_),
+                planned_band,
+                end.rope_node_transforms_
+            };
+            trajectory.push_back({tes, ConvertToEigenFeedback(test_result.microsteps_last_action)});
+        }
+
+        return trajectory;
     }
 }
 
@@ -187,8 +282,23 @@ namespace smmap
     {
         std::vector<Visualizer::NamespaceId> marker_ids;
 
+        constexpr bool vis_template_starting_band = true;
+        constexpr bool vis_template_ending_executed_band = true;
+        constexpr bool vis_template_executed_band_surface = true;
+        constexpr bool vis_test_start_planned_band = true;
+        constexpr bool vis_test_executed_band = true;
+        constexpr bool vis_test_executed_band_surface = true;
+        constexpr bool vis_adapt_default_next_band = true;
+        constexpr bool vis_adapt_target_band_and_action = true;
+        constexpr bool vis_adapt_template_band_and_action = true;
+        constexpr bool vis_adapt_template_aligned = true;
+        constexpr bool vis_adapt_next_band_points_to_smooth = true;
+        constexpr bool vis_adapt_transformed_band_surface_points = true;
+        constexpr bool vis_adapt_retightend_band_surface = true;
+        constexpr bool vis_adapt_final_result = true;
+
         // Template - starting planned band
-        if (true)
+        if (vis_template_starting_band)
         {
             const auto color = Visualizer::Green();
             const auto name = basename + "template__start";
@@ -198,7 +308,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Template - ending executed band
-        if (true)
+        if (vis_template_ending_executed_band)
         {
             const auto color = Visualizer::Cyan();
             const auto name = basename + "template__executed";
@@ -208,7 +318,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Template - Executed band surface
-        if (true)
+        if (vis_template_executed_band_surface)
         {
             const auto start_color = Visualizer::Green();
             const auto end_color = Visualizer::Cyan();
@@ -219,7 +329,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Test - start planned band
-        if (true)
+        if (vis_test_start_planned_band)
         {
             const auto color = Visualizer::Yellow();
             const auto name = basename + "tested__start";
@@ -229,7 +339,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Test - exectued band
-        if (true)
+        if (vis_test_executed_band)
         {
             const auto color = Visualizer::Orange();
             const auto name = basename + "tested__executed";
@@ -239,7 +349,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Test - Executed band surface
-        if (true)
+        if (vis_test_executed_band_surface)
         {
             const auto start_color = Visualizer::Yellow();
             const auto end_color = Visualizer::Orange();
@@ -250,7 +360,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - default next band
-        if (true)
+        if (vis_adapt_default_next_band)
         {
             const auto color = Visualizer::Red();
             const auto name = basename + "adaptation__default_next_band";
@@ -260,7 +370,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - target band and action
-        if (true)
+        if (vis_adapt_target_band_and_action)
         {
             const auto color = Visualizer::Yellow();
             const auto name = basename + "adaptation__target_points_to_match";
@@ -276,7 +386,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - template band and action
-        if (true)
+        if (vis_adapt_template_band_and_action)
         {
             const auto color = Visualizer::Green();
             const auto name = basename + "adaptation__template_points_to_align";
@@ -292,7 +402,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - template aligned
-        if (true)
+        if (vis_adapt_template_aligned)
         {
             const auto color = Visualizer::Magenta();
             const auto name = basename + "adaptation__template_aligned_to_target";
@@ -308,7 +418,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - next_band_points_to_smooth_
-        if (true)
+        if (vis_adapt_next_band_points_to_smooth)
         {
             const auto color = Visualizer::Seafoam();
             const auto name = basename + "adaptation__next_band_points_to_smooth";
@@ -318,7 +428,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - transformed_band_surface_points
-        if (true)
+        if (vis_adapt_transformed_band_surface_points)
         {
             const auto start_color = Visualizer::Blue();
             const auto end_color = Visualizer::Seafoam();
@@ -329,7 +439,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - re-tightened band surface
-        if (true)
+        if (vis_adapt_retightend_band_surface)
         {
             const auto start_color = Visualizer::Olive();
             const auto end_color = Visualizer::Coral();
@@ -340,7 +450,7 @@ namespace smmap
                               std::make_move_iterator(new_ids.end()));
         }
         // Adaptation process - final result
-        if (true)
+        if (vis_adapt_final_result)
         {
             const auto color = Visualizer::Coral();
             const auto name = basename + "adaptation__result";
@@ -422,7 +532,7 @@ namespace smmap
     {
         initializeBand(world_state);
         transition_estimator_ = std::make_shared<TransitionEstimation>(
-                    nh_, ph_, sdf_, work_space_grid_, vis_, *band_);
+                    nh_, ph_, sdf_, work_space_grid_, vis_, *initial_band_);
         initializeRRTParams();
     }
 
@@ -473,7 +583,7 @@ namespace smmap
         const double resampled_band_max_pointwise_dist = work_space_grid_.minStepDimension() / 2.0;
         const size_t upsampled_band_num_points = GetRRTBandMaxPoints(*ph_);
 
-        band_ = std::make_shared<RubberBand>(
+        initial_band_ = std::make_shared<RubberBand>(
                     nh_,
                     ph_,
                     vis_,
@@ -604,7 +714,9 @@ namespace smmap
         return files;
     }
 
-    void TransitionTesting::runTests(const bool generate_test_data, const bool generate_transition_approximations)
+    void TransitionTesting::runTests(const bool generate_test_data,
+                                     const bool generate_last_step_transition_approximations,
+                                     const bool generate_meaningful_mistake_examples)
     {
         if (generate_test_data)
         {
@@ -613,11 +725,18 @@ namespace smmap
             std::cout << "Data generation time taken: " << stopwatch(READ) << std::endl;
         }
 
-        if (generate_transition_approximations)
+        if (generate_last_step_transition_approximations)
         {
             Stopwatch stopwatch;
-            generateTransitionApproximations();
-            std::cout << "Data processing time taken: " << stopwatch(READ) << std::endl;
+            generateLastStepTransitionApproximations();
+            std::cout << "Last step transition approximations time taken: " << stopwatch(READ) << std::endl;
+        }
+
+        if (generate_meaningful_mistake_examples)
+        {
+            Stopwatch stopwatch;
+            generateMeaningfulMistakeExamples();
+            std::cout << "Finding meaningful mistake examples time taken: " << stopwatch(READ) << std::endl;
         }
     }
 }
@@ -854,7 +973,7 @@ namespace smmap
             const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
             const auto deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
             {
-                return RRTNode::Deserialize(buf, cur, *band_);
+                return RRTNode::Deserialize(buf, cur, *initial_band_);
             };
             const auto path_deserialized = DeserializeVector<RRTNode, Eigen::aligned_allocator<RRTNode>>(buffer, 0, deserializer);
             return path_deserialized.first;
@@ -894,7 +1013,7 @@ namespace smmap
         robot_config.tail<3>() = gripper_config.second.translation();
 
         const auto rubber_band = RubberBand::BandFromWorldState(
-                    initial_world_state_, *band_);
+                    initial_world_state_, *initial_band_);
 
         const RRTNode start_config(
                     gripper_config,
@@ -919,20 +1038,20 @@ namespace smmap
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-//          Data Processing
+//          Generate Last Step Approximations
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace smmap
 {
-    void TransitionTesting::generateTransitionApproximations()
+    void TransitionTesting::generateLastStepTransitionApproximations()
     {
+        // Setup the transition data source to generate transition approximations from
         dmm::TransitionTestingVisualizationRequest req;
         req.data = "cannonical_straight_test/unmodified__test_results.compressed";
         dmm::TransitionTestingVisualizationResponse res;
         setSourceCallback(req, res);
         assert(source_valid_);
 
-        const auto files = getDataFileList();
         enum
         {
             FILENAME,
@@ -947,9 +1066,11 @@ namespace smmap
             TRUE_VS_DEFAULT_EUCLIDEAN,
             TRUE_VS_ADAPTATION_FOH,
             TRUE_VS_ADAPTATION_EUCLIDEAN,
+            PLANNED_VS_ACTUAL_START_FOH,
+            PLANNED_VS_ACTUAL_START_EUCLIDEAN,
             DUMMY_ITEM
         };
-        Log::Log logger(data_folder_ + "/cannonical_straight_test/dists_etc.csv", false);
+        Log::Log logger(data_folder_ + "/cannonical_straight_test/generate_last_step_transition_approximations.csv", false);
         LOG(logger, "FILENAME, "
                     "ERROR_STRING, "
                     "TEMPLATE_MISALIGNMENT_EUCLIDEAN, "
@@ -961,7 +1082,10 @@ namespace smmap
                     "TRUE_VS_DEFAULT_FOH, "
                     "TRUE_VS_DEFAULT_EUCLIDEAN, "
                     "TRUE_VS_ADAPTATION_FOH, "
-                    "TRUE_VS_ADAPTATION_EUCLIDEAN");
+                    "TRUE_VS_ADAPTATION_EUCLIDEAN, "
+                    "PLANNED_VS_ACTUAL_START_FOH, "
+                    "PLANNED_VS_ACTUAL_START_EUCLIDEAN");
+        const auto files = getDataFileList();
         #pragma omp parallel for
         for (size_t idx = 0; idx < files.size(); ++idx)
         {
@@ -970,27 +1094,51 @@ namespace smmap
             dists_etc[FILENAME] = test_result_file.substr(data_folder_.length() + 1);
             try
             {
+                // Load the path that generated the test
+                const RRTPath path_to_start = [&]
+                {
+                    const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
+                    const auto decompressed_path = ZlibHelpers::LoadFromFileAndDecompress(path_to_start_file);
+                    const auto node_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
+                    {
+                        return RRTNode::Deserialize(buf, cur, *initial_band_);
+                    };
+                    return DeserializeVector<RRTNode, aligned_allocator<smmap::RRTNode>>(decompressed_path, 0, node_deserializer).first;
+                }();
+
                 // Load the test record
                 const dmm::TransitionTestResult test_result = [&]
                 {
                     const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
                     return arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
                 }();
+
+                // Load the resulting transition, if needed generate it first
+                const TransitionEstimation::StateTransition test_transition = [&]
+                {
+                    const auto test_transition_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__test_transition.compressed";
+                    if (!boost::filesystem::is_regular_file(test_transition_file))
+                    {
+                        const auto transition = ToStateTransition(test_result, path_to_start);
+
+                        std::vector<uint8_t> output_buffer;
+                        transition.serialize(output_buffer);
+                        ZlibHelpers::CompressAndWriteToFile(output_buffer, test_transition_file);
+                        return transition;
+                    }
+                    else
+                    {
+                        const auto test_transition_buffer = ZlibHelpers::LoadFromFileAndDecompress(test_transition_file);
+                        return TransitionEstimation::StateTransition::Deserialize(test_transition_buffer, 0, *initial_band_).first;
+                    }
+                }();
+
                 // Load the adaptation record, if needed generate it first
                 const TransitionEstimation::TransitionAdaptationResult adaptation_record = [&]
                 {
                     const auto adaptation_record_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__adaptation_record.compressed";
-                    const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
-                    const auto decompressed_path = ZlibHelpers::LoadFromFileAndDecompress(path_to_start_file);
-                    const auto node_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
-                    {
-                        return RRTNode::Deserialize(buf, cur, *band_);
-                    };
-                    const auto path_to_start = DeserializeVector<RRTNode, aligned_allocator<smmap::RRTNode>>(decompressed_path, 0, node_deserializer).first;
-
                     if (!boost::filesystem::is_regular_file(adaptation_record_file))
                     {
-                        const auto test_transition = ToStateTransition(test_result, path_to_start);
                         const auto ar = transition_estimator_->generateTransition(
                                     source_transition_,
                                     *test_transition.starting_state_.planned_rubber_band_,
@@ -1004,17 +1152,16 @@ namespace smmap
                     else
                     {
                         const auto adaptation_record_buffer = ZlibHelpers::LoadFromFileAndDecompress(adaptation_record_file);
-                        const auto ar = TransitionEstimation::TransitionAdaptationResult::Deserialize(adaptation_record_buffer, 0, *band_).first;
-                        return ar;
+                        return TransitionEstimation::TransitionAdaptationResult::Deserialize(adaptation_record_buffer, 0, *initial_band_).first;
                     }
                 }();
 
-                const auto test_band_start = RubberBand::BandFromWorldState(ConvertToEigenFeedback(test_result.start_after_following_path), *band_);
+                const auto test_band_start = RubberBand::BandFromWorldState(ConvertToEigenFeedback(test_result.start_after_following_path), *initial_band_);
                 if (test_band_start->isOverstretched())
                 {
                     throw_arc_exception(std::runtime_error, "Starting configuration of test band is overstretched");
                 }
-                const auto test_band_end = RubberBand::BandFromWorldState(ConvertToEigenFeedback(test_result.microsteps_last_action.back()), *band_);
+                const auto test_band_end = RubberBand::BandFromWorldState(ConvertToEigenFeedback(test_result.microsteps_last_action.back()), *initial_band_);
 
                 dists_etc[TEMPLATE_MISALIGNMENT_EUCLIDEAN] = std::to_string(adaptation_record.template_misalignment_dist_);
                 dists_etc[DEFAULT_VS_ADAPTATION_FOH] = std::to_string(adaptation_record.default_band_foh_result_);
@@ -1029,6 +1176,9 @@ namespace smmap
 
                 dists_etc[TRUE_VS_ADAPTATION_FOH] = std::to_string(transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.result_, *test_band_end));
                 dists_etc[TRUE_VS_ADAPTATION_EUCLIDEAN] = std::to_string(adaptation_record.result_->distance(*test_band_end));
+
+                dists_etc[PLANNED_VS_ACTUAL_START_FOH] = std::to_string(transition_estimator_->checkFirstOrderHomotopy(*test_transition.starting_state_.planned_rubber_band_, *test_transition.starting_state_.rubber_band_));
+                dists_etc[PLANNED_VS_ACTUAL_START_EUCLIDEAN] = std::to_string(test_transition.starting_state_.planned_rubber_band_->distance(*test_transition.starting_state_.rubber_band_));
             }
             catch (const std::exception& ex)
             {
@@ -1059,7 +1209,7 @@ namespace smmap
         const auto decompressed_path = ZlibHelpers::LoadFromFileAndDecompress(path_to_start_file);
         const auto node_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
         {
-            return RRTNode::Deserialize(buf, cur, *band_);
+            return RRTNode::Deserialize(buf, cur, *initial_band_);
         };
         const auto path_to_start = DeserializeVector<RRTNode, aligned_allocator<smmap::RRTNode>>(decompressed_path, 0, node_deserializer).first;
         const auto decompressed_test_result = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
@@ -1116,7 +1266,7 @@ namespace smmap
         const auto decompressed_path = ZlibHelpers::LoadFromFileAndDecompress(path_to_start_file);
         const auto node_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
         {
-            return RRTNode::Deserialize(buf, cur, *band_);
+            return RRTNode::Deserialize(buf, cur, *initial_band_);
         };
         const auto path_to_start = DeserializeVector<RRTNode, aligned_allocator<smmap::RRTNode>>(decompressed_path, 0, node_deserializer).first;
         const auto decompressed_test_result = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
@@ -1140,18 +1290,20 @@ namespace smmap
         visid_to_markers_[res.response] = sim_record.visualize(std::to_string(next_vis_prefix_) + "__", vis_);
         ++next_vis_prefix_;
 
-        const auto test_band_end = RubberBand::BandFromWorldState(ConvertToEigenFeedback(test_result.microsteps_last_action.back()), *band_);
+        const auto test_band_end = RubberBand::BandFromWorldState(ConvertToEigenFeedback(test_result.microsteps_last_action.back()), *initial_band_);
         ROS_INFO_STREAM("Added vis id: " << res.response << " for file " << req.data << std::endl
-                        << "Template alignment dist: " << adaptation_record.template_misalignment_dist_ << std::endl
-                        << "Default band FOH:        " << adaptation_record.default_band_foh_result_ << std::endl
-                        << "Default band dist:       " << adaptation_record.default_band_dist_ << std::endl
-                        << "Band tighten delta:      " << adaptation_record.band_tighten_delta_ << std::endl
-                        << "Source FOH changes:      " << source_num_foh_changes_ << std::endl
-                        << "Adaptation FOH changes:  " << adaptation_record.num_foh_changes_ << std::endl
-                        << "True vs default FOH:     " << transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.default_next_band_, *test_band_end) << std::endl
-                        << "True vs default dist:    " << adaptation_record.default_next_band_->distance(*test_band_end) << std::endl
-                        << "True vs adaptation FOH:  " << transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.result_, *test_band_end) << std::endl
-                        << "True vs adaptation dist: " << adaptation_record.result_->distance(*test_band_end) << std::endl);
+                        << "Template alignment dist:      " << adaptation_record.template_misalignment_dist_ << std::endl
+                        << "Default band FOH:             " << adaptation_record.default_band_foh_result_ << std::endl
+                        << "Default band dist:            " << adaptation_record.default_band_dist_ << std::endl
+                        << "Band tighten delta:           " << adaptation_record.band_tighten_delta_ << std::endl
+                        << "Source FOH changes:           " << source_num_foh_changes_ << std::endl
+                        << "Adaptation FOH changes:       " << adaptation_record.num_foh_changes_ << std::endl
+                        << "True vs default FOH:          " << transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.default_next_band_, *test_band_end) << std::endl
+                        << "True vs default dist:         " << adaptation_record.default_next_band_->distance(*test_band_end) << std::endl
+                        << "True vs adaptation FOH:       " << transition_estimator_->checkFirstOrderHomotopy(*adaptation_record.result_, *test_band_end) << std::endl
+                        << "True vs adaptation dist:      " << adaptation_record.result_->distance(*test_band_end) << std::endl
+                        << "Planned vs actual start FOH:  " << transition_estimator_->checkFirstOrderHomotopy(*test_transition.starting_state_.planned_rubber_band_, *test_transition.starting_state_.rubber_band_) << std::endl
+                        << "Planned vs actual start dist: " << test_transition.starting_state_.planned_rubber_band_->distance(*test_transition.starting_state_.rubber_band_) << std::endl);
         return true;
     }
 
@@ -1175,6 +1327,122 @@ namespace smmap
         {
             res.response = "Invalid vis id";
             return false;
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//          Find Meaningful Mistakes
+////////////////////////////////////////////////////////////////////////////////
+
+namespace smmap
+{
+    void TransitionTesting::generateMeaningfulMistakeExamples()
+    {
+        enum
+        {
+            FILENAME,
+            ERROR_STRING,
+            PLANNED_VS_EXECUTED_START_EUCLIDEAN,
+            PLANNED_VS_EXECUTED_END_EUCLIDEAN,
+            START_VS_END_EUCLIDEN_PLANNED,
+            START_VS_END_EUCLIDEN_EXECUTED,
+            FOH_RESULTS,
+            NUM_FOH_CHANGES,
+            DUMMY_ITEM
+        };
+        Log::Log logger(data_folder_ + "/cannonical_straight_test/generate_meaningful_mistake_examples.csv", false);
+        LOG(logger, "FILENAME, "
+                    "ERROR_STRING, "
+                    "PLANNED_VS_EXECUTED_START_EUCLIDEAN, "
+                    "PLANNED_VS_EXECUTED_END_EUCLIDEAN, "
+                    "START_VS_END_EUCLIDEN_PLANNED, "
+                    "START_VS_END_EUCLIDEN_EXECUTED, "
+                    "FOH_RESULTS, "
+                    "NUM_FOH_CHANGES");
+
+        const auto files = getDataFileList();
+        #pragma omp parallel for
+        for (size_t idx = 0; idx < files.size(); ++idx)
+        {
+            const auto& test_result_file = files[idx];
+            std::vector<std::string> dists_etc(DUMMY_ITEM, "");
+            dists_etc[FILENAME] = test_result_file.substr(data_folder_.length() + 1);
+            try
+            {
+                // Load the path that generated the test
+                const RRTPath path_to_start = [&]
+                {
+                    const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
+                    const auto decompressed_path = ZlibHelpers::LoadFromFileAndDecompress(path_to_start_file);
+                    const auto node_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
+                    {
+                        return RRTNode::Deserialize(buf, cur, *initial_band_);
+                    };
+                    return DeserializeVector<RRTNode, aligned_allocator<smmap::RRTNode>>(decompressed_path, 0, node_deserializer).first;
+                }();
+
+                // Load the test record
+                const dmm::TransitionTestResult test_result = [&]
+                {
+                    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
+                    return arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+                }();
+
+                // Load the transition example
+                const TransitionEstimation::StateTransition transition = [&]
+                {
+                    const std::string example_mistake_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__example_mistake.compressed";
+
+                    if (!boost::filesystem::is_regular_file(example_mistake_file))
+                    {
+                        const auto trajectory = toTrajectory(test_result, path_to_start);
+                        const auto example = transition_estimator_->findMostRecentBadTransition(trajectory).Get();
+
+                        std::vector<uint8_t> buffer;
+                        example.serialize(buffer);
+                        ZlibHelpers::CompressAndWriteToFile(buffer, example_mistake_file);
+                        return example;
+                    }
+                    else
+                    {
+                        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(example_mistake_file);
+                        return TransitionEstimation::StateTransition::Deserialize(buffer, 0, *initial_band_).first;
+                    }
+                }();
+
+                std::vector<bool> foh_values;
+                for (size_t step_idx = 0; step_idx < transition.microstep_band_history_.size() - 1; ++step_idx)
+                {
+                    RubberBand::Ptr b1 = transition.microstep_band_history_[step_idx];
+                    RubberBand::Ptr b2 = transition.microstep_band_history_[step_idx + 1];
+                    foh_values.push_back(transition_estimator_->checkFirstOrderHomotopy(*b1, *b2));
+                }
+                int num_foh_changes = 0;
+                for (size_t step_idx = 0; step_idx < foh_values.size() - 1; ++step_idx)
+                {
+                    if (foh_values[step_idx] != foh_values[step_idx + 1])
+                    {
+                        ++num_foh_changes;
+                    }
+                }
+
+                dists_etc[PLANNED_VS_EXECUTED_START_EUCLIDEAN] = std::to_string(transition.starting_state_.planned_rubber_band_->distance(*transition.starting_state_.rubber_band_));
+                dists_etc[PLANNED_VS_EXECUTED_END_EUCLIDEAN] = std::to_string(transition.ending_state_.planned_rubber_band_->distance(*transition.ending_state_.rubber_band_));
+
+                dists_etc[START_VS_END_EUCLIDEN_PLANNED] = std::to_string(transition.starting_state_.planned_rubber_band_->distance(*transition.ending_state_.planned_rubber_band_));
+                dists_etc[START_VS_END_EUCLIDEN_EXECUTED] = std::to_string(transition.starting_state_.rubber_band_->distance(*transition.ending_state_.rubber_band_));
+
+                dists_etc[FOH_RESULTS] = PrettyPrint::PrettyPrint(foh_values, false, "");
+                dists_etc[NUM_FOH_CHANGES] = std::to_string(num_foh_changes);
+            }
+            catch (const std::exception& ex)
+            {
+                ROS_ERROR_STREAM("Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
+                dists_etc[ERROR_STRING] = ex.what();
+            }
+
+            LOG(logger, PrettyPrint::PrettyPrint(dists_etc, false, ", "));
         }
     }
 }

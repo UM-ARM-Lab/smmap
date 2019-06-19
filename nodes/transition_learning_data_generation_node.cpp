@@ -40,9 +40,10 @@ int main(int argc, char* argv[])
                 nullptr);
     auto vis = std::make_shared<Visualizer>(nh, ph, true);
     auto transition_tester = TransitionTesting(nh, ph, robot, vis);
-    const bool generate_test_data = ROSHelpers::GetParam<bool>(*ph, "generate_test_data", false);
-    const bool generate_transition_approximations = ROSHelpers::GetParam<bool>(*ph, "generate_transitions", false);
-    transition_tester.runTests(generate_test_data, generate_transition_approximations);
+    transition_tester.runTests(
+                ROSHelpers::GetParam<bool>(*ph, "generate_test_data", false),
+                ROSHelpers::GetParam<bool>(*ph, "generate_transitions", false),
+                ROSHelpers::GetParam<bool>(*ph, "generate_meaningful_mistakes", false));
 
     // Set the source to make sense, if this file exists
     dmm::TransitionTestingVisualizationRequest req;
