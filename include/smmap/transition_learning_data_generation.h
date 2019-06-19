@@ -126,30 +126,40 @@ namespace smmap
 
         //// Data Visualization ////////////////////////////////////////////////
 
-        ros::ServiceServer set_source_;
-        ros::ServiceServer add_visualization_;
+        // Maps filenames to ns+ids
+        std::map<std::string, std::vector<Visualizer::NamespaceId>> visid_to_markers_;
+
+        int next_vis_prefix_;
+        ros::Subscriber next_vis_id_sub_;
         ros::ServiceServer remove_visualization_;
 
+        // Transition Adaptation
         bool source_valid_;
         std::string source_file_;
         TransitionEstimation::StateTransition source_transition_;
         ObjectPointSet source_band_surface_;
         int source_num_foh_changes_;
 
-        // Maps filenames to ns+ids
-        ros::Subscriber next_vis_id_sub_;
-        std::map<std::string, std::vector<Visualizer::NamespaceId>> visid_to_markers_;
-        int next_vis_prefix_;
+        ros::ServiceServer set_transition_adaptation_source_;
+        ros::ServiceServer add_transition_adaptation_visualization_;
+
+        // Mistake Example
+        ros::ServiceServer add_mistake_example_visualization_;
 
     public:
         void setNextVisId(const std_msgs::Int32& msg);
-        bool setSourceCallback(
-                deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
-                deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
-        bool addVisualizationCallback(
-                deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
-                deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
         bool removeVisualizationCallback(
+                deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+                deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
+
+        bool setTransitionAdaptationSourceCallback(
+                deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+                deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
+        bool addTransitionAdaptationVisualizationCallback(
+                deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+                deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
+
+        bool addMistakeExampleVisualizationCallback(
                 deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
                 deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
     };

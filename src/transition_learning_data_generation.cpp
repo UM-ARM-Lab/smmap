@@ -506,12 +506,15 @@ namespace smmap
 
         , data_folder_(ROSHelpers::GetParam<std::string>(*ph_, "data_folder", "/tmp/transition_learning_data_generation"))
 
-        , set_source_(nh_->advertiseService("transition_vis/set_source", &TransitionTesting::setSourceCallback, this))
-        , add_visualization_(nh_->advertiseService("transition_vis/add_visualization", &TransitionTesting::addVisualizationCallback, this))
-        , remove_visualization_(nh_->advertiseService("transition_vis/remove_visualization", &TransitionTesting::removeVisualizationCallback, this))
-        , source_valid_(false)
-        , next_vis_id_sub_(nh_->subscribe("transition_vis/set_next_vis_id", 1, &TransitionTesting::setNextVisId, this))
         , next_vis_prefix_(0)
+        , next_vis_id_sub_(nh_->subscribe("transition_vis/set_next_vis_id", 1, &TransitionTesting::setNextVisId, this))
+        , remove_visualization_(nh_->advertiseService("transition_vis/remove_visualization", &TransitionTesting::removeVisualizationCallback, this))
+
+        , source_valid_(false)
+        , set_transition_adaptation_source_(nh_->advertiseService("transition_vis/set_transition_adaptation_source", &TransitionTesting::setTransitionAdaptationSourceCallback, this))
+        , add_transition_adaptation_visualization_(nh_->advertiseService("transition_vis/add_transition_adaptation_visualization", &TransitionTesting::addTransitionAdaptationVisualizationCallback, this))
+
+        , add_mistake_example_visualization_(nh_->advertiseService("transition_vis/add_mistake_example_visualization", &TransitionTesting::addMistakeExampleVisualizationCallback, this))
     {
         std::srand((unsigned int)seed_);
         initialize(initial_world_state_);
@@ -1049,7 +1052,7 @@ namespace smmap
         dmm::TransitionTestingVisualizationRequest req;
         req.data = "cannonical_straight_test/unmodified__test_results.compressed";
         dmm::TransitionTestingVisualizationResponse res;
-        setSourceCallback(req, res);
+        setTransitionAdaptationSourceCallback(req, res);
         assert(source_valid_);
 
         enum
@@ -1190,13 +1193,7 @@ namespace smmap
         }
     }
 
-    void TransitionTesting::setNextVisId(const std_msgs::Int32& msg)
-    {
-        next_vis_prefix_ = msg.data;
-        ROS_INFO_STREAM("Next vis id: " << next_vis_prefix_);
-    }
-
-    bool TransitionTesting::setSourceCallback(
+    bool TransitionTesting::setTransitionAdaptationSourceCallback(
             dmm::TransitionTestingVisualizationRequest& req,
             dmm::TransitionTestingVisualizationResponse& res)
     {
@@ -1250,7 +1247,7 @@ namespace smmap
         return true;
     }
 
-    bool TransitionTesting::addVisualizationCallback(
+    bool TransitionTesting::addTransitionAdaptationVisualizationCallback(
             deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
             deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res)
     {
@@ -1306,29 +1303,6 @@ namespace smmap
                         << "Planned vs actual start dist: " << test_transition.starting_state_.planned_rubber_band_->distance(*test_transition.starting_state_.rubber_band_) << std::endl);
         return true;
     }
-
-    bool TransitionTesting::removeVisualizationCallback(
-            deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
-            deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res)
-    {
-        (void)res;
-        try
-        {
-            const auto markers_nsid = visid_to_markers_.at(req.data);
-            for (const auto& nsid : markers_nsid)
-            {
-                vis_->deleteObject(nsid.first, nsid.second);
-            }
-            visid_to_markers_.erase(req.data);
-            ROS_INFO_STREAM("Removed vis id: " << req.data);
-            return true;
-        }
-        catch (...)
-        {
-            res.response = "Invalid vis id";
-            return false;
-        }
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1370,32 +1344,32 @@ namespace smmap
             dists_etc[FILENAME] = test_result_file.substr(data_folder_.length() + 1);
             try
             {
-                // Load the path that generated the test
-                const RRTPath path_to_start = [&]
-                {
-                    const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
-                    const auto decompressed_path = ZlibHelpers::LoadFromFileAndDecompress(path_to_start_file);
-                    const auto node_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
-                    {
-                        return RRTNode::Deserialize(buf, cur, *initial_band_);
-                    };
-                    return DeserializeVector<RRTNode, aligned_allocator<smmap::RRTNode>>(decompressed_path, 0, node_deserializer).first;
-                }();
-
-                // Load the test record
-                const dmm::TransitionTestResult test_result = [&]
-                {
-                    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
-                    return arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
-                }();
-
-                // Load the transition example
+                // Load the transition example if possible, otherwise generate it
                 const TransitionEstimation::StateTransition transition = [&]
                 {
                     const std::string example_mistake_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__example_mistake.compressed";
 
                     if (!boost::filesystem::is_regular_file(example_mistake_file))
                     {
+                        // Load the path that generated the test
+                        const RRTPath path_to_start = [&]
+                        {
+                            const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
+                            const auto decompressed_path = ZlibHelpers::LoadFromFileAndDecompress(path_to_start_file);
+                            const auto node_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
+                            {
+                                return RRTNode::Deserialize(buf, cur, *initial_band_);
+                            };
+                            return DeserializeVector<RRTNode, aligned_allocator<smmap::RRTNode>>(decompressed_path, 0, node_deserializer).first;
+                        }();
+
+                        // Load the test record
+                        const dmm::TransitionTestResult test_result = [&]
+                        {
+                            const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
+                            return arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+                        }();
+
                         const auto trajectory = toTrajectory(test_result, path_to_start);
                         const auto example = transition_estimator_->findMostRecentBadTransition(trajectory).Get();
 
@@ -1411,7 +1385,7 @@ namespace smmap
                     }
                 }();
 
-                std::vector<bool> foh_values;
+                std::vector<int> foh_values;
                 for (size_t step_idx = 0; step_idx < transition.microstep_band_history_.size() - 1; ++step_idx)
                 {
                     RubberBand::Ptr b1 = transition.microstep_band_history_[step_idx];
@@ -1443,6 +1417,119 @@ namespace smmap
             }
 
             LOG(logger, PrettyPrint::PrettyPrint(dists_etc, false, ", "));
+        }
+    }
+
+    bool TransitionTesting::addMistakeExampleVisualizationCallback(
+            deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+            deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res)
+    {
+        const std::string test_result_file = data_folder_ + "/" + req.data;
+        const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
+        const auto example_mistake_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__example_mistake.compressed";
+
+        // Load the path that generated the test
+        const RRTPath path_to_start = [&]
+        {
+            const auto decompressed_path = ZlibHelpers::LoadFromFileAndDecompress(path_to_start_file);
+            const auto node_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
+            {
+                return RRTNode::Deserialize(buf, cur, *initial_band_);
+            };
+            return DeserializeVector<RRTNode, aligned_allocator<smmap::RRTNode>>(decompressed_path, 0, node_deserializer).first;
+        }();
+
+        // Load the test record
+        const dmm::TransitionTestResult test_result = [&]
+        {
+            const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
+            return arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+        }();
+
+        // Load the transition example if possible
+        const TransitionEstimation::StateTransition transition = [&]
+        {
+            if (!boost::filesystem::is_regular_file(example_mistake_file))
+            {
+                const auto trajectory = toTrajectory(test_result, path_to_start);
+                const auto example = transition_estimator_->findMostRecentBadTransition(trajectory).Get();
+
+                std::vector<uint8_t> buffer;
+                example.serialize(buffer);
+                ZlibHelpers::CompressAndWriteToFile(buffer, example_mistake_file);
+                return example;
+            }
+            else
+            {
+                const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(example_mistake_file);
+                return TransitionEstimation::StateTransition::Deserialize(buffer, 0, *initial_band_).first;
+            }
+        }();
+
+        // Determine the FOH and distance values along the band surface
+        Matrix2Xd dist_and_foh_values(2, transition.microstep_band_history_.size() - 1);
+        for (size_t step_idx = 0; step_idx < transition.microstep_band_history_.size() - 1; ++step_idx)
+        {
+            RubberBand::Ptr b1 = transition.microstep_band_history_[step_idx];
+            RubberBand::Ptr b2 = transition.microstep_band_history_[step_idx + 1];
+            dist_and_foh_values(0, step_idx) = b1->distance(*b2);
+            dist_and_foh_values(1, step_idx) = transition_estimator_->checkFirstOrderHomotopy(*b1, *b2);
+        }
+        int num_foh_changes = 0;
+        for (ssize_t step_idx = 0; step_idx < dist_and_foh_values.cols() - 1; ++step_idx)
+        {
+            if (dist_and_foh_values(1, step_idx) != dist_and_foh_values(1, step_idx + 1))
+            {
+                ++num_foh_changes;
+            }
+        }
+
+        res.response = std::to_string(-1);
+
+        ROS_INFO_STREAM("Added vis id: " << res.response << " for file " << req.data << std::endl
+                        << "Planned vs executed start dist:     " << transition.starting_state_.planned_rubber_band_->distance(*transition.starting_state_.rubber_band_) << std::endl
+                        << "Planned vs executed end dist:       " << transition.ending_state_.planned_rubber_band_->distance(*transition.ending_state_.rubber_band_) << std::endl
+                        << "Start vs end dist planned:          " << transition.starting_state_.planned_rubber_band_->distance(*transition.ending_state_.planned_rubber_band_) << std::endl
+                        << "Start vs end dist executed:         " << transition.starting_state_.rubber_band_->distance(*transition.ending_state_.rubber_band_) << std::endl
+                        << "Distance and FOH values along band surface:\n" << dist_and_foh_values.transpose() << std::endl
+                        << "Num FOH changes:                    " << num_foh_changes << std::endl);
+
+        return true;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//          Generic Visualization
+////////////////////////////////////////////////////////////////////////////////
+
+namespace smmap
+{
+    void TransitionTesting::setNextVisId(const std_msgs::Int32& msg)
+    {
+        next_vis_prefix_ = msg.data;
+        ROS_INFO_STREAM("Next vis id: " << next_vis_prefix_);
+    }
+
+    bool TransitionTesting::removeVisualizationCallback(
+            deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+            deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res)
+    {
+        (void)res;
+        try
+        {
+            const auto markers_nsid = visid_to_markers_.at(req.data);
+            for (const auto& nsid : markers_nsid)
+            {
+                vis_->deleteObject(nsid.first, nsid.second);
+            }
+            visid_to_markers_.erase(req.data);
+            ROS_INFO_STREAM("Removed vis id: " << req.data);
+            return true;
+        }
+        catch (...)
+        {
+            res.response = "Invalid vis id";
+            return false;
         }
     }
 }
