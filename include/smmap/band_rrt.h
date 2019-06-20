@@ -223,9 +223,9 @@ namespace smmap
         static constexpr char RRT_SAMPLE_NS[]                   = "rrt_sample";
         static constexpr char RRT_FORWARD_PROP_START_NS[]       = "rrt_forward_prop_start";
 
-        static constexpr char RRT_SOLUTION_GRIPPER_A_NS[]       = "rrt_solution_gripper_a";
-        static constexpr char RRT_SOLUTION_GRIPPER_B_NS[]       = "rrt_solution_gripper_b";
-        static constexpr char RRT_SOLUTION_RUBBER_BAND_NS[]     = "rrt_solution_rubber_band";
+        static constexpr char RRT_PATH_GRIPPER_A_NS[]           = "rrt_path_gripper_a";
+        static constexpr char RRT_PATH_GRIPPER_B_NS[]           = "rrt_path_gripper_b";
+        static constexpr char RRT_PATH_RUBBER_BAND_NS[]         = "rrt_path_rubber_band";
 
         static constexpr char RRT_SMOOTHING_GRIPPER_A_NS[]      = "rrt_smoothing_gripper_a";
         static constexpr char RRT_SMOOTHING_GRIPPER_B_NS[]      = "rrt_smoothing_gripper_b";
@@ -316,7 +316,7 @@ namespace smmap
         // Visualization and other debugging tools
         ///////////////////////////////////////////////////////////////////////////////////////
 
-        void visualizeTree(
+        std::vector<Visualizer::NamespaceId> visualizeTree(
                 const RRTTree& tree,
                 const size_t start_idx,
                 const std::string ns_a,
@@ -329,11 +329,11 @@ namespace smmap
                 const std_msgs::ColorRGBA& color_b,
                 const std_msgs::ColorRGBA& color_band,
                 const bool draw_band = false) const;
-        void visualizeBothTrees() const;
+        std::vector<Visualizer::NamespaceId> visualizeBothTrees() const;
         void deleteTreeVisualizations() const;
-        void visualizePath(const RRTPath& path, const int32_t id, const bool draw_band = false) const;
-        void visualizePolicy(const RRTPolicy& policy, const bool draw_band = false) const;
-        void visualizeBlacklist() const;
+        std::vector<Visualizer::NamespaceId> visualizePath(const RRTPath& path, const std::string& ns_prefix, const int32_t id, const bool draw_band = false) const;
+        std::vector<Visualizer::NamespaceId> visualizePolicy(const RRTPolicy& policy, const bool draw_band = false) const;
+        std::vector<Visualizer::NamespaceId> visualizeBlacklist() const;
 
         void storeTree(const RRTTree& tree, std::string file_path = "") const;
         RRTTree loadStoredTree(std::string file_path = "") const;

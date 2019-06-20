@@ -34,9 +34,9 @@ constexpr char BandRRT::RRT_TREE_BAND_NS[];
 constexpr char BandRRT::RRT_SAMPLE_NS[];
 constexpr char BandRRT::RRT_FORWARD_PROP_START_NS[];
 
-constexpr char BandRRT::RRT_SOLUTION_GRIPPER_A_NS[];
-constexpr char BandRRT::RRT_SOLUTION_GRIPPER_B_NS[];
-constexpr char BandRRT::RRT_SOLUTION_RUBBER_BAND_NS[];
+constexpr char BandRRT::RRT_PATH_GRIPPER_A_NS[];
+constexpr char BandRRT::RRT_PATH_GRIPPER_B_NS[];
+constexpr char BandRRT::RRT_PATH_RUBBER_BAND_NS[];
 
 constexpr char BandRRT::RRT_SMOOTHING_GRIPPER_A_NS[];
 constexpr char BandRRT::RRT_SMOOTHING_GRIPPER_B_NS[];
@@ -1350,7 +1350,7 @@ std::vector<VectorXd> BandRRT::ConvertRRTPathToRobotPath(const RRTTree& path)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Draws lines connecting all nodes in the tree, from start_idx through to the end of the vector
-void BandRRT::visualizeTree(
+std::vector<Visualizer::NamespaceId> BandRRT::visualizeTree(
         const RRTTree& tree,
         const size_t start_idx,
         const std::string ns_a,
@@ -1364,6 +1364,8 @@ void BandRRT::visualizeTree(
         const std_msgs::ColorRGBA& color_band,
         const bool draw_band) const
 {
+    std::vector<Visualizer::NamespaceId> marker_ids;
+
     if (visualization_enabled_globally_)
     {
         assert(start_idx < tree.size());
@@ -1440,22 +1442,29 @@ void BandRRT::visualizeTree(
             }
         }
 
-        vis_->visualizeLines(ns_a, gripper_a_tree_start_points, gripper_a_tree_end_points, gripper_a_line_colors, id_a);
-        vis_->visualizeLines(ns_b, gripper_b_tree_start_points, gripper_b_tree_end_points, gripper_b_line_colors, id_b);
+        const auto gripper_a_ids = vis_->visualizeLines(ns_a, gripper_a_tree_start_points, gripper_a_tree_end_points, gripper_a_line_colors, id_a);
+        marker_ids.insert(marker_ids.end(), gripper_a_ids.begin(), gripper_a_ids.end());
+        const auto gripper_b_ids = vis_->visualizeLines(ns_b, gripper_b_tree_start_points, gripper_b_tree_end_points, gripper_b_line_colors, id_b);
+        marker_ids.insert(marker_ids.end(), gripper_b_ids.begin(), gripper_b_ids.end());
         if (draw_band)
         {
-            vis_->visualizeLines(ns_band, band_line_start_points, band_line_end_points, band_line_colors, id_band);
+            const auto band_ids = vis_->visualizeLines(ns_band, band_line_start_points, band_line_end_points, band_line_colors, id_band);
+            marker_ids.insert(marker_ids.end(), band_ids.begin(), band_ids.end());
         }
     }
+
+    return marker_ids;
 }
 
-void BandRRT::visualizeBothTrees() const
+std::vector<Visualizer::NamespaceId> BandRRT::visualizeBothTrees() const
 {
+    std::vector<Visualizer::NamespaceId> marker_ids;
+
     deleteTreeVisualizations();
 
     const bool draw_band = false;
 
-    visualizeTree(
+    const auto forward_tree_ids = visualizeTree(
                 forward_tree_,
                 0,
                 RRT_FORWARD_TREE_GRIPPER_A_NS,
@@ -1468,8 +1477,9 @@ void BandRRT::visualizeBothTrees() const
                 gripper_b_forward_tree_color_,
                 band_tree_color_,
                 draw_band);
+    marker_ids.insert(marker_ids.end(),forward_tree_ids.begin(), forward_tree_ids.end());
 
-    visualizeTree(
+    const auto backward_tree_ids = visualizeTree(
                 grippers_goal_set_,
                 0,
                 RRT_BACKWARD_TREE_GRIPPER_A_NS,
@@ -1482,8 +1492,12 @@ void BandRRT::visualizeBothTrees() const
                 gripper_b_backward_tree_color_,
                 band_tree_color_,
                 draw_band);
+    marker_ids.insert(marker_ids.end(), backward_tree_ids.begin(),backward_tree_ids.end());
+
 
     vis_->forcePublishNow();
+
+    return marker_ids;
 }
 
 void BandRRT::deleteTreeVisualizations() const
@@ -1503,8 +1517,10 @@ void BandRRT::deleteTreeVisualizations() const
 }
 
 // Assumes the path that is passed is sequential
-void BandRRT::visualizePath(const RRTPath& path, const int32_t id, const bool draw_band) const
+std::vector<Visualizer::NamespaceId> BandRRT::visualizePath(const RRTPath& path, const std::string& ns_prefix, const int32_t id, const bool draw_band) const
 {
+    std::vector<Visualizer::NamespaceId> marker_ids;
+
     VectorVector3d gripper_a_cubes;
     VectorVector3d gripper_b_cubes;
     gripper_a_cubes.reserve(path.size());
@@ -1531,24 +1547,32 @@ void BandRRT::visualizePath(const RRTPath& path, const int32_t id, const bool dr
         }
     }
 
-    vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.005, 0.005, 0.005), gripper_a_forward_tree_color_, id);
-    vis_->visualizeCubes(RRT_SOLUTION_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.005, 0.005, 0.005), gripper_b_forward_tree_color_, id);
+    const auto gripper_a_ids = vis_->visualizeCubes(ns_prefix + RRT_PATH_GRIPPER_A_NS, gripper_a_cubes, Vector3d(0.005, 0.005, 0.005), gripper_a_forward_tree_color_, id);
+    marker_ids.insert(marker_ids.end(), gripper_a_ids.begin(), gripper_a_ids.end());
+    const auto gripper_b_ids = vis_->visualizeCubes(ns_prefix + RRT_PATH_GRIPPER_B_NS, gripper_b_cubes, Vector3d(0.005, 0.005, 0.005), gripper_b_forward_tree_color_, id);
+    marker_ids.insert(marker_ids.end(), gripper_b_ids.begin(), gripper_b_ids.end());
     if (draw_band)
     {
-        vis_->visualizeLines(RRT_SOLUTION_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Blue(), id);
+        const auto band_ids = vis_->visualizeLines(ns_prefix + RRT_PATH_RUBBER_BAND_NS, line_start_points, line_end_points, Visualizer::Blue(), id);
+        marker_ids.insert(marker_ids.end(), band_ids.begin(), band_ids.end());
     }
+
+    return marker_ids;
 }
 
-void BandRRT::visualizePolicy(const RRTPolicy& policy, const bool draw_band) const
+std::vector<Visualizer::NamespaceId> BandRRT::visualizePolicy(const RRTPolicy& policy, const bool draw_band) const
 {
+    std::vector<Visualizer::NamespaceId> marker_ids;
     for (size_t path_idx = 0; path_idx < policy.size(); ++path_idx)
     {
         const RRTPath& path = policy[path_idx].first;
-        visualizePath(path, (int32_t)path_idx + 1, draw_band);
+        const auto new_ids = visualizePath(path, "", (int32_t)path_idx + 1, draw_band);
+        marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
     }
+    return marker_ids;
 }
 
-void BandRRT::visualizeBlacklist() const
+std::vector<Visualizer::NamespaceId> BandRRT::visualizeBlacklist() const
 {
     VectorVector3d line_start_points;
     VectorVector3d line_end_points;
@@ -1563,7 +1587,7 @@ void BandRRT::visualizeBlacklist() const
         }
     }
 
-    vis_->visualizeLines(RRT_BLACKLISTED_GOAL_BANDS_NS, line_start_points, line_end_points, Visualizer::Red(), 1, 0.01);
+    return vis_->visualizeLines(RRT_BLACKLISTED_GOAL_BANDS_NS, line_start_points, line_end_points, Visualizer::Red(), 1, 0.01);
 }
 
 void BandRRT::storeTree(const RRTTree& tree, std::string file_path) const
@@ -3503,7 +3527,7 @@ void BandRRT::shortcutSmoothPath(
 
         if (visualization_enabled_globally_ && visualization_enabled_locally)
         {
-            visualizePath(path, visualization_idx, false);
+            visualizePath(path, "", visualization_idx, false);
             vis_->forcePublishNow(0.01);
         }
     }

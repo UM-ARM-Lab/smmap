@@ -303,9 +303,7 @@ namespace smmap
             const auto color = Visualizer::Green();
             const auto name = basename + "template__start";
             const auto new_ids = template_.starting_state_.planned_rubber_band_->visualize(name, color, color, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
         // Template - ending executed band
         if (vis_template_ending_executed_band)
@@ -313,9 +311,7 @@ namespace smmap
             const auto color = Visualizer::Cyan();
             const auto name = basename + "template__executed";
             const auto new_ids = template_.ending_state_.rubber_band_->visualize(name, color, color, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
         // Template - Executed band surface
         if (vis_template_executed_band_surface)
@@ -324,9 +320,7 @@ namespace smmap
             const auto end_color = Visualizer::Cyan();
             const auto name = basename + "template__band_surface";
             const auto new_ids = RubberBand::VisualizeBandSurface(vis, template_band_surface_, template_.microstep_band_history_.size(), start_color, end_color, name, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
         // Test - start planned band
         if (vis_test_start_planned_band)
@@ -334,9 +328,7 @@ namespace smmap
             const auto color = Visualizer::Yellow();
             const auto name = basename + "tested__start";
             const auto new_ids = tested_.starting_state_.planned_rubber_band_->visualize(name, color, color, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
         // Test - exectued band
         if (vis_test_executed_band)
@@ -344,9 +336,7 @@ namespace smmap
             const auto color = Visualizer::Orange();
             const auto name = basename + "tested__executed";
             const auto new_ids = tested_.ending_state_.rubber_band_->visualize(name, color, color, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
         // Test - Executed band surface
         if (vis_test_executed_band_surface)
@@ -355,9 +345,7 @@ namespace smmap
             const auto end_color = Visualizer::Orange();
             const auto name = basename + "tested__band_surface";
             const auto new_ids = RubberBand::VisualizeBandSurface(vis, tested_band_surface_, tested_.microstep_band_history_.size(), start_color, end_color, name, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
         // Adaptation process - default next band
         if (vis_adapt_default_next_band)
@@ -365,9 +353,7 @@ namespace smmap
             const auto color = Visualizer::Red();
             const auto name = basename + "adaptation__default_next_band";
             const auto new_ids = adaptation_result_.default_next_band_->visualize(name, color, color, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
         // Adaptation process - target band and action
         if (vis_adapt_target_band_and_action)
@@ -381,9 +367,7 @@ namespace smmap
                 colors.push_back(InterpolateColor(color, Visualizer::Red(), (float)idx / (float)num_divs));
             }
             const auto new_ids = vis->visualizePoints(name, adaptation_result_.target_points_to_match_, colors, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
         // Adaptation process - template band and action
         if (vis_adapt_template_band_and_action)
@@ -397,9 +381,7 @@ namespace smmap
                 colors.push_back(InterpolateColor(color, Visualizer::Red(), (float)idx / (float)num_divs));
             }
             const auto new_ids = vis->visualizePoints(name, adaptation_result_.template_points_to_align_, colors, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
         // Adaptation process - template aligned
         if (vis_adapt_template_aligned)
@@ -413,9 +395,7 @@ namespace smmap
                 colors.push_back(InterpolateColor(color, Visualizer::Red(), (float)idx / (float)num_divs));
             }
             const auto new_ids = vis->visualizePoints(name, adaptation_result_.template_planned_band_aligned_to_target_, colors, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
         // Adaptation process - next_band_points_to_smooth_
         if (vis_adapt_next_band_points_to_smooth)
@@ -423,9 +403,7 @@ namespace smmap
             const auto color = Visualizer::Seafoam();
             const auto name = basename + "adaptation__next_band_points_to_smooth";
             const auto new_ids = vis->visualizePoints(name, adaptation_result_.next_band_points_to_smooth_, color, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
         // Adaptation process - transformed_band_surface_points
         if (vis_adapt_transformed_band_surface_points)
@@ -434,9 +412,7 @@ namespace smmap
             const auto end_color = Visualizer::Seafoam();
             const auto name = basename + "adaptation__transformed_band_surface_points";
             const auto new_ids = RubberBand::VisualizeBandSurface(vis, adaptation_result_.transformed_band_surface_points_, template_.microstep_band_history_.size(), start_color, end_color, name, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
         // Adaptation process - re-tightened band surface
         if (vis_adapt_retightend_band_surface)
@@ -445,9 +421,7 @@ namespace smmap
             const auto end_color = Visualizer::Coral();
             const auto name = basename + "adaptation__tightened_transformed_bands_surface";
             const auto new_ids = RubberBand::VisualizeBandSurface(vis, adaptation_result_.tightened_transformed_bands_surface_, template_.microstep_band_history_.size(), start_color, end_color, name, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
         // Adaptation process - final result
         if (vis_adapt_final_result)
@@ -455,9 +429,7 @@ namespace smmap
             const auto color = Visualizer::Coral();
             const auto name = basename + "adaptation__result";
             const auto new_ids = adaptation_result_.result_->visualize(name, color, color, 1);
-            marker_ids.insert(marker_ids.end(),
-                              std::make_move_iterator(new_ids.begin()),
-                              std::make_move_iterator(new_ids.end()));
+            marker_ids.insert(marker_ids.end(), new_ids.begin(), new_ids.end());
         }
 
         return marker_ids;
@@ -1446,12 +1418,14 @@ namespace smmap
             return arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
         }();
 
+        // Convert the loaded records to a state trajectory
+        const auto trajectory = toTrajectory(test_result, path_to_start);
+
         // Load the transition example if possible
         const TransitionEstimation::StateTransition transition = [&]
         {
             if (!boost::filesystem::is_regular_file(example_mistake_file))
             {
-                const auto trajectory = toTrajectory(test_result, path_to_start);
                 const auto example = transition_estimator_->findMostRecentBadTransition(trajectory).Get();
 
                 std::vector<uint8_t> buffer;
@@ -1484,7 +1458,78 @@ namespace smmap
             }
         }
 
-        res.response = std::to_string(-1);
+        // Visualization
+        {
+            std::vector<Visualizer::NamespaceId> marker_ids;
+            const std::string ns_prefix = std::to_string(next_vis_prefix_) + "_";
+
+            // Planned Path
+            {
+                auto band_rrt = BandRRT(nh_,
+                                        ph_,
+                                        *world_params_,
+                                        planning_params_,
+                                        smoothing_params_,
+                                        task_params_,
+                                        vis_,
+                                        false);
+                const auto draw_bands = true;
+                const auto path_ids = band_rrt.visualizePath(path_to_start, ns_prefix + "PLANNED_", 1, draw_bands);
+                marker_ids.insert(marker_ids.end(), path_ids.begin(), path_ids.end());
+            }
+
+            // Actual Path
+            {
+                for (size_t idx = 0; idx < trajectory.size(); ++idx)
+                {
+                    const auto& state = trajectory[idx].first;
+                    const auto new_ids = state.rubber_band_->visualize(ns_prefix + "EXECUTED_BAND", Visualizer::Yellow(), Visualizer::Yellow(), (int32_t)(idx + 1));
+                    marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
+                }
+            }
+
+            // Discovered mistake
+            {
+                const auto new_ids1 = transition.starting_state_.planned_rubber_band_->visualize(
+                            ns_prefix + "MISTAKE_START_PLANNED",
+                            Visualizer::Green(),
+                            Visualizer::Green(),
+                            1);
+                const auto new_ids2 = transition.starting_state_.rubber_band_->visualize(
+                            ns_prefix + "MISTAKE_START_EXECUTED",
+                            Visualizer::Red(),
+                            Visualizer::Red(),
+                            1);
+                const auto new_ids3 = transition.ending_state_.planned_rubber_band_->visualize(
+                            ns_prefix + "MISTAKE_END_PLANNED",
+                            Visualizer::Olive(),
+                            Visualizer::Olive(),
+                            1);
+                const auto new_ids4 = transition.ending_state_.rubber_band_->visualize(
+                            ns_prefix + "MISTAKE_END_EXECUTED",
+                            Visualizer::Orange(),
+                            Visualizer::Orange(),
+                            1);
+
+                const auto new_ids5 = RubberBand::VisualizeBandSurface(
+                            vis_,
+                            transition.microstep_band_history_,
+                            Visualizer::Red(),
+                            Visualizer::Orange(),
+                            ns_prefix + "MISTAKE_EXECUTED_BAND_SURFACE",
+                            1);
+
+                marker_ids.insert(marker_ids.begin(), new_ids1.begin(), new_ids1.end());
+                marker_ids.insert(marker_ids.begin(), new_ids2.begin(), new_ids2.end());
+                marker_ids.insert(marker_ids.begin(), new_ids3.begin(), new_ids3.end());
+                marker_ids.insert(marker_ids.begin(), new_ids4.begin(), new_ids4.end());
+                marker_ids.insert(marker_ids.begin(), new_ids5.begin(), new_ids5.end());
+            }
+
+            res.response = std::to_string(next_vis_prefix_);
+            visid_to_markers_[res.response] = marker_ids;
+            ++next_vis_prefix_;
+        }
 
         ROS_INFO_STREAM("Added vis id: " << res.response << " for file " << req.data << std::endl
                         << "Planned vs executed start dist:     " << transition.starting_state_.planned_rubber_band_->distance(*transition.starting_state_.rubber_band_) << std::endl
