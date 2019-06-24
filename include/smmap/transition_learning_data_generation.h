@@ -110,13 +110,31 @@ namespace smmap
         void generateTestData();
         void generateLastStepTransitionApproximations();
         void generateMeaningfulMistakeExamples();
+        void generateFeatures();
 
-//        typedef std::pair<TransitionEstimation::State, std::vector<WorldState>> StateMicrostepsPair;
-        std::vector<std::pair<TransitionEstimation::State, std::vector<WorldState>>> toTrajectory(
+        typedef std::pair<TransitionEstimation::State, std::vector<WorldState>> StateMicrostepsPair;
+        std::vector<StateMicrostepsPair> toTrajectory(
                 const deformable_manipulation_msgs::TransitionTestResult& test,
                 const RRTPath& path);
 
     private:
+
+        //// Data saving and loading ///////////////////////////////////////////
+
+        void savePath(const RRTPath& path, const std::string& filename) const;
+        RRTPath loadPath(const std::string& filename) const;
+
+        void saveTestResult(const deformable_manipulation_msgs::TransitionTestResult& test_result, const std::string& filename) const;
+        deformable_manipulation_msgs::TransitionTestResult loadTestResult(const std::string& filename) const;
+
+        void saveStateTransition(const TransitionEstimation::StateTransition& state, const std::string& filename) const;
+        TransitionEstimation::StateTransition loadStateTransition(const std::string& filename) const;
+
+        void saveAdaptationResult(const TransitionEstimation::TransitionAdaptationResult& result, const std::string& filename) const;
+        TransitionEstimation::TransitionAdaptationResult loadAdaptationResult(const std::string& filename) const;
+
+        void saveTrajectory(const std::vector<StateMicrostepsPair>& trajectory, const std::string& filename) const;
+        std::vector<StateMicrostepsPair> loadTrajectory(const std::string& filename) const;
 
         //// Data Generation ///////////////////////////////////////////////////
 
