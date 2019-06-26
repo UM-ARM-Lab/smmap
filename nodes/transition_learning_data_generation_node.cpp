@@ -43,15 +43,19 @@ int main(int argc, char* argv[])
     transition_tester.runTests(
                 ROSHelpers::GetParam<bool>(*ph, "generate_test_data", false),
                 ROSHelpers::GetParam<bool>(*ph, "generate_transitions", false),
-                ROSHelpers::GetParam<bool>(*ph, "generate_meaningful_mistakes", false));
+                ROSHelpers::GetParam<bool>(*ph, "generate_meaningful_mistakes", false),
+                ROSHelpers::GetParam<bool>(*ph, "generate_features", true));
 
-    // Set the source to make sense, if this file exists
-    dmm::TransitionTestingVisualizationRequest req;
-    req.data = "cannonical_straight_test/unmodified__test_results.compressed";
-    dmm::TransitionTestingVisualizationResponse res;
-    transition_tester.setTransitionAdaptationSourceCallback(req, res);
-    ROS_INFO("Waiting for visualization requests...");
-    ros::spin();
+    if (!GetDisableAllVisualizations(*ph))
+    {
+        // Set the source to make sense, if this file exists
+        dmm::TransitionTestingVisualizationRequest req;
+        req.data = "cannonical_straight_test/unmodified__test_results.compressed";
+        dmm::TransitionTestingVisualizationResponse res;
+        transition_tester.setTransitionAdaptationSourceCallback(req, res);
+        ROS_INFO("Waiting for visualization requests...");
+        ros::spin();
+    }
 
     return EXIT_SUCCESS;
 }

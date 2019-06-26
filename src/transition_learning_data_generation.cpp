@@ -6,6 +6,8 @@
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/log.hpp>
 #include <arc_utilities/math_helpers.hpp>
+#include <arc_utilities/eigen_helpers.hpp>
+#include <sdf_tools/collision_map.hpp>
 #include <smmap_utilities/neighbours.h>
 #include <boost/filesystem.hpp>
 #include <deformable_manipulation_experiment_params/conversions.hpp>
@@ -178,6 +180,61 @@ namespace smmap
         }
 
         return trajectory;
+    }
+
+    sdf_tools::CollisionMapGrid ExtractEllipseSlice(
+            const sdf_tools::SignedDistanceField& sdf,
+            const Eigen::Isometry3d& origin,
+            const double resolution,
+            const int64_t x_cells,
+            const int64_t y_cells,
+            const int64_t z_cells,
+            const Vector3d ellipse_center,
+            const double x_axis_len2,
+            const double y_axis_len2)
+    {
+        assert(resolution > 0.0);
+        sdf_tools::CollisionMapGrid grid(origin,
+                                         sdf.GetFrame(),
+                                         resolution,
+                                         x_cells,
+                                         y_cells,
+                                         z_cells,
+                                         sdf_tools::COLLISION_CELL(1.0));
+
+        // We assume that the ellipse is axis aligned in the grid frame (x-major, y-minor)
+        const Vector3d ellipse_center_grid_frame = grid.GetInverseOriginTransform() * ellipse_center;
+
+        for (int64_t x_idx = 0; x_idx < x_cells; ++x_idx)
+        {
+            for (int64_t y_idx = 0; y_idx < y_cells; ++y_idx)
+            {
+                for (int64_t z_idx = 0; z_idx < z_cells; ++z_idx)
+                {
+                    const auto location_grid_frame = grid.GridIndexToLocationGridFrame(x_idx, y_idx, z_idx);
+                    const auto location_world_frame = grid.GetOriginTransform() * location_grid_frame;
+                    const auto dx = location_grid_frame(0) - ellipse_center_grid_frame.x();
+                    const auto dy = location_grid_frame(1) - ellipse_center_grid_frame.y();
+                    const bool inside_ellipse = (dx * dx / x_axis_len2 + dy * dy / y_axis_len2) < 1.0;
+
+                    // If the location is inside the ellipse, then check if it is filled,
+                    // otherwise eave it at the default "filled" value
+                    if (inside_ellipse)
+                    {
+                        const auto sdf_val = sdf.GetImmutable4d(location_world_frame);
+                        // If the sdf lookup is valid, then set the collision cell accordingly,
+                        // otherwise leave it at the default "filled" value
+                        if (sdf_val.second)
+                        {
+                            const auto occupancy = sdf_val.first > 0.0 ? 0.0f : 1.0f;
+                            grid.SetValue(x_idx, y_idx, z_idx, sdf_tools::COLLISION_CELL(occupancy));
+                        }
+                    }
+                }
+            }
+        }
+
+        return grid;
     }
 }
 
@@ -450,7 +507,8 @@ namespace smmap
         , ph_(std::move(ph))
         , robot_(std::move(robot))
         , vis_(std::move(vis))
-        , visualize_gripper_motion_(!GetDisableAllVisualizations(*ph_) && GetVisualizeGripperMotion(*ph_))
+        , disable_visualizations_(GetDisableAllVisualizations(*ph_))
+        , visualize_gripper_motion_(!disable_visualizations_ && GetVisualizeGripperMotion(*ph_))
 
         , seed_(GetPlannerSeed(*ph_))
         , generator_(std::make_shared<std::mt19937_64>(seed_))
@@ -663,6 +721,8 @@ namespace smmap
 
     std::vector<std::string> TransitionTesting::getDataFileList()
     {
+        ROS_INFO_STREAM("Finding data files in folder: " << data_folder_ << "/cannonical_straight_test");
+
         std::vector<std::string> files;
         const boost::filesystem::path p(data_folder_ + "/cannonical_straight_test");
         const boost::filesystem::recursive_directory_iterator start(p);
@@ -673,7 +733,8 @@ namespace smmap
             {
                 const auto filename = itr->path().string();
                 // Only warn about file types that are not expected
-                if (filename.find("compressed") == std::string::npos)
+                if (filename.find("compressed") == std::string::npos &&
+                    filename.find("failed") == std::string::npos)
                 {
                     ROS_WARN_STREAM("Ignoring file: " << filename);
                 }
@@ -690,7 +751,8 @@ namespace smmap
 
     void TransitionTesting::runTests(const bool generate_test_data,
                                      const bool generate_last_step_transition_approximations,
-                                     const bool generate_meaningful_mistake_examples)
+                                     const bool generate_meaningful_mistake_examples,
+                                     const bool generate_features)
     {
         if (generate_test_data)
         {
@@ -698,6 +760,8 @@ namespace smmap
             generateTestData();
             std::cout << "Data generation time taken: " << stopwatch(READ) << std::endl;
         }
+
+        data_files_ = getDataFileList();
 
         if (generate_last_step_transition_approximations)
         {
@@ -711,6 +775,13 @@ namespace smmap
             Stopwatch stopwatch;
             generateMeaningfulMistakeExamples();
             std::cout << "Finding meaningful mistake examples time taken: " << stopwatch(READ) << std::endl;
+        }
+
+        if (generate_features)
+        {
+            Stopwatch stopwatch;
+            generateFeatures();
+            std::cout << "Generate features time taken: " << stopwatch(READ) << std::endl;
         }
     }
 }
@@ -904,15 +975,22 @@ namespace smmap
 
                 for (size_t b_idx = 0; b_idx < perturbations.size(); ++b_idx)
                 {
+                    const Isometry3d gripper_b_starting_pose = Translation3d(perturbations[b_idx]) * gripper_b_starting_pose_;
+                    const Isometry3d gripper_b_ending_pose = Translation3d(gripper_b_action_vector_) * gripper_b_starting_pose;
+
+                    const std::string test_id("/gripper_b_" + ToString(perturbations[b_idx]));
+                    const std::string test_results_filename = folder + test_id + "__test_results.compressed";
+                    const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
+                    const std::string failure_file = folder + test_id + "__path_to_start.failure";
+
+                    // Check for the file flag that indicates that this test is not possible
+                    if (boost::filesystem::is_regular_file(failure_file))
+                    {
+                        continue;
+                    }
+
                     try
                     {
-                        const Isometry3d gripper_b_starting_pose = Translation3d(perturbations[b_idx]) * gripper_b_starting_pose_;
-                        const Isometry3d gripper_b_ending_pose = Translation3d(gripper_b_action_vector_) * gripper_b_starting_pose;
-
-                        const std::string test_id("/gripper_b_" + ToString(perturbations[b_idx]));
-                        const std::string test_results_filename = folder + test_id + "__test_results.compressed";
-                        const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
-
                         if (!boost::filesystem::is_regular_file(test_results_filename))
                         {
                             // Generate a path and convert the test to a ROS format (if needed)
@@ -944,6 +1022,11 @@ namespace smmap
                     }
                     catch (const std::runtime_error& ex)
                     {
+                        Log::Log failure_logger(failure_file, true);
+                        LOG_STREAM(failure_logger, "Unable to plan with perturbation"
+                                   << " a: " << perturbations[a_idx].transpose()
+                                   << " b: " << perturbations[b_idx].transpose()
+                                   << " Message: " << ex.what());
                         ROS_ERROR_STREAM_NAMED("data_generation", "Unable to plan with perturbation"
                                                << " a: " << perturbations[a_idx].transpose()
                                                << " b: " << perturbations[b_idx].transpose()
@@ -971,20 +1054,27 @@ namespace smmap
                 const Vector3d gripper_a_action_vector = gripper_a_action_vector_ + perturbations[a_idx];
                 for (size_t b_idx = 0; b_idx < perturbations.size(); ++b_idx)
                 {
+                    const Vector3d gripper_b_action_vector = gripper_b_action_vector_ + perturbations[b_idx];
+                    Vector3d gripper_a_action_vector_normalized = gripper_a_action_vector;
+                    Vector3d gripper_b_action_vector_normalized = gripper_b_action_vector;
+                    clampGripperDeltas(gripper_a_action_vector_normalized, gripper_b_action_vector_normalized);
+
+                    const Isometry3d gripper_a_ending_pose = Translation3d(gripper_a_action_vector_normalized) * gripper_a_starting_pose_;
+                    const Isometry3d gripper_b_ending_pose = Translation3d(gripper_b_action_vector_normalized) * gripper_b_starting_pose_;
+
+                    const std::string test_id("/gripper_b_" + ToString(perturbations[b_idx]));
+                    const std::string test_results_filename = folder + test_id + "__test_results.compressed";
+                    const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
+                    const std::string failure_file = folder + test_id + "__path_to_start.failure";
+
+                    // Check for the file flag that indicates that this test is not possible
+                    if (boost::filesystem::is_regular_file(failure_file))
+                    {
+                        continue;
+                    }
+
                     try
                     {
-                        const Vector3d gripper_b_action_vector = gripper_b_action_vector_ + perturbations[b_idx];
-                        Vector3d gripper_a_action_vector_normalized = gripper_a_action_vector;
-                        Vector3d gripper_b_action_vector_normalized = gripper_b_action_vector;
-                        clampGripperDeltas(gripper_a_action_vector_normalized, gripper_b_action_vector_normalized);
-
-                        const Isometry3d gripper_a_ending_pose = Translation3d(gripper_a_action_vector_normalized) * gripper_a_starting_pose_;
-                        const Isometry3d gripper_b_ending_pose = Translation3d(gripper_b_action_vector_normalized) * gripper_b_starting_pose_;
-
-                        const std::string test_id("/gripper_b_" + ToString(perturbations[b_idx]));
-                        const std::string test_results_filename = folder + test_id + "__test_results.compressed";
-                        const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
-
                         if (!boost::filesystem::is_regular_file(test_results_filename))
                         {
                             // Generate a path and convert the test to a ROS format (if needed)
@@ -1017,6 +1107,11 @@ namespace smmap
                     }
                     catch (const std::runtime_error& ex)
                     {
+                        Log::Log failure_logger(failure_file, true);
+                        LOG_STREAM(failure_logger, "Unable to plan with perturbation"
+                                   << " a: " << perturbations[a_idx].transpose()
+                                   << " b: " << perturbations[b_idx].transpose()
+                                   << " Message: " << ex.what());
                         ROS_ERROR_STREAM_NAMED("data_generation", "Unable to plan with perturbation"
                                                << " a: " << perturbations[a_idx].transpose()
                                                << " b: " << perturbations[b_idx].transpose()
@@ -1145,19 +1240,25 @@ namespace smmap
                     "TRUE_VS_ADAPTATION_EUCLIDEAN, "
                     "PLANNED_VS_ACTUAL_START_FOH, "
                     "PLANNED_VS_ACTUAL_START_EUCLIDEAN");
-        const auto files = getDataFileList();
         #pragma omp parallel for
-        for (size_t idx = 0; idx < files.size(); ++idx)
+        for (size_t idx = 0; idx < data_files_.size(); ++idx)
         {
-            const auto& test_result_file = files[idx];
+            const auto& test_result_file = data_files_[idx];
             const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
             const auto test_transition_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__test_transition.compressed";
             const auto adaptation_result_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__adaptation_record.compressed";
+            const auto failure_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__adaptation_record.failed";
 
             std::vector<std::string> dists_etc(DUMMY_ITEM, "");
             dists_etc[FILENAME] = test_result_file.substr(data_folder_.length() + 1);
             try
             {
+                // Check for the file flag that indicatest that this test is not possible
+                if (boost::filesystem::is_regular_file(failure_file))
+                {
+                    continue;
+                }
+
                 // Load the test result itself
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
 
@@ -1223,8 +1324,10 @@ namespace smmap
             }
             catch (const std::exception& ex)
             {
-                ROS_ERROR_STREAM("Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
-                dists_etc[ERROR_STRING] = ex.what();
+                Log::Log failure_logger(failure_file, true);
+                LOG_STREAM(failure_logger, "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
+                ROS_ERROR_STREAM_NAMED("last_step_approximations", "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
+                dists_etc[ERROR_STRING] = ex.what();                
             }
 
             LOG(logger, PrettyPrint::PrettyPrint(dists_etc, false, ", "));
@@ -1308,7 +1411,6 @@ namespace smmap
         const auto test_result_file = data_folder_ + "/" + req.data;
         const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
         const auto test_transition_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__test_transition.compressed";
-        const auto adaptation_result_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__adaptation_record.compressed";
 
         // Load the test result itself
         const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
@@ -1331,23 +1433,12 @@ namespace smmap
             }
         }();
 
-        // Load the adaptation record, if needed generate it first
-        const TransitionEstimation::TransitionAdaptationResult adaptation_result = [&]
-        {
-            if (!boost::filesystem::is_regular_file(adaptation_result_file))
-            {
-                const auto ar = transition_estimator_->generateTransition(
-                            source_transition_,
-                            *test_transition.starting_state_.planned_rubber_band_,
-                            test_transition.ending_gripper_positions_);
-                saveAdaptationResult(ar, adaptation_result_file);
-                return ar;
-            }
-            else
-            {
-                return loadAdaptationResult(adaptation_result_file);
-            }
-        }();
+        // Don't use any saved files as we could be using a different source transition
+        const TransitionEstimation::TransitionAdaptationResult adaptation_result =
+                transition_estimator_->generateTransition(
+                    source_transition_,
+                    *test_transition.starting_state_.planned_rubber_band_,
+                    test_transition.ending_gripper_positions_);
 
         const auto sim_record = TransitionSimulationRecord
         {
@@ -1420,18 +1511,24 @@ namespace smmap
                     "LARGEST_FOH_CHANGE_DIST, "
                     "NUM_FOH_CHANGES");
 
-        const auto files = getDataFileList();
         #pragma omp parallel for
-        for (size_t idx = 0; idx < files.size(); ++idx)
+        for (size_t idx = 0; idx < data_files_.size(); ++idx)
         {
-            const auto& test_result_file = files[idx];
+            const auto& test_result_file = data_files_[idx];
             const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
             const auto example_mistake_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__example_mistake.compressed";
+            const auto failure_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__example_mistake.failed";
 
             std::vector<std::string> dists_etc(DUMMY_ITEM, "");
             dists_etc[FILENAME] = test_result_file.substr(data_folder_.length() + 1);
             try
             {
+                // Check for the file flag that indicatest that this test is not possible
+                if (boost::filesystem::is_regular_file(failure_file))
+                {
+                    continue;
+                }
+
                 // Load the transition example if possible, otherwise generate it
                 const TransitionEstimation::StateTransition transition = [&]
                 {
@@ -1488,7 +1585,9 @@ namespace smmap
             }
             catch (const std::exception& ex)
             {
-                ROS_ERROR_STREAM("Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
+                Log::Log failure_logger(failure_file, true);
+                LOG_STREAM(failure_logger, "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
+                ROS_ERROR_STREAM_NAMED("meaningful_mistake", "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
                 dists_etc[ERROR_STRING] = ex.what();
             }
 
@@ -1690,26 +1789,57 @@ namespace smmap
 {
     void TransitionTesting::generateFeatures()
     {
-        Log::Log logger(data_folder_ + "/cannonical_straight_test/meaningful_mistake_features.csv", false);
-
-        const auto files = getDataFileList();
-        #pragma omp parallel for
-        for (size_t idx = 0; idx < files.size(); ++idx)
+        enum
         {
-            const auto& test_result_file = files[idx];
+            GRIPPER_A_PRE_X,
+            GRIPPER_A_PRE_Y,
+            GRIPPER_A_PRE_Z,
+            GRIPPER_B_PRE_X,
+            GRIPPER_B_PRE_Y,
+            GRIPPER_B_PRE_Z,
+            GRIPPER_A_POST_X,
+            GRIPPER_A_POST_Y,
+            GRIPPER_A_POST_Z,
+            GRIPPER_B_POST_X,
+            GRIPPER_B_POST_Y,
+            GRIPPER_B_POST_Z,
+            MAX_BAND_LENGTH,
+            STARTING_BAND_LENGTH,
+            ENDING_DEFAULT_BAND_LENGTH,
+            STARTING_MAJOR_AXIS_LENGTH,
+            STARTING_MINOR_AXIS_LENGTH,
+            ENDING_MAJOR_AXIS_LENGTH,
+            ENDING_MINOR_AXIS_LENGTH,
+            SLICE_NUM_CONNECTED_COMPONENTS_PRE,
+            SLICE_NUM_CONNECTED_COMPONENTS_POST,
+            DUMMY_ITEM
+        };
+
+//        Log::Log logger(data_folder_ + "/cannonical_straight_test/meaningful_mistake_features.csv", false);
+
+        int num_examples_pre_slice_3_components = 0;
+        int num_examples_pre_slice_not_3_components = 0;
+
+        #pragma omp parallel for
+        for (size_t file_idx = 0; file_idx < data_files_.size(); ++file_idx)
+        {
+            const auto& test_result_file = data_files_[file_idx];
             const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
             const auto trajectory_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__trajectory.compressed";
+            const auto features_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__classification_features.csv";
+//            const auto features_metadata_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__classification_metadata.csv";
+            Log::Log logger(features_file, false);
 
-//            std::vector<std::string> dists_etc(DUMMY_ITEM, "");
 //            dists_etc[FILENAME] = test_result_file.substr(data_folder_.length() + 1);
             try
             {
+                const RRTPath path_to_start = loadPath(path_to_start_file);
+
                 // Load the trajectory if possible, otherwise generate it
                 const std::vector<StateMicrostepsPair> trajectory = [&]
                 {
                     if (!boost::filesystem::is_regular_file(trajectory_file))
                     {
-                        const RRTPath path_to_start = loadPath(path_to_start_file);
                         const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
                         const auto traj = toTrajectory(test_result, path_to_start);
                         saveTrajectory(traj, trajectory_file);
@@ -1720,15 +1850,421 @@ namespace smmap
                         return loadTrajectory(trajectory_file);
                     }
                 }();
+
+                // Step through the trajectory, looking for cases where the prediction goes
+                // from homotopy match to homotopy mismatch and large Euclidean distance
+
+                assert(trajectory.size() > 0);
+                bool start_foh = transition_estimator_->checkFirstOrderHomotopy(
+                            *trajectory[0].first.planned_rubber_band_,
+                            *trajectory[0].first.rubber_band_);
+
+                for (size_t idx = 1; idx < trajectory.size(); ++idx)
+                {
+                    const auto& start_state = trajectory[idx - 1].first;
+                    const auto& end_state = trajectory[idx].first;
+                    const bool end_foh = transition_estimator_->checkFirstOrderHomotopy(
+                                *end_state.planned_rubber_band_,
+                                *end_state.rubber_band_);
+                    const auto dist = end_state.planned_rubber_band_->distance(*end_state.rubber_band_);
+
+                    const TransitionEstimation::StateTransition transition
+                    {
+                        start_state,
+                        end_state,
+                        start_state.planned_rubber_band_->getEndpoints(),
+                        end_state.planned_rubber_band_->getEndpoints(),
+                        trajectory[idx].second,
+                        transition_estimator_->reduceMicrostepsToBands(trajectory[idx].second)
+                    };
+                    const auto features = extractFeatures(transition);
+                    const bool mistake = (start_foh && !end_foh) && (dist > 0.5);
+                    LOG_STREAM(logger, std::to_string(mistake) << ", " << PrettyPrint::PrettyPrint(features,false, ", "));
+
+                    if (start_foh && !end_foh)
+                    {
+                        // Determine the FOH and distance values along the band surface
+                        Matrix2Xd dist_and_foh_values(2, transition.microstep_band_history_.size() - 1);
+                        for (size_t step_idx = 0; step_idx < transition.microstep_band_history_.size() - 1; ++step_idx)
+                        {
+                            RubberBand::Ptr b1 = transition.microstep_band_history_[step_idx];
+                            RubberBand::Ptr b2 = transition.microstep_band_history_[step_idx + 1];
+                            dist_and_foh_values(0, step_idx) = b1->distance(*b2);
+                            dist_and_foh_values(1, step_idx) = transition_estimator_->checkFirstOrderHomotopy(*b1, *b2);
+                        }
+                        int num_foh_changes = 0;
+                        for (ssize_t step_idx = 0; step_idx < dist_and_foh_values.cols() - 1; ++step_idx)
+                        {
+                            if (dist_and_foh_values(1, step_idx) != dist_and_foh_values(1, step_idx + 1))
+                            {
+                                ++num_foh_changes;
+                            }
+                        }
+
+
+                        // Visualization
+                        if (!disable_visualizations_)
+                        {
+                            std::vector<Visualizer::NamespaceId> marker_ids;
+                            const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
+
+                            // Remove any existing visualization at this id (if there is one)
+                            {
+                                dmm::TransitionTestingVisualizationRequest dmmreq;
+                                dmmreq.data = std::to_string(next_vis_prefix_);
+                                dmm::TransitionTestingVisualizationResponse dmmres;
+                                removeVisualizationCallback(dmmreq, dmmres);
+                            }
+
+                            // Planned Path
+                            {
+                                auto band_rrt = BandRRT(nh_,
+                                                        ph_,
+                                                        *world_params_,
+                                                        planning_params_,
+                                                        smoothing_params_,
+                                                        task_params_,
+                                                        vis_,
+                                                        false);
+                                const auto draw_bands = true;
+                                const auto path_ids = band_rrt.visualizePath(path_to_start, ns_prefix + "PLANNED_", 1, draw_bands);
+
+                                const auto gripper_a_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_A_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().first}, Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 2);
+                                const auto gripper_b_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_B_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().second}, Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), 2);
+
+                                marker_ids.insert(marker_ids.end(), path_ids.begin(), path_ids.end());
+                                marker_ids.insert(marker_ids.end(), gripper_a_last_id.begin(), gripper_a_last_id.end());
+                                marker_ids.insert(marker_ids.end(), gripper_b_last_id.begin(), gripper_b_last_id.end());
+                            }
+
+                            // Actual Path
+                            {
+                                for (size_t path_idx = 0; path_idx < trajectory.size(); ++path_idx)
+                                {
+                                    const auto& state = trajectory[path_idx].first;
+                                    const auto new_ids = state.rubber_band_->visualize(ns_prefix + "EXECUTED_BAND", Visualizer::Yellow(), Visualizer::Yellow(), (int32_t)(path_idx + 1));
+                                    marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
+                                }
+                            }
+
+                            // Discovered mistake
+                            {
+                                // Add the first band surface band
+                                {
+                                    const bool foh = dist_and_foh_values(1, 0);
+                                    const auto color = foh ? Visualizer::Green() : Visualizer::Red();
+                                    const auto ns = foh ? ns_prefix + "MISTAKE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "MISTAKE_EXECUTED_BAND_SURFACE_FOH_DIFF";
+                                    const auto new_ids = transition.microstep_band_history_.back()->visualize(ns, color, color, (int)(dist_and_foh_values.cols() + 1));
+                                    marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
+                                }
+                                // Add the "middle" band surface bands
+                                for (size_t step_idx = 1; step_idx < transition.microstep_band_history_.size() - 1; ++step_idx)
+                                {
+                                    const auto ratio = (float)(step_idx) / (float)(transition.microstep_band_history_.size() - 1);
+                                    const bool foh = (bool)dist_and_foh_values(1, step_idx - 1) && (bool)dist_and_foh_values(1, step_idx);
+                                    const auto color = foh
+                                            ? InterpolateColor(Visualizer::Green(), Visualizer::Cyan(), ratio)
+                                            : InterpolateColor(Visualizer::Red(), Visualizer::Magenta(), ratio);
+                                    const auto ns = foh ? ns_prefix + "MISTAKE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "MISTAKE_EXECUTED_BAND_SURFACE_FOH_DIFF";
+                                    const auto new_ids = transition.microstep_band_history_[step_idx]->visualize(ns, color, color, (int)(step_idx + 1));
+                                    marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
+                                }
+                                // Add the last band surface band
+                                {
+                                    const bool foh = dist_and_foh_values(1, dist_and_foh_values.cols() - 1);
+                                    const auto color = foh ? Visualizer::Cyan() : Visualizer::Magenta();
+                                    const auto ns = foh ? ns_prefix + "MISTAKE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "MISTAKE_EXECUTED_BAND_SURFACE_FOH_DIFF";
+                                    const auto new_ids = transition.microstep_band_history_.back()->visualize(ns, color, color, (int)(dist_and_foh_values.cols() + 1));
+                                    marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
+                                }
+
+                                // Add the planned vs executed start and end bands on their own namespaces
+                                {
+                                    const auto new_ids1 = transition.starting_state_.planned_rubber_band_->visualize(
+                                                ns_prefix + "MISTAKE_START_PLANNED",
+                                                Visualizer::Green(),
+                                                Visualizer::Green(),
+                                                1);
+                                    const auto new_ids2 = transition.starting_state_.rubber_band_->visualize(
+                                                ns_prefix + "MISTAKE_START_EXECUTED",
+                                                Visualizer::Red(),
+                                                Visualizer::Red(),
+                                                1);
+                                    const auto new_ids3 = transition.ending_state_.planned_rubber_band_->visualize(
+                                                ns_prefix + "MISTAKE_END_PLANNED",
+                                                Visualizer::Olive(),
+                                                Visualizer::Olive(),
+                                                1);
+                                    const auto new_ids4 = transition.ending_state_.rubber_band_->visualize(
+                                                ns_prefix + "MISTAKE_END_EXECUTED",
+                                                Visualizer::Orange(),
+                                                Visualizer::Orange(),
+                                                1);
+
+                                    marker_ids.insert(marker_ids.begin(), new_ids1.begin(), new_ids1.end());
+                                    marker_ids.insert(marker_ids.begin(), new_ids2.begin(), new_ids2.end());
+                                    marker_ids.insert(marker_ids.begin(), new_ids3.begin(), new_ids3.end());
+                                    marker_ids.insert(marker_ids.begin(), new_ids4.begin(), new_ids4.end());
+                                }
+                            }
+
+//                            res.response = std::to_string(next_vis_prefix_);
+                            visid_to_markers_[std::to_string(next_vis_prefix_)] = marker_ids;
+//                            ++next_vis_prefix_;
+
+//                            ROS_INFO_STREAM("Added vis id: " << std::to_string(next_vis_prefix_) << " for file " << test_result_file << std::endl
+//                                            << "Planned vs executed start FOH:      " << start_foh << std::endl
+//                                            << "Planned vs executed start dist:     " << transition.starting_state_.planned_rubber_band_->distance(*transition.starting_state_.rubber_band_) << std::endl
+//                                            << "Planned vs executed end FOH:        " << end_foh << std::endl
+//                                            << "Planned vs executed end dist:       " << transition.ending_state_.planned_rubber_band_->distance(*transition.ending_state_.rubber_band_) << std::endl
+//                                            << "Start vs end dist planned:          " << transition.starting_state_.planned_rubber_band_->distance(*transition.ending_state_.planned_rubber_band_) << std::endl
+//                                            << "Start vs end dist executed:         " << transition.starting_state_.rubber_band_->distance(*transition.ending_state_.rubber_band_) << std::endl
+//                                            << "Num FOH changes:                    " << num_foh_changes << std::endl
+//                                            << "Distance and FOH values along band surface:\n" << dist_and_foh_values.transpose() << std::endl);
+                            if (features[SLICE_NUM_CONNECTED_COMPONENTS_PRE] != std::to_string(3))
+                            {
+                                ++num_examples_pre_slice_not_3_components;
+                                ROS_INFO_STREAM_NAMED("features", test_result_file << ": Transition from same FOH to different FOH at idx: " << idx << " with distance " << dist);
+                                ROS_INFO_STREAM_NAMED("features", PrettyPrint::PrettyPrint(features, false, ", "));
+                                ROS_INFO_STREAM_NAMED("features", "Examples with 3 components: " << num_examples_pre_slice_3_components << "   Not 3 components: " << num_examples_pre_slice_not_3_components);
+
+//                                PressAnyKeyToContinue();
+                            }
+                            else
+                            {
+                                ++num_examples_pre_slice_3_components;
+                            }
+                        }
+                    }
+                }
             }
             catch (const std::exception& ex)
             {
-                ROS_ERROR_STREAM("Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
+                ROS_ERROR_STREAM("Error parsing idx: " << file_idx << " file: " << test_result_file << ": " << ex.what());
 //                dists_etc[ERROR_STRING] = ex.what();
             }
 
 //            LOG(logger, PrettyPrint::PrettyPrint(dists_etc, false, ", "));
         }
+    }
+
+    std::vector<std::string> TransitionTesting::extractFeatures(const TransitionEstimation::StateTransition& transition) const
+    {
+        enum
+        {
+            GRIPPER_A_PRE_X,
+            GRIPPER_A_PRE_Y,
+            GRIPPER_A_PRE_Z,
+            GRIPPER_B_PRE_X,
+            GRIPPER_B_PRE_Y,
+            GRIPPER_B_PRE_Z,
+            GRIPPER_A_POST_X,
+            GRIPPER_A_POST_Y,
+            GRIPPER_A_POST_Z,
+            GRIPPER_B_POST_X,
+            GRIPPER_B_POST_Y,
+            GRIPPER_B_POST_Z,
+            MAX_BAND_LENGTH,
+            STARTING_BAND_LENGTH,
+            ENDING_DEFAULT_BAND_LENGTH,
+            STARTING_MAJOR_AXIS_LENGTH,
+            STARTING_MINOR_AXIS_LENGTH,
+            ENDING_MAJOR_AXIS_LENGTH,
+            ENDING_MINOR_AXIS_LENGTH,
+            SLICE_NUM_CONNECTED_COMPONENTS_PRE,
+            SLICE_NUM_CONNECTED_COMPONENTS_POST,
+            DUMMY_ITEM
+        };
+
+        const Vector3d mid_point_pre =
+                (transition.starting_gripper_positions_.first +
+                 transition.starting_gripper_positions_.second) / 2.0;
+
+        const Vector3d mid_point_post =
+                (transition.ending_gripper_positions_.first +
+                 transition.ending_gripper_positions_.second) / 2.0;
+
+        const Vector3d midpoint_translation =  mid_point_post - mid_point_pre;
+
+        const Vector3d mid_to_gripper_b_pre =
+                (transition.starting_gripper_positions_.second -
+                 mid_point_pre);
+
+        const Vector3d mid_to_gripper_b_post =
+                (transition.ending_gripper_positions_.second -
+                 mid_point_post);
+
+        // Transform the starting gipper positions to "neutral":
+        //      Centered on the origin (midpoint of the starting gripper positions)
+        //      World-z defines the transformed z-direction
+        //      +'ve x pointing towards gripper b
+        //          If the grippers are directly in line with the z-axis
+        //          then use the (average) direction of motion to define the y-axis
+        //              If the direction of motion is directly in line with the z-axis
+        //              then use use world x and y to define the rotation
+        const Isometry3d origin = [&]
+        {
+            Vector3d x_axis;
+            Vector3d y_axis;
+            const Vector3d z_axis = Vector3d::UnitZ();
+            if (!mid_to_gripper_b_pre.normalized().isApprox(Vector3d::UnitZ()))
+            {
+                x_axis = Vector3d(mid_to_gripper_b_pre.x(), mid_to_gripper_b_pre.y(), 0.0).normalized();
+                y_axis = z_axis.cross(x_axis).normalized();
+            }
+            else
+            {
+                if (!midpoint_translation.normalized().isApprox(Vector3d::UnitZ()))
+                {
+                    y_axis = Vector3d(midpoint_translation.x(), midpoint_translation.y(), 0.0);
+                    x_axis = y_axis.cross(x_axis).normalized();
+                }
+                else
+                {
+                    x_axis = Vector3d::UnitX();
+                    y_axis = Vector3d::UnitX();
+                }
+            }
+
+            return Isometry3d((Matrix4d() << x_axis, y_axis, z_axis, mid_point_pre,
+                                             0.0,    0.0,    0.0,    1.0).finished());
+        }();
+        const Isometry3d inv_origin = origin.inverse();
+
+        const Vector3d gripper_a_pre = inv_origin * transition.starting_gripper_positions_.first;
+        const Vector3d gripper_b_pre = inv_origin * transition.starting_gripper_positions_.second;
+        const Vector3d gripper_a_post = inv_origin * transition.ending_gripper_positions_.first;
+        const Vector3d gripper_b_post = inv_origin * transition.ending_gripper_positions_.second;
+
+        const double band_length_pre = transition.starting_state_.planned_rubber_band_->totalLength();
+        const double default_band_length_post = transition.ending_state_.planned_rubber_band_->totalLength();
+
+        const double dmax = initial_band_->maxSafeLength();
+        const double major_axis_length_pre = dmax / 2.0;
+        const double minor_axis_length_pre = std::sqrt(dmax * dmax / 4.0 - mid_to_gripper_b_pre.squaredNorm());
+        const double major_axis_length_post = dmax / 2.0;
+        const double minor_axis_length_post = std::sqrt(dmax * dmax / 4.0 - mid_to_gripper_b_post.squaredNorm());
+
+        const double resolution = work_space_grid_.minStepDimension() / 2.0;
+        sdf_tools::CollisionMapGrid collision_grid_pre = [&]
+        {
+            const int64_t x_cells_half = (int64_t)std::ceil(major_axis_length_pre / resolution) + 1;
+            const int64_t y_cells_half = (int64_t)std::ceil(minor_axis_length_pre / resolution) + 1;
+            // Rotate the origin transform to align the x-axis with the major axis
+            // of the ellipse defined by using the gripper positions as foci,
+            const Isometry3d collision_map_origin = [&]
+            {
+                const Vector3d x_axis = mid_to_gripper_b_pre.normalized();
+                // TODO: what if v2 is ill defined? Do the same process as the other origin
+                const Vector3d y_axis = (Vector3d::UnitZ() - x_axis.z() * x_axis).normalized();
+                const Vector3d z_axis = x_axis.cross(y_axis).normalized();
+                const Isometry3d center((Matrix4d() << x_axis, y_axis, z_axis, mid_point_pre,
+                                                       0.0,    0.0,    0.0,    1.0).finished());
+                const Vector3d offset = Vector3d(-resolution * (double)x_cells_half,
+                                                 -resolution * (double)y_cells_half,
+                                                 -resolution / 2.0);
+                return center * Translation3d(offset);
+            }();
+
+//            const Vector3d x_axis = mid_to_gripper_b_pre.normalized();
+//            // TODO: what if v2 is ill defined? Do the same process as the other origin
+//            const Vector3d y_axis = (Vector3d::UnitZ() - x_axis.z() * x_axis).normalized();
+//            const Vector3d z_axis = x_axis.cross(y_axis).normalized();
+//            const Isometry3d center((Matrix4d() << x_axis, y_axis, z_axis, mid_point_pre,
+//                                                   0.0,    0.0,    0.0,    1.0).finished());
+//            ObjectPointSet ellipse_points(3, 201);
+//            for (size_t idx = 0; idx <= 200; ++idx)
+//            {
+//                const double theta = (2.0 * M_PI / 200.0) * (double)idx;
+//                const double x = major_axis_length_pre * std::cos(theta);
+//                const double y = minor_axis_length_pre * std::sin(theta);
+//                ellipse_points.col(idx) = center * Vector3d(x, y, 0.0);
+//            }
+//            vis_->visualizePoints("ellipse_pre", ellipse_points, Visualizer::Blue(), 1);
+
+            return ExtractEllipseSlice(
+                        *sdf_,
+                        collision_map_origin,
+                        resolution,
+                        2 * x_cells_half,
+                        2 * y_cells_half,
+                        1,
+                        mid_point_pre,
+                        std::pow(major_axis_length_pre, 2),
+                        std::pow(minor_axis_length_pre, 2));
+        }();
+        const auto num_connected_components_pre = collision_grid_pre.UpdateConnectedComponents();
+
+        sdf_tools::CollisionMapGrid collision_grid_post = [&]
+        {
+            const int64_t x_cells_half = (int64_t)std::ceil(major_axis_length_post / resolution) + 1;
+            const int64_t y_cells_half = (int64_t)std::ceil(minor_axis_length_post / resolution) + 1;
+            // Rotate the origin transform to align the x-axis with the major axis
+            // of the ellipse defined by using the gripper positions as foci,
+            const Isometry3d collision_map_origin = [&]
+            {
+                const Vector3d x_axis = mid_to_gripper_b_post.normalized();
+                // TODO: what if v2 is ill defined? Do the same process as the other origin
+                const Vector3d y_axis = (Vector3d::UnitZ() - x_axis.z() * x_axis).normalized();
+                const Vector3d z_axis = x_axis.cross(y_axis).normalized();
+                const Isometry3d center((Matrix4d() << x_axis, y_axis, z_axis, mid_point_post,
+                                                       0.0,    0.0,    0.0,    1.0).finished());
+                const Vector3d offset = Vector3d(-resolution * (double)x_cells_half,
+                                                 -resolution * (double)y_cells_half,
+                                                 -resolution / 2.0);
+                return center * Translation3d(offset);
+            }();
+            return ExtractEllipseSlice(
+                        *sdf_,
+                        collision_map_origin,
+                        resolution,
+                        2 * x_cells_half,
+                        2 * y_cells_half,
+                        1,
+                        mid_point_post,
+                        std::pow(major_axis_length_post, 2),
+                        std::pow(minor_axis_length_post, 2));
+        }();
+        const auto num_connected_components_post = collision_grid_post.UpdateConnectedComponents();
+
+        if (!disable_visualizations_)
+        {
+            auto collision_grid_marker_pre = collision_grid_pre.ExportForDisplay(Visualizer::Red(), Visualizer::Green(), Visualizer::Blue());
+            auto collision_grid_marker_post = collision_grid_post.ExportForDisplay(Visualizer::Orange(), Visualizer::Seafoam(), Visualizer::Blue());
+            collision_grid_marker_pre.ns = "collision_grid_pre";
+            collision_grid_marker_post.ns = "collision_grid_post";
+            vis_->publish(collision_grid_marker_pre);
+            vis_->publish(collision_grid_marker_post);
+        }
+
+        std::vector<std::string> features(DUMMY_ITEM, "");
+
+        features[GRIPPER_A_PRE_X] = std::to_string(gripper_a_pre.x());
+        features[GRIPPER_A_PRE_Y] = std::to_string(gripper_a_pre.y());
+        features[GRIPPER_A_PRE_Z] = std::to_string(gripper_a_pre.z());
+        features[GRIPPER_B_PRE_X] = std::to_string(gripper_b_pre.x());
+        features[GRIPPER_B_PRE_Y] = std::to_string(gripper_b_pre.y());
+        features[GRIPPER_B_PRE_Z] = std::to_string(gripper_b_pre.z());
+        features[GRIPPER_A_POST_X] = std::to_string(gripper_a_post.x());
+        features[GRIPPER_A_POST_Y] = std::to_string(gripper_a_post.y());
+        features[GRIPPER_A_POST_Z] = std::to_string(gripper_a_post.z());
+        features[GRIPPER_B_POST_X] = std::to_string(gripper_b_post.x());
+        features[GRIPPER_B_POST_Y] = std::to_string(gripper_b_post.y());
+        features[GRIPPER_B_POST_Z] = std::to_string(gripper_b_post.z());
+
+        features[MAX_BAND_LENGTH] = std::to_string(dmax);
+        features[STARTING_BAND_LENGTH] = std::to_string(band_length_pre);
+        features[ENDING_DEFAULT_BAND_LENGTH] = std::to_string(default_band_length_post);
+
+        features[STARTING_MAJOR_AXIS_LENGTH] = std::to_string(major_axis_length_pre);
+        features[STARTING_MINOR_AXIS_LENGTH] = std::to_string(minor_axis_length_pre);
+        features[ENDING_MAJOR_AXIS_LENGTH] = std::to_string(major_axis_length_post);
+        features[ENDING_MINOR_AXIS_LENGTH] = std::to_string(minor_axis_length_post);
+
+        features[SLICE_NUM_CONNECTED_COMPONENTS_PRE] = std::to_string(num_connected_components_pre);
+        features[SLICE_NUM_CONNECTED_COMPONENTS_POST] = std::to_string(num_connected_components_post);
+
+        return features;
     }
 }
 

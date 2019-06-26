@@ -55,6 +55,7 @@ namespace smmap
         const std::shared_ptr<ros::NodeHandle> ph_;
         const RobotInterface::Ptr robot_;
         const Visualizer::Ptr vis_;
+        const bool disable_visualizations_;
         const bool visualize_gripper_motion_;
 
         const unsigned long seed_;
@@ -102,15 +103,18 @@ namespace smmap
                 Eigen::Ref<Eigen::Vector3d> a_delta,
                 Eigen::Ref<Eigen::Vector3d> b_delta) const;
         std::vector<std::string> getDataFileList();
+        std::vector<std::string> data_files_;
 
     public:
         void runTests(const bool generate_test_data,
                       const bool generate_last_step_transition_approximations,
-                      const bool generate_meaningful_mistake_examples);
+                      const bool generate_meaningful_mistake_examples,
+                      const bool generate_features);
         void generateTestData();
         void generateLastStepTransitionApproximations();
         void generateMeaningfulMistakeExamples();
         void generateFeatures();
+        std::vector<std::string> extractFeatures(const TransitionEstimation::StateTransition& transition) const;
 
         typedef std::pair<TransitionEstimation::State, std::vector<WorldState>> StateMicrostepsPair;
         std::vector<StateMicrostepsPair> toTrajectory(
