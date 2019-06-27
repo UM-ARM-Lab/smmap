@@ -734,7 +734,8 @@ namespace smmap
                 const auto filename = itr->path().string();
                 // Only warn about file types that are not expected
                 if (filename.find("compressed") == std::string::npos &&
-                    filename.find("failed") == std::string::npos)
+                    filename.find("failed") == std::string::npos &&
+                    filename.find("classification_features") == std::string::npos)
                 {
                     ROS_WARN_STREAM("Ignoring file: " << filename);
                 }
