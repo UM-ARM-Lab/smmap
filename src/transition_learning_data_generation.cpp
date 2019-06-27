@@ -1885,7 +1885,7 @@ namespace smmap
                         const bool mistake = (start_foh && !end_foh) && (dist > 0.5);
                         LOG_STREAM(logger, std::to_string(mistake) << ", " << PrettyPrint::PrettyPrint(features,false, ", "));
 
-                        if (start_foh && !end_foh)
+                        if (start_foh && !end_foh && !disable_visualizations_)
                         {
                             // Determine the FOH and distance values along the band surface
                             Matrix2Xd dist_and_foh_values(2, transition.microstep_band_history_.size() - 1);
@@ -1907,7 +1907,7 @@ namespace smmap
 
 
                             // Visualization
-                            if (!disable_visualizations_)
+//                            if (!disable_visualizations_)
                             {
                                 std::vector<Visualizer::NamespaceId> marker_ids;
                                 const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
