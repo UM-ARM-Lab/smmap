@@ -244,8 +244,13 @@ namespace smmap
     std::pair<double, double> FindParabolaCoeffs(
             const double x1,
             const double y1,
-            const double length)
+            const double length,
+            const bool verbose = false)
     {
+        if (verbose)
+        {
+            std::cout << "x1: " << x1 << "    y1: " << y1 << "    length: " << length << std::endl;
+        }
         assert(x1 > 0.0);
 
         // Precomputed as it is used multiple places
@@ -283,14 +288,30 @@ namespace smmap
         const auto EPSILON = 1e-10;
         // Start with a guess that is guaranteed to be positive, and could be in vaguely the right place
         double guess = std::abs(ratio) + 1.0;
-//        std::cout << "0: " << guess << " : " << arc_len_fn(guess) << std::endl;
+        if (verbose)
+        {
+            std::cout << "0: " << guess << " : " << arc_len_fn(guess) << std::endl;
+        }
 
         for (int n = 0; n < N; ++n)
         {
             const auto dguess = (arc_len_fn(guess) - length) / darc_len_fn(guess);
             guess -= dguess;
-            assert(guess > 0.0);
-//            std::cout << n+1 << ": " << guess << " : " << arc_len_fn(guess) << std::endl;
+            if (verbose)
+            {
+                std::cout << n+1 << ": " << guess << " : " << arc_len_fn(guess) << std::endl;
+                if (guess <= 0.0)
+                {
+                    PressAnyKeyToContinue("Weirdness in FindCoeffs");
+                }
+            }
+            else
+            {
+                if (guess <= 0.0)
+                {
+                    FindParabolaCoeffs(x1, y1, length, true);
+                }
+            }
             if (std::abs(dguess) <= EPSILON)
             {
                 break;
@@ -2110,7 +2131,7 @@ namespace smmap
             DUMMY_ITEM
         };
 
-        std::vector<std::string> feature_names =
+        const std::vector<std::string> feature_names =
         {
             std::string("GRIPPER_A_PRE_X"),
             std::string("GRIPPER_A_PRE_Y"),
