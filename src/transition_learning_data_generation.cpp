@@ -236,6 +236,290 @@ namespace smmap
 
         return grid;
     }
+
+    // Assumes that (x0, y0) is the origin, and thus c = 0. Returns (a, b)
+    // such that y = a*x^2 + b*x + 0; such that the arc length from (0, 0) to
+    // (x1, y1) = 'length', and the parabola is convex. Also assumes that x1 is positive.
+    // https://stackoverflow.com/questions/48486254/determine-parabola-with-given-arc-length-between-two-known-points
+    std::pair<double, double> FindParabolaCoeffs(
+            const double x1,
+            const double y1,
+            const double length)
+    {
+        assert(x1 > 0.0);
+
+        // Precomputed as it is used multiple places
+        const auto ratio = y1 / x1;
+
+        // Simplified formula inside the integral for the arc length of a parabola
+        const auto dIntegral = [] (const double t)
+        {
+            return std::sqrt(1.0 + t*t);
+        };
+
+        // The result of integrating dIntegral without applying bounds
+        const auto Integral = [] (const double t)
+        {
+            const auto rt = std::sqrt(1.0 + t*t);
+            return 0.5 * (t * rt + std::log(t + rt));
+        };
+
+        // The arclength of a parabola based on the above
+        const auto arc_len_fn = [&] (const double a)
+        {
+            const auto upper = ratio + a*x1;
+            const auto lower = ratio - a*x1;
+            return 0.5 * (Integral(upper) - Integral(lower)) / a;
+        };
+
+        const auto darc_len_fn = [&] (const double a)
+        {
+            const auto upper = ratio + a*x1;
+            const auto lower = ratio - a*x1;
+            return 0.5 * (a*x1 * (dIntegral(upper) + dIntegral(lower)) + Integral(lower) - Integral(upper)) / (a*a);
+        };
+
+        const auto N = 1000;
+        const auto EPSILON = 1e-10;
+        // Start with a guess that is guaranteed to be positive, and could be in vaguely the right place
+        double guess = std::abs(ratio) + 1.0;
+//        std::cout << "0: " << guess << " : " << arc_len_fn(guess) << std::endl;
+
+        for (int n = 0; n < N; ++n)
+        {
+            const auto dguess = (arc_len_fn(guess) - length) / darc_len_fn(guess);
+            guess -= dguess;
+            assert(guess > 0.0);
+//            std::cout << n+1 << ": " << guess << " : " << arc_len_fn(guess) << std::endl;
+            if (std::abs(dguess) <= EPSILON)
+            {
+                break;
+            }
+        }
+
+        const auto a = guess;
+        const auto b = ratio - a*x1;
+
+        return {a, b};
+    }
+
+    sdf_tools::CollisionMapGrid ExtractParabolaSlice(
+            const sdf_tools::SignedDistanceField& sdf,
+            const double resolution,
+            const PairGripperPositions& gripper_positions,
+            const double parabola_length,
+            const std::shared_ptr<Visualizer> vis_ = nullptr)
+    {
+        const double half_res = 0.5 * resolution;
+        // Special case the instance when the grippers are in line with the gravity vector
+        const Vector3d gripper_delta = gripper_positions.second - gripper_positions.first;
+        const double gripper_seperation = gripper_delta.norm();
+        if (gripper_delta.normalized().isApprox(Vector3d::UnitZ()))
+        {
+            // Return a grid which is bloated by 1 cell around the z-axis
+            // and is thus 3x1x(N+2) in size, with the outer rectangle marked as
+            // "out of bounds". Which dimension is "3" and which is "1" does not
+            // matter as only the central portion is looked up in the SDF anyway
+            const int64_t x_cells = 3;
+            const int64_t y_cells = 1;
+            const int64_t z_cells = (int64_t)std::ceil(parabola_length / 2.0 + gripper_seperation) + 2;
+
+            sdf_tools::CollisionMapGrid grid(Isometry3d(Translation3d(
+                                                 gripper_positions.first.x(),
+                                                 gripper_positions.first.y(),
+                                                 (parabola_length - gripper_seperation) / 2.0)),
+                                             sdf.GetFrame(),
+                                             resolution,
+                                             x_cells,
+                                             y_cells,
+                                             z_cells,
+                                             sdf_tools::COLLISION_CELL(1.0),
+                                             sdf_tools::COLLISION_CELL(1.0));
+
+            const int64_t x_idx = 1;
+            const int64_t y_idx = 0;
+            for (int64_t z_idx = 1; z_idx < z_cells - 1; ++z_idx)
+            {
+                const auto location_world_frame = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                const auto sdf_val = sdf.GetImmutable4d(location_world_frame);
+                // If the sdf lookup is valid, then set the collision cell accordingly,
+                // otherwise leave it at the default "filled" value
+                if (sdf_val.second)
+                {
+                    const auto occupancy = sdf_val.first > 0.0 ? 0.0f : 1.0f;
+                    grid.SetValue(x_idx, y_idx, z_idx, sdf_tools::COLLISION_CELL(occupancy));
+                }
+            }
+
+            return grid;
+        }
+
+        // For the purposes of calculating the parabola coefficients, rotate the
+        // frame so that gripper_positions.first is at the origin, with the
+        // gravity vector pointing along positive-y, and
+        const Isometry3d parabola_origin = [&]
+        {
+            const Vector3d x_axis = Vector3d(gripper_delta.x(), gripper_delta.y(), 0.0).normalized();
+            const Vector3d y_axis = Vector3d::UnitZ();
+            const Vector3d z_axis = x_axis.cross(y_axis).normalized();
+
+            return Isometry3d((Matrix4d() << x_axis, y_axis, z_axis, gripper_positions.first,
+                                             0.0,    0.0,    0.0,    1.0).finished());
+        }();
+        const Isometry3d parabola_origin_inv = parabola_origin.inverse();
+        const Vector3d second_point_parabola_frame = parabola_origin_inv * gripper_positions.second;
+        const Vector2d line_normal_parabola_frame(-second_point_parabola_frame.y(), second_point_parabola_frame.x());
+        const auto coeffs = FindParabolaCoeffs(second_point_parabola_frame.x(), second_point_parabola_frame.y(), parabola_length);
+        const double a = coeffs.first;
+        const double b = coeffs.second;
+        const auto parabola_eqn = [&] (const double x)
+        {
+            return a * x * x + b * x;
+        };
+        // Ensure that the parabola is convex:
+        assert(a >= 0.0 && "Parabola must be convex");
+        // If b is positive, then there is not enough slack to create a loop below the gripper
+        const double x_min = 0.0;
+        const double x_max = second_point_parabola_frame.x();
+        const double x_lowest = ClampValue(-b/(2*a), x_min, x_max);
+        const double y_min = parabola_eqn(x_lowest);
+        const double y_max = std::max(0.0, second_point_parabola_frame(1));
+        const double x_range = x_max - x_min;
+        const double y_range = y_max - y_min;
+        assert(y_max >= y_min);
+        const int64_t x_cells = (int64_t)std::ceil(x_range / resolution) + 2;
+        const int64_t y_cells = (int64_t)std::ceil(y_range / resolution) + 2;
+        const int64_t z_cells = 1;
+
+//        std::cout << "Gripper pair:                " << PrettyPrint::PrettyPrint(gripper_positions, false, ", ") << std::endl;
+//        std::cout << "second_point_parabola_frame: " << second_point_parabola_frame.transpose() << std::endl;
+//        std::cout << "x_min: " << x_min << " x_max: " << x_max << " x_lowest: " << x_lowest << std::endl;
+//        std::cout << "y_min: " << y_min << " y_max: " << y_max << std::endl;
+
+        // Move the origin to center the parabola; will ensure a 1 cell boundary by construction
+        const Vector3d grid_offset(x_min - 0.5 * (resolution * (double)x_cells - x_range),  // Center the valid region of the voxel grid between the grippers
+                                   y_min - 0.5 * (resolution * (double)y_cells - y_range),  // Center the valid region of the voxel grid on the parabola
+                                   -0.5 * resolution);                                      // Shift half a cell to put the slice directly overtop of the grippers
+//        std::cout << "Grid offset:      " << grid_offset.transpose() << std::endl;
+//        std::cout << "Parabola origin:  " << parabola_origin.translation().transpose() << std::endl;
+//        std::cout << "Grid origin:      " << (parabola_origin * Translation3d(grid_offset)).translation().transpose() << std::endl;
+//        std::cout << std::endl;
+
+        sdf_tools::CollisionMapGrid grid(parabola_origin * Translation3d(grid_offset),
+                                         sdf.GetFrame(),
+                                         resolution,
+                                         x_cells,
+                                         y_cells,
+                                         z_cells,
+                                         sdf_tools::COLLISION_CELL(1.0),
+                                         sdf_tools::COLLISION_CELL(1.0));
+
+        if (vis_ != nullptr)
+        {
+            const VectorXd x = VectorXd::LinSpaced(1000, 0.0, x_max);
+            const VectorXd y = x.unaryExpr(parabola_eqn);
+            const VectorXd z = VectorXd::Zero(x.rows());
+            vis_->visualizeLineStrip("parabola",
+                                     parabola_origin * (ObjectPointSet(3, x.rows()) << x.transpose(),
+                                                                                       y.transpose(),
+                                                                                       z.transpose()).finished(),
+                                     Visualizer::Blue(), 1, 0.002);
+            vis_->visualizeLineStrip("parabola",
+                                     (ObjectPointSet(3, 2) << gripper_positions.first, gripper_positions.second).finished(),
+                                     Visualizer::Blue(), 2, 0.002);
+            vis_->visualizeAxes("parabola_origin", parabola_origin, 0.05, 0.005, 1);
+        }
+
+        // Iterate through the grid, only considering cells inside the parabola
+        for (int64_t x_idx = 1; x_idx < x_cells - 1; ++x_idx)
+        {
+            for (int64_t y_idx = 1; y_idx < y_cells - 1; ++y_idx)
+            {
+                const int64_t z_idx = 0;
+                const auto location_grid_frame = grid.GridIndexToLocationGridFrame(x_idx, y_idx, z_idx);
+                const auto location_world_frame = grid.GetOriginTransform() * location_grid_frame;
+
+                const Vector2d point_parabola_frame = (parabola_origin_inv * location_world_frame).head<2>();
+                const bool above_parabola = point_parabola_frame.y() >= parabola_eqn(point_parabola_frame.x());
+                const bool below_line = line_normal_parabola_frame.dot(point_parabola_frame) <= 0.0;
+
+//                std::cout << location_parabola_frame.head<2>().transpose() << " Above Parabola: " << above_parabola << " Below Line: " << below_line << std::endl;
+
+                // If the location is inside the parabola, then check if it is filled,
+                if (above_parabola && below_line)
+                {
+                    const auto sdf_val = sdf.GetImmutable4d(location_world_frame);
+                    // If the sdf lookup is valid, then set the collision cell accordingly,
+                    // otherwise leave it at the default "filled" value
+                    if (sdf_val.second)
+                    {
+                        const auto occupancy = sdf_val.first > 0.0 ? 0.0f : 1.0f;
+                        grid.SetValue(x_idx, y_idx, z_idx, sdf_tools::COLLISION_CELL(occupancy));
+                    }
+                }
+                // Check if we're at an edge case - i.e. the line passes through the voxel,
+                // but the voxel center is on the wrong side of something
+                else
+                {
+                    const Vector2d top_right    = point_parabola_frame + Vector2d( half_res,  half_res);
+                    const Vector2d bottom_right = point_parabola_frame + Vector2d( half_res, -half_res);
+                    const Vector2d bottom_left  = point_parabola_frame + Vector2d(-half_res, -half_res);
+                    const Vector2d top_left     = point_parabola_frame + Vector2d(-half_res,  half_res);
+
+                    // Check if the line itself passes through the voxel
+                    const bool line_bisects_voxel = [&]
+                    {
+                        const double top_right_dot_product      = line_normal_parabola_frame.dot(top_right);
+                        const double bottom_right_dot_product   = line_normal_parabola_frame.dot(bottom_right);
+                        const double bottom_left_dot_product    = line_normal_parabola_frame.dot(bottom_left);
+                        const double top_left_dot_product       = line_normal_parabola_frame.dot(top_left);
+
+                        const bool top_right_below_line     = top_right_dot_product       < 0.0;
+                        const bool bottom_right_below_line  = bottom_right_dot_product    < 0.0;
+                        const bool bottom_left_below_line   = bottom_left_dot_product     < 0.0;
+                        const bool top_left_below_line      = top_left_dot_product        < 0.0;
+
+                        // If the line bisects the voxel, then it passes through
+                        return (top_right_below_line ^ bottom_left_below_line) ||
+                               (top_left_below_line ^ bottom_right_below_line);
+                    }();
+                    // Check if the parabola passes through the voxel
+                    const bool parabola_bisects_voxel = [&]
+                    {
+                        const double top_right_parabola_val     = parabola_eqn(top_right.x());
+                        const double bottom_right_parabola_val  = parabola_eqn(bottom_right.x());
+                        const double bottom_left_parabola_val   = parabola_eqn(bottom_left.x());
+                        const double top_left_parabola_val      = parabola_eqn(top_left.x());
+
+                        const bool top_right_above_parabola     = top_right.y()     > top_right_parabola_val;
+                        const bool bottom_right_above_parabola  = bottom_right.y()  > bottom_right_parabola_val;
+                        const bool bottom_left_above_parabola   = bottom_left.y()   > bottom_left_parabola_val;
+                        const bool top_left_above_parabola      = top_left.y()      > top_left_parabola_val;
+
+                        // If the parabola bisects the voxel, then it passes through
+                        return (top_right_above_parabola && !bottom_left_above_parabola) ||
+                               (top_left_above_parabola && !bottom_right_above_parabola);
+                    }();
+
+                    if ((line_bisects_voxel && above_parabola) ||
+                        (parabola_bisects_voxel && below_line) ||
+                        (line_bisects_voxel && parabola_bisects_voxel))
+                    {
+                        const auto sdf_val = sdf.GetImmutable4d(location_world_frame);
+                        // If the sdf lookup is valid, then set the collision cell accordingly,
+                        // otherwise leave it at the default "filled" value
+                        if (sdf_val.second)
+                        {
+                            const auto occupancy = sdf_val.first > 0.0 ? 0.0f : 1.0f;
+                            grid.SetValue(x_idx, y_idx, z_idx, sdf_tools::COLLISION_CELL(occupancy));
+                        }
+                    }
+                }
+            }
+        }
+
+        return grid;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -553,11 +837,14 @@ namespace smmap
         gripper_b_starting_pose_.linear() = initial_world_state_.all_grippers_single_pose_[1].linear();
         clampGripperDeltas(gripper_a_action_vector_, gripper_b_action_vector_);
 
-        vis_->visualizeAxes("center_of_rotation",   experiment_center_of_rotation_, 0.1, 0.005, 1);
-        vis_->visualizeAxes("gripper_a_start",      gripper_a_starting_pose_,       0.1, 0.005, 1);
-        vis_->visualizeAxes("gripper_b_start",      gripper_b_starting_pose_,       0.1, 0.005, 1);
-        vis_->visualizeAxes("gripper_a_end",        Translation3d(gripper_a_action_vector_) * gripper_a_starting_pose_, 0.1, 0.005, 1);
-        vis_->visualizeAxes("gripper_b_end",        Translation3d(gripper_b_action_vector_) * gripper_b_starting_pose_, 0.1, 0.005, 1);
+        if (visualize_gripper_motion_)
+        {
+            vis_->visualizeAxes("center_of_rotation",   experiment_center_of_rotation_, 0.1, 0.005, 1);
+            vis_->visualizeAxes("gripper_a_start",      gripper_a_starting_pose_,       0.1, 0.005, 1);
+            vis_->visualizeAxes("gripper_b_start",      gripper_b_starting_pose_,       0.1, 0.005, 1);
+            vis_->visualizeAxes("gripper_a_end",        Translation3d(gripper_a_action_vector_) * gripper_a_starting_pose_, 0.1, 0.005, 1);
+            vis_->visualizeAxes("gripper_b_end",        Translation3d(gripper_b_action_vector_) * gripper_b_starting_pose_, 0.1, 0.005, 1);
+        }
     }
 
     void TransitionTesting::initialize(const WorldState& world_state)
@@ -758,31 +1045,35 @@ namespace smmap
         if (generate_test_data)
         {
             Stopwatch stopwatch;
+            ROS_INFO("Generating test data via Bullet");
             generateTestData();
-            std::cout << "Data generation time taken: " << stopwatch(READ) << std::endl;
+            ROS_INFO_STREAM("Data generation time taken: " << stopwatch(READ));
         }
 
         data_files_ = getDataFileList();
 
         if (generate_last_step_transition_approximations)
         {
+            ROS_INFO("Generating last step transition approximations");
             Stopwatch stopwatch;
             generateLastStepTransitionApproximations();
-            std::cout << "Last step transition approximations time taken: " << stopwatch(READ) << std::endl;
+            ROS_INFO_STREAM("Last step transition approximations time taken: " << stopwatch(READ));
         }
 
         if (generate_meaningful_mistake_examples)
         {
+            ROS_INFO("Generating meaningful mistake examples");
             Stopwatch stopwatch;
             generateMeaningfulMistakeExamples();
-            std::cout << "Finding meaningful mistake examples time taken: " << stopwatch(READ) << std::endl;
+            ROS_INFO_STREAM("Finding meaningful mistake examples time taken: " << stopwatch(READ));
         }
 
         if (generate_features)
         {
             Stopwatch stopwatch;
+            ROS_INFO("Generating transition features");
             generateFeatures();
-            std::cout << "Generate features time taken: " << stopwatch(READ) << std::endl;
+            ROS_INFO_STREAM("Generate features time taken: " << stopwatch(READ));
         }
     }
 }
@@ -1789,7 +2080,7 @@ namespace smmap
 namespace smmap
 {
     void TransitionTesting::generateFeatures()
-    {
+    {        
         enum
         {
             GRIPPER_A_PRE_X,
@@ -1804,22 +2095,53 @@ namespace smmap
             GRIPPER_B_POST_X,
             GRIPPER_B_POST_Y,
             GRIPPER_B_POST_Z,
+            GRIPPER_DELTA_LENGTH_PRE,
+            GRIPPER_DELTA_LENGTH_POST,
             MAX_BAND_LENGTH,
             STARTING_BAND_LENGTH,
             ENDING_DEFAULT_BAND_LENGTH,
-            STARTING_MAJOR_AXIS_LENGTH,
-            STARTING_MINOR_AXIS_LENGTH,
-            ENDING_MAJOR_AXIS_LENGTH,
-            ENDING_MINOR_AXIS_LENGTH,
+//            STARTING_MAJOR_AXIS_LENGTH,
+//            STARTING_MINOR_AXIS_LENGTH,
+//            ENDING_MAJOR_AXIS_LENGTH,
+//            ENDING_MINOR_AXIS_LENGTH,
             SLICE_NUM_CONNECTED_COMPONENTS_PRE,
             SLICE_NUM_CONNECTED_COMPONENTS_POST,
+            SLICE_NUM_CONNECTED_COMPONENTS_DELTA,
             DUMMY_ITEM
+        };
+
+        std::vector<std::string> feature_names =
+        {
+            std::string("GRIPPER_A_PRE_X"),
+            std::string("GRIPPER_A_PRE_Y"),
+            std::string("GRIPPER_A_PRE_Z"),
+            std::string("GRIPPER_B_PRE_X"),
+            std::string("GRIPPER_B_PRE_Y"),
+            std::string("GRIPPER_B_PRE_Z"),
+            std::string("GRIPPER_A_POST_X"),
+            std::string("GRIPPER_A_POST_Y"),
+            std::string("GRIPPER_A_POST_Z"),
+            std::string("GRIPPER_B_POST_X"),
+            std::string("GRIPPER_B_POST_Y"),
+            std::string("GRIPPER_B_POST_Z"),
+            std::string("GRIPPER_DELTA_LENGTH_PRE"),
+            std::string("GRIPPER_DELTA_LENGTH_POST"),
+            std::string("MAX_BAND_LENGTH"),
+            std::string("STARTING_BAND_LENGTH"),
+            std::string("ENDING_DEFAULT_BAND_LENGTH"),
+            std::string("STARTING_MAJOR_AXIS_LENGTH"),
+            std::string("STARTING_MINOR_AXIS_LENGTH"),
+            std::string("ENDING_MAJOR_AXIS_LENGTH"),
+            std::string("ENDING_MINOR_AXIS_LENGTH"),
+            std::string("SLICE_NUM_CONNECTED_COMPONENTS_PRE"),
+            std::string("SLICE_NUM_CONNECTED_COMPONENTS_POST"),
+            std::string("SLICE_NUM_CONNECTED_COMPONENTS_DELTA")
         };
 
 //        Log::Log logger(data_folder_ + "/cannonical_straight_test/meaningful_mistake_features.csv", false);
 
-        int num_examples_pre_slice_3_components = 0;
-        int num_examples_pre_slice_not_3_components = 0;
+        int num_examples_delta_eq_0 = 0;
+        int num_examples_delta_neq_0 = 0;
 
         #pragma omp parallel for
         for (size_t file_idx = 0; file_idx < data_files_.size(); ++file_idx)
@@ -1872,6 +2194,13 @@ namespace smmap
                                     *end_state.rubber_band_);
                         const auto dist = end_state.planned_rubber_band_->distance(*end_state.rubber_band_);
 
+                        // Only compute the microstep band history if we're going to actually use it
+                        std::vector<RubberBand::Ptr> microstep_band_history;
+//                        if (!disable_visualizations_)
+                        {
+                            microstep_band_history = transition_estimator_->reduceMicrostepsToBands(trajectory[idx].second);
+                        }
+
                         const TransitionEstimation::StateTransition transition
                         {
                             start_state,
@@ -1879,13 +2208,13 @@ namespace smmap
                             start_state.planned_rubber_band_->getEndpoints(),
                             end_state.planned_rubber_band_->getEndpoints(),
                             trajectory[idx].second,
-                            transition_estimator_->reduceMicrostepsToBands(trajectory[idx].second)
+                            microstep_band_history
                         };
                         const auto features = extractFeatures(transition);
                         const bool mistake = (start_foh && !end_foh) && (dist > 0.5);
                         LOG_STREAM(logger, std::to_string(mistake) << ", " << PrettyPrint::PrettyPrint(features,false, ", "));
 
-                        if (start_foh && !end_foh && !disable_visualizations_)
+//                        if (start_foh && !end_foh && !disable_visualizations_)
                         {
                             // Determine the FOH and distance values along the band surface
                             Matrix2Xd dist_and_foh_values(2, transition.microstep_band_history_.size() - 1);
@@ -1904,7 +2233,6 @@ namespace smmap
                                     ++num_foh_changes;
                                 }
                             }
-
 
                             // Visualization
 //                            if (!disable_visualizations_)
@@ -1951,7 +2279,7 @@ namespace smmap
                                     }
                                 }
 
-                                // Discovered mistake
+                                // Transition under consideration
                                 {
                                     // Add the first band surface band
                                     {
@@ -2025,18 +2353,23 @@ namespace smmap
     //                                            << "Start vs end dist executed:         " << transition.starting_state_.rubber_band_->distance(*transition.ending_state_.rubber_band_) << std::endl
     //                                            << "Num FOH changes:                    " << num_foh_changes << std::endl
     //                                            << "Distance and FOH values along band surface:\n" << dist_and_foh_values.transpose() << std::endl);
-                                if (features[SLICE_NUM_CONNECTED_COMPONENTS_PRE] != std::to_string(3))
-                                {
-                                    ++num_examples_pre_slice_not_3_components;
-                                    ROS_INFO_STREAM_NAMED("features", test_result_file << ": Transition from same FOH to different FOH at idx: " << idx << " with distance " << dist);
-                                    ROS_INFO_STREAM_NAMED("features", PrettyPrint::PrettyPrint(features, false, ", "));
-                                    ROS_INFO_STREAM_NAMED("features", "Examples with 3 components: " << num_examples_pre_slice_3_components << "   Not 3 components: " << num_examples_pre_slice_not_3_components);
 
-    //                                PressAnyKeyToContinue();
+                                if (features[SLICE_NUM_CONNECTED_COMPONENTS_DELTA] != std::to_string(0))
+                                {
+                                    assert(features.size() == feature_names.size());
+                                    ++num_examples_delta_neq_0;
+                                    ROS_INFO_STREAM_NAMED("features", "Examples with equal number of components: " << num_examples_delta_eq_0 << "   Not equal components: " << num_examples_delta_neq_0);
+                                    ROS_INFO_STREAM_NAMED("features", test_result_file);
+                                    ROS_INFO_STREAM_NAMED("features", "  Transition from same FOH to different FOH at idx: " << idx << " with distance " << dist);
+                                    for (size_t i = 0; i < feature_names.size(); ++i)
+                                    {
+                                        ROS_INFO_STREAM_NAMED("features", "  " << /* std::left << */ std::setw(40) << feature_names[i] << ": " << features[i]);
+                                    }
+                                    PressAnyKeyToContinue();
                                 }
                                 else
                                 {
-                                    ++num_examples_pre_slice_3_components;
+                                    ++num_examples_delta_eq_0;
                                 }
                             }
                         }
@@ -2059,6 +2392,12 @@ namespace smmap
 
     std::vector<std::string> TransitionTesting::extractFeatures(const TransitionEstimation::StateTransition& transition) const
     {
+//        static double time = 0.0;
+//        static size_t calls = 0;
+//        ++calls;
+
+//        Stopwatch sw;
+
         enum
         {
             GRIPPER_A_PRE_X,
@@ -2073,15 +2412,18 @@ namespace smmap
             GRIPPER_B_POST_X,
             GRIPPER_B_POST_Y,
             GRIPPER_B_POST_Z,
+            GRIPPER_DELTA_LENGTH_PRE,
+            GRIPPER_DELTA_LENGTH_POST,
             MAX_BAND_LENGTH,
             STARTING_BAND_LENGTH,
             ENDING_DEFAULT_BAND_LENGTH,
-            STARTING_MAJOR_AXIS_LENGTH,
-            STARTING_MINOR_AXIS_LENGTH,
-            ENDING_MAJOR_AXIS_LENGTH,
-            ENDING_MINOR_AXIS_LENGTH,
+//            STARTING_MAJOR_AXIS_LENGTH,
+//            STARTING_MINOR_AXIS_LENGTH,
+//            ENDING_MAJOR_AXIS_LENGTH,
+//            ENDING_MINOR_AXIS_LENGTH,
             SLICE_NUM_CONNECTED_COMPONENTS_PRE,
             SLICE_NUM_CONNECTED_COMPONENTS_POST,
+            SLICE_NUM_CONNECTED_COMPONENTS_DELTA,
             DUMMY_ITEM
         };
 
@@ -2099,9 +2441,9 @@ namespace smmap
                 (transition.starting_gripper_positions_.second -
                  mid_point_pre);
 
-        const Vector3d mid_to_gripper_b_post =
-                (transition.ending_gripper_positions_.second -
-                 mid_point_post);
+//        const Vector3d mid_to_gripper_b_post =
+//                (transition.ending_gripper_positions_.second -
+//                 mid_point_post);
 
         // Transform the starting gipper positions to "neutral":
         //      Centered on the origin (midpoint of the starting gripper positions)
@@ -2131,7 +2473,7 @@ namespace smmap
                 else
                 {
                     x_axis = Vector3d::UnitX();
-                    y_axis = Vector3d::UnitX();
+                    y_axis = Vector3d::UnitY();
                 }
             }
 
@@ -2149,97 +2491,23 @@ namespace smmap
         const double default_band_length_post = transition.ending_state_.planned_rubber_band_->totalLength();
 
         const double dmax = initial_band_->maxSafeLength();
-        const double major_axis_length_pre = dmax / 2.0;
-        const double minor_axis_length_pre = std::sqrt(dmax * dmax / 4.0 - mid_to_gripper_b_pre.squaredNorm());
-        const double major_axis_length_post = dmax / 2.0;
-        const double minor_axis_length_post = std::sqrt(dmax * dmax / 4.0 - mid_to_gripper_b_post.squaredNorm());
+//        const double major_axis_length_pre = dmax / 2.0;
+//        const double minor_axis_length_pre = std::sqrt(dmax * dmax / 4.0 - mid_to_gripper_b_pre.squaredNorm());
+//        const double major_axis_length_post = dmax / 2.0;
+//        const double minor_axis_length_post = std::sqrt(dmax * dmax / 4.0 - mid_to_gripper_b_post.squaredNorm());
 
         const double resolution = work_space_grid_.minStepDimension() / 2.0;
-        sdf_tools::CollisionMapGrid collision_grid_pre = [&]
-        {
-            const int64_t x_cells_half = (int64_t)std::ceil(major_axis_length_pre / resolution) + 1;
-            const int64_t y_cells_half = (int64_t)std::ceil(minor_axis_length_pre / resolution) + 1;
-            // Rotate the origin transform to align the x-axis with the major axis
-            // of the ellipse defined by using the gripper positions as foci,
-            const Isometry3d collision_map_origin = [&]
-            {
-                const Vector3d x_axis = mid_to_gripper_b_pre.normalized();
-                // TODO: what if v2 is ill defined? Do the same process as the other origin
-                const Vector3d y_axis = (Vector3d::UnitZ() - x_axis.z() * x_axis).normalized();
-                const Vector3d z_axis = x_axis.cross(y_axis).normalized();
-                const Isometry3d center((Matrix4d() << x_axis, y_axis, z_axis, mid_point_pre,
-                                                       0.0,    0.0,    0.0,    1.0).finished());
-                const Vector3d offset = Vector3d(-resolution * (double)x_cells_half,
-                                                 -resolution * (double)y_cells_half,
-                                                 -resolution / 2.0);
-                return center * Translation3d(offset);
-            }();
-
-//            const Vector3d x_axis = mid_to_gripper_b_pre.normalized();
-//            // TODO: what if v2 is ill defined? Do the same process as the other origin
-//            const Vector3d y_axis = (Vector3d::UnitZ() - x_axis.z() * x_axis).normalized();
-//            const Vector3d z_axis = x_axis.cross(y_axis).normalized();
-//            const Isometry3d center((Matrix4d() << x_axis, y_axis, z_axis, mid_point_pre,
-//                                                   0.0,    0.0,    0.0,    1.0).finished());
-//            ObjectPointSet ellipse_points(3, 201);
-//            for (size_t idx = 0; idx <= 200; ++idx)
-//            {
-//                const double theta = (2.0 * M_PI / 200.0) * (double)idx;
-//                const double x = major_axis_length_pre * std::cos(theta);
-//                const double y = minor_axis_length_pre * std::sin(theta);
-//                ellipse_points.col(idx) = center * Vector3d(x, y, 0.0);
-//            }
-//            vis_->visualizePoints("ellipse_pre", ellipse_points, Visualizer::Blue(), 1);
-
-            return ExtractEllipseSlice(
-                        *sdf_,
-                        collision_map_origin,
-                        resolution,
-                        2 * x_cells_half,
-                        2 * y_cells_half,
-                        1,
-                        mid_point_pre,
-                        std::pow(major_axis_length_pre, 2),
-                        std::pow(minor_axis_length_pre, 2));
-        }();
+        sdf_tools::CollisionMapGrid collision_grid_pre = ExtractParabolaSlice(*sdf_, resolution, transition.starting_gripper_positions_, initial_band_->maxSafeLength());//, vis_);
+        sdf_tools::CollisionMapGrid collision_grid_post = ExtractParabolaSlice(*sdf_, resolution, transition.ending_gripper_positions_, initial_band_->maxSafeLength());//, vis_);
         const auto num_connected_components_pre = collision_grid_pre.UpdateConnectedComponents();
-
-        sdf_tools::CollisionMapGrid collision_grid_post = [&]
-        {
-            const int64_t x_cells_half = (int64_t)std::ceil(major_axis_length_post / resolution) + 1;
-            const int64_t y_cells_half = (int64_t)std::ceil(minor_axis_length_post / resolution) + 1;
-            // Rotate the origin transform to align the x-axis with the major axis
-            // of the ellipse defined by using the gripper positions as foci,
-            const Isometry3d collision_map_origin = [&]
-            {
-                const Vector3d x_axis = mid_to_gripper_b_post.normalized();
-                // TODO: what if v2 is ill defined? Do the same process as the other origin
-                const Vector3d y_axis = (Vector3d::UnitZ() - x_axis.z() * x_axis).normalized();
-                const Vector3d z_axis = x_axis.cross(y_axis).normalized();
-                const Isometry3d center((Matrix4d() << x_axis, y_axis, z_axis, mid_point_post,
-                                                       0.0,    0.0,    0.0,    1.0).finished());
-                const Vector3d offset = Vector3d(-resolution * (double)x_cells_half,
-                                                 -resolution * (double)y_cells_half,
-                                                 -resolution / 2.0);
-                return center * Translation3d(offset);
-            }();
-            return ExtractEllipseSlice(
-                        *sdf_,
-                        collision_map_origin,
-                        resolution,
-                        2 * x_cells_half,
-                        2 * y_cells_half,
-                        1,
-                        mid_point_post,
-                        std::pow(major_axis_length_post, 2),
-                        std::pow(minor_axis_length_post, 2));
-        }();
         const auto num_connected_components_post = collision_grid_post.UpdateConnectedComponents();
 
         if (!disable_visualizations_)
         {
             auto collision_grid_marker_pre = collision_grid_pre.ExportForDisplay(Visualizer::Red(), Visualizer::Green(), Visualizer::Blue());
             auto collision_grid_marker_post = collision_grid_post.ExportForDisplay(Visualizer::Orange(), Visualizer::Seafoam(), Visualizer::Blue());
+//            auto collision_grid_marker_pre = collision_grid_pre.ExportForDisplay(Visualizer::Red(0.2f), Visualizer::Green(0.2f), Visualizer::Blue(0.2f));
+//            auto collision_grid_marker_post = collision_grid_post.ExportForDisplay(Visualizer::Orange(0.2f), Visualizer::Seafoam(0.2f), Visualizer::Blue(0.2f));
             collision_grid_marker_pre.ns = "collision_grid_pre";
             collision_grid_marker_post.ns = "collision_grid_post";
             vis_->publish(collision_grid_marker_pre);
@@ -2261,17 +2529,25 @@ namespace smmap
         features[GRIPPER_B_POST_Y] = std::to_string(gripper_b_post.y());
         features[GRIPPER_B_POST_Z] = std::to_string(gripper_b_post.z());
 
+        features[GRIPPER_DELTA_LENGTH_PRE] = std::to_string((gripper_a_pre - gripper_b_pre).norm());
+        features[GRIPPER_DELTA_LENGTH_POST] = std::to_string((gripper_a_post - gripper_b_post).norm());
+
         features[MAX_BAND_LENGTH] = std::to_string(dmax);
         features[STARTING_BAND_LENGTH] = std::to_string(band_length_pre);
         features[ENDING_DEFAULT_BAND_LENGTH] = std::to_string(default_band_length_post);
 
-        features[STARTING_MAJOR_AXIS_LENGTH] = std::to_string(major_axis_length_pre);
-        features[STARTING_MINOR_AXIS_LENGTH] = std::to_string(minor_axis_length_pre);
-        features[ENDING_MAJOR_AXIS_LENGTH] = std::to_string(major_axis_length_post);
-        features[ENDING_MINOR_AXIS_LENGTH] = std::to_string(minor_axis_length_post);
+//        features[STARTING_MAJOR_AXIS_LENGTH] = std::to_string(major_axis_length_pre);
+//        features[STARTING_MINOR_AXIS_LENGTH] = std::to_string(minor_axis_length_pre);
+//        features[ENDING_MAJOR_AXIS_LENGTH] = std::to_string(major_axis_length_post);
+//        features[ENDING_MINOR_AXIS_LENGTH] = std::to_string(minor_axis_length_post);
 
         features[SLICE_NUM_CONNECTED_COMPONENTS_PRE] = std::to_string(num_connected_components_pre);
         features[SLICE_NUM_CONNECTED_COMPONENTS_POST] = std::to_string(num_connected_components_post);
+        features[SLICE_NUM_CONNECTED_COMPONENTS_DELTA] = std::to_string((int)num_connected_components_post - (int)num_connected_components_pre);
+
+//        time += sw(READ);
+//        std::cerr << "Calls: " << calls
+//                  << "    Time: " << time << std::endl;
 
         return features;
     }

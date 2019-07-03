@@ -94,7 +94,10 @@ namespace smmap
         ////////////////////////////////////////////////////////////////////////
 
         // Assumes the vectors have already been appropriately discretized/resampled
-        bool checkFirstOrderHomotopy(
+        bool checkFirstOrderHomotopyPoints(
+                const EigenHelpers::VectorVector3d& b1,
+                const EigenHelpers::VectorVector3d& b2) const;
+        bool checkMatchedStarightLineHomotopyPoints(
                 const EigenHelpers::VectorVector3d& b1,
                 const EigenHelpers::VectorVector3d& b2) const;
         // Resamples the bands appropriately, then calls the above

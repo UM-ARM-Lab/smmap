@@ -6,6 +6,7 @@
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/first_order_deformation.h>
 #include <arc_utilities/path_utils.hpp>
+#include <arc_utilities/timing.hpp>
 #include <deformable_manipulation_experiment_params/utility.hpp>
 
 //#define TRANSITION_LEARNING_VERBOSE true
@@ -516,7 +517,7 @@ TransitionEstimation::TransitionEstimation(
 //////// Helper functions //////////////////////////////////////////////////////////////////////////////////////////////
 
 // Assumes the vectors have already been appropriately discretized/resampled
-bool TransitionEstimation::checkFirstOrderHomotopy(
+bool TransitionEstimation::checkFirstOrderHomotopyPoints(
         const VectorVector3d& b1,
         const VectorVector3d& b2) const
 {
@@ -556,18 +557,102 @@ bool TransitionEstimation::checkFirstOrderHomotopy(
                     straight_line_collision_check_fn);
 }
 
+// Assumes the vectors have already been appropriately discretized/upsampled
+bool TransitionEstimation::checkMatchedStarightLineHomotopyPoints(
+        const VectorVector3d& b1,
+        const VectorVector3d& b2) const
+{
+    assert(b1.size() == b2.size());
+    static const double one_div_min_step_size = 1.0 / (work_space_grid_.minStepDimension() * 0.5);
+
+    // Checks if the straight line between matched-elements of the two paths is collision free
+    const auto straight_line_collision_check_fn = [&] (
+            const ssize_t idx)
+    {
+        const auto& b1_node = b1[idx];
+        const auto& b2_node = b2[idx];
+
+        const size_t num_steps = (size_t)std::ceil((b2_node - b1_node).norm() * one_div_min_step_size);
+        if (num_steps == 0)
+        {
+            return true;
+        }
+
+        // Checking 0 and num_steps to catch the endpoints of the line
+        for (size_t ind = 0; ind <= num_steps; ++ind)
+        {
+            const double ratio = (double)ind / (double)num_steps;
+            const Vector3d interpolated_point = Interpolate(b1_node, b2_node, ratio);
+            if (sdf_->GetImmutable3d(interpolated_point).first < 0.0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    // Only check straight lines for exactly matching points on the band
+    for (size_t idx = 0; idx < b1.size(); ++idx)
+    {
+        if (straight_line_collision_check_fn(idx) == false)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool TransitionEstimation::checkFirstOrderHomotopy(
         const RubberBand& b1,
         const RubberBand& b2) const
 {
-    const auto b1_points = b1.resampleBand();
-    const auto b2_points = b2.resampleBand();
-    return checkFirstOrderHomotopy(b1_points, b2_points);
+//    static double time_foh = 0.0;
+//    static double time_straight_line = 0.0;
+//    static size_t calls = 0;
+//    static size_t disagreement = 0;
+//    ++calls;
+
+//    const auto b1_resample_points = b1.resampleBand();
+//    const auto b2_resample_points = b2.resampleBand();
+//    Stopwatch sw;
+//    arc_helpers::DoNotOptimize(b1_resample_points);
+//    arc_helpers::DoNotOptimize(b2_resample_points);
+//    const bool foh = checkFirstOrderHomotopyPoints(b1_resample_points, b2_resample_points);
+//    arc_helpers::DoNotOptimize(foh);
+//    time_foh += sw(READ);
+
+    const auto b1_upsample_points = b1.upsampleBand();
+    const auto b2_upsample_points = b2.upsampleBand();
+//    sw(RESET);
+//    arc_helpers::DoNotOptimize(b1_upsample_points);
+//    arc_helpers::DoNotOptimize(b2_upsample_points);
+    const bool straight_line = checkMatchedStarightLineHomotopyPoints(b1_upsample_points, b2_upsample_points);
+//    arc_helpers::DoNotOptimize(straight_line);
+//    time_straight_line += sw(READ);
+
+//    if (foh != straight_line)
+//    {
+//        ++disagreement;
+//    }
+
+//    std::cerr << "Calls: " << calls
+//              << "    Disagreement: " << disagreement
+//              << "    Time foh: " << time_foh
+//              << "    Time straight line: " << time_straight_line << std::endl;
+
+    return straight_line;
 }
 
 std::vector<RubberBand::Ptr> TransitionEstimation::reduceMicrostepsToBands(
         const std::vector<WorldState>& microsteps) const
 {
+//    static double time = 0.0;
+//    static size_t calls = 0;
+//    ++calls;
+
+//    Stopwatch sw;
+
     std::vector<RubberBand::Ptr> bands;
     bands.reserve(microsteps.size());
     for (size_t idx = 0; idx < microsteps.size(); ++idx)
@@ -584,6 +669,10 @@ std::vector<RubberBand::Ptr> TransitionEstimation::reduceMicrostepsToBands(
             PressAnyKeyToContinue("Unable to extract surface");
         }
     }
+
+//    time += sw(READ);
+//    std::cerr << "Calls: " << calls
+//              << "    Time: " << time << std::endl;
 
     return bands;
 }

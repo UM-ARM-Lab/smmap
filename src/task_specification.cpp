@@ -57,10 +57,10 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::ROPE_CYLINDER_COVERAGE_TWO_GRIPPERS:
             return std::make_shared<RopeDirectCoverage>(nh, ph, vis);
 
-        case TaskType::CLOTH_MFLAG_LIVE_ROBOT:
         case TaskType::CLOTH_TABLE_COVERAGE:
             return std::make_shared<ClothDirectCoverage>(nh, ph, vis);
 
+        case TaskType::CLOTH_MFLAG:
         case TaskType::CLOTH_CYLINDER_COVERAGE:
         case TaskType::CLOTH_WAFR:
         case TaskType::CLOTH_WALL:
@@ -73,7 +73,7 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::ROPE_HOOKS:
             return std::make_shared<RopeFixedCorrespondences>(nh, ph, vis);
 
-        case TaskType::CLOTH_PLACEMAT_LIVE_ROBOT:
+        case TaskType::CLOTH_PLACEMAT:
             return std::make_shared<ClothFixedCorrespondences>(nh, ph, vis);
 
         default:

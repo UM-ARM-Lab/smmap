@@ -1603,7 +1603,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     // Resample the band for the purposes of first order vis checking
     if (!executing_global_trajectory_)
     {
-        band_rrt_->addBandToBlacklist(rubber_band_->resampleBand());
+        band_rrt_->addBandToBlacklist(*rubber_band_);
     }
 
     vis_->purgeMarkerList();

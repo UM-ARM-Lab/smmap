@@ -1003,9 +1003,11 @@ RRTPolicy BandRRT::plan(
     return policy;
 }
 
-void BandRRT::addBandToBlacklist(const VectorVector3d& band)
+void BandRRT::addBandToBlacklist(const RubberBand& band)
 {
-    blacklisted_goal_rubber_bands_.push_back(band);
+    blacklisted_goal_rubber_bands_.push_back(std::make_shared<const RubberBand>(band));
+    blacklisted_goal_rubber_bands_.back()->resampleBand();
+    blacklisted_goal_rubber_bands_.back()->upsampleBand();
 }
 
 void BandRRT::clearBlacklist()
@@ -1574,20 +1576,14 @@ std::vector<Visualizer::NamespaceId> BandRRT::visualizePolicy(const RRTPolicy& p
 
 std::vector<Visualizer::NamespaceId> BandRRT::visualizeBlacklist() const
 {
-    VectorVector3d line_start_points;
-    VectorVector3d line_end_points;
-
+    std::vector<Visualizer::NamespaceId> ids;
     for (size_t idx = 0; idx < blacklisted_goal_rubber_bands_.size(); ++idx)
     {
         const auto& band = blacklisted_goal_rubber_bands_[idx];
-        for (size_t band_idx = 1; band_idx < band.size(); ++band_idx)
-        {
-            line_start_points.push_back(band[band_idx - 1]);
-            line_end_points.push_back(band[band_idx]);
-        }
+        const auto new_ids = band->visualize(RRT_BLACKLISTED_GOAL_BANDS_NS, Visualizer::Red(), Visualizer::Red(), (int32_t)(idx + 1));
+        ids.insert(ids.end(), new_ids.begin(), new_ids.end());
     }
-
-    return vis_->visualizeLines(RRT_BLACKLISTED_GOAL_BANDS_NS, line_start_points, line_end_points, Visualizer::Red(), 1, 0.01);
+    return ids;
 }
 
 void BandRRT::storeTree(const RRTTree& tree, std::string file_path) const
@@ -2827,20 +2823,19 @@ bool BandRRT::goalReached(const RRTNode& node)
 bool BandRRT::isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band)
 {
     Stopwatch stopwatch;
-    const auto vector_representation = test_band.resampleBand();
-    const bool is_first_order_visible = isBandFirstOrderVisibileToBlacklist(vector_representation);
+    const bool is_first_order_visible = isBandFirstOrderVisibileToBlacklist_impl(test_band);
     const double first_order_vis_time = stopwatch(READ);
     total_first_order_vis_propogation_time_ += first_order_vis_time;
 
     return is_first_order_visible;
 }
 
-bool BandRRT::isBandFirstOrderVisibileToBlacklist(const VectorVector3d& test_band) const
+bool BandRRT::isBandFirstOrderVisibileToBlacklist_impl(const RubberBand& test_band) const
 {
     for (size_t idx = 0; idx < blacklisted_goal_rubber_bands_.size(); idx++)
     {
-        const VectorVector3d& blacklisted_path = blacklisted_goal_rubber_bands_[idx];
-        if (transition_estimator_->checkFirstOrderHomotopy(test_band, blacklisted_path))
+        const RubberBand::ConstPtr& blacklisted_band = blacklisted_goal_rubber_bands_[idx];
+        if (transition_estimator_->checkFirstOrderHomotopy(*blacklisted_band, test_band))
         {
             return true;
         }

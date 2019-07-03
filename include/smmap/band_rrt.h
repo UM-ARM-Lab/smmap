@@ -296,7 +296,7 @@ namespace smmap
                 const RRTGrippersRepresentation& grippers_goal_poses,
                 const std::chrono::duration<double>& time_limit);
 
-        void addBandToBlacklist(const EigenHelpers::VectorVector3d& band);
+        void addBandToBlacklist(const RubberBand& band);
         void clearBlacklist();
 
         //////// Policy extraction functions /////////////////////////////////////////////////
@@ -405,7 +405,7 @@ namespace smmap
         void checkNewStatesForGoal(const ssize_t num_nodes);
         bool goalReached(const RRTNode& node);
         bool isBandFirstOrderVisibileToBlacklist(const RubberBand& test_band);
-        bool isBandFirstOrderVisibileToBlacklist(const EigenHelpers::VectorVector3d& test_band) const;
+        bool isBandFirstOrderVisibileToBlacklist_impl(const RubberBand& test_band) const;
 
         void goalReachedCallback(const int64_t node_idx);
         bool isRootOfGoalBranch(const int64_t node_idx) const;
@@ -482,7 +482,7 @@ namespace smmap
         RRTGrippersRepresentation starting_grippers_poses_;
         RRTRobotRepresentation starting_robot_configuration_;
 
-        std::vector<EigenHelpers::VectorVector3d> blacklisted_goal_rubber_bands_;
+        std::vector<RubberBand::ConstPtr> blacklisted_goal_rubber_bands_;
         double max_grippers_distance_;
         std::chrono::duration<double> time_limit_;
         RRTGrippersRepresentation grippers_goal_poses_;
