@@ -245,11 +245,11 @@ namespace smmap
             const double x1,
             const double y1,
             const double length,
-            const bool verbose = false)
+            const bool verbose = true)
     {
         if (verbose)
         {
-            std::cout << "x1: " << x1 << "    y1: " << y1 << "    length: " << length << std::endl;
+            std::cerr << "x1: " << x1 << "    y1: " << y1 << "    length: " << length << std::endl;
         }
         assert(x1 > 0.0);
 
@@ -290,7 +290,7 @@ namespace smmap
         double guess = std::abs(ratio) + 1.0;
         if (verbose)
         {
-            std::cout << "0: " << guess << " : " << arc_len_fn(guess) << std::endl;
+            std::cerr << "0: " << guess << " : " << arc_len_fn(guess) << std::endl;
         }
 
         for (int n = 0; n < N; ++n)
@@ -299,18 +299,17 @@ namespace smmap
             guess -= dguess;
             if (verbose)
             {
-                std::cout << n+1 << ": " << guess << " : " << arc_len_fn(guess) << std::endl;
+                std::cerr << n+1 << ": " << guess << " : " << arc_len_fn(guess) << std::endl;
                 if (guess <= 0.0)
                 {
                     PressAnyKeyToContinue("Weirdness in FindCoeffs");
+                    assert(false);
                 }
             }
-            else
+            if (guess <= 0.0)
             {
-                if (guess <= 0.0)
-                {
-                    FindParabolaCoeffs(x1, y1, length, true);
-                }
+                std::cerr << "x1: " << x1 << "    y1: " << y1 << "    length: " << length << std::endl;
+                return FindParabolaCoeffs(x1, y1, length, true);
             }
             if (std::abs(dguess) <= EPSILON)
             {
@@ -318,8 +317,16 @@ namespace smmap
             }
         }
 
-        const auto a = guess;
-        const auto b = ratio - a*x1;
+        const double a = guess;
+        const double b = ratio - a*x1;
+
+        if (a < 0.0)
+        {
+            std::cerr << "x1: " << x1 << "    y1: " << y1 << "    length: " << length << std::endl;
+            std::cerr << "guess: " << guess << std::endl;
+            assert(a >= 0.0);
+        }
+        assert(a >= 0.0);
 
         return {a, b};
     }
@@ -398,6 +405,11 @@ namespace smmap
             return a * x * x + b * x;
         };
         // Ensure that the parabola is convex:
+        if (a < 0.0)
+        {
+            std::cerr << "FindParabolaCoeffs called with (" << second_point_parabola_frame.x() << ", " << second_point_parabola_frame.y() << ", " << parabola_length )
+            std::cerr << a << ", " << b << std::endl;
+        }
         assert(a >= 0.0 && "Parabola must be convex");
         // If b is positive, then there is not enough slack to create a loop below the gripper
         const double x_min = 0.0;
@@ -412,19 +424,19 @@ namespace smmap
         const int64_t y_cells = (int64_t)std::ceil(y_range / resolution) + 2;
         const int64_t z_cells = 1;
 
-//        std::cout << "Gripper pair:                " << PrettyPrint::PrettyPrint(gripper_positions, false, ", ") << std::endl;
-//        std::cout << "second_point_parabola_frame: " << second_point_parabola_frame.transpose() << std::endl;
-//        std::cout << "x_min: " << x_min << " x_max: " << x_max << " x_lowest: " << x_lowest << std::endl;
-//        std::cout << "y_min: " << y_min << " y_max: " << y_max << std::endl;
+//        std::cerr << "Gripper pair:                " << PrettyPrint::PrettyPrint(gripper_positions, false, ", ") << std::endl;
+//        std::cerr << "second_point_parabola_frame: " << second_point_parabola_frame.transpose() << std::endl;
+//        std::cerr << "x_min: " << x_min << " x_max: " << x_max << " x_lowest: " << x_lowest << std::endl;
+//        std::cerr << "y_min: " << y_min << " y_max: " << y_max << std::endl;
 
         // Move the origin to center the parabola; will ensure a 1 cell boundary by construction
         const Vector3d grid_offset(x_min - 0.5 * (resolution * (double)x_cells - x_range),  // Center the valid region of the voxel grid between the grippers
                                    y_min - 0.5 * (resolution * (double)y_cells - y_range),  // Center the valid region of the voxel grid on the parabola
                                    -0.5 * resolution);                                      // Shift half a cell to put the slice directly overtop of the grippers
-//        std::cout << "Grid offset:      " << grid_offset.transpose() << std::endl;
-//        std::cout << "Parabola origin:  " << parabola_origin.translation().transpose() << std::endl;
-//        std::cout << "Grid origin:      " << (parabola_origin * Translation3d(grid_offset)).translation().transpose() << std::endl;
-//        std::cout << std::endl;
+//        std::cerr << "Grid offset:      " << grid_offset.transpose() << std::endl;
+//        std::cerr << "Parabola origin:  " << parabola_origin.translation().transpose() << std::endl;
+//        std::cerr << "Grid origin:      " << (parabola_origin * Translation3d(grid_offset)).translation().transpose() << std::endl;
+//        std::cerr << std::endl;
 
         sdf_tools::CollisionMapGrid grid(parabola_origin * Translation3d(grid_offset),
                                          sdf.GetFrame(),
@@ -464,7 +476,7 @@ namespace smmap
                 const bool above_parabola = point_parabola_frame.y() >= parabola_eqn(point_parabola_frame.x());
                 const bool below_line = line_normal_parabola_frame.dot(point_parabola_frame) <= 0.0;
 
-//                std::cout << location_parabola_frame.head<2>().transpose() << " Above Parabola: " << above_parabola << " Below Line: " << below_line << std::endl;
+//                std::cerr << location_parabola_frame.head<2>().transpose() << " Above Parabola: " << above_parabola << " Below Line: " << below_line << std::endl;
 
                 // If the location is inside the parabola, then check if it is filled,
                 if (above_parabola && below_line)
@@ -1273,7 +1285,7 @@ namespace smmap
             const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*ph_, "perturbations/gripper_positions/max_magnitude", __func__).GetImmutable();
             const auto num_divisions = ROSHelpers::GetParamRequired<int>(*ph_, "perturbations/gripper_positions/num_divisions", __func__).GetImmutable();
             const auto perturbations = Vec3dPerturbations(max_magnitude, num_divisions);
-            std::cout << "Num position perturbations: " << perturbations.size() * perturbations.size()<< std::endl;
+            std::cerr << "Num position perturbations: " << perturbations.size() * perturbations.size()<< std::endl;
             #pragma omp parallel for
             for (size_t a_idx = 0; a_idx < perturbations.size(); ++a_idx)
             {
@@ -1354,7 +1366,7 @@ namespace smmap
             const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*ph_, "perturbations/action_vectors/max_magnitude", __func__).GetImmutable();
             const auto num_divisions = ROSHelpers::GetParamRequired<int>(*ph_, "perturbations/action_vectors/num_divisions", __func__).GetImmutable();
             const auto perturbations = Vec3dPerturbations(max_magnitude, num_divisions);
-            std::cout << "Num action perturbations: " << perturbations.size() * perturbations.size()<< std::endl;
+            std::cerr << "Num action perturbations: " << perturbations.size() * perturbations.size()<< std::endl;
             #pragma omp parallel for
             for (size_t a_idx = 0; a_idx < perturbations.size(); ++a_idx)
             {
@@ -1577,7 +1589,7 @@ namespace smmap
 
                 // Load the resulting transition, if needed generate it first
                 const TransitionEstimation::StateTransition test_transition = [&]
-                {                    
+                {
                     if (!boost::filesystem::is_regular_file(test_transition_file))
                     {
                         // Load the path that generated the test
@@ -1640,7 +1652,7 @@ namespace smmap
                 Log::Log failure_logger(failure_file, true);
                 LOG_STREAM(failure_logger, "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
                 ROS_ERROR_STREAM_NAMED("last_step_approximations", "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
-                dists_etc[ERROR_STRING] = ex.what();                
+                dists_etc[ERROR_STRING] = ex.what();
             }
 
             LOG(logger, PrettyPrint::PrettyPrint(dists_etc, false, ", "));
@@ -2101,7 +2113,7 @@ namespace smmap
 namespace smmap
 {
     void TransitionTesting::generateFeatures()
-    {        
+    {
         enum
         {
             GRIPPER_A_PRE_X,
