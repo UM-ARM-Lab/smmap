@@ -1,4 +1,5 @@
 #include "smmap/task_specification_implementions.h"
+#include <arc_utilities/arc_exceptions.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
 
 using namespace smmap;

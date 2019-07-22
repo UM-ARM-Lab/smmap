@@ -7,6 +7,7 @@
 #include <arc_utilities/path_utils.hpp>
 #include <arc_utilities/simple_astar_planner.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
+#include <arc_utilities/ros_helpers.hpp>
 
 #include "smmap/ros_communication_helpers.h"
 #include "smmap/quinlan_rubber_band.h"

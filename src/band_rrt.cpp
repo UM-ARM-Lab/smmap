@@ -3237,7 +3237,7 @@ void BandRRT::shortcutSmoothPath(
         ///////////////////// Attempte a shortcut //////////////////////////////////////////////////////////////////////
 
         // Create structures to hold the results which will get filled by each part of the if/else chain
-        RRTTree smoothed_segment;
+        RRTPath smoothed_segment;
         smoothed_segment.reserve(256);
         std::pair<bool, RRTTree> end_of_smoothing_to_goal_results;
 
@@ -3245,7 +3245,8 @@ void BandRRT::shortcutSmoothPath(
 
         if (planning_for_whole_robot_)
         {
-            assert(false && "Not updated based on using policies");
+            ROS_ERROR_NAMED("rrt", "smoothing for whole robot is not policy aware");
+//            assert(false && "Not updated based on using policies");
             // Check if the edge possibly can be smoothed
             const double minimum_distance = RRTDistance::Distance(smoothing_start_config.robotConfiguration(), smoothing_end_config.robotConfiguration());
             const double path_distance = RRTDistance::RobotPathDistance(path, smoothing_start_index, smoothing_end_index);
@@ -3504,7 +3505,7 @@ void BandRRT::shortcutSmoothPath(
             ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Shortcut valid, accepting");
 
             // Allocate space for the total smoothed path
-            RRTTree smoothed_path;
+            RRTPath smoothed_path;
             smoothed_path.reserve((smoothing_start_index  + 1) + (smoothed_segment.size() - 1) + (end_of_smoothing_to_goal_path.size() - 1));
 
             // Insert the starting unchanged part of the path

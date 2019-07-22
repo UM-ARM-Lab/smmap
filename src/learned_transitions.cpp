@@ -814,13 +814,14 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
         const RubberBand& test_band_start,
         const PairGripperPositions& ending_gripper_positions) const
 {
+    static const auto steps_per_cmd = GetNumSimstepsPerGripperCommand(*nh_);
+
     auto default_next_band = std::make_shared<RubberBand>(test_band_start);
     default_next_band->forwardPropagate(ending_gripper_positions, false);
 
     // Extract the best transform based on the invariants in the system
     // (memorized data) into the target points (test data)
-    #warning "Hard-coded div 4 to account for num simsteps per gripper command"
-    const auto num_gripper_steps = stored_trans.microstep_state_history_.size() / 4 * 100;
+    const auto num_gripper_steps = stored_trans.microstep_state_history_.size() / steps_per_cmd * 100;
     const ObjectPointSet warping_target_points = RubberBand::PointsFromBandAndGrippers(
                 test_band_start,
                 test_band_start.getEndpoints(),

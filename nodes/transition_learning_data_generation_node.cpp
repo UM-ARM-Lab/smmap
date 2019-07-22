@@ -1,3 +1,4 @@
+#include <arc_utilities/ros_helpers.hpp>
 #include <smmap_utilities/visualization_tools.h>
 #include "smmap/transition_learning_data_generation.h"
 #include "smmap/robot_interface.h"

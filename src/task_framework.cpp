@@ -14,6 +14,7 @@
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
+#include <arc_utilities/arc_helpers.hpp>
 #include <deformable_manipulation_experiment_params/utility.hpp>
 
 #include "smmap/diminishing_rigidity_model.h"
@@ -164,6 +165,21 @@ void TaskFramework::execute()
     WorldState world_feedback = robot_->start();
     double start_time = world_feedback.sim_time_;
     initializeModelAndControllerSet(world_feedback);
+
+    if (false)
+    {
+        world_feedback = robot_->start();
+        std::vector<std_msgs::ColorRGBA> colors(world_feedback.object_configuration_.cols());
+        for (ssize_t idx = 0; idx < world_feedback.object_configuration_.cols(); ++idx)
+        {
+            colors[idx] = ColorBuilder::InterpolateHotToCold((double)(idx)/(double)(world_feedback.object_configuration_.cols() - 1));
+        }
+        vis_->visualizePoints("object_config_test", world_feedback.object_configuration_, colors);
+        vis_->visualizePoint("gripper0grasped_point", world_feedback.object_configuration_.col(robot_->getGrippersData().at(0).node_indices_[0]), Visualizer::Blue());
+        vis_->visualizePoint("gripper1grasped_point", world_feedback.object_configuration_.col(robot_->getGrippersData().at(1).node_indices_[0]), Visualizer::Cyan());
+        PressAnyKeyToContinue("Waiting for object config ordering confirmation");
+//        arc_helpers::Sleep(0.5);
+    }
 
     if (enable_stuck_detection_)
     {
@@ -1588,9 +1604,6 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
 //    std::cout << "cover_points = [\n" << dijkstras_task_->cover_points_ << "];\n";
 //    std::cout << "cluster_targets = [\n" << PrettyPrint::PrettyPrint(cluster_targets, false, "\n") << "];\n";
 //    std::cout << "cluster_labels = [" << PrettyPrint::PrettyPrint(cluster_labels, false, " ") << "];\n";
-
-
-
     return target_gripper_poses;
 }
 

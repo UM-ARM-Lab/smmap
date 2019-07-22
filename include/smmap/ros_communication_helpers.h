@@ -1,6 +1,8 @@
 #ifndef ROS_COMMUNICATION_HELPERS_H
 #define ROS_COMMUNICATION_HELPERS_H
 
+#include <ros/ros.h>
+#include <arc_utilities/arc_exceptions.hpp>
 #include <arc_utilities/dijkstras.hpp>
 #include <sdf_tools/sdf.hpp>
 #include <smmap_utilities/grippers.h>

@@ -60,6 +60,7 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::CLOTH_TABLE_COVERAGE:
             return std::make_shared<ClothDirectCoverage>(nh, ph, vis);
 
+        case TaskType::CLOTH_PLACEMAT:
         case TaskType::CLOTH_MFLAG:
         case TaskType::CLOTH_CYLINDER_COVERAGE:
         case TaskType::CLOTH_WAFR:
@@ -72,9 +73,6 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::ROPE_ZIG_MATCH:
         case TaskType::ROPE_HOOKS:
             return std::make_shared<RopeFixedCorrespondences>(nh, ph, vis);
-
-        case TaskType::CLOTH_PLACEMAT:
-            return std::make_shared<ClothFixedCorrespondences>(nh, ph, vis);
 
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");
@@ -853,7 +851,7 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateErrorCorrectionDeltaFixedCo
     {
         const std::vector<ssize_t>& current_correspondences     = correspondences[deform_idx];
         #ifdef ENABLE_PROJECTION
-        const Eigen::Vector3d& deformable_point                 = environment_sdf_->ProjectOutOfCollision3d(world_state.object_configuration_.col(deform_idx));
+        const Eigen::Vector3d& deformable_point                 = sdf_->ProjectOutOfCollision3d(world_state.object_configuration_.col(deform_idx));
         #else
         const Eigen::Vector3d& deformable_point                 = world_state.object_configuration_.col(deform_idx);
         #endif
@@ -1157,7 +1155,7 @@ EigenHelpers::VectorVector3d DijkstrasCoverageTask::followCoverPointAssignments(
     static const double min_outer_progress_squared = std::pow(work_space_grid_.minStepDimension() / 2.0, 2);
 
     #ifdef ENABLE_PROJECTION
-    Eigen::Vector3d current_pos = environment_sdf_->ProjectOutOfCollision3d(starting_pos);
+    Eigen::Vector3d current_pos = sdf_->ProjectOutOfCollision3d(starting_pos);
     #else
     Eigen::Vector3d current_pos = starting_pos;
     #endif
@@ -1344,7 +1342,7 @@ DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCo
         // Ensure that regardless of the sensed point, we are working with a point that is in the valid volume
         const Eigen::Vector3d& deformable_point         = world_state.object_configuration_.col(deform_idx);
         #ifdef ENABLE_PROJECTION
-        const Eigen::Vector3d point_in_free_space       = environment_sdf_->ProjectOutOfCollision3d(deformable_point);
+        const Eigen::Vector3d point_in_free_space       = sdf_->ProjectOutOfCollision3d(deformable_point);
         #else
         const Eigen::Vector3d point_in_free_space = deformable_point;
         #endif

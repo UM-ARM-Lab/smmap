@@ -4,6 +4,7 @@
 #include <ros/callback_queue.h>
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/eigen_helpers_conversions.hpp>
+#include <arc_utilities/ros_helpers.hpp>
 #include <tf2_eigen/tf2_eigen.h>
 #include "smmap/ros_communication_helpers.h"
 
