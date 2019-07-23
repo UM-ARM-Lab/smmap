@@ -9,7 +9,6 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import classification_report
 from sklearn.svm import SVC
-from smmap_jupyter import notebook_finder
 from smmap_jupyter.classification_data import load_data, preprocess
 
 
