@@ -8,19 +8,21 @@ from sklearn import preprocessing
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import classification_report
-from sklearn.svm import SVC
+from sklearn.svm import SVC, LinearSVC
 from smmap_jupyter.classification_data import load_data, preprocess
 
 
 data, metadata = load_data(aggregate_data=False)
 X_train, X_test, Y_train, Y_test, metadata_train, metadata_test, output_fields = \
-    preprocess(data, metadata, max_train_datapoints=40000, max_test_datapoints=40000)
+    preprocess(data, metadata, max_train_datapoints=None, max_test_datapoints=None)
 scalar = preprocessing.StandardScaler()
 X_train_scaled = scalar.fit_transform(X_train)
 X_test_scaled = scalar.transform(X_test)
 
-classifier = SVC(C=1.0, kernel='rbf', class_weight='balanced', gamma='auto')
+classifier = SVC(C=10.0, kernel='linear', class_weight='balanced')
 classifier.fit(X_train_scaled, Y_train)
+# classifier = LinearSVC(penalty='l1', loss='squared_hinge', dual=False, C=10.0, class_weight='balanced', max_iter=1000000)
+# classifier.fit(X_train_scaled, Y_train)
 
 print("Full training set scores:")
 Y_train_predict = classifier.predict(X_train_scaled)
