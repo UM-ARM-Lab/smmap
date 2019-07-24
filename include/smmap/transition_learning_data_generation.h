@@ -8,7 +8,7 @@
 #include <arc_utilities/arc_helpers.hpp>
 #include <deformable_manipulation_msgs/TransitionTest.h>
 #include <smmap_utilities/visualization_tools.h>
-#include "smmap/learned_transitions.h"
+#include "smmap/transition_estimation.h"
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/robot_interface.h"
 #include "smmap/band_rrt.h"

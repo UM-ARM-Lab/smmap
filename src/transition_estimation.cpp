@@ -1,4 +1,4 @@
-#include "smmap/learned_transitions.h"
+#include "smmap/transition_estimation.h"
 
 #include <arc_utilities/filesystem.hpp>
 #include <arc_utilities/serialization_eigen.hpp>

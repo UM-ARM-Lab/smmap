@@ -1,5 +1,5 @@
-#ifndef LEARNED_TRANSITIONS_H
-#define LEARNED_TRANSITIONS_H
+#ifndef TRANSITION_ESTIMATION_H
+#define TRANSITION_ESTIMATION_H
 
 #include <arc_utilities/maybe.hpp>
 #include <smmap_utilities/visualization_tools.h>

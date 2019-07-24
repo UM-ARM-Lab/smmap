@@ -26,6 +26,7 @@ set(Eigen3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
 find_package(Flann REQUIRED)
+find_package(SVM REQUIRED)
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -41,7 +42,7 @@ catkin_package(
     INCLUDE_DIRS    include
     LIBRARIES       ${PROJECT_NAME}_planning
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
-    DEPENDS         Eigen3 FLANN
+    DEPENDS         Eigen3 FLANN SVM
 )
 
 ###########
@@ -56,6 +57,7 @@ include_directories(include
     ${EIGEN3_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
     ${FLANN_INCLUDE_DIRS}
+    ${SVM_INCLUDE_DIRS}
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
@@ -133,16 +135,16 @@ target_link_libraries(${PROJECT_NAME}_controllers ${catkin_LIBRARIES})
 ############# Transitions ######################################################
 
 add_custom_target(${PROJECT_NAME}_transitions_headers SOURCES
-    include/${PROJECT_NAME}/learned_transitions.h
+    include/${PROJECT_NAME}/transition_estimation.h
     include/${PROJECT_NAME}/quinlan_rubber_band.h
 )
 
 add_library(${PROJECT_NAME}_transitions
-    src/learned_transitions.cpp
+    src/transition_estimation.cpp
     src/quinlan_rubber_band.cpp
 )
 add_dependencies(${PROJECT_NAME}_transitions ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_transitions ${catkin_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_transitions ${catkin_LIBRARIES} ${SVM_LIBRARIES})
 
 ############# Planning #########################################################
 

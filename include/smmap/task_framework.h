@@ -12,7 +12,7 @@
 #include "smmap/deformable_controller.h"
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/band_rrt.h"
-#include "smmap/learned_transitions.h"
+#include "smmap/transition_estimation.h"
 
 namespace smmap
 {

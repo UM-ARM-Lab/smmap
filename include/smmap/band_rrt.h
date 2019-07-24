@@ -6,7 +6,7 @@
 
 #include <flann/flann.hpp>
 
-#include "smmap/learned_transitions.h"
+#include "smmap/transition_estimation.h"
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/robot_interface.h"
 
