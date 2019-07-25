@@ -138,12 +138,14 @@ add_custom_target(${PROJECT_NAME}_transitions_headers SOURCES
     include/${PROJECT_NAME}/transition_estimation.h
     include/${PROJECT_NAME}/quinlan_rubber_band.h
     include/${PROJECT_NAME}/svm_classifier.h
+    include/${PROJECT_NAME}/parabola.h
 )
 
 add_library(${PROJECT_NAME}_transitions
     src/transition_estimation.cpp
     src/quinlan_rubber_band.cpp
     src/svm_classifier.cpp
+    src/parabola.cpp
 )
 add_dependencies(${PROJECT_NAME}_transitions ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_transitions

@@ -6,6 +6,7 @@
 #include "smmap/trajectory.hpp"
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/task_specification.h"
+#include "smmap/svm_classifier.h"
 
 namespace smmap
 {
@@ -124,6 +125,8 @@ namespace smmap
         // Using transitions
         ////////////////////////////////////////////////////////////////////////
 
+        Eigen::VectorXd transitionFeatures();
+
         const std::vector<StateTransition>& transitions() const;
 
         struct TransitionAdaptationResult
@@ -172,6 +175,9 @@ namespace smmap
                 const StateTransition& stored_trans,
                 const RubberBand& test_band_start,
                 const PairGripperPositions& ending_gripper_positions) const;
+
+        Eigen::VectorXd transitionFeatures(const RubberBand& initial_band,
+                                           const RubberBand& default_prediction) const;
 
         // Returns vector of potential outcomes of the action, and a relative
         // confidence from 0 (not likely) to 1 (input data exactly matched a
@@ -226,6 +232,13 @@ namespace smmap
         const double template_misalignment_scale_factor_;
         const double band_tighten_scale_factor_;
         const double homotopy_changes_scale_factor_;
+
+        ////////////////////////////////////////////////////////////////////////
+        // Default transition mistake estimation
+        ////////////////////////////////////////////////////////////////////////
+
+        MinMaxTransformer classifier_scaler_;
+        SVMClassifier transition_mistake_classifier_;
 
         ////////////////////////////////////////////////////////////////////////
         // Saving and loading learned transitions

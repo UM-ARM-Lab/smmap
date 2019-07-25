@@ -16,8 +16,8 @@ namespace smmap
         {
             (void)nh;
             const int vec_len = ROSHelpers::GetParamRequired<int>(*ph, "svm/dim", __func__).GetImmutable();
-            const auto scale = ROSHelpers::GetVectorRequired<std::vector<double>>(*ph, "svm/transformer/scale", __func__).GetImmutable();
-            const auto offset = ROSHelpers::GetVectorRequired<std::vector<double>>(*ph, "svm/transformer/offset", __func__).GetImmutable();
+            const auto scale = ROSHelpers::GetVectorRequired<double>(*ph, "svm/transformer/scale", __func__).GetImmutable();
+            const auto offset = ROSHelpers::GetVectorRequired<double>(*ph, "svm/transformer/offset", __func__).GetImmutable();
             assert(static_cast<int>(scale.size()) == vec_len);
             assert(static_cast<int>(offset.size()) == vec_len);
 
@@ -58,6 +58,7 @@ namespace smmap
 
         ~SVMClassifier();
 
+        int numFeatures() const { return num_features_; }
         double predict(const Eigen::VectorXd& vec) const;
 
     private:

@@ -8,6 +8,8 @@
 #include <arc_utilities/path_utils.hpp>
 #include <arc_utilities/timing.hpp>
 #include <deformable_manipulation_experiment_params/utility.hpp>
+#include <sdf_tools/collision_map.hpp>
+#include "smmap/parabola.h"
 
 //#define TRANSITION_LEARNING_VERBOSE true
 #define TRANSITION_LEARNING_VERBOSE false
@@ -505,6 +507,9 @@ TransitionEstimation::TransitionEstimation(
     , band_tighten_scale_factor_(GetTransitionTightenDeltaScaleFactor(*ph_))
     , homotopy_changes_scale_factor_(GetTransitionHomotopyChangesScaleFactor(*ph_))
 
+    , classifier_scaler_(nh, ph)
+    , transition_mistake_classifier_(nh, ph)
+
     , template_band_(template_band)
 {
     if (useStoredTransitions())
@@ -927,6 +932,136 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
     };
 }
 
+Eigen::VectorXd TransitionEstimation::transitionFeatures(
+        const RubberBand& initial_band,
+        const RubberBand& default_prediction) const
+{
+    enum
+    {
+//        GRIPPER_A_PRE_X,
+//        GRIPPER_A_PRE_Y,
+//        GRIPPER_A_PRE_Z,
+//        GRIPPER_B_PRE_X,
+//        GRIPPER_B_PRE_Y,
+//        GRIPPER_B_PRE_Z,
+//        GRIPPER_A_POST_X,
+//        GRIPPER_A_POST_Y,
+//        GRIPPER_A_POST_Z,
+//        GRIPPER_B_POST_X,
+//        GRIPPER_B_POST_Y,
+//        GRIPPER_B_POST_Z,
+
+        GRIPPER_DELTA_LENGTH_PRE,
+        GRIPPER_DELTA_LENGTH_POST,
+
+//        MAX_BAND_LENGTH,
+        STARTING_BAND_LENGTH,
+        ENDING_DEFAULT_BAND_LENGTH,
+
+//        STARTING_MAJOR_AXIS_LENGTH,
+//        STARTING_MINOR_AXIS_LENGTH,
+//        ENDING_MAJOR_AXIS_LENGTH,
+//        ENDING_MINOR_AXIS_LENGTH,
+
+        SLICE_NUM_CONNECTED_COMPONENTS_PRE,
+        SLICE_NUM_CONNECTED_COMPONENTS_POST,
+        SLICE_NUM_CONNECTED_COMPONENTS_DELTA,
+
+        SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE,
+        SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST,
+        SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA,
+
+        SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE,
+        SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST,
+        SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA,
+
+        DUMMY_ITEM
+    };
+
+    assert(transition_mistake_classifier_.numFeatures() == 4 ||
+           transition_mistake_classifier_.numFeatures() == 13);
+    Eigen::VectorXd features(transition_mistake_classifier_.numFeatures());
+
+    const auto grippers_pre = initial_band.getEndpoints();
+    const auto grippers_post = default_prediction.getEndpoints();
+    const double band_length_pre = initial_band.totalLength();
+    const double default_band_length_post = default_prediction.totalLength();
+
+    features[GRIPPER_DELTA_LENGTH_PRE]      = (grippers_pre.first - grippers_pre.second).norm();
+    features[GRIPPER_DELTA_LENGTH_POST]     = (grippers_post.first - grippers_post.second).norm();
+    features[STARTING_BAND_LENGTH]          = band_length_pre;
+    features[ENDING_DEFAULT_BAND_LENGTH]    = default_band_length_post;
+
+    if (transition_mistake_classifier_.numFeatures() == 13)
+    {
+        const double dmax = initial_band.maxSafeLength();
+        const double resolution = work_space_grid_.minStepDimension() / 2.0;
+        sdf_tools::CollisionMapGrid collision_grid_pre = ExtractParabolaSlice(*sdf_, resolution, grippers_pre, dmax);//, vis_);
+        sdf_tools::CollisionMapGrid collision_grid_post = ExtractParabolaSlice(*sdf_, resolution, grippers_post, dmax);//, vis_);
+
+        const auto components_pre = collision_grid_pre.ExtractConnectedComponents();
+        const auto components_post = collision_grid_post.ExtractConnectedComponents();
+        const int num_connected_components_pre = static_cast<int>(components_pre.size());
+        const int num_connected_components_post = static_cast<int>(components_post.size());
+
+        // Figure out how many "occupied" components there are, and how many "empty" components there are (pre)
+        int num_free_components_pre = 0;
+        int num_occupied_components_pre = 0;
+        for (size_t idx = 0; idx < components_pre.size(); ++idx)
+        {
+            const auto grid_idx = components_pre[idx].at(0);
+            const auto occupancy = collision_grid_pre.GetImmutable(grid_idx).first.occupancy;
+            if (occupancy < 0.5)
+            {
+                ++num_free_components_pre;
+            }
+            else if (occupancy > 0.5)
+            {
+                ++num_occupied_components_pre;
+            }
+            else
+            {
+                assert(false && "Unknown cell in grid");
+            }
+        }
+
+        // Figure out how many "occupied" components there are, and how many "empty" components there are (post)
+        int num_free_components_post = 0;
+        int num_occupied_components_post = 0;
+        for (size_t idx = 0; idx < components_post.size(); ++idx)
+        {
+            const auto grid_idx = components_post[idx].at(0);
+            const auto occupancy = collision_grid_post.GetImmutable(grid_idx).first.occupancy;
+            if (occupancy < 0.5)
+            {
+                ++num_free_components_post;
+            }
+            else if (occupancy > 0.5)
+            {
+                ++num_occupied_components_post;
+            }
+            else
+            {
+                assert(false && "Unknown cell in grid");
+            }
+        }
+
+        features[SLICE_NUM_CONNECTED_COMPONENTS_PRE]            = num_connected_components_pre;
+        features[SLICE_NUM_CONNECTED_COMPONENTS_POST]           = num_connected_components_post;
+        features[SLICE_NUM_CONNECTED_COMPONENTS_DELTA]          = num_connected_components_post - num_connected_components_pre;
+
+        features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE]       = num_free_components_pre;
+        features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST]      = num_free_components_post;
+        features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA]     = num_free_components_post - num_free_components_pre;
+
+        features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE]   = num_occupied_components_pre;
+        features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST]  = num_occupied_components_post;
+        features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] = num_occupied_components_post - num_occupied_components_pre;
+    }
+
+    return classifier_scaler_(features);
+}
+
 std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTransitions(
         const RubberBand& test_band_start,
         const PairGripperPositions& ending_gripper_positions,
@@ -943,9 +1078,15 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     }
     else
     {
-        transitions.push_back({default_next_band, default_propogation_confidence_});
+        const auto features = transitionFeatures(test_band_start, *default_next_band);
+        if (transition_mistake_classifier_.predict(features) == -1)
+        {
+            transitions.push_back({default_next_band, default_propogation_confidence_});
+        }
     }
 
+
+#if false
     for (size_t transition_idx = 0; transition_idx < learned_transitions_.size(); ++transition_idx)
     {
         const StateTransition& stored_trans = learned_transitions_[transition_idx];
@@ -1111,7 +1252,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
         PressAnyKeyToContinue("Made it to the end of the stored trans loop");
         transitions.push_back({next_band, confidence});
     }
-
+#endif
     return transitions;
 }
 

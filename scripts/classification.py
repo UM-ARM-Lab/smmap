@@ -12,11 +12,13 @@ from smmap_jupyter import classification_data
 
 
 data, metadata = classification_data.load_data(aggregate_data=False)
-X_train, X_test, Y_train, Y_test, metadata_train, metadata_test, output_fields = \
+X_train, X_test, Y_train, Y_test, metadata_train, metadata_test, field_names = \
     classification_data.preprocess(data, metadata, max_train_datapoints=None, max_test_datapoints=None)
 scaler = preprocessing.MinMaxScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
+
+IPython.embed()
 
 # classifier = SVC(C=10.0, kernel='linear', class_weight='balanced')
 # classifier.fit(X_train_scaled, Y_train)
@@ -28,8 +30,8 @@ classifier = SVC(C=1000.0, kernel='rbf', class_weight='balanced', gamma='scale')
 classifier.fit(X_train_scaled, Y_train)
 print("done. Using", len(classifier.support_), "support vectors.")
 
-classification_data.write_min_max_scaler(scaler, str(len(output_fields)) + "feature.scaler")
-classification_data.libsvm_write_model(classifier, str(len(output_fields)) + "feature.model", X_train_scaled.var())
+classification_data.write_min_max_scaler(scaler, str(len(field_names)) + "feature.scaler")
+classification_data.libsvm_write_model(classifier, str(len(field_names)) + "feature.model", X_train_scaled.var())
 
 print("Full training set scores:")
 Y_train_predict = classifier.predict(X_train_scaled)
