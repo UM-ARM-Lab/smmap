@@ -1,5 +1,5 @@
 find_path(SVM_INCLUDE_DIR svm/svm.h)
-find_library(SVM_LIBRARY svm)
+set(SVM_LIBRARY ${SVM_INCLUDE_DIR}/../lib/libsvm.so)
 
 set(SVM_INCLUDE_DIRS ${SVM_INCLUDE_DIR})
 set(SVM_LIBRARIES ${SVM_LIBRARY})

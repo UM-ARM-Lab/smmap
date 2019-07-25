@@ -137,14 +137,21 @@ target_link_libraries(${PROJECT_NAME}_controllers ${catkin_LIBRARIES})
 add_custom_target(${PROJECT_NAME}_transitions_headers SOURCES
     include/${PROJECT_NAME}/transition_estimation.h
     include/${PROJECT_NAME}/quinlan_rubber_band.h
+    include/${PROJECT_NAME}/svm_classifier.h
 )
 
 add_library(${PROJECT_NAME}_transitions
     src/transition_estimation.cpp
     src/quinlan_rubber_band.cpp
+    src/svm_classifier.cpp
 )
 add_dependencies(${PROJECT_NAME}_transitions ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_transitions ${catkin_LIBRARIES} ${SVM_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_transitions
+    ${PROJECT_NAME}_infrastructure
+    ${catkin_LIBRARIES}
+    ${SVM_LIBRARIES}
+)
+target_compile_definitions(${PROJECT_NAME}_transitions PUBLIC "-D _DENSE_REP")
 
 ############# Planning #########################################################
 
@@ -183,8 +190,6 @@ add_library(${PROJECT_NAME}_learning_testing
 )
 add_dependencies(${PROJECT_NAME}_learning_testing ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_learning_testing
-#    ${PROJECT_NAME}_infrastructure
-#    ${PROJECT_NAME}_transitions
     ${PROJECT_NAME}_planning
     ${catkin_LIBRARIES}
 )
@@ -192,3 +197,7 @@ target_link_libraries(${PROJECT_NAME}_learning_testing
 add_executable(transition_learning_data_generation_node nodes/transition_learning_data_generation_node.cpp)
 add_dependencies(transition_learning_data_generation_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(transition_learning_data_generation_node ${PROJECT_NAME}_learning_testing ${catkin_LIBRARIES})
+
+add_executable(svm_tester nodes/svm_tester.cpp)
+add_dependencies(svm_tester ${catkin_EXPORTED_TARGETS})
+target_link_libraries(svm_tester ${PROJECT_NAME}_transitions ${catkin_LIBRARIES})
