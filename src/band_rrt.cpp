@@ -1896,7 +1896,7 @@ static std::pair<int64_t, double> getNearest(
     std::pair<int64_t, double> nearest(-1, std::numeric_limits<double>::infinity());
 
     VectorXf robot_config_float = robot_config.cast<float>();
-    flann::Matrix<float> query(robot_config_float.data(), 1, robot_config.size());
+    const flann::Matrix<float> query(robot_config_float.data(), 1, robot_config.size());
 
     const size_t knn = 1;
     std::vector<std::vector<size_t>> indices(query.rows, std::vector<size_t>(knn, -1));

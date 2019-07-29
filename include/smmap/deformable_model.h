@@ -69,7 +69,7 @@ namespace smmap
             // Logging
             ////////////////////////////////////////////////////////////////////
 
-            const std::shared_ptr<Log::Log> computation_time_log_;
+//            const std::shared_ptr<Log::Log> computation_time_log_;
     };
 }
 

@@ -177,7 +177,8 @@ namespace smmap
                 const PairGripperPositions& ending_gripper_positions) const;
 
         Eigen::VectorXd transitionFeatures(const RubberBand& initial_band,
-                                           const RubberBand& default_prediction) const;
+                                           const RubberBand& default_prediction,
+                                           const bool verbose = false) const;
 
         // Returns vector of potential outcomes of the action, and a relative
         // confidence from 0 (not likely) to 1 (input data exactly matched a

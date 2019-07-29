@@ -85,6 +85,24 @@ class TransitionExamplePage(QWidget):
         self.setLayout(self.layout)
 
 
+class TransitionClassificationPage(QWidget):
+    def __init__(self, parent):
+        QWidget.__init__(self, parent)
+        self.parent = parent
+
+        self.add_vis_service_name = "transition_vis/add_classification_example_visualization"
+        self.data_folder = rospy.get_param("transition_learning_data_generation_node/data_folder", "/tmp")
+        self.last_folder_used = deepcopy(self.data_folder)
+
+        self.test_file_box = parent.createTestFileBox("Classification Example", self)
+        self.test_file_list_box = parent.createTestFileListBox("Classification Example List", self)
+
+        self.layout = QGridLayout()
+        self.layout.addWidget(self.test_file_box)
+        self.layout.addWidget(self.test_file_list_box)
+
+        self.setLayout(self.layout)
+
 class DataVisBrowswer(QWidget):
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
@@ -101,8 +119,10 @@ class DataVisBrowswer(QWidget):
         self.createVisIdFeedbackBox()
         self.transition_adaptation_page = TransitionAdaptationPage(self)
         self.transition_example_page = TransitionExamplePage(self)
+        self.transition_classification_page = TransitionClassificationPage(self)
 
         self.tabs = QTabWidget(parent)
+        self.tabs.addTab(self.transition_classification_page, "Transition Classification")
         self.tabs.addTab(self.transition_example_page, "Transition Examples")
         self.tabs.addTab(self.transition_adaptation_page, "Transition Adaptation")
         self.layout = QGridLayout()
@@ -261,9 +281,9 @@ class DataVisBrowswer(QWidget):
         """
         text = str(text)
         text = text.strip()
-        if text[0] == '"':
+        if text[0] == '"' or text[0] == "'":
             text = text[1:]
-        if text[-1] == '"':
+        if text[-1] == '"' or text[-1] == "'":
             text = text[:-1]
         return text
 

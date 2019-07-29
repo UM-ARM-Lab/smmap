@@ -43,6 +43,8 @@ const static std_msgs::ColorRGBA PREDICTION_RUBBER_BAND_VIOLATION_COLOR = ColorB
 
 //#define ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE 1
 #define ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE 0
+//#define ENABLE_TRANSITION_LEARNING 1
+#define ENABLE_TRANSITION_LEARNING 0
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal helpers
@@ -357,7 +359,7 @@ WorldState TaskFramework::sendNextCommand(
 //                vis_->forcePublishNow(0.05);
 
                 planning_needed = true;
-
+#if ENABLE_TRANSITION_LEARNING
                 ROS_WARN_NAMED("task_framework", "Determining most recent bad transition");
                 const auto last_bad_transition = transition_estimator_->findMostRecentBadTransition(rrt_executed_path_);
                 if (last_bad_transition.Valid())
@@ -376,6 +378,7 @@ WorldState TaskFramework::sendNextCommand(
                 {
                     ROS_WARN_NAMED("task_framework", "Global plan failed but unable to learn new transition");
                 }
+#endif
 
 
                 ROS_WARN_NAMED("task_framework", "Invoking global planner as the current plan will overstretch the deformable object");
@@ -1729,6 +1732,31 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 band_rrt_->storePolicy(rrt_planned_policy_, file_path);
             }
         }
+    }
+
+    // Record the resulting path execution in its entirety for transition learning purposes
+    {
+        const auto test = robot_->toRosTransitionTest(
+                    world_state.rope_node_transforms_,
+                    world_state.all_grippers_single_pose_,
+                    RRTPathToGrippersPoseTrajectory(rrt_planned_policy_[0].first),
+                    ToGripperPoseVector(rrt_planned_policy_[0].first.back().grippers()));
+        const auto base_folder = "/mnt/big_narstie_data/dmcconac/transition_learning_data_generation/smmap_generated_plans/";
+        const auto folder = base_folder + GetTaskTypeString(*nh_) + "/" + std::to_string(seed_) + "/";
+        arc_utilities::CreateDirectory(folder);
+        const auto timestamp = arc_helpers::GetCurrentTimeAsString();
+        const auto path_to_start_filename = folder + timestamp + "__path_to_start.compressed";
+        const auto test_results_filename = folder + timestamp + "__test_results.compressed";
+
+        // Save the path to file in the correct folder
+        {
+            std::vector<uint8_t> buffer;
+            SerializeVector<RRTNode>(rrt_planned_policy_[0].first, buffer, &RRTNode::Serialize);
+            ZlibHelpers::CompressAndWriteToFile(buffer, path_to_start_filename);
+        }
+
+        // Ignore the feedback as the action sever saves the results to file anyway
+        robot_->generateTransitionData({test}, {test_results_filename}, nullptr, false);
     }
 
 //    band_rrt_->visualizePolicy(rrt_planned_policy_, true);

@@ -669,10 +669,14 @@ namespace smmap
         feedback_recieved_.clear();
         feedback_recieved_.resize(goal.tests.size(), false);
 
-        ros::Subscriber internal_feedback_sub = nh_->subscribe<GenerateTransitionDataActionFeedback>(
-                    GetGenerateTransitionDataTopic(*nh_) + "/feedback",
-                    1000,
-                    boost::bind(&RobotInterface::internalGenerateTransitionDataFeedbackCallback, this, _1, feedback_callback));
+        ros::Subscriber internal_feedback_sub;
+        if (feedback_callback != nullptr)
+        {
+            internal_feedback_sub = nh_->subscribe<GenerateTransitionDataActionFeedback>(
+                        GetGenerateTransitionDataTopic(*nh_) + "/feedback",
+                        1000,
+                        boost::bind(&RobotInterface::internalGenerateTransitionDataFeedbackCallback, this, _1, feedback_callback));
+        }
 
         generate_transition_data_client_.sendGoal(goal);
 

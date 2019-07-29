@@ -66,10 +66,11 @@ namespace smmap
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
         const XYZGrid work_space_grid_;
 
-        std::shared_ptr<BandRRT::WorldParams> world_params_;
+        std::shared_ptr<const BandRRT::WorldParams> world_params_;
         BandRRT::PlanningParams planning_params_;
         BandRRT::SmoothingParams smoothing_params_;
         BandRRT::TaskParams task_params_;
+        std::shared_ptr<const BandRRT> band_rrt_vis_;
 
         Eigen::Isometry3d gripper_a_starting_pose_;
         Eigen::Isometry3d gripper_b_starting_pose_;
@@ -102,6 +103,7 @@ namespace smmap
         void clampGripperDeltas(
                 Eigen::Ref<Eigen::Vector3d> a_delta,
                 Eigen::Ref<Eigen::Vector3d> b_delta) const;
+        // Generates file name stubs: "/path/to/file/experiment" without the "__type_of_data.compressed" suffix
         std::vector<std::string> getDataFileList();
         std::vector<std::string> data_files_;
 
@@ -113,6 +115,48 @@ namespace smmap
         void generateTestData();
         void generateLastStepTransitionApproximations();
         void generateMeaningfulMistakeExamples();
+
+        enum Features
+        {
+            GRIPPER_A_PRE_X,
+            GRIPPER_A_PRE_Y,
+            GRIPPER_A_PRE_Z,
+            GRIPPER_B_PRE_X,
+            GRIPPER_B_PRE_Y,
+            GRIPPER_B_PRE_Z,
+            GRIPPER_A_POST_X,
+            GRIPPER_A_POST_Y,
+            GRIPPER_A_POST_Z,
+            GRIPPER_B_POST_X,
+            GRIPPER_B_POST_Y,
+            GRIPPER_B_POST_Z,
+
+            GRIPPER_DELTA_LENGTH_PRE,
+            GRIPPER_DELTA_LENGTH_POST,
+
+            MAX_BAND_LENGTH,
+            STARTING_BAND_LENGTH,
+            ENDING_DEFAULT_BAND_LENGTH,
+
+//            STARTING_MAJOR_AXIS_LENGTH,
+//            STARTING_MINOR_AXIS_LENGTH,
+//            ENDING_MAJOR_AXIS_LENGTH,
+//            ENDING_MINOR_AXIS_LENGTH,
+
+            SLICE_NUM_CONNECTED_COMPONENTS_PRE,
+            SLICE_NUM_CONNECTED_COMPONENTS_POST,
+            SLICE_NUM_CONNECTED_COMPONENTS_DELTA,
+
+            SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE,
+            SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST,
+            SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA,
+
+            SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE,
+            SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST,
+            SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA,
+
+            FEATURES_DUMMY_ITEM
+        };
         void generateFeatures();
         std::vector<std::string> extractFeatures(const TransitionEstimation::StateTransition& transition) const;
 
@@ -166,7 +210,13 @@ namespace smmap
         ros::ServiceServer add_transition_adaptation_visualization_;
 
         // Mistake Example
+        const double mistake_dist_thresh_;
         ros::ServiceServer add_mistake_example_visualization_;
+
+        // Classification Example
+        MinMaxTransformer classifier_scaler_;
+        SVMClassifier transition_mistake_classifier_;
+        ros::ServiceServer add_classification_example_visualization_;
 
     public:
         void setNextVisId(const std_msgs::Int32& msg);
@@ -182,6 +232,10 @@ namespace smmap
                 deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
 
         bool addMistakeExampleVisualizationCallback(
+                deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
+                deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
+
+        bool addClassificationExampleVisualizationCallback(
                 deformable_manipulation_msgs::TransitionTestingVisualizationRequest& req,
                 deformable_manipulation_msgs::TransitionTestingVisualizationResponse& res);
     };

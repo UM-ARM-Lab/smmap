@@ -4,6 +4,7 @@
 #include <ros/ros.h>
 #include <svm/svm.h>
 #include <Eigen/Core>
+#include <flann/flann.hpp>
 #include <arc_utilities/ros_helpers.hpp>
 
 namespace smmap
@@ -11,8 +12,8 @@ namespace smmap
     class MinMaxTransformer
     {
     public:
-        MinMaxTransformer(std::shared_ptr<ros::NodeHandle>& nh,
-                          std::shared_ptr<ros::NodeHandle>& ph)
+        MinMaxTransformer(std::shared_ptr<ros::NodeHandle> nh,
+                          std::shared_ptr<ros::NodeHandle> ph)
         {
             (void)nh;
             const int vec_len = ROSHelpers::GetParamRequired<int>(*ph, "svm/dim", __func__).GetImmutable();
@@ -42,7 +43,12 @@ namespace smmap
 
         Eigen::VectorXd operator()(const Eigen::VectorXd& x) const
         {
-            return scale_.cwiseProduct(x) + offset_;
+            return x.cwiseProduct(scale_) + offset_;
+        }
+
+        Eigen::VectorXd inverse(const Eigen::VectorXd& sx) const
+        {
+            return (sx - offset_).cwiseQuotient(scale_);
         }
 
     private:
@@ -53,13 +59,14 @@ namespace smmap
     class SVMClassifier
     {
     public:
-        SVMClassifier(std::shared_ptr<ros::NodeHandle>& nh,
-                      std::shared_ptr<ros::NodeHandle>& ph);
+        SVMClassifier(std::shared_ptr<ros::NodeHandle> nh,
+                      std::shared_ptr<ros::NodeHandle> ph);
 
         ~SVMClassifier();
 
         int numFeatures() const { return num_features_; }
         double predict(const Eigen::VectorXd& vec) const;
+        std::pair<double, Eigen::VectorXd> nearestNeighbour(const Eigen::VectorXd& vec) const;
 
     private:
         std::shared_ptr<ros::NodeHandle> const nh_;
@@ -69,6 +76,9 @@ namespace smmap
         int const num_features_;
         svm_node query_;
 //        MinMaxTransformer const transformer_;
+
+        std::vector<double> nn_raw_data_;
+        flann::KDTreeSingleIndex<flann::L2<double>> nn_index_;
     };
 }
 

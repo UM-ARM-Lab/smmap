@@ -449,10 +449,10 @@ namespace smmap
             std::shared_ptr<ros::NodeHandle> ph,
             RobotInterface::Ptr robot,
             Visualizer::Ptr vis)
-        : nh_(std::move(nh))
-        , ph_(std::move(ph))
-        , robot_(std::move(robot))
-        , vis_(std::move(vis))
+        : nh_(nh)
+        , ph_(ph)
+        , robot_(robot)
+        , vis_(vis)
         , disable_visualizations_(GetDisableAllVisualizations(*ph_))
         , visualize_gripper_motion_(!disable_visualizations_ && GetVisualizeGripperMotion(*ph_))
 
@@ -489,7 +489,13 @@ namespace smmap
         , set_transition_adaptation_source_(nh_->advertiseService("transition_vis/set_transition_adaptation_source", &TransitionTesting::setTransitionAdaptationSourceCallback, this))
         , add_transition_adaptation_visualization_(nh_->advertiseService("transition_vis/add_transition_adaptation_visualization", &TransitionTesting::addTransitionAdaptationVisualizationCallback, this))
 
+        #warning("Hard coded mistake dist thresh here")
+        , mistake_dist_thresh_(0.5)
         , add_mistake_example_visualization_(nh_->advertiseService("transition_vis/add_mistake_example_visualization", &TransitionTesting::addMistakeExampleVisualizationCallback, this))
+
+        , classifier_scaler_(nh_, ph_)
+        , transition_mistake_classifier_(nh_, ph_)
+        , add_classification_example_visualization_(nh_->advertiseService("transition_vis/add_classification_example_visualization", &TransitionTesting::addClassificationExampleVisualizationCallback, this))
     {
         std::srand((unsigned int)seed_);
         initialize(initial_world_state_);
@@ -580,7 +586,7 @@ namespace smmap
     void TransitionTesting::initializeRRTParams()
     {
         // "World" params used by planning
-        world_params_ = std::make_shared<BandRRT::WorldParams>(BandRRT::WorldParams
+        world_params_ = std::make_shared<const BandRRT::WorldParams>(BandRRT::WorldParams
         {
             robot_,
             false,
@@ -656,6 +662,15 @@ namespace smmap
             band_distance2_scaling_factor,
             upsampled_band_num_points
         };
+
+        band_rrt_vis_ = std::make_shared<const BandRRT>(nh_,
+                                                        ph_,
+                                                        *world_params_,
+                                                        planning_params_,
+                                                        smoothing_params_,
+                                                        task_params_,
+                                                        vis_,
+                                                        false);
     }
 
     void TransitionTesting::clampGripperDeltas(Ref<Vector3d> a_delta, Ref<Vector3d> b_delta) const
@@ -688,9 +703,10 @@ namespace smmap
                 {
                     ROS_WARN_STREAM("Ignoring file: " << filename);
                 }
-                if (filename.find("test_results.compressed") != std::string::npos)
+                if (filename.find("__test_results.compressed") != std::string::npos)
                 {
-                    files.push_back(filename);
+                    // Strip off the extra string for simpler use later
+                    files.push_back(filename.substr(0, filename.find("__test_results.compressed")));
                 }
             }
         }
@@ -872,13 +888,6 @@ namespace smmap
         tests.reserve(num_threads);
         filenames.reserve(num_threads);
 
-        // Ignore the feedback as the action sever saves the results to file anyway
-        const auto feedback_callback = [&] (const size_t test_id, const dmm::TransitionTestResult& result)
-        {
-            (void)test_id;
-            (void)result;
-        };
-
         //// Generate the canonical example ////////////////////////////////////
         {
             const std::string folder(data_folder_ + "/cannonical_straight_test");
@@ -967,7 +976,8 @@ namespace smmap
                                 // Execute the tests if tehre are enough to run
                                 if (tests.size() == num_threads)
                                 {
-                                    robot_->generateTransitionData(tests, filenames, feedback_callback, false);
+                                    // Ignore the feedback as the action sever saves the results to file anyway
+                                    robot_->generateTransitionData(tests, filenames, nullptr, false);
                                     tests.clear();
                                     filenames.clear();
                                 }
@@ -1051,7 +1061,8 @@ namespace smmap
                                 // Execute the tests if tehre are enough to run
                                 if (tests.size() == num_threads)
                                 {
-                                    robot_->generateTransitionData(tests, filenames, feedback_callback, false);
+                                    // Ignore the feedback as the action sever saves the results to file anyway
+                                    robot_->generateTransitionData(tests, filenames, nullptr, false);
                                     tests.clear();
                                     filenames.clear();
                                 }
@@ -1078,7 +1089,8 @@ namespace smmap
         // Run an tests left over
         if (tests.size() != 0)
         {
-            robot_->generateTransitionData(tests, filenames, feedback_callback, false);
+            // Ignore the feedback as the action sever saves the results to file anyway
+            robot_->generateTransitionData(tests, filenames, nullptr, false);
             tests.clear();
             filenames.clear();
         }
@@ -1197,11 +1209,12 @@ namespace smmap
         #pragma omp parallel for
         for (size_t idx = 0; idx < data_files_.size(); ++idx)
         {
-            const auto& test_result_file = data_files_[idx];
-            const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
-            const auto test_transition_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__test_transition.compressed";
-            const auto adaptation_result_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__adaptation_record.compressed";
-            const auto failure_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__adaptation_record.failed";
+            const auto& experiment = data_files_[idx];
+            const auto test_result_file =       experiment + "__test_results.compressed";
+            const auto path_to_start_file =     experiment + "__path_to_start.compressed";
+            const auto test_transition_file =   experiment + "__test_transition.compressed";
+            const auto adaptation_result_file = experiment + "__adaptation_record.compressed";
+            const auto failure_file =           experiment + "__adaptation_record.failed";
 
             std::vector<std::string> dists_etc(DUMMY_ITEM, "");
             dists_etc[FILENAME] = test_result_file.substr(data_folder_.length() + 1);
@@ -1296,9 +1309,13 @@ namespace smmap
 
         source_valid_ = false;
 
-        const auto test_result_file = data_folder_ + "/" + req.data;
-        const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
-        const auto test_transition_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__test_transition.compressed";
+        const std::string delimiter = "__test_results.compressed";
+        const auto pos = req.data.find(delimiter);
+        const auto experiment = data_folder_ + "/" + req.data.substr(0, pos);
+
+        const auto test_result_file =       experiment + "__test_results.compressed";
+        const auto path_to_start_file =     experiment + "__path_to_start.compressed";
+        const auto test_transition_file =   experiment + "__test_transition.compressed";
 
         // Load the resulting transition, if needed generate it first
         source_file_ = req.data;
@@ -1362,9 +1379,13 @@ namespace smmap
             return false;
         }
 
-        const auto test_result_file = data_folder_ + "/" + req.data;
-        const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
-        const auto test_transition_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__test_transition.compressed";
+        const std::string delimiter = "__test_results.compressed";
+        const auto pos = req.data.find(delimiter);
+        const auto experiment = data_folder_ + "/" + req.data.substr(0, pos);
+
+        const auto test_result_file =       experiment + "__test_results.compressed";
+        const auto path_to_start_file =     experiment + "__path_to_start.compressed";
+        const auto test_transition_file =   experiment + "__test_transition.compressed";
 
         // Load the test result itself
         const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
@@ -1468,10 +1489,11 @@ namespace smmap
         #pragma omp parallel for
         for (size_t idx = 0; idx < data_files_.size(); ++idx)
         {
-            const auto& test_result_file = data_files_[idx];
-            const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
-            const auto example_mistake_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__example_mistake.compressed";
-            const auto failure_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__example_mistake.failed";
+            const auto& experiment = data_files_[idx];
+            const auto test_result_file =       experiment + "__test_results.compressed";
+            const auto path_to_start_file =     experiment + "__path_to_start.compressed";
+            const auto example_mistake_file =   experiment + "__example_mistake.compressed";
+            const auto failure_file =           experiment + "__example_mistake.failed";
 
             std::vector<std::string> dists_etc(DUMMY_ITEM, "");
             dists_etc[FILENAME] = test_result_file.substr(data_folder_.length() + 1);
@@ -1553,10 +1575,14 @@ namespace smmap
             dmm::TransitionTestingVisualizationRequest& req,
             dmm::TransitionTestingVisualizationResponse& res)
     {
-        const std::string test_result_file = data_folder_ + "/" + req.data;
-        const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
-        const auto example_mistake_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__example_mistake.compressed";
-        const auto trajectory_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__trajectory.compressed";
+        const std::string delimiter = "__test_results.compressed";
+        const auto pos = req.data.find(delimiter);
+        const auto experiment = data_folder_ + "/" + req.data.substr(0, pos);
+
+        const auto test_result_file =       experiment + "__test_results.compressed";
+        const auto path_to_start_file =     experiment + "__path_to_start.compressed";
+        const auto example_mistake_file =   experiment + "__example_mistake.compressed";
+        const auto trajectory_file =        experiment + "__trajectory.compressed";
 
         // Load the path that generated the test
         const RRTPath path_to_start = loadPath(path_to_start_file);
@@ -1625,16 +1651,8 @@ namespace smmap
 
             // Planned Path
             {
-                auto band_rrt = BandRRT(nh_,
-                                        ph_,
-                                        *world_params_,
-                                        planning_params_,
-                                        smoothing_params_,
-                                        task_params_,
-                                        vis_,
-                                        false);
                 const auto draw_bands = true;
-                const auto path_ids = band_rrt.visualizePath(path_to_start, ns_prefix + "PLANNED_", 1, draw_bands);
+                const auto path_ids = band_rrt_vis_->visualizePath(path_to_start, ns_prefix + "PLANNED_", 1, draw_bands);
 
                 const auto gripper_a_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_A_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().first}, Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 2);
                 const auto gripper_b_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_B_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().second}, Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), 2);
@@ -1743,48 +1761,6 @@ namespace smmap
 {
     void TransitionTesting::generateFeatures()
     {
-        enum
-        {
-            GRIPPER_A_PRE_X,
-            GRIPPER_A_PRE_Y,
-            GRIPPER_A_PRE_Z,
-            GRIPPER_B_PRE_X,
-            GRIPPER_B_PRE_Y,
-            GRIPPER_B_PRE_Z,
-            GRIPPER_A_POST_X,
-            GRIPPER_A_POST_Y,
-            GRIPPER_A_POST_Z,
-            GRIPPER_B_POST_X,
-            GRIPPER_B_POST_Y,
-            GRIPPER_B_POST_Z,
-
-            GRIPPER_DELTA_LENGTH_PRE,
-            GRIPPER_DELTA_LENGTH_POST,
-
-            MAX_BAND_LENGTH,
-            STARTING_BAND_LENGTH,
-            ENDING_DEFAULT_BAND_LENGTH,
-
-//            STARTING_MAJOR_AXIS_LENGTH,
-//            STARTING_MINOR_AXIS_LENGTH,
-//            ENDING_MAJOR_AXIS_LENGTH,
-//            ENDING_MINOR_AXIS_LENGTH,
-
-            SLICE_NUM_CONNECTED_COMPONENTS_PRE,
-            SLICE_NUM_CONNECTED_COMPONENTS_POST,
-            SLICE_NUM_CONNECTED_COMPONENTS_DELTA,
-
-            SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE,
-            SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST,
-            SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA,
-
-            SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE,
-            SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST,
-            SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA,
-
-            DUMMY_ITEM
-        };
-
         const std::vector<std::string> feature_names =
         {
             std::string("GRIPPER_A_PRE_X"),
@@ -1833,12 +1809,14 @@ namespace smmap
         #pragma omp parallel for
         for (size_t file_idx = 0; file_idx < data_files_.size(); ++file_idx)
         {
-            const auto& test_result_file = data_files_[file_idx];
-            const auto path_to_start_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__path_to_start.compressed";
-            const auto trajectory_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__trajectory.compressed";
-            const auto features_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__classification_features.csv";
-            const auto features_complete_flag_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__classification_features.complete";
-//            const auto features_metadata_file = test_result_file.substr(0, test_result_file.find("__test_results.compressed")) + "__classification_metadata.csv";
+            const auto& experiment = data_files_[file_idx];
+            const auto test_result_file =            experiment + "__test_results.compressed";
+            const auto path_to_start_file =          experiment + "__path_to_start.compressed";
+            const auto trajectory_file =             experiment + "__trajectory.compressed";
+            const auto features_file =               experiment + "__classification_features.csv";
+            const auto features_complete_flag_file = experiment + "__classification_features.complete";
+//            const auto features_metadata_file =      experiment + "__classification_metadata.csv";
+
             Log::Log logger(features_file, false);
 
 //            dists_etc[FILENAME] = test_result_file.substr(data_folder_.length() + 1);
@@ -1899,7 +1877,7 @@ namespace smmap
                         };
                         const auto features = extractFeatures(transition);
                         assert(feature_names.size() == features.size());
-                        const bool mistake = (start_foh && !end_foh) && (dist > 0.5);
+                        const bool mistake = (start_foh && !end_foh) && (dist > mistake_dist_thresh_);
                         LOG_STREAM(logger, std::to_string(mistake) << ", " << PrettyPrint::PrettyPrint(features, false, ", "));
 
                         if (!disable_visualizations_)
@@ -1938,16 +1916,8 @@ namespace smmap
 
                                 // Planned Path
                                 {
-                                    auto band_rrt = BandRRT(nh_,
-                                                            ph_,
-                                                            *world_params_,
-                                                            planning_params_,
-                                                            smoothing_params_,
-                                                            task_params_,
-                                                            vis_,
-                                                            false);
                                     const auto draw_bands = true;
-                                    const auto path_ids = band_rrt.visualizePath(path_to_start, ns_prefix + "PLANNED_", 1, draw_bands);
+                                    const auto path_ids = band_rrt_vis_->visualizePath(path_to_start, ns_prefix + "PLANNED_", 1, draw_bands);
 
                                     const auto gripper_a_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_A_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().first}, Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 2);
                                     const auto gripper_b_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_B_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().second}, Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), 2);
@@ -2079,55 +2049,14 @@ namespace smmap
         }
     }
 
-    std::vector<std::string> TransitionTesting::extractFeatures(const TransitionEstimation::StateTransition& transition) const
+    std::vector<std::string> TransitionTesting::extractFeatures(
+            const TransitionEstimation::StateTransition& transition) const
     {
 //        static double time = 0.0;
 //        static size_t calls = 0;
 //        ++calls;
 
 //        Stopwatch sw;
-
-        enum
-        {
-            GRIPPER_A_PRE_X,
-            GRIPPER_A_PRE_Y,
-            GRIPPER_A_PRE_Z,
-            GRIPPER_B_PRE_X,
-            GRIPPER_B_PRE_Y,
-            GRIPPER_B_PRE_Z,
-            GRIPPER_A_POST_X,
-            GRIPPER_A_POST_Y,
-            GRIPPER_A_POST_Z,
-            GRIPPER_B_POST_X,
-            GRIPPER_B_POST_Y,
-            GRIPPER_B_POST_Z,
-
-            GRIPPER_DELTA_LENGTH_PRE,
-            GRIPPER_DELTA_LENGTH_POST,
-
-            MAX_BAND_LENGTH,
-            STARTING_BAND_LENGTH,
-            ENDING_DEFAULT_BAND_LENGTH,
-
-//            STARTING_MAJOR_AXIS_LENGTH,
-//            STARTING_MINOR_AXIS_LENGTH,
-//            ENDING_MAJOR_AXIS_LENGTH,
-//            ENDING_MINOR_AXIS_LENGTH,
-
-            SLICE_NUM_CONNECTED_COMPONENTS_PRE,
-            SLICE_NUM_CONNECTED_COMPONENTS_POST,
-            SLICE_NUM_CONNECTED_COMPONENTS_DELTA,
-
-            SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE,
-            SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST,
-            SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA,
-
-            SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE,
-            SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST,
-            SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA,
-
-            DUMMY_ITEM
-        };
 
         const Vector3d mid_point_pre =
                 (transition.starting_gripper_positions_.first +
@@ -2261,7 +2190,7 @@ namespace smmap
             }
         }
 
-        std::vector<std::string> features(DUMMY_ITEM, "");
+        std::vector<std::string> features(FEATURES_DUMMY_ITEM, "");
 
         features[GRIPPER_A_PRE_X] = std::to_string(gripper_a_pre.x());
         features[GRIPPER_A_PRE_Y] = std::to_string(gripper_a_pre.y());
@@ -2305,6 +2234,130 @@ namespace smmap
 //                  << "    Time: " << time << std::endl;
 
         return features;
+    }
+
+    bool TransitionTesting::addClassificationExampleVisualizationCallback(
+            dmm::TransitionTestingVisualizationRequest& req,
+            dmm::TransitionTestingVisualizationResponse& res)
+    {
+        // Separate out the data source and the transition index. Assumed string format is
+        // cannonical_straight_test/perturbed_gripper_action_vectors/gripper_a_-0.0125_-0.025_0.0125/gripper_b_0_0_-0.0125__classification_features.csv : 38
+        const std::string delimiter = "__classification_features.csv : ";
+        const auto pos = req.data.find(delimiter);
+        const auto experiment = data_folder_ + "/" + req.data.substr(0, pos);
+        const auto traj_idx = std::stoi(req.data.substr(pos + delimiter.size()));
+        assert(traj_idx > 0);
+
+        const auto test_result_file =   experiment + "__test_results.compressed";
+        const auto path_to_start_file = experiment + "__path_to_start.compressed";
+        const auto trajectory_file =    experiment + "__trajectory.compressed";
+
+        const RRTPath path_to_start = loadPath(path_to_start_file);
+
+        // Load the trajectory if possible, otherwise generate it
+        const std::vector<StateMicrostepsPair> trajectory = [&]
+        {
+            if (!boost::filesystem::is_regular_file(trajectory_file))
+            {
+                const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
+                const auto traj = toTrajectory(test_result, path_to_start);
+                saveTrajectory(traj, trajectory_file);
+                return traj;
+            }
+            else
+            {
+                return loadTrajectory(trajectory_file);
+            }
+        }();
+
+        std::vector<Visualizer::NamespaceId> marker_ids;
+        const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
+
+        // Planned Path
+        {
+            const auto draw_bands = true;
+            const auto path_ids = band_rrt_vis_->visualizePath(path_to_start, ns_prefix + "PLANNED_", 1, draw_bands);
+
+            const auto gripper_a_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_A_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().first}, Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 2);
+            const auto gripper_b_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_B_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().second}, Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), 2);
+
+            marker_ids.insert(marker_ids.end(), path_ids.begin(), path_ids.end());
+            marker_ids.insert(marker_ids.end(), gripper_a_last_id.begin(), gripper_a_last_id.end());
+            marker_ids.insert(marker_ids.end(), gripper_b_last_id.begin(), gripper_b_last_id.end());
+        }
+
+        // Actual Path
+        {
+            for (size_t path_idx = 0; path_idx < trajectory.size(); ++path_idx)
+            {
+                const auto& state = trajectory[path_idx].first;
+                const auto new_ids = state.rubber_band_->visualize(ns_prefix + "EXECUTED_BAND", Visualizer::Yellow(), Visualizer::Yellow(), (int32_t)(path_idx + 1));
+                marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
+            }
+        }
+
+        // Specific transition
+        const auto& start_state = trajectory[traj_idx - 1].first;
+        const auto& end_state = trajectory[traj_idx].first;
+
+        const bool start_foh = transition_estimator_->checkFirstOrderHomotopy(
+                    *start_state.planned_rubber_band_,
+                    *end_state.rubber_band_);
+        const bool end_foh = transition_estimator_->checkFirstOrderHomotopy(
+                    *end_state.planned_rubber_band_,
+                    *end_state.rubber_band_);
+        const auto start_dist = start_state.planned_rubber_band_->distance(*start_state.rubber_band_);
+        const auto end_dist = end_state.planned_rubber_band_->distance(*end_state.rubber_band_);
+
+        std::vector<RubberBand::Ptr> microstep_band_history = transition_estimator_->reduceMicrostepsToBands(trajectory[traj_idx].second);
+
+        const TransitionEstimation::StateTransition transition
+        {
+            start_state,
+            end_state,
+            start_state.planned_rubber_band_->getEndpoints(),
+            end_state.planned_rubber_band_->getEndpoints(),
+            trajectory[traj_idx].second,
+            microstep_band_history
+        };
+        const auto features = extractFeatures(transition);
+        const bool mistake = (start_foh && !end_foh) && (end_dist > mistake_dist_thresh_);
+        const bool predicted_mistake = transition_mistake_classifier_.predict(
+                    classifier_scaler_(
+                        transition_estimator_->transitionFeatures(
+                            *start_state.planned_rubber_band_, *end_state.planned_rubber_band_, false)));
+
+        res.response = std::to_string(next_vis_prefix_);
+        visid_to_markers_[res.response] = marker_ids;
+        ++next_vis_prefix_;
+
+        ROS_INFO_STREAM("Added vis id: " << res.response << " for file " << req.data << std::endl
+                        << "Planned vs executed start FOH:          " << start_foh << std::endl
+                        << "Planned vs executed start dist:         " << start_dist << std::endl
+                        << "Planned vs executed end FOH:            " << end_foh << std::endl
+                        << "Planned vs executed end dist:           " << end_dist << std::endl
+                        << "Mistake:                                " << std::boolalpha <<  mistake << std::endl
+                        << "Predicted mistake:                      " << std::boolalpha <<  predicted_mistake << std::endl
+//                        << "Gripper a transformed start position:   " << features[GRIPPER_A_PRE_X] << ", " << features[GRIPPER_A_PRE_Y] << ", " << features[GRIPPER_A_PRE_Z] << std::endl
+//                        << "Gripper b transformed start position:   " << features[GRIPPER_B_PRE_X] << ", " << features[GRIPPER_B_PRE_Y] << ", " << features[GRIPPER_B_PRE_Z] << std::endl
+//                        << "Gripper a transformed end position:     " << features[GRIPPER_A_POST_X] << ", " << features[GRIPPER_A_POST_Y] << ", " << features[GRIPPER_A_POST_Z] << std::endl
+//                        << "Gripper b transformed end position:     " << features[GRIPPER_B_POST_X] << ", " << features[GRIPPER_B_POST_Y] << ", " << features[GRIPPER_B_POST_Z] << std::endl
+                        << "Gripper seperation pre:                 " << features[GRIPPER_DELTA_LENGTH_PRE] << std::endl
+                        << "Gripper seperation post:                " << features[GRIPPER_DELTA_LENGTH_POST] << std::endl
+//                        << "Band length max:                        " << features[MAX_BAND_LENGTH] << std::endl
+                        << "Band length pre:                        " << features[STARTING_BAND_LENGTH] << std::endl
+                        << "Band length post:                       " << features[ENDING_DEFAULT_BAND_LENGTH] << std::endl
+                        << "Num connected components pre:           " << features[SLICE_NUM_CONNECTED_COMPONENTS_PRE] << std::endl
+                        << "Num connected components post:          " << features[SLICE_NUM_CONNECTED_COMPONENTS_POST] << std::endl
+                        << "Num connected components delta:         " << features[SLICE_NUM_CONNECTED_COMPONENTS_DELTA] << std::endl
+                        << "Num free connected components pre:      " << features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE] << std::endl
+                        << "Num free connected components post:     " << features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST] << std::endl
+                        << "Num free connected components delta:    " << features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA] << std::endl
+                        << "Num filled connected components pre:    " << features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE] << std::endl
+                        << "Num filled connected components post:   " << features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST] << std::endl
+                        << "Num filled connected components delta:  " << features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] << std::endl);
+
+        return true;
     }
 }
 

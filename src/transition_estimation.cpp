@@ -507,8 +507,8 @@ TransitionEstimation::TransitionEstimation(
     , band_tighten_scale_factor_(GetTransitionTightenDeltaScaleFactor(*ph_))
     , homotopy_changes_scale_factor_(GetTransitionHomotopyChangesScaleFactor(*ph_))
 
-    , classifier_scaler_(nh, ph)
-    , transition_mistake_classifier_(nh, ph)
+    , classifier_scaler_(nh_, ph_)
+    , transition_mistake_classifier_(nh_, ph_)
 
     , template_band_(template_band)
 {
@@ -934,7 +934,8 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
 
 Eigen::VectorXd TransitionEstimation::transitionFeatures(
         const RubberBand& initial_band,
-        const RubberBand& default_prediction) const
+        const RubberBand& default_prediction,
+        const bool verbose) const
 {
     enum
     {
@@ -996,8 +997,38 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
     {
         const double dmax = initial_band.maxSafeLength();
         const double resolution = work_space_grid_.minStepDimension() / 2.0;
-        sdf_tools::CollisionMapGrid collision_grid_pre = ExtractParabolaSlice(*sdf_, resolution, grippers_pre, dmax);//, vis_);
-        sdf_tools::CollisionMapGrid collision_grid_post = ExtractParabolaSlice(*sdf_, resolution, grippers_post, dmax);//, vis_);
+        sdf_tools::CollisionMapGrid collision_grid_pre = [&]
+        {
+            if (verbose && vis_->visualizationsEnabled())
+            {
+                return ExtractParabolaSlice(*sdf_, resolution, grippers_pre, dmax, vis_);
+            }
+            else
+            {
+                return ExtractParabolaSlice(*sdf_, resolution, grippers_pre, dmax);
+            }
+        }();
+        sdf_tools::CollisionMapGrid collision_grid_post = [&]
+        {
+            if (verbose && vis_->visualizationsEnabled())
+            {
+                return ExtractParabolaSlice(*sdf_, resolution, grippers_post, dmax, vis_);
+            }
+            else
+            {
+                return ExtractParabolaSlice(*sdf_, resolution, grippers_post, dmax);
+            }
+        }();
+
+        if (verbose && vis_->visualizationsEnabled())
+        {
+            auto collision_grid_marker_pre = collision_grid_pre.ExportForDisplay(Visualizer::Red(), Visualizer::Green(), Visualizer::Blue());
+            auto collision_grid_marker_post = collision_grid_post.ExportForDisplay(Visualizer::Orange(), Visualizer::Seafoam(), Visualizer::Blue());
+            collision_grid_marker_pre.ns = "collision_grid_pre";
+            collision_grid_marker_post.ns = "collision_grid_post";
+            vis_->publish(collision_grid_marker_pre);
+            vis_->publish(collision_grid_marker_post);
+        }
 
         const auto components_pre = collision_grid_pre.ExtractConnectedComponents();
         const auto components_post = collision_grid_post.ExtractConnectedComponents();
@@ -1059,7 +1090,7 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
         features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] = num_occupied_components_post - num_occupied_components_pre;
     }
 
-    return classifier_scaler_(features);
+    return features;
 }
 
 std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTransitions(
@@ -1078,11 +1109,29 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     }
     else
     {
-        const auto features = transitionFeatures(test_band_start, *default_next_band);
-        if (transition_mistake_classifier_.predict(features) == -1)
-        {
+//        const auto features = transitionFeatures(test_band_start, *default_next_band);
+//        const auto predicted_mistake = transition_mistake_classifier_.predict(classifier_scaler_(features));
+//        const auto nn_prediction = transition_mistake_classifier_.nearestNeighbour(classifier_scaler_(features));
+//        std::cout << "Classifier prediction: " << predicted_mistake << std::endl;
+//        std::cout << "NN prediction: " << nn_prediction.first << std::endl;
+//        if (predicted_mistake == -1.0)
+//        {
             transitions.push_back({default_next_band, default_propogation_confidence_});
-        }
+//        }
+//        else
+//        {
+//            std::cout << "\nFeatures: " << transitionFeatures(test_band_start, *default_next_band, true).transpose() << std::endl;
+//            PressAnyKeyToContinue("Classifier reports bad transition");
+//        }
+
+//        if (predicted_mistake != nn_prediction.first)
+//        {
+//            std::cout << "\nFeatures:    " << transitionFeatures(test_band_start, *default_next_band, true).transpose() << std::endl;
+//            std::cout << "Classifier prediction: " << predicted_mistake << std::endl;
+//            std::cout << "NN prediction: " << nn_prediction.first << std::endl;
+//            std::cout << "NN Feautres: " << classifier_scaler_.inverse(nn_prediction.second).transpose() << std::endl;
+//            PressAnyKeyToContinue("NN vs SVM Prediction mismatch");
+//        }
     }
 
 
