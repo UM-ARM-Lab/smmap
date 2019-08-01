@@ -1096,7 +1096,7 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
 std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTransitions(
         const RubberBand& test_band_start,
         const PairGripperPositions& ending_gripper_positions,
-        const bool verbose) const
+        const bool verbose)
 {
     std::vector<std::pair<RubberBand::Ptr, double>> transitions;
 
@@ -1109,15 +1109,15 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     }
     else
     {
-//        const auto features = transitionFeatures(test_band_start, *default_next_band);
-//        const auto predicted_mistake = transition_mistake_classifier_.predict(classifier_scaler_(features));
+        const auto features = transitionFeatures(test_band_start, *default_next_band);
+        const auto predicted_mistake = transition_mistake_classifier_.predict(classifier_scaler_(features));
 //        const auto nn_prediction = transition_mistake_classifier_.nearestNeighbour(classifier_scaler_(features));
 //        std::cout << "Classifier prediction: " << predicted_mistake << std::endl;
 //        std::cout << "NN prediction: " << nn_prediction.first << std::endl;
-//        if (predicted_mistake == -1.0)
-//        {
+        if (predicted_mistake == -1.0)
+        {
             transitions.push_back({default_next_band, default_propogation_confidence_});
-//        }
+        }
 //        else
 //        {
 //            std::cout << "\nFeatures: " << transitionFeatures(test_band_start, *default_next_band, true).transpose() << std::endl;

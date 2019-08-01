@@ -237,7 +237,7 @@ namespace smmap
             bool planning_for_whole_robot_;
             sdf_tools::SignedDistanceField::ConstPtr sdf_;
             XYZGrid work_space_grid_;
-            TransitionEstimation::ConstPtr transition_estimator_;
+            TransitionEstimation::Ptr transition_estimator_;
             std::shared_ptr<std::mt19937_64> generator_;
         };
 
@@ -437,7 +437,7 @@ namespace smmap
         const bool planning_for_whole_robot_;
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
         const XYZGrid work_space_grid_;
-        const TransitionEstimation::ConstPtr transition_estimator_;
+        const TransitionEstimation::Ptr transition_estimator_;
         const std::shared_ptr<std::mt19937_64> generator_;
         std::uniform_real_distribution<double> uniform_unit_distribution_;
 

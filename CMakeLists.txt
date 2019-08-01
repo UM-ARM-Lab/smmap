@@ -22,11 +22,12 @@ find_package(cmake_modules REQUIRED)
 find_package(Eigen3 REQUIRED)
 set(Eigen3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 
-
-
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
 find_package(Flann REQUIRED)
 find_package(SVM REQUIRED)
+
+#set(Torch_DIR "/home/dmcconac/local/libtorch/share/cmake/Torch")
+find_package(Torch REQUIRED)
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -58,6 +59,7 @@ include_directories(include
     ${catkin_INCLUDE_DIRS}
     ${FLANN_INCLUDE_DIRS}
     ${SVM_INCLUDE_DIRS}
+    ${TORCH_INCLUDE_DIRS}
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
@@ -136,24 +138,33 @@ target_link_libraries(${PROJECT_NAME}_controllers ${catkin_LIBRARIES})
 
 add_custom_target(${PROJECT_NAME}_transitions_headers SOURCES
     include/${PROJECT_NAME}/transition_estimation.h
-    include/${PROJECT_NAME}/quinlan_rubber_band.h
-    include/${PROJECT_NAME}/svm_classifier.h
     include/${PROJECT_NAME}/parabola.h
+    include/${PROJECT_NAME}/quinlan_rubber_band.h
+    include/${PROJECT_NAME}/min_max_transformer.hpp
+    include/${PROJECT_NAME}/nn_classifier.h
+    include/${PROJECT_NAME}/svm_classifier.h
+    include/${PROJECT_NAME}/torch_classifier.h
 )
 
 add_library(${PROJECT_NAME}_transitions
     src/transition_estimation.cpp
-    src/quinlan_rubber_band.cpp
-    src/svm_classifier.cpp
     src/parabola.cpp
+    src/quinlan_rubber_band.cpp
+    src/nn_classifier.cpp
+    src/svm_classifier.cpp
+    src/torch_classifier.cpp
 )
 add_dependencies(${PROJECT_NAME}_transitions ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_transitions
-    ${PROJECT_NAME}_infrastructure
     ${catkin_LIBRARIES}
+    ${PROJECT_NAME}_infrastructure
     ${SVM_LIBRARIES}
+    ${TORCH_LIBRARIES}
 )
 target_compile_definitions(${PROJECT_NAME}_transitions PUBLIC "-D _DENSE_REP")
+
+#message(SEND_ERROR "${catkin_LIBRARIES}")
+#message(FATAL_ERROR "${TORCH_LIBRARIES}")
 
 ############# Planning #########################################################
 
@@ -168,11 +179,11 @@ add_library(${PROJECT_NAME}_planning
 )
 add_dependencies(${PROJECT_NAME}_planning ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_planning
+    ${catkin_LIBRARIES}
     ${PROJECT_NAME}_infrastructure
     ${PROJECT_NAME}_models
     ${PROJECT_NAME}_controllers
     ${PROJECT_NAME}_transitions
-    ${catkin_LIBRARIES}
     ${FLANN_LIBRARIES}
 )
 set_target_properties(${PROJECT_NAME}_planning PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${FLANN_DEFINITIONS}")
@@ -200,6 +211,14 @@ add_executable(transition_learning_data_generation_node nodes/transition_learnin
 add_dependencies(transition_learning_data_generation_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(transition_learning_data_generation_node ${PROJECT_NAME}_learning_testing ${catkin_LIBRARIES})
 
-add_executable(svm_tester nodes/svm_tester.cpp)
-add_dependencies(svm_tester ${catkin_EXPORTED_TARGETS})
-target_link_libraries(svm_tester ${PROJECT_NAME}_transitions ${catkin_LIBRARIES})
+add_executable(smmap_svm_tester nodes/svm_tester.cpp)
+add_dependencies(smmap_svm_tester ${catkin_EXPORTED_TARGETS})
+target_link_libraries(smmap_svm_tester ${PROJECT_NAME}_transitions ${catkin_LIBRARIES})
+set_property(TARGET smmap_svm_tester PROPERTY CXX_STANDARD 11)
+
+############# Torch Testing #################################################
+add_executable(smmap_torch_tester nodes/torch_tester.cpp)
+target_link_libraries(smmap_torch_tester
+    ${TORCH_LIBRARIES}
+    ${catkin_LIBRARIES}
+)

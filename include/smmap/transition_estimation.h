@@ -6,7 +6,10 @@
 #include "smmap/trajectory.hpp"
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/task_specification.h"
-#include "smmap/svm_classifier.h"
+#include "smmap/min_max_transformer.hpp"
+#include "smmap/nn_classifier.h"
+//#include "smmap/svm_classifier.h"
+//#include "smmap/torch_classifiers.h"
 
 namespace smmap
 {
@@ -188,7 +191,7 @@ namespace smmap
         std::vector<std::pair<RubberBand::Ptr, double>> estimateTransitions(
                 const RubberBand& test_band_start,
                 const PairGripperPositions& ending_gripper_positions,
-                const bool verbose = false) const;
+                const bool verbose = false);
 
         ////////////////////////////////////////////////////////////////////////
         // Visualizing transitions
@@ -239,7 +242,9 @@ namespace smmap
         ////////////////////////////////////////////////////////////////////////
 
         MinMaxTransformer classifier_scaler_;
-        SVMClassifier transition_mistake_classifier_;
+        NNClassifier transition_mistake_classifier_;
+//        SVMClassifier transition_mistake_classifier_;
+//        TorchClassifier transition_mistake_classifier_;
 
         ////////////////////////////////////////////////////////////////////////
         // Saving and loading learned transitions

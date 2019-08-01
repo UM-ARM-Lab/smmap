@@ -13,6 +13,7 @@
 #include <deformable_manipulation_experiment_params/conversions.hpp>
 #include <deformable_manipulation_experiment_params/utility.hpp>
 #include <deformable_manipulation_msgs/GenerateTransitionDataAction.h>
+#include <smmap_utilities/grippers.h>
 
 #include "smmap/band_rrt.h"
 #include "smmap/parabola.h"
@@ -94,13 +95,16 @@ namespace smmap
             const dmm::TransitionTestResult& test_result,
             const RRTPath& path)
     {
-        const auto gripper_a_ending_pose = GeometryPoseToEigenIsometry3d(test_result.microsteps_last_action.back().gripper_poses.at(0));
-        const auto gripper_b_ending_pose = GeometryPoseToEigenIsometry3d(test_result.microsteps_last_action.back().gripper_poses.at(1));
+        // Designed to address different ways of generating data (with or without a last action)
+        const AllGrippersSinglePose grippers_ending_poses = test_result.microsteps_last_action.size() > 0
+                ? VectorGeometryPoseToVectorIsometry3d(test_result.microsteps_last_action.back().gripper_poses)
+                : ToGripperPoseVector(path.back().grippers());
+
         const auto test = robot_->toRosTransitionTest(
-                    initial_world_state_.rope_node_transforms_,
-                    initial_world_state_.all_grippers_single_pose_,
+                    initial_world_state_.rope_node_transforms_, // Doesn't matter what this is because we do not read anything calculated from this
+                    ToGripperPoseVector(path.front().grippers()),
                     RRTPathToGrippersPoseTrajectory(path),
-                    {gripper_a_ending_pose, gripper_b_ending_pose});
+                    grippers_ending_poses);
         const auto path_num_steps = path.size();
         const auto simsteps_per_gripper_cmd = ROSHelpers::GetParamRequiredDebugLog<int>(*nh_, "deform_simulator_node/num_simsteps_per_gripper_command", __func__).Get();
         const auto path_total_substeps = std::accumulate(test.path_num_substeps.begin(), test.path_num_substeps.end(), test.final_num_substeps);
@@ -112,6 +116,11 @@ namespace smmap
         }();
 
         // Make sure that the data is in the format we're expecting
+
+//        std::cout << "Path back grippers:                  " << PrettyPrint::PrettyPrint(ToGripperPositions(path.back().grippers()), true, " ") << std::endl;
+//        std::cout << "grippers ending poses (as positions: " << PrettyPrint::PrettyPrint(ToGripperPositions(grippers_ending_poses), true, " ") << std::endl;
+//        std::cout << "Path total substeps: " << path_total_substeps << std::endl;
+
         assert(test.path_num_substeps.size() == path_num_steps);
         assert((int)test_result.microsteps_all.size() == (path_total_substeps * simsteps_per_gripper_cmd));
         assert(test.path_num_substeps.at(0) == 0); // I.e.; the path starts at the same place that the grippers are already at
@@ -139,6 +148,7 @@ namespace smmap
             const auto microsteps_start_idx = path_cummulative_substeps[idx - 1] * simsteps_per_gripper_cmd;
             const auto microsteps_end_idx = path_cummulative_substeps[idx] * simsteps_per_gripper_cmd;
 
+            // If the grippers do not move, then skip this part of the path
             if (microsteps_end_idx == microsteps_start_idx)
             {
                 continue;
@@ -161,15 +171,22 @@ namespace smmap
                 std::make_shared<RubberBand>(*path[idx].band()),
                 microsteps.back().rope_node_transforms_,
             };
+            // Shortcut if the band becomes overstretched
+            if (tes.rubber_band_->isOverstretched())
+            {
+                ROS_WARN_STREAM_NAMED("to_traj", "Band overstretched at index " << idx);
+                return trajectory;
+            }
             trajectory.push_back({tes, microsteps});
         }
 
         // Propagate the planned band the last step, and record the resulting state
+        if (test_result.microsteps_last_action.size() > 0)
         {
             const WorldState end = ConvertToEigenFeedback(test_result.microsteps_last_action.back());
 
             auto planned_band = std::make_shared<RubberBand>(*path.back().band());
-            planned_band->forwardPropagate(ToGripperPositions(VectorGeometryPoseToVectorIsometry3d(test.final_gripper_targets)), false);
+            planned_band->forwardPropagate(ToGripperPositions(grippers_ending_poses), false);
             const auto tes = TransitionEstimation::State
             {
                 end.object_configuration_,
@@ -685,10 +702,10 @@ namespace smmap
 
     std::vector<std::string> TransitionTesting::getDataFileList()
     {
-        ROS_INFO_STREAM("Finding data files in folder: " << data_folder_ << "/cannonical_straight_test");
+        ROS_INFO_STREAM("Finding data files in folder: " << data_folder_);
 
         std::vector<std::string> files;
-        const boost::filesystem::path p(data_folder_ + "/cannonical_straight_test");
+        const boost::filesystem::path p(data_folder_);
         const boost::filesystem::recursive_directory_iterator start(p);
         const boost::filesystem::recursive_directory_iterator end;
         for (auto itr = start; itr != end; ++itr)
@@ -890,7 +907,7 @@ namespace smmap
 
         //// Generate the canonical example ////////////////////////////////////
         {
-            const std::string folder(data_folder_ + "/cannonical_straight_test");
+            const std::string folder(data_folder_);
             const std::string test_id("/unmodified");
             const std::string test_results_filename = folder + test_id + "__test_results.compressed";
             const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
@@ -931,7 +948,6 @@ namespace smmap
                 const Isometry3d gripper_a_ending_pose = Translation3d(gripper_a_action_vector_) * gripper_a_starting_pose;
 
                 const std::string folder(data_folder_ +
-                                         "/cannonical_straight_test"
                                          "/perturbed_gripper_start_positions"
                                          "/gripper_a_" + ToString(perturbations[a_idx]));
                 arc_utilities::CreateDirectory(folder);
@@ -987,7 +1003,7 @@ namespace smmap
                     catch (const std::runtime_error& ex)
                     {
                         Log::Log failure_logger(failure_file, true);
-                        LOG_STREAM(failure_logger, "Unable to plan with perturbation"
+                        ARC_LOG_STREAM(failure_logger, "Unable to plan with perturbation"
                                    << " a: " << perturbations[a_idx].transpose()
                                    << " b: " << perturbations[b_idx].transpose()
                                    << " Message: " << ex.what());
@@ -1010,7 +1026,6 @@ namespace smmap
             for (size_t a_idx = 0; a_idx < perturbations.size(); ++a_idx)
             {
                 const std::string folder(data_folder_ +
-                                         "/cannonical_straight_test"
                                          "/perturbed_gripper_action_vectors"
                                          "/gripper_a_" + ToString(perturbations[a_idx]));
                 arc_utilities::CreateDirectory(folder);
@@ -1073,7 +1088,7 @@ namespace smmap
                     catch (const std::runtime_error& ex)
                     {
                         Log::Log failure_logger(failure_file, true);
-                        LOG_STREAM(failure_logger, "Unable to plan with perturbation"
+                        ARC_LOG_STREAM(failure_logger, "Unable to plan with perturbation"
                                    << " a: " << perturbations[a_idx].transpose()
                                    << " b: " << perturbations[b_idx].transpose()
                                    << " Message: " << ex.what());
@@ -1168,7 +1183,7 @@ namespace smmap
     {
         // Setup the transition data source to generate transition approximations from
         dmm::TransitionTestingVisualizationRequest req;
-        req.data = "cannonical_straight_test/unmodified__test_results.compressed";
+        req.data = "unmodified__test_results.compressed";
         dmm::TransitionTestingVisualizationResponse res;
         setTransitionAdaptationSourceCallback(req, res);
         assert(source_valid_);
@@ -1191,8 +1206,8 @@ namespace smmap
             PLANNED_VS_ACTUAL_START_EUCLIDEAN,
             DUMMY_ITEM
         };
-        Log::Log logger(data_folder_ + "/cannonical_straight_test/generate_last_step_transition_approximations.csv", false);
-        LOG(logger, "FILENAME, "
+        Log::Log logger(data_folder_ + "/generate_last_step_transition_approximations.csv", false);
+        ARC_LOG(logger, "FILENAME, "
                     "ERROR_STRING, "
                     "TEMPLATE_MISALIGNMENT_EUCLIDEAN, "
                     "DEFAULT_VS_ADAPTATION_FOH, "
@@ -1292,12 +1307,12 @@ namespace smmap
             catch (const std::exception& ex)
             {
                 Log::Log failure_logger(failure_file, true);
-                LOG_STREAM(failure_logger, "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
+                ARC_LOG_STREAM(failure_logger, "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
                 ROS_ERROR_STREAM_NAMED("last_step_approximations", "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
                 dists_etc[ERROR_STRING] = ex.what();
             }
 
-            LOG(logger, PrettyPrint::PrettyPrint(dists_etc, false, ", "));
+            ARC_LOG(logger, PrettyPrint::PrettyPrint(dists_etc, false, ", "));
         }
     }
 
@@ -1475,8 +1490,8 @@ namespace smmap
             LARGEST_FOH_CHANGE_DIST,
             DUMMY_ITEM
         };
-        Log::Log logger(data_folder_ + "/cannonical_straight_test/generate_meaningful_mistake_examples.csv", false);
-        LOG(logger, "FILENAME, "
+        Log::Log logger(data_folder_ + "/generate_meaningful_mistake_examples.csv", false);
+        ARC_LOG(logger, "FILENAME, "
                     "ERROR_STRING, "
                     "PLANNED_VS_EXECUTED_START_EUCLIDEAN, "
                     "PLANNED_VS_EXECUTED_END_EUCLIDEAN, "
@@ -1562,12 +1577,12 @@ namespace smmap
             catch (const std::exception& ex)
             {
                 Log::Log failure_logger(failure_file, true);
-                LOG_STREAM(failure_logger, "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
+                ARC_LOG_STREAM(failure_logger, "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
                 ROS_ERROR_STREAM_NAMED("meaningful_mistake", "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
                 dists_etc[ERROR_STRING] = ex.what();
             }
 
-            LOG(logger, PrettyPrint::PrettyPrint(dists_etc, false, ", "));
+            ARC_LOG(logger, PrettyPrint::PrettyPrint(dists_etc, false, ", "));
         }
     }
 
@@ -1801,7 +1816,7 @@ namespace smmap
             std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA")
         };
 
-//        Log::Log logger(data_folder_ + "/cannonical_straight_test/meaningful_mistake_features.csv", false);
+//        Log::Log logger(data_folder_ + "/meaningful_mistake_features.csv", false);
 
         int num_examples_delta_eq_0 = 0;
         int num_examples_delta_neq_0 = 0;
@@ -1819,7 +1834,6 @@ namespace smmap
 
             Log::Log logger(features_file, false);
 
-//            dists_etc[FILENAME] = test_result_file.substr(data_folder_.length() + 1);
             try
             {
                 if (!boost::filesystem::is_regular_file(features_complete_flag_file))
@@ -1878,7 +1892,7 @@ namespace smmap
                         const auto features = extractFeatures(transition);
                         assert(feature_names.size() == features.size());
                         const bool mistake = (start_foh && !end_foh) && (dist > mistake_dist_thresh_);
-                        LOG_STREAM(logger, std::to_string(mistake) << ", " << PrettyPrint::PrettyPrint(features, false, ", "));
+                        ARC_LOG_STREAM(logger, std::to_string(mistake) << ", " << PrettyPrint::PrettyPrint(features, false, ", "));
 
                         if (!disable_visualizations_)
                         {
@@ -2042,10 +2056,7 @@ namespace smmap
             catch (const std::exception& ex)
             {
                 ROS_ERROR_STREAM("Error parsing idx: " << file_idx << " file: " << test_result_file << ": " << ex.what());
-//                dists_etc[ERROR_STRING] = ex.what();
             }
-
-//            LOG(logger, PrettyPrint::PrettyPrint(dists_etc, false, ", "));
         }
     }
 
@@ -2241,7 +2252,7 @@ namespace smmap
             dmm::TransitionTestingVisualizationResponse& res)
     {
         // Separate out the data source and the transition index. Assumed string format is
-        // cannonical_straight_test/perturbed_gripper_action_vectors/gripper_a_-0.0125_-0.025_0.0125/gripper_b_0_0_-0.0125__classification_features.csv : 38
+        // relative/path/to/file/test_identifier__classification_features.csv : 38
         const std::string delimiter = "__classification_features.csv : ";
         const auto pos = req.data.find(delimiter);
         const auto experiment = data_folder_ + "/" + req.data.substr(0, pos);

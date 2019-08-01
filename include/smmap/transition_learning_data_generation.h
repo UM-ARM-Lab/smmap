@@ -215,7 +215,9 @@ namespace smmap
 
         // Classification Example
         MinMaxTransformer classifier_scaler_;
-        SVMClassifier transition_mistake_classifier_;
+//        SVMClassifier transition_mistake_classifier_;
+//        TorchClassifier transition_mistake_classifier_;
+        NNClassifier transition_mistake_classifier_;
         ros::ServiceServer add_classification_example_visualization_;
 
     public:

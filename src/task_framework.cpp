@@ -1119,9 +1119,9 @@ bool TaskFramework::globalPlannerNeededDueToLackOfProgress()
     {
         // Determine if there is a general positive slope on the distances
         // - we should be moving away from the start config if we are not stuck
-        LOG(loggers_.at("grippers_distance_delta_history"), PrettyPrint::PrettyPrint(grippers_distance_deltas, false, ", "));
+        ARC_LOG(loggers_.at("grippers_distance_delta_history"), PrettyPrint::PrettyPrint(grippers_distance_deltas, false, ", "));
 
-        LOG(loggers_.at("error_delta_history"), PrettyPrint::PrettyPrint(error_deltas, false, ", "));
+        ARC_LOG(loggers_.at("error_delta_history"), PrettyPrint::PrettyPrint(error_deltas, false, ", "));
     }
 
     // If error has not decreased sufficiently, then we may not be making progress
@@ -1731,32 +1731,32 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                         PrettyPrint::PrettyPrint(num_times_invoked);
                 band_rrt_->storePolicy(rrt_planned_policy_, file_path);
             }
+
+            // Record the resulting path execution in its entirety for transition learning purposes
+            {
+                const auto test = robot_->toRosTransitionTest(
+                            world_state.rope_node_transforms_,
+                            world_state.all_grippers_single_pose_,
+                            RRTPathToGrippersPoseTrajectory(rrt_planned_policy_[0].first),
+                            ToGripperPoseVector(rrt_planned_policy_[0].first.back().grippers()));
+                const auto base_folder = "/mnt/big_narstie_data/dmcconac/transition_learning_data_generation/smmap_generated_plans/start_to_end";
+                const auto folder = base_folder + GetTaskTypeString(*nh_) + "/" + std::to_string(seed_) + "/";
+                arc_utilities::CreateDirectory(folder);
+                const auto timestamp = arc_helpers::GetCurrentTimeAsString();
+                const auto path_to_start_filename = folder + timestamp + "__path_to_start.compressed";
+                const auto test_results_filename = folder + timestamp + "__test_results.compressed";
+
+                // Save the path to file in the correct folder
+                {
+                    std::vector<uint8_t> buffer;
+                    SerializeVector<RRTNode>(rrt_planned_policy_[0].first, buffer, &RRTNode::Serialize);
+                    ZlibHelpers::CompressAndWriteToFile(buffer, path_to_start_filename);
+                }
+                // Run the path through the simulator, which will save the results to file
+                // Ignore the feedback as the action sever saves the results to file anyway
+                robot_->generateTransitionData({test}, {test_results_filename}, nullptr, false);
+            }
         }
-    }
-
-    // Record the resulting path execution in its entirety for transition learning purposes
-    {
-        const auto test = robot_->toRosTransitionTest(
-                    world_state.rope_node_transforms_,
-                    world_state.all_grippers_single_pose_,
-                    RRTPathToGrippersPoseTrajectory(rrt_planned_policy_[0].first),
-                    ToGripperPoseVector(rrt_planned_policy_[0].first.back().grippers()));
-        const auto base_folder = "/mnt/big_narstie_data/dmcconac/transition_learning_data_generation/smmap_generated_plans/";
-        const auto folder = base_folder + GetTaskTypeString(*nh_) + "/" + std::to_string(seed_) + "/";
-        arc_utilities::CreateDirectory(folder);
-        const auto timestamp = arc_helpers::GetCurrentTimeAsString();
-        const auto path_to_start_filename = folder + timestamp + "__path_to_start.compressed";
-        const auto test_results_filename = folder + timestamp + "__test_results.compressed";
-
-        // Save the path to file in the correct folder
-        {
-            std::vector<uint8_t> buffer;
-            SerializeVector<RRTNode>(rrt_planned_policy_[0].first, buffer, &RRTNode::Serialize);
-            ZlibHelpers::CompressAndWriteToFile(buffer, path_to_start_filename);
-        }
-
-        // Ignore the feedback as the action sever saves the results to file anyway
-        robot_->generateTransitionData({test}, {test_results_filename}, nullptr, false);
     }
 
 //    band_rrt_->visualizePolicy(rrt_planned_policy_, true);
@@ -2380,7 +2380,7 @@ void TaskFramework::initializeBanditsLogging()
         ROS_INFO_STREAM_NAMED("task_framework", "Logging to " << log_folder);
 
         Log::Log seed_log(log_folder + "seed.txt", false);
-        LOG_STREAM(seed_log, std::hex << seed_);
+        ARC_LOG_STREAM(seed_log, std::hex << seed_);
 
         loggers_.insert(std::make_pair<std::string, Log::Log>(
                             "time",
@@ -2424,7 +2424,7 @@ void TaskFramework::initializeControllerLogging()
         ROS_INFO_STREAM_NAMED("task_framework", "Logging to " << log_folder);
 
         Log::Log seed_log(log_folder + "seed.txt", false);
-        LOG_STREAM(seed_log, std::hex << seed_);
+        ARC_LOG_STREAM(seed_log, std::hex << seed_);
 
         controller_loggers_.insert(std::make_pair<std::string, Log::Log>(
                                        "control_time",
@@ -2480,22 +2480,22 @@ void TaskFramework::logBanditsData(
                     DontAlignCols,
                     " ", " ", "", "");
 
-        LOG(loggers_.at("time"),
+        ARC_LOG(loggers_.at("time"),
              resulting_world_state.sim_time_);
 
-        LOG(loggers_.at("error"),
+        ARC_LOG(loggers_.at("error"),
              task_specification_->calculateError(resulting_world_state));
 
-        LOG(loggers_.at("utility_mean"),
+        ARC_LOG(loggers_.at("utility_mean"),
              model_utility_mean.format(single_line));
 
-        LOG(loggers_.at("utility_covariance"),
+        ARC_LOG(loggers_.at("utility_covariance"),
              model_utility_second_stat.format(single_line));
 
-        LOG(loggers_.at("model_chosen"),
+        ARC_LOG(loggers_.at("model_chosen"),
              model_used);
 
-        LOG(loggers_.at("rewards_for_all_models"),
+        ARC_LOG(loggers_.at("rewards_for_all_models"),
             PrettyPrint::PrettyPrint(rewards_for_all_models, false, " "));
     }
 }
@@ -2598,22 +2598,22 @@ void TaskFramework::controllerLogData(
                     DontAlignCols,
                     " ", " ", "", "");
 
-        LOG(controller_loggers_.at("control_time"),
+        ARC_LOG(controller_loggers_.at("control_time"),
             resulting_world_state.sim_time_);
 
-        LOG(controller_loggers_.at("control_error_realtime"),
+        ARC_LOG(controller_loggers_.at("control_error_realtime"),
             PrettyPrint::PrettyPrint(avg_control_error, false, " "));
 
-        LOG(controller_loggers_.at("realtime_stretching_factor"),
+        ARC_LOG(controller_loggers_.at("realtime_stretching_factor"),
             PrettyPrint::PrettyPrint(current_stretching_factor, false, " "));
 
-        LOG(controller_loggers_.at("individual_computation_times"),
+        ARC_LOG(controller_loggers_.at("individual_computation_times"),
             PrettyPrint::PrettyPrint(individual_computation_times, false, " "));
 
-        LOG(controller_loggers_.at("model_prediction_error_weighted"),
+        ARC_LOG(controller_loggers_.at("model_prediction_error_weighted"),
             PrettyPrint::PrettyPrint(model_prediction_errors_weighted, false, " "));
 
-        LOG(controller_loggers_.at("model_prediction_error_unweighted"),
+        ARC_LOG(controller_loggers_.at("model_prediction_error_unweighted"),
             PrettyPrint::PrettyPrint(model_prediction_errors_unweighted, false, " "));
     }
 }

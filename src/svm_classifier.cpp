@@ -20,7 +20,7 @@ SVMClassifier::SVMClassifier(std::shared_ptr<ros::NodeHandle> nh,
     : nh_(nh)
     , ph_(ph)
     , model_(svm_load_model(getModelFilename(*ph_).c_str()))
-    , num_features_(ROSHelpers::GetParamRequired<int>(*ph_, "svm/dim", __func__).GetImmutable())
+    , num_features_(ROSHelpers::GetParamRequired<int>(*ph_, "classifier/dim", __func__).GetImmutable())
 //    , transformer_(nh, ph)
 {
     assert(model_->nr_class = 2);

@@ -1032,7 +1032,7 @@ DeformableController::OutputData StretchingConstraintController::solvedByGradien
             }
         }
 
-        LOG(num_model_calls_, num_model_calls);
+        ARC_LOG(num_model_calls_, num_model_calls);
 
         return OutputData(RobotMotionToGripperMotion(jacobian, robot_motion), object_delta, robot_motion);
     }
@@ -1375,7 +1375,7 @@ DeformableController::OutputData StretchingConstraintController::solvedByGradien
 //            std::cout << "Error end of loop:    " << error << std::endl;
         }
 
-        LOG(num_model_calls_, num_model_calls);
+        ARC_LOG(num_model_calls_, num_model_calls);
 
         return OutputData(gripper_motion, object_delta, VectorXd());
     }
