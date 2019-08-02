@@ -44,6 +44,7 @@ int main(int argc, char* argv[])
     transition_tester.runTests(
                 ROSHelpers::GetParam<bool>(*ph, "generate_test_data", false),
                 ROSHelpers::GetParam<bool>(*ph, "generate_transitions", false),
+                ROSHelpers::GetParam<bool>(*ph, "generate_trajectories", false),
                 ROSHelpers::GetParam<bool>(*ph, "generate_meaningful_mistakes", false),
                 ROSHelpers::GetParam<bool>(*ph, "generate_features", true));
 

@@ -7,9 +7,9 @@
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/task_specification.h"
 #include "smmap/min_max_transformer.hpp"
-#include "smmap/nn_classifier.h"
+//#include "smmap/nn_classifier.h"
 //#include "smmap/svm_classifier.h"
-//#include "smmap/torch_classifiers.h"
+#include "smmap/torch_classifier.h"
 
 namespace smmap
 {
@@ -242,9 +242,9 @@ namespace smmap
         ////////////////////////////////////////////////////////////////////////
 
         MinMaxTransformer classifier_scaler_;
-        NNClassifier transition_mistake_classifier_;
+//        NNClassifier transition_mistake_classifier_;
 //        SVMClassifier transition_mistake_classifier_;
-//        TorchClassifier transition_mistake_classifier_;
+        TorchClassifier transition_mistake_classifier_;
 
         ////////////////////////////////////////////////////////////////////////
         // Saving and loading learned transitions

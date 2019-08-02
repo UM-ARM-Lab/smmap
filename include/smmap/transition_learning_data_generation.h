@@ -110,10 +110,12 @@ namespace smmap
     public:
         void runTests(const bool generate_test_data,
                       const bool generate_last_step_transition_approximations,
+                      const bool generate_trajectories,
                       const bool generate_meaningful_mistake_examples,
                       const bool generate_features);
         void generateTestData();
         void generateLastStepTransitionApproximations();
+        void generateTrajectories();
         void generateMeaningfulMistakeExamples();
 
         enum Features
@@ -163,7 +165,8 @@ namespace smmap
         typedef std::pair<TransitionEstimation::State, std::vector<WorldState>> StateMicrostepsPair;
         std::vector<StateMicrostepsPair> toTrajectory(
                 const deformable_manipulation_msgs::TransitionTestResult& test,
-                const RRTPath& path);
+                const RRTPath& path,
+                const std::string& filename);
 
     private:
 
@@ -216,8 +219,8 @@ namespace smmap
         // Classification Example
         MinMaxTransformer classifier_scaler_;
 //        SVMClassifier transition_mistake_classifier_;
-//        TorchClassifier transition_mistake_classifier_;
-        NNClassifier transition_mistake_classifier_;
+        TorchClassifier transition_mistake_classifier_;
+//        NNClassifier transition_mistake_classifier_;
         ros::ServiceServer add_classification_example_visualization_;
 
     public:

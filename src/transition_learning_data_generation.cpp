@@ -93,13 +93,17 @@ namespace smmap
 
     std::vector<TransitionTesting::StateMicrostepsPair> TransitionTesting::toTrajectory(
             const dmm::TransitionTestResult& test_result,
-            const RRTPath& path)
+            const RRTPath& path,
+            const std::string& filename)
     {
+        const bool has_last_action = test_result.microsteps_last_action.size() > 0;
+
         // Designed to address different ways of generating data (with or without a last action)
-        const AllGrippersSinglePose grippers_ending_poses = test_result.microsteps_last_action.size() > 0
+        const AllGrippersSinglePose grippers_ending_poses = has_last_action
                 ? VectorGeometryPoseToVectorIsometry3d(test_result.microsteps_last_action.back().gripper_poses)
                 : ToGripperPoseVector(path.back().grippers());
 
+        // Determine what to expect, under the assumption that the path was completely executed in the simulator
         const auto test = robot_->toRosTransitionTest(
                     initial_world_state_.rope_node_transforms_, // Doesn't matter what this is because we do not read anything calculated from this
                     ToGripperPoseVector(path.front().grippers()),
@@ -116,19 +120,18 @@ namespace smmap
         }();
 
         // Make sure that the data is in the format we're expecting
-
-//        std::cout << "Path back grippers:                  " << PrettyPrint::PrettyPrint(ToGripperPositions(path.back().grippers()), true, " ") << std::endl;
-//        std::cout << "grippers ending poses (as positions: " << PrettyPrint::PrettyPrint(ToGripperPositions(grippers_ending_poses), true, " ") << std::endl;
-//        std::cout << "Path total substeps: " << path_total_substeps << std::endl;
-
         assert(test.path_num_substeps.size() == path_num_steps);
-        assert((int)test_result.microsteps_all.size() == (path_total_substeps * simsteps_per_gripper_cmd));
-        assert(test.path_num_substeps.at(0) == 0); // I.e.; the path starts at the same place that the grippers are already at
+        // I.e.; the path starts at the same place that the grippers are already at
+        assert(test.path_num_substeps.at(0) == 0);
 
-        // Add an extra state for the start, remove one to exclude the 'dud' first step in the path,
-        // and add one for the last step after reaching the end of the path
+        if ((int)test_result.microsteps_all.size() != (path_total_substeps * simsteps_per_gripper_cmd))
+        {
+            ROS_WARN_STREAM_NAMED("to_traj", filename << ": Only a partial trajectory exists.");
+        }
+
+        const auto total_steps = has_last_action ? path_num_steps + 1 : path_num_steps;
         std::vector<StateMicrostepsPair> trajectory;
-        trajectory.reserve(path_num_steps + 1);
+        trajectory.reserve(total_steps);
 
         // Add the first state with no history
         {
@@ -145,8 +148,8 @@ namespace smmap
         // Add the rest of the states other than the last step
         for (size_t idx = 1; idx < path_num_steps; ++idx)
         {
-            const auto microsteps_start_idx = path_cummulative_substeps[idx - 1] * simsteps_per_gripper_cmd;
-            const auto microsteps_end_idx = path_cummulative_substeps[idx] * simsteps_per_gripper_cmd;
+            const auto microsteps_start_idx = path_cummulative_substeps.at(idx - 1) * simsteps_per_gripper_cmd;
+            const auto microsteps_end_idx = path_cummulative_substeps.at(idx) * simsteps_per_gripper_cmd;
 
             // If the grippers do not move, then skip this part of the path
             if (microsteps_end_idx == microsteps_start_idx)
@@ -155,9 +158,13 @@ namespace smmap
             }
 
             // Ensure that we don't overflow the end of the vector (assuming one set of data at the end for the "last step")
-            // Given the earlier assertions; only a logic error in this function would trigger this
-            assert(test_result.microsteps_all.begin() + microsteps_start_idx <= test_result.microsteps_all.end() - (test.final_num_substeps * simsteps_per_gripper_cmd));
-            assert(test_result.microsteps_all.begin() + microsteps_end_idx <= test_result.microsteps_all.end() - (test.final_num_substeps * simsteps_per_gripper_cmd));
+            // Given the earlier assertions; only a logic error or an imcomplete trajectory would trigger this
+            if ((test_result.microsteps_all.begin() + microsteps_start_idx > test_result.microsteps_all.end() - (test.final_num_substeps * simsteps_per_gripper_cmd)) ||
+                (test_result.microsteps_all.begin() + microsteps_end_idx   > test_result.microsteps_all.end() - (test.final_num_substeps * simsteps_per_gripper_cmd)))
+            {
+                ROS_WARN_STREAM_NAMED("to_traj", filename << ": Results only contains " << idx << " path steps. Path steps anticipated: " << path_num_steps);
+                return trajectory;
+            }
 
             const std::vector<dmm::WorldState> dmm_microsteps(
                         test_result.microsteps_all.begin() + microsteps_start_idx,
@@ -174,14 +181,14 @@ namespace smmap
             // Shortcut if the band becomes overstretched
             if (tes.rubber_band_->isOverstretched())
             {
-                ROS_WARN_STREAM_NAMED("to_traj", "Band overstretched at index " << idx);
+                ROS_WARN_STREAM_NAMED("to_traj", filename << ": Band overstretched at index " << idx << ". Path steps anticipated: " << path_num_steps);
                 return trajectory;
             }
             trajectory.push_back({tes, microsteps});
         }
 
         // Propagate the planned band the last step, and record the resulting state
-        if (test_result.microsteps_last_action.size() > 0)
+        if (has_last_action)
         {
             const WorldState end = ConvertToEigenFeedback(test_result.microsteps_last_action.back());
 
@@ -194,6 +201,11 @@ namespace smmap
                 planned_band,
                 end.rope_node_transforms_
             };
+            if (tes.rubber_band_->isOverstretched())
+            {
+                ROS_WARN_STREAM_NAMED("to_traj", filename << ": Band overstretched at last action.");
+                return trajectory;
+            }
             trajectory.push_back({tes, ConvertToEigenFeedback(test_result.microsteps_last_action)});
         }
 
@@ -456,7 +468,7 @@ namespace smmap
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-//          Transition Testing
+//          Transition Testing - Initialization and main function
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace smmap
@@ -734,6 +746,7 @@ namespace smmap
 
     void TransitionTesting::runTests(const bool generate_test_data,
                                      const bool generate_last_step_transition_approximations,
+                                     const bool generate_trajectories,
                                      const bool generate_meaningful_mistake_examples,
                                      const bool generate_features)
     {
@@ -753,6 +766,14 @@ namespace smmap
             Stopwatch stopwatch;
             generateLastStepTransitionApproximations();
             ROS_INFO_STREAM("Last step transition approximations time taken: " << stopwatch(READ));
+        }
+
+        if (generate_trajectories)
+        {
+            ROS_INFO("Generating trajectories");
+            Stopwatch stopwatch;
+            generateTrajectories();
+            ROS_INFO_STREAM("Generate trajectories time taken: " << stopwatch(READ));
         }
 
         if (generate_meaningful_mistake_examples)
@@ -1470,6 +1491,40 @@ namespace smmap
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+//          Generate Trajectories from rrt::paths and dmm::results
+////////////////////////////////////////////////////////////////////////////////
+
+namespace smmap
+{
+    void TransitionTesting::generateTrajectories()
+    {
+        #pragma omp parallel for
+        for (size_t idx = 0; idx < data_files_.size(); ++idx)
+        {
+            const auto& experiment = data_files_[idx];
+            const auto test_result_file =       experiment + "__test_results.compressed";
+            const auto path_to_start_file =     experiment + "__path_to_start.compressed";
+            const auto trajectory_file =        experiment + "__trajectory.compressed";
+
+            try
+            {
+                if (!boost::filesystem::is_regular_file(trajectory_file))
+                {
+                    const RRTPath path_to_start = loadPath(path_to_start_file);
+                    const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
+                    const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
+                    saveTrajectory(traj, trajectory_file);
+                }
+            }
+            catch (const std::exception& ex)
+            {
+                ROS_ERROR_STREAM_NAMED("generate_trajectories", "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
+            }
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 //          Find Meaningful Mistakes
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1507,6 +1562,7 @@ namespace smmap
             const auto& experiment = data_files_[idx];
             const auto test_result_file =       experiment + "__test_results.compressed";
             const auto path_to_start_file =     experiment + "__path_to_start.compressed";
+            const auto trajectory_file =        experiment + "__trajectory.compressed";
             const auto example_mistake_file =   experiment + "__example_mistake.compressed";
             const auto failure_file =           experiment + "__example_mistake.failed";
 
@@ -1525,13 +1581,23 @@ namespace smmap
                 {
                     if (!boost::filesystem::is_regular_file(example_mistake_file))
                     {
-                        // Load the path that generated the test
-                        const RRTPath path_to_start = loadPath(path_to_start_file);
+                        // Load the trajectory if possible, otherwise generate it
+                        const std::vector<StateMicrostepsPair> trajectory = [&]
+                        {
+                            if (!boost::filesystem::is_regular_file(trajectory_file))
+                            {
+                                const RRTPath path_to_start = loadPath(path_to_start_file);
+                                const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
+                                const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
+                                saveTrajectory(traj, trajectory_file);
+                                return traj;
+                            }
+                            else
+                            {
+                                return loadTrajectory(trajectory_file);
+                            }
+                        }();
 
-                        // Load the test record
-                        const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
-
-                        const auto trajectory = toTrajectory(test_result, path_to_start);
                         const auto example = transition_estimator_->findMostRecentBadTransition(trajectory).Get();
                         saveStateTransition(example, example_mistake_file);
                         return example;
@@ -1608,7 +1674,7 @@ namespace smmap
             if (!boost::filesystem::is_regular_file(trajectory_file))
             {
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
-                const auto traj = toTrajectory(test_result, path_to_start);
+                const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
                 saveTrajectory(traj, trajectory_file);
                 return traj;
             }
@@ -1846,7 +1912,7 @@ namespace smmap
                         if (!boost::filesystem::is_regular_file(trajectory_file))
                         {
                             const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
-                            const auto traj = toTrajectory(test_result, path_to_start);
+                            const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
                             saveTrajectory(traj, trajectory_file);
                             return traj;
                         }
@@ -2271,7 +2337,7 @@ namespace smmap
             if (!boost::filesystem::is_regular_file(trajectory_file))
             {
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
-                const auto traj = toTrajectory(test_result, path_to_start);
+                const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
                 saveTrajectory(traj, trajectory_file);
                 return traj;
             }

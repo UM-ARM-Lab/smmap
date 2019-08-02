@@ -399,8 +399,8 @@ WorldState TaskFramework::sendNextCommand(
             {
                 planning_needed = true;
 
-                ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "task_framework", "Invoking global planner due to overstretch");
-                ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "task_framework", "Invoking global planner due to collision");
+                ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "task_framework", "Invoking global planner as the controller will overstretch the deformable object");
+                ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "task_framework", "Invoking global planner due to lack of progress");
                 ROS_INFO_NAMED("task_framework", "----------------------------------------------------------------------------");
 
                 if (!GetDisableAllVisualizations(*ph_))
@@ -1739,8 +1739,8 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                             world_state.all_grippers_single_pose_,
                             RRTPathToGrippersPoseTrajectory(rrt_planned_policy_[0].first),
                             ToGripperPoseVector(rrt_planned_policy_[0].first.back().grippers()));
-                const auto base_folder = "/mnt/big_narstie_data/dmcconac/transition_learning_data_generation/smmap_generated_plans/start_to_end";
-                const auto folder = base_folder + GetTaskTypeString(*nh_) + "/" + std::to_string(seed_) + "/";
+                const auto base_folder = "/mnt/big_narstie_data/dmcconac/transition_learning_data_generation/smmap_generated_plans/";
+                const auto folder = base_folder + GetTaskTypeString(*nh_) + "/start_to_end/" + std::to_string(seed_) + "/";
                 arc_utilities::CreateDirectory(folder);
                 const auto timestamp = arc_helpers::GetCurrentTimeAsString();
                 const auto path_to_start_filename = folder + timestamp + "__path_to_start.compressed";
