@@ -16,6 +16,7 @@
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/arc_helpers.hpp>
 #include <deformable_manipulation_experiment_params/utility.hpp>
+#include <deformable_manipulation_experiment_params/ros_params.hpp>
 
 #include "smmap/diminishing_rigidity_model.h"
 #include "smmap/adaptive_jacobian_model.h"
@@ -37,9 +38,6 @@ using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 const static std_msgs::ColorRGBA PREDICTION_GRIPPER_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 0.5f);
 const static std_msgs::ColorRGBA PREDICTION_RUBBER_BAND_SAFE_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.0f, 1.0f);
 const static std_msgs::ColorRGBA PREDICTION_RUBBER_BAND_VIOLATION_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 1.0f, 1.0f, 1.0f);
-
-#pragma message "Magic number - reward scaling factor starting value"
-#define REWARD_STANDARD_DEV_SCALING_FACTOR_START (1.0)
 
 //#define ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE 1
 #define ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE 0
@@ -128,7 +126,7 @@ TaskFramework::TaskFramework(
     // Multi-model and regret based model selection parameters
     , collect_results_for_all_models_(GetCollectResultsForAllModels(*ph_))
     , mab_algorithm_(GetMABAlgorithm(*ph_))
-    , reward_std_dev_scale_factor_(REWARD_STANDARD_DEV_SCALING_FACTOR_START)
+    , reward_std_dev_scale_factor_(GetRewardScaleFactorStart(*ph_))
     , process_noise_factor_(GetProcessNoiseFactor(*ph_))
     , observation_noise_factor_(GetObservationNoiseFactor(*ph_))
     , correlation_strength_factor_(GetCorrelationStrengthFactor(*ph_))
@@ -1947,10 +1945,9 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
             // Diminishing rigidity models
             ////////////////////////////////////////////////////////////////////////
             {
-                #pragma message "Magic numbers: Multi-model deform range"
-                const double deform_min = 0.0;
-                const double deform_max = 25.0;
-                const double deform_step = 4.0;
+                const double deform_min = GetDeformabilityRangeMin(*ph_);
+                const double deform_max = GetDeformabilityRangeMax(*ph_);
+                const double deform_step = GetDeformabilityRangeStep(*ph_);
 
                 for (double trans_deform = deform_min; trans_deform < deform_max; trans_deform += deform_step)
                 {
@@ -1982,10 +1979,9 @@ void TaskFramework::initializeModelAndControllerSet(const WorldState& initial_wo
             // Adaptive jacobian models
             ////////////////////////////////////////////////////////////////////////
             {
-                #pragma message "Magic numbers: Multi-model adaptive range"
-                const double learning_rate_min = 1e-10;
-                const double learning_rate_max = 1.1e0;
-                const double learning_rate_step = 10.0;
+                const double learning_rate_min = GetAdaptiveLearningRateRangeMin(*ph_);
+                const double learning_rate_max = GetAdaptiveLearningRateRangeMax(*ph_);
+                const double learning_rate_step = GetAdaptiveLearningRateRangeStep(*ph_);
 
                 const auto tmp_model = DiminishingRigidityModel(nh_, task_specification_->defaultDeformability(), false);
                 const auto starting_jacobian = tmp_model.computeGrippersToDeformableObjectJacobian(initial_world_state);
@@ -2627,13 +2623,13 @@ void TaskFramework::storeWorldState(const WorldState& world_state, const RubberB
     {
         const auto log_folder = GetLogFolder(*nh_);
         arc_utilities::CreateDirectory(log_folder);
-        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state_file_name_prefix", __func__);
+        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state/file_name_prefix", __func__);
         if (!file_name_prefix.Valid())
         {
-            throw_arc_exception(std::invalid_argument, "Unable to load world_state_file_name_prefix from parameter server");
+            throw_arc_exception(std::invalid_argument, "Unable to load world_state/file_name_prefix from parameter server");
         }
 
-        const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsStringWithMilliseconds(); //arc_helpers::GetCurrentTimeAsString();
+        const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsStringWithMilliseconds();
         const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
         const std::string full_path = log_folder + file_name;
         ROS_DEBUG_STREAM_NAMED("task_framework", "Saving world_state to " << full_path);
@@ -2659,15 +2655,15 @@ std::pair<WorldState, RubberBand::Ptr> TaskFramework::loadStoredWorldState()
     try
     {
         const auto log_folder = GetLogFolder(*nh_);
-        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state_file_name_prefix", __func__);
+        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state/file_name_prefix", __func__);
         if (!file_name_prefix.Valid())
         {
-            throw_arc_exception(std::invalid_argument, "Unable to load world_state_file_name_prefix from parameter server");
+            throw_arc_exception(std::invalid_argument, "Unable to load world_state/file_name_prefix from parameter server");
         }
-        const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state_file_name_suffix_to_load", __func__);
+        const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state/file_name_suffix_to_load", __func__);
         if (!file_name_suffix.Valid())
         {
-            throw_arc_exception(std::invalid_argument, "Unable to load world_state_file_name_suffix_to_load from parameter server");
+            throw_arc_exception(std::invalid_argument, "Unable to load world_state/file_name_suffix_to_load from parameter server");
         }
 
         const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix.GetImmutable() + ".compressed";
@@ -2691,5 +2687,5 @@ std::pair<WorldState, RubberBand::Ptr> TaskFramework::loadStoredWorldState()
 
 bool TaskFramework::useStoredWorldState() const
 {
-    return ROSHelpers::GetParamDebugLog<bool>(*ph_, "use_stored_world_state", false);
+    return ROSHelpers::GetParamDebugLog<bool>(*ph_, "world_state/use_stored_world_state", false);
 }

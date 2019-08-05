@@ -1517,7 +1517,7 @@ namespace smmap
                 throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
             }
             arc_utilities::CreateDirectory(log_folder.GetImmutable());
-            const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "band_file_name_prefix", __func__);
+            const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "file_name_prefix", __func__);
             if (!file_name_prefix.Valid())
             {
                 throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_prefix from parameter server");
@@ -1542,17 +1542,17 @@ namespace smmap
     {
         try
         {
-            const auto log_folder = ROSHelpers::GetParamRequired<std::string>(*ph_, "log_folder", __func__);
+            const auto log_folder = ROSHelpers::GetParamRequired<std::string>(*nh_, "log_folder", __func__);
             if (!log_folder.Valid())
             {
                 throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
             }
-            const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "band_file_name_prefix", __func__);
+            const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "file_name_prefix", __func__);
             if (!file_name_prefix.Valid())
             {
                 throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_prefix from parameter server");
             }
-            const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "band_file_name_suffix_to_load", __func__);
+            const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "file_name_suffix_to_load", __func__);
             if (!file_name_suffix.Valid())
             {
                 throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_suffix_to_load from parameter server");
