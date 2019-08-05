@@ -135,6 +135,7 @@ TaskFramework::TaskFramework(
     , max_lookahead_steps_(GetNumLookaheadSteps(*ph_))
     , max_grippers_pose_history_length_(GetMaxGrippersPoseHistoryLength(*ph_))
     , executing_global_trajectory_(false)
+    , num_times_planner_invoked_(0)
     , band_rrt_(nullptr)
     , policy_current_idx_(-1)
     , policy_segment_next_idx_(-1)
@@ -146,9 +147,9 @@ TaskFramework::TaskFramework(
     , bandits_logging_enabled_(GetBanditsLoggingEnabled(*ph_))
     , controller_logging_enabled_(GetControllerLoggingEnabled(*ph_))
     , vis_(vis)
-    , visualize_desired_motion_(!GetDisableAllVisualizations(*ph_) && GetVisualizeObjectDesiredMotion(*ph_))
-    , visualize_gripper_motion_(!GetDisableAllVisualizations(*ph_) && GetVisualizeGripperMotion(*ph_))
-    , visualize_predicted_motion_(!GetDisableAllVisualizations(*ph_) && GetVisualizeObjectPredictedMotion(*ph_))
+    , visualize_desired_motion_(vis_->visualizationsEnabled() && GetVisualizeObjectDesiredMotion(*ph_))
+    , visualize_gripper_motion_(vis_->visualizationsEnabled() && GetVisualizeGripperMotion(*ph_))
+    , visualize_predicted_motion_(vis_->visualizationsEnabled() && GetVisualizeObjectPredictedMotion(*ph_))
 {
     ROS_INFO_STREAM_NAMED("task_framework", "Using seed " << std::hex << seed_ );
     std::srand((unsigned int)seed_);
@@ -247,23 +248,32 @@ void TaskFramework::execute()
             {
                 ROS_INFO("Terminating task as the task has been completed");
             }
-//            robot_->shutdown();
 
-            ROS_INFO_NAMED("task_framework", "------------------------------- RESETING RESETING -------------------------------------");
-            robot_->reset();
-            world_feedback = robot_->start();
-            start_time = world_feedback.sim_time_;
-            if (enable_stuck_detection_)
+            // If rrt/num_trials is larger than 1, then all the seeds are reset in planGlobalGripperTrajectory,
+            // so reseting and running another full system trial makes no sense
+            if (GetRRTNumTrials(*ph_) != 1)
             {
-                initializeBand(world_feedback);
-                initializeBandRRT(world_feedback.robot_configuration_valid_);
+                robot_->shutdown();
+            }
+            else
+            {
+                ROS_INFO_NAMED("task_framework", "------------------------------- RESETING RESETING -------------------------------------");
+                robot_->reset();
+                world_feedback = robot_->start();
+                start_time = world_feedback.sim_time_;
+                if (enable_stuck_detection_)
+                {
+                    initializeBand(world_feedback);
+                    initializeBandRRT(world_feedback.robot_configuration_valid_);
 
-                executing_global_trajectory_ = false;
-                policy_current_idx_ = -1;
-                policy_segment_next_idx_ = -1;
-                grippers_pose_history_.clear();
-                error_history_.clear();
-                microstep_history_buffer_.clear();
+                    executing_global_trajectory_ = false;
+                    num_times_planner_invoked_ = 0;
+                    policy_current_idx_ = -1;
+                    policy_segment_next_idx_ = -1;
+                    grippers_pose_history_.clear();
+                    error_history_.clear();
+                    microstep_history_buffer_.clear();
+                }
             }
         }
     }
@@ -401,7 +411,7 @@ WorldState TaskFramework::sendNextCommand(
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "task_framework", "Invoking global planner due to lack of progress");
                 ROS_INFO_NAMED("task_framework", "----------------------------------------------------------------------------");
 
-                if (!GetDisableAllVisualizations(*ph_))
+                if (vis_->visualizationsEnabled())
                 {
                     vis_->forcePublishNow(2.0);
                 }
@@ -1610,9 +1620,8 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
 
 void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 {
-    static int num_times_invoked = 0;
-    num_times_invoked++;
-    ROS_INFO_STREAM_NAMED("task_framework", "!!!!!!!!!!!!!!!!!! Planner Invoked " << num_times_invoked << " times!!!!!!!!!!!");
+    num_times_planner_invoked_++;
+    ROS_INFO_STREAM_NAMED("task_framework", "!!!!!!!!!!!!!!!!!! Planner Invoked " << num_times_planner_invoked_ << " times!!!!!!!!!!!");
 
     // Resample the band for the purposes of first order vis checking
     if (!executing_global_trajectory_)
@@ -1638,7 +1647,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         const std::string file_path =
                 GetLogFolder(*nh_) +
                 "rrt_cache_step." +
-                PrettyPrint::PrettyPrint(num_times_invoked);
+                PrettyPrint::PrettyPrint(num_times_planner_invoked_);
         rrt_planned_policy_ = band_rrt_->loadStoredPolicy(file_path);
 
         if (world_state.robot_configuration_valid_)
@@ -1712,7 +1721,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                             time_limit);
             }
 
-            if (!GetDisableAllVisualizations(*ph_))
+            if (vis_->visualizationsEnabled())
             {
                 vis_->deleteObjects(BandRRT::RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
                 band_rrt_->visualizePolicy(rrt_planned_policy_);
@@ -1726,7 +1735,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 const std::string file_path =
                         GetLogFolder(*nh_) +
                         "rrt_cache_step." +
-                        PrettyPrint::PrettyPrint(num_times_invoked);
+                        PrettyPrint::PrettyPrint(num_times_planner_invoked_);
                 band_rrt_->storePolicy(rrt_planned_policy_, file_path);
             }
 

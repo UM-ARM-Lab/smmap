@@ -482,7 +482,7 @@ namespace smmap
         , ph_(ph)
         , robot_(robot)
         , vis_(vis)
-        , disable_visualizations_(GetDisableAllVisualizations(*ph_))
+        , disable_visualizations_(vis_->visualizationsEnabled())
         , visualize_gripper_motion_(!disable_visualizations_ && GetVisualizeGripperMotion(*ph_))
 
         , seed_(GetPlannerSeed(*ph_))

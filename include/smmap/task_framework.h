@@ -142,6 +142,7 @@ namespace smmap
             std::vector<double> error_history_;
 
             bool executing_global_trajectory_;
+            size_t num_times_planner_invoked_;
             std::shared_ptr<BandRRT> band_rrt_;
             RRTPolicy rrt_planned_policy_;
             size_t policy_current_idx_;

@@ -700,7 +700,7 @@ DijkstrasCoverageTask::DijkstrasCoverageTask(
 {
     GetFreeSpaceGraph(*nh_, free_space_graph_, cover_ind_to_free_space_graph_ind_);
     assert(cover_ind_to_free_space_graph_ind_.size() == (size_t)num_cover_points_);
-    if (!GetDisableAllVisualizations(*ph_) && GetVisualizeFreeSpaceGraph(*ph_))
+    if (vis_->visualizationsEnabled() && GetVisualizeFreeSpaceGraph(*ph_))
     {
         visualizeFreeSpaceGraph();
     }
