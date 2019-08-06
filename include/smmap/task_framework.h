@@ -42,6 +42,7 @@ namespace smmap
             const unsigned long seed_;
             const std::shared_ptr<std::mt19937_64> generator_;
 
+            const std::string test_id_;
             const RobotInterface::Ptr robot_;
             const TaskSpecification::Ptr task_specification_;
             const DijkstrasCoverageTask::Ptr dijkstras_task_;

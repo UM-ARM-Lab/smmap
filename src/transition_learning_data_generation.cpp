@@ -91,7 +91,7 @@ namespace smmap
         };
     }
 
-    std::vector<TransitionTesting::StateMicrostepsPair> TransitionTesting::toTrajectory(
+    std::vector<TransitionEstimation::StateMicrostepsPair> TransitionTesting::toTrajectory(
             const dmm::TransitionTestResult& test_result,
             const RRTPath& path,
             const std::string& filename)
@@ -130,7 +130,7 @@ namespace smmap
         }
 
         const auto total_steps = has_last_action ? path_num_steps + 1 : path_num_steps;
-        std::vector<StateMicrostepsPair> trajectory;
+        std::vector<TransitionEstimation::StateMicrostepsPair> trajectory;
         trajectory.reserve(total_steps);
 
         // Add the first state with no history
@@ -614,6 +614,8 @@ namespace smmap
 
     void TransitionTesting::initializeRRTParams()
     {
+        assert(initial_band_ != nullptr);
+
         // "World" params used by planning
         world_params_ = std::make_shared<const BandRRT::WorldParams>(BandRRT::WorldParams
         {
@@ -698,6 +700,7 @@ namespace smmap
                                                         planning_params_,
                                                         smoothing_params_,
                                                         task_params_,
+                                                        initial_band_,
                                                         vis_,
                                                         false);
     }
@@ -748,7 +751,8 @@ namespace smmap
                                      const bool generate_last_step_transition_approximations,
                                      const bool generate_trajectories,
                                      const bool generate_meaningful_mistake_examples,
-                                     const bool generate_features)
+                                     const bool generate_features,
+                                     const bool test_classifiers)
     {
         if (generate_test_data)
         {
@@ -791,6 +795,11 @@ namespace smmap
             generateFeatures();
             ROS_INFO_STREAM("Generate features time taken: " << stopwatch(READ));
         }
+
+        if (test_classifiers)
+        {
+            assert(false && "Not implemented");
+        }
     }
 }
 
@@ -800,24 +809,6 @@ namespace smmap
 
 namespace smmap
 {
-    void TransitionTesting::savePath(const RRTPath& path, const std::string& filename) const
-    {
-        std::vector<uint8_t> buffer;
-        SerializeVector<RRTNode>(path, buffer, &RRTNode::Serialize);
-        ZlibHelpers::CompressAndWriteToFile(buffer, filename);
-    }
-
-    RRTPath TransitionTesting::loadPath(const std::string& filename) const
-    {
-        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
-        const auto deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
-        {
-            return RRTNode::Deserialize(buf, cur, *initial_band_);
-        };
-        const auto path_deserialized = DeserializeVector<RRTNode, Eigen::aligned_allocator<RRTNode>>(buffer, 0, deserializer);
-        return path_deserialized.first;
-    }
-
     void TransitionTesting::saveTestResult(const dmm::TransitionTestResult& test_result, const std::string& filename) const
     {
         std::vector<uint8_t> buffer;
@@ -829,65 +820,6 @@ namespace smmap
     {
         const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
         return arc_utilities::RosMessageDeserializationWrapper<dmm::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
-    }
-
-    void TransitionTesting::saveStateTransition(const TransitionEstimation::StateTransition& state, const std::string& filename) const
-    {
-        std::vector<uint8_t> buffer;
-        state.serialize(buffer);
-        ZlibHelpers::CompressAndWriteToFile(buffer, filename);
-    }
-
-    TransitionEstimation::StateTransition TransitionTesting::loadStateTransition(const std::string& filename) const
-    {
-        const auto test_transition_buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
-        return TransitionEstimation::StateTransition::Deserialize(test_transition_buffer, 0, *initial_band_).first;
-    }
-
-    void TransitionTesting::saveAdaptationResult(const TransitionEstimation::TransitionAdaptationResult& result, const std::string& filename) const
-    {
-        std::vector<uint8_t> buffer;
-        result.serialize(buffer);
-        ZlibHelpers::CompressAndWriteToFile(buffer, filename);
-    }
-
-    TransitionEstimation::TransitionAdaptationResult TransitionTesting::loadAdaptationResult(const std::string& filename) const
-    {
-        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
-        return TransitionEstimation::TransitionAdaptationResult::Deserialize(buffer, 0, *initial_band_).first;
-    }
-
-    void TransitionTesting::saveTrajectory(const std::vector<StateMicrostepsPair>& trajectory, const std::string& filename) const
-    {
-        const auto microsteps_serializer = [] (const std::vector<WorldState>& microsteps, std::vector<uint8_t>& buf)
-        {
-            return arc_utilities::SerializeVector<WorldState>(microsteps, buf, &WorldState::Serialize);
-        };
-        const auto item_serializer = [&] (const StateMicrostepsPair& item, std::vector<uint8_t>& buf)
-        {
-            return arc_utilities::SerializePair<StateMicrostepsPair::first_type, StateMicrostepsPair::second_type>(item, buf, &TransitionEstimation::State::Serialize, microsteps_serializer);
-        };
-        std::vector<uint8_t> buffer;
-        arc_utilities::SerializeVector<StateMicrostepsPair>(trajectory, buffer, item_serializer);
-        ZlibHelpers::CompressAndWriteToFile(buffer, filename);
-    }
-
-    std::vector<TransitionTesting::StateMicrostepsPair> TransitionTesting::loadTrajectory(const std::string& filename) const
-    {
-        const auto state_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
-        {
-            return TransitionEstimation::State::Deserialize(buf, cur, *initial_band_);
-        };
-        const auto microsteps_deserializer = [] (const std::vector<uint8_t>& buf, const uint64_t cur)
-        {
-            return arc_utilities::DeserializeVector<WorldState>(buf, cur, &WorldState::Deserialize);
-        };
-        const auto item_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
-        {
-            return arc_utilities::DeserializePair<StateMicrostepsPair::first_type, StateMicrostepsPair::second_type>(buf, cur, state_deserializer, microsteps_deserializer);
-        };
-        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
-        return arc_utilities::DeserializeVector<StateMicrostepsPair>(buffer, 0, item_deserializer).first;
     }
 }
 
@@ -1138,12 +1070,12 @@ namespace smmap
     {
         if (boost::filesystem::is_regular_file(filename))
         {
-            return loadPath(filename);
+            return band_rrt_vis_->loadPath(filename);
         }
         else
         {
             const auto path = generateTestPath(gripper_target_poses);
-            savePath(path, filename);
+            band_rrt_vis_->savePath(path, filename);
             return path;
         }
     }
@@ -1158,6 +1090,7 @@ namespace smmap
                                 planning_params_,
                                 smoothing_params_,
                                 task_params_,
+                                initial_band_,
                                 vis_,
                                 false);
 
@@ -1271,15 +1204,15 @@ namespace smmap
                     if (!boost::filesystem::is_regular_file(test_transition_file))
                     {
                         // Load the path that generated the test
-                        const RRTPath path_to_start = loadPath(path_to_start_file);
+                        const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
                         // Generate the transition at the end of the path
                         const auto transition = ToStateTransition(test_result, path_to_start);
-                        saveStateTransition(transition, test_transition_file);
+                        transition_estimator_->saveStateTransition(transition, test_transition_file);
                         return transition;
                     }
                     else
                     {
-                        return loadStateTransition(test_transition_file);
+                        return transition_estimator_->loadStateTransition(test_transition_file);
                     }
                 }();
 
@@ -1292,12 +1225,12 @@ namespace smmap
                                     source_transition_,
                                     *test_transition.starting_state_.planned_rubber_band_,
                                     test_transition.ending_gripper_positions_);
-                        saveAdaptationResult(ar, adaptation_result_file);
+                        transition_estimator_->saveAdaptationResult(ar, adaptation_result_file);
                         return ar;
                     }
                     else
                     {
-                        return loadAdaptationResult(adaptation_result_file);
+                        return transition_estimator_->loadAdaptationResult(adaptation_result_file);
                     }
                 }();
 
@@ -1359,16 +1292,16 @@ namespace smmap
         {
             if (!boost::filesystem::is_regular_file(test_transition_file))
             {
-                const RRTPath path_to_start = loadPath(path_to_start_file);
+                const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
 
                 const auto transition = ToStateTransition(test_result, path_to_start);
-                saveStateTransition(transition, test_transition_file);
+                transition_estimator_->saveStateTransition(transition, test_transition_file);
                 return transition;
             }
             else
             {
-                return loadStateTransition(test_transition_file);
+                return transition_estimator_->loadStateTransition(test_transition_file);
             }
         }();
         source_band_surface_ = RubberBand::AggregateBandPoints(source_transition_.microstep_band_history_);
@@ -1432,15 +1365,15 @@ namespace smmap
             if (!boost::filesystem::is_regular_file(test_transition_file))
             {
                 // Load the path that generated the test
-                const RRTPath path_to_start = loadPath(path_to_start_file);
+                const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
                 // Generate the transition at the end of the path
                 const auto transition = ToStateTransition(test_result, path_to_start);
-                saveStateTransition(transition, test_transition_file);
+                transition_estimator_->saveStateTransition(transition, test_transition_file);
                 return transition;
             }
             else
             {
-                return loadStateTransition(test_transition_file);
+                return transition_estimator_->loadStateTransition(test_transition_file);
             }
         }();
 
@@ -1510,10 +1443,10 @@ namespace smmap
             {
                 if (!boost::filesystem::is_regular_file(trajectory_file))
                 {
-                    const RRTPath path_to_start = loadPath(path_to_start_file);
+                    const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
                     const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
                     const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
-                    saveTrajectory(traj, trajectory_file);
+                    transition_estimator_->saveTrajectory(traj, trajectory_file);
                 }
             }
             catch (const std::exception& ex)
@@ -1582,29 +1515,29 @@ namespace smmap
                     if (!boost::filesystem::is_regular_file(example_mistake_file))
                     {
                         // Load the trajectory if possible, otherwise generate it
-                        const std::vector<StateMicrostepsPair> trajectory = [&]
+                        const auto trajectory = [&]
                         {
                             if (!boost::filesystem::is_regular_file(trajectory_file))
                             {
-                                const RRTPath path_to_start = loadPath(path_to_start_file);
+                                const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
                                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
                                 const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
-                                saveTrajectory(traj, trajectory_file);
+                                transition_estimator_->saveTrajectory(traj, trajectory_file);
                                 return traj;
                             }
                             else
                             {
-                                return loadTrajectory(trajectory_file);
+                                return transition_estimator_->loadTrajectory(trajectory_file);
                             }
                         }();
 
                         const auto example = transition_estimator_->findMostRecentBadTransition(trajectory).Get();
-                        saveStateTransition(example, example_mistake_file);
+                        transition_estimator_->saveStateTransition(example, example_mistake_file);
                         return example;
                     }
                     else
                     {
-                        return loadStateTransition(example_mistake_file);
+                        return transition_estimator_->loadStateTransition(example_mistake_file);
                     }
                 }();
 
@@ -1666,21 +1599,21 @@ namespace smmap
         const auto trajectory_file =        experiment + "__trajectory.compressed";
 
         // Load the path that generated the test
-        const RRTPath path_to_start = loadPath(path_to_start_file);
+        const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
 
         // Load the trajectory if possible, otherwise generate it
-        const std::vector<StateMicrostepsPair> trajectory = [&]
+        const auto trajectory = [&]
         {
             if (!boost::filesystem::is_regular_file(trajectory_file))
             {
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
                 const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
-                saveTrajectory(traj, trajectory_file);
+                transition_estimator_->saveTrajectory(traj, trajectory_file);
                 return traj;
             }
             else
             {
-                return loadTrajectory(trajectory_file);
+                return transition_estimator_->loadTrajectory(trajectory_file);
             }
         }();
 
@@ -1690,12 +1623,12 @@ namespace smmap
             if (!boost::filesystem::is_regular_file(example_mistake_file))
             {
                 const auto example = transition_estimator_->findMostRecentBadTransition(trajectory).Get();
-                saveStateTransition(example, example_mistake_file);
+                transition_estimator_->saveStateTransition(example, example_mistake_file);
                 return example;
             }
             else
             {
-                return loadStateTransition(example_mistake_file);
+                return transition_estimator_->loadStateTransition(example_mistake_file);
             }
         }();
 
@@ -1904,21 +1837,21 @@ namespace smmap
             {
                 if (!boost::filesystem::is_regular_file(features_complete_flag_file))
                 {
-                    const RRTPath path_to_start = loadPath(path_to_start_file);
+                    const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
 
                     // Load the trajectory if possible, otherwise generate it
-                    const std::vector<StateMicrostepsPair> trajectory = [&]
+                    const auto trajectory = [&]
                     {
                         if (!boost::filesystem::is_regular_file(trajectory_file))
                         {
                             const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
                             const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
-                            saveTrajectory(traj, trajectory_file);
+                            transition_estimator_->saveTrajectory(traj, trajectory_file);
                             return traj;
                         }
                         else
                         {
-                            return loadTrajectory(trajectory_file);
+                            return transition_estimator_->loadTrajectory(trajectory_file);
                         }
                     }();
 
@@ -2329,21 +2262,21 @@ namespace smmap
         const auto path_to_start_file = experiment + "__path_to_start.compressed";
         const auto trajectory_file =    experiment + "__trajectory.compressed";
 
-        const RRTPath path_to_start = loadPath(path_to_start_file);
+        const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
 
         // Load the trajectory if possible, otherwise generate it
-        const std::vector<StateMicrostepsPair> trajectory = [&]
+        const auto trajectory = [&]
         {
             if (!boost::filesystem::is_regular_file(trajectory_file))
             {
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
                 const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
-                saveTrajectory(traj, trajectory_file);
+                transition_estimator_->saveTrajectory(traj, trajectory_file);
                 return traj;
             }
             else
             {
-                return loadTrajectory(trajectory_file);
+                return transition_estimator_->loadTrajectory(trajectory_file);
             }
         }();
 

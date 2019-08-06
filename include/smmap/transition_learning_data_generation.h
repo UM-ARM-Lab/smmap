@@ -112,7 +112,8 @@ namespace smmap
                       const bool generate_last_step_transition_approximations,
                       const bool generate_trajectories,
                       const bool generate_meaningful_mistake_examples,
-                      const bool generate_features);
+                      const bool generate_features,
+                      const bool test_classifiers);
         void generateTestData();
         void generateLastStepTransitionApproximations();
         void generateTrajectories();
@@ -162,8 +163,7 @@ namespace smmap
         void generateFeatures();
         std::vector<std::string> extractFeatures(const TransitionEstimation::StateTransition& transition) const;
 
-        typedef std::pair<TransitionEstimation::State, std::vector<WorldState>> StateMicrostepsPair;
-        std::vector<StateMicrostepsPair> toTrajectory(
+        std::vector<TransitionEstimation::StateMicrostepsPair> toTrajectory(
                 const deformable_manipulation_msgs::TransitionTestResult& test,
                 const RRTPath& path,
                 const std::string& filename);
@@ -172,20 +172,8 @@ namespace smmap
 
         //// Data saving and loading ///////////////////////////////////////////
 
-        void savePath(const RRTPath& path, const std::string& filename) const;
-        RRTPath loadPath(const std::string& filename) const;
-
         void saveTestResult(const deformable_manipulation_msgs::TransitionTestResult& test_result, const std::string& filename) const;
         deformable_manipulation_msgs::TransitionTestResult loadTestResult(const std::string& filename) const;
-
-        void saveStateTransition(const TransitionEstimation::StateTransition& state, const std::string& filename) const;
-        TransitionEstimation::StateTransition loadStateTransition(const std::string& filename) const;
-
-        void saveAdaptationResult(const TransitionEstimation::TransitionAdaptationResult& result, const std::string& filename) const;
-        TransitionEstimation::TransitionAdaptationResult loadAdaptationResult(const std::string& filename) const;
-
-        void saveTrajectory(const std::vector<StateMicrostepsPair>& trajectory, const std::string& filename) const;
-        std::vector<StateMicrostepsPair> loadTrajectory(const std::string& filename) const;
 
         //// Data Generation ///////////////////////////////////////////////////
 
@@ -218,9 +206,7 @@ namespace smmap
 
         // Classification Example
         MinMaxTransformer classifier_scaler_;
-//        SVMClassifier transition_mistake_classifier_;
-        TorchClassifier transition_mistake_classifier_;
-//        NNClassifier transition_mistake_classifier_;
+        TransitionEstimation::Classifier transition_mistake_classifier_;
         ros::ServiceServer add_classification_example_visualization_;
 
     public:

@@ -3,8 +3,7 @@
 
 #include <ros/ros.h>
 #include <svm/svm.h>
-#include <Eigen/Core>
-#include <flann/flann.hpp>
+#include <Eigen/Dense>
 
 namespace smmap
 {
@@ -16,9 +15,9 @@ namespace smmap
 
         ~SVMClassifier();
 
+        std::string static Name() { return "svm"; }
         int numFeatures() const { return num_features_; }
-        double predict(const Eigen::VectorXd& vec) const;
-        std::pair<double, Eigen::VectorXd> nearestNeighbour(const Eigen::VectorXd& vec) const;
+        double predict(const Eigen::VectorXd& vec);
 
     private:
         std::shared_ptr<ros::NodeHandle> const nh_;
@@ -27,10 +26,6 @@ namespace smmap
         svm_model* model_;
         int const num_features_;
         svm_node query_;
-//        MinMaxTransformer const transformer_;
-
-        std::vector<double> nn_raw_data_;
-        flann::KDTreeSingleIndex<flann::L2<double>> nn_index_;
     };
 }
 

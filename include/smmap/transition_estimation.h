@@ -7,8 +7,9 @@
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/task_specification.h"
 #include "smmap/min_max_transformer.hpp"
-//#include "smmap/nn_classifier.h"
-//#include "smmap/svm_classifier.h"
+#include "smmap/no_classifier.h"
+#include "smmap/knn_classifier.h"
+#include "smmap/svm_classifier.h"
 #include "smmap/torch_classifier.h"
 
 namespace smmap
@@ -18,6 +19,10 @@ namespace smmap
     public:
         typedef std::shared_ptr<TransitionEstimation> Ptr;
         typedef std::shared_ptr<const TransitionEstimation> ConstPtr;
+        typedef NoClassifier Classifier;
+//        typedef kNNClassifier Classifier;
+//        typedef SVMClassifier Classifier;
+//        typedef TorchClassifier Classifier;
 
         struct State
         {
@@ -80,6 +85,8 @@ namespace smmap
 
             std::string toString() const;
         };
+
+        typedef std::pair<State, std::vector<WorldState>> StateMicrostepsPair;
 
         ////////////////////////////////////////////////////////////////////////
         // Constructor
@@ -218,6 +225,18 @@ namespace smmap
         static constexpr char MDP_TESTING_STATE_NS[]    = "mdp_testing_state";
         static constexpr char MDP_POST_STATE_NS[]       = "mdp_post_state";
 
+        ////////////////////////////////////////////////////////////////////////
+        // Saving and loading helpers
+        ////////////////////////////////////////////////////////////////////////
+
+        void saveStateTransition(const StateTransition& state, const std::string& filename) const;
+        StateTransition loadStateTransition(const std::string& filename) const;
+
+        void saveTrajectory(const std::vector<StateMicrostepsPair>& trajectory, const std::string& filename) const;
+        std::vector<StateMicrostepsPair> loadTrajectory(const std::string& filename) const;
+
+        void saveAdaptationResult(const TransitionAdaptationResult& result, const std::string& filename) const;
+        TransitionAdaptationResult loadAdaptationResult(const std::string& filename) const;
 
     private:
 
@@ -242,9 +261,7 @@ namespace smmap
         ////////////////////////////////////////////////////////////////////////
 
         MinMaxTransformer classifier_scaler_;
-//        NNClassifier transition_mistake_classifier_;
-//        SVMClassifier transition_mistake_classifier_;
-        TorchClassifier transition_mistake_classifier_;
+        Classifier transition_mistake_classifier_;
 
         ////////////////////////////////////////////////////////////////////////
         // Saving and loading learned transitions

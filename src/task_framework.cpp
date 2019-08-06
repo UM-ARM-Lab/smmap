@@ -18,6 +18,8 @@
 #include <deformable_manipulation_experiment_params/utility.hpp>
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
 
+#include "smmap/conversions.h"
+
 #include "smmap/diminishing_rigidity_model.h"
 #include "smmap/adaptive_jacobian_model.h"
 #include "smmap/least_squares_jacobian_model.h"
@@ -120,6 +122,7 @@ TaskFramework::TaskFramework(
     , ph_(ph)
     , seed_(GetPlannerSeed(*ph_))
     , generator_(std::make_shared<std::mt19937_64>(seed_))
+    , test_id_(GetTestId(*nh_))
     , robot_(robot)
     , task_specification_(task_specification)
     , dijkstras_task_(std::dynamic_pointer_cast<DijkstrasCoverageTask>(task_specification_)) // If possible, this will be done, if not, it will be NULL (nullptr?)
@@ -251,11 +254,7 @@ void TaskFramework::execute()
 
             // If rrt/num_trials is larger than 1, then all the seeds are reset in planGlobalGripperTrajectory,
             // so reseting and running another full system trial makes no sense
-            if (GetRRTNumTrials(*ph_) != 1)
-            {
-                robot_->shutdown();
-            }
-            else
+            if (GetRRTNumTrials(*ph_) == 1)
             {
                 ROS_INFO_NAMED("task_framework", "------------------------------- RESETING RESETING -------------------------------------");
                 robot_->reset();
@@ -274,6 +273,10 @@ void TaskFramework::execute()
                     error_history_.clear();
                     microstep_history_buffer_.clear();
                 }
+            }
+            else
+            {
+                robot_->shutdown();
             }
         }
     }
@@ -1241,6 +1244,8 @@ void TaskFramework::initializeBand(const WorldState& world_state)
 
 void TaskFramework::initializeBandRRT(const bool planning_for_whole_robot)
 {
+    assert(rubber_band_ != nullptr);
+
     // "World" params used by planning
     BandRRT::WorldParams world_params =
     {
@@ -1330,6 +1335,7 @@ void TaskFramework::initializeBandRRT(const bool planning_for_whole_robot)
                 planning_params,
                 smoothing_params,
                 task_params,
+                rubber_band_,
                 vis_,
                 enable_rrt_visualizations);
 }
@@ -1648,7 +1654,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 GetLogFolder(*nh_) +
                 "rrt_cache_step." +
                 PrettyPrint::PrettyPrint(num_times_planner_invoked_);
-        rrt_planned_policy_ = band_rrt_->loadStoredPolicy(file_path);
+        rrt_planned_policy_ = band_rrt_->loadPolicy(file_path);
 
         if (world_state.robot_configuration_valid_)
         {
@@ -1695,6 +1701,9 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
         const std::chrono::duration<double> time_limit(GetRRTTimeout(*ph_));
         const size_t num_trials = GetRRTNumTrials(*ph_);
+        const bool test_paths_in_bullet = GetRRTTestPathsInBullet(*ph_);
+        auto num_succesful_paths = 0;
+        auto num_unsuccesful_paths = 0;
         for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
         {
             // Only use the seed resetting if we are performing more than 1 trial
@@ -1728,45 +1737,66 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 vis_->forcePublishNow(0.5);
             }
 
-            // Serialization
-            if (GetRRTStoreNewResults(*ph_))
-            {
-                ROS_INFO_NAMED("rrt_planner_results", "Compressing and saving RRT results to file for storage");
-                const std::string file_path =
-                        GetLogFolder(*nh_) +
-                        "rrt_cache_step." +
-                        PrettyPrint::PrettyPrint(num_times_planner_invoked_);
-                band_rrt_->storePolicy(rrt_planned_policy_, file_path);
-            }
-
             // Record the resulting path execution in its entirety for transition learning purposes
+            if (test_paths_in_bullet)
             {
+                assert(rrt_planned_policy_.size() == 1);
+                const auto rrt_path = rrt_planned_policy_[0].first;
+
                 const auto test = robot_->toRosTransitionTest(
                             world_state.rope_node_transforms_,
                             world_state.all_grippers_single_pose_,
-                            RRTPathToGrippersPoseTrajectory(rrt_planned_policy_[0].first),
-                            ToGripperPoseVector(rrt_planned_policy_[0].first.back().grippers()));
+                            RRTPathToGrippersPoseTrajectory(rrt_path),
+                            ToGripperPoseVector(rrt_path.back().grippers()));
                 const auto base_folder = "/mnt/big_narstie_data/dmcconac/transition_learning_data_generation/smmap_generated_plans/";
-                const auto folder = base_folder + GetTaskTypeString(*nh_) + "/start_to_end/" + std::to_string(seed_) + "/";
+                const auto folder = base_folder + GetTaskTypeString(*nh_) + "/" + test_id_ +"/"
+                        + TransitionEstimation::Classifier::Name() + "_classifier_"
+                        + std::to_string(seed_) + "/";
                 arc_utilities::CreateDirectory(folder);
                 const auto timestamp = arc_helpers::GetCurrentTimeAsString();
-                const auto path_to_start_filename = folder + timestamp + "__path_to_start.compressed";
-                const auto test_results_filename = folder + timestamp + "__test_results.compressed";
+                std::cout << "Saving path and result to prefix: " << folder << timestamp << std::endl;
+                const auto path_to_start_file = folder + timestamp + "__path_to_start.compressed";
+                const auto test_results_file = folder + timestamp + "__test_results.compressed";
+                const auto trajectory_file = folder + timestamp + "__test_results.compressed";
 
                 // Save the path to file in the correct folder
                 {
                     std::vector<uint8_t> buffer;
-                    SerializeVector<RRTNode>(rrt_planned_policy_[0].first, buffer, &RRTNode::Serialize);
-                    ZlibHelpers::CompressAndWriteToFile(buffer, path_to_start_filename);
+                    SerializeVector<RRTNode>(rrt_path, buffer, &RRTNode::Serialize);
+                    ZlibHelpers::CompressAndWriteToFile(buffer, path_to_start_file);
                 }
-                // Run the path through the simulator, which will save the results to file
-                // Ignore the feedback as the action sever saves the results to file anyway
-                robot_->generateTransitionData({test}, {test_results_filename}, nullptr, false);
+                const auto feedback_fn = [&] (const size_t test_id, const deformable_manipulation_msgs::TransitionTestResult& test_result)
+                {
+                    (void)test_id;
+                    const auto trajectory = ToTrajectory(world_state, rrt_path, test, test_result);
+                    transition_estimator_->saveTrajectory(trajectory, trajectory_file);
+                    if (trajectory.size() == rrt_path.size())
+                    {
+                        ++num_succesful_paths;
+                    }
+                    else
+                    {
+                        ++num_unsuccesful_paths;
+                    }
+                };
+                // Run the path through the simulator which will save the results to file,
+                // and then convert the result to a trajectory, recording the result to file
+                robot_->generateTransitionData({test}, {test_results_file}, feedback_fn, true);
             }
         }
-    }
+        ROS_INFO_STREAM_COND_NAMED(test_paths_in_bullet, "task_framework", "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
 
-//    band_rrt_->visualizePolicy(rrt_planned_policy_, true);
+        // Serialization
+        if (GetRRTStoreNewResults(*ph_))
+        {
+            ROS_INFO_NAMED("rrt_planner_results", "Compressing and saving RRT results to file");
+            const std::string file_path =
+                    GetLogFolder(*nh_) +
+                    "rrt_cache_step." +
+                    PrettyPrint::PrettyPrint(num_times_planner_invoked_);
+            band_rrt_->storePolicy(rrt_planned_policy_, file_path);
+        }
+    }
 
     // We set the next index to "1" because the policy starts with the current configuration
     policy_current_idx_ = 0;

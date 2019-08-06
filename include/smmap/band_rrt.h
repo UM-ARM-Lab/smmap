@@ -286,6 +286,7 @@ namespace smmap
                 const PlanningParams& planning_params,
                 const SmoothingParams& smoothing_params,
                 const TaskParams& task_params,
+                const RubberBand::ConstPtr& template_band,
                 Visualizer::Ptr vis,
                 const bool visualization_enabled);
 
@@ -339,9 +340,11 @@ namespace smmap
         RRTTree loadStoredTree(std::string file_path = "") const;
         bool useStoredTree() const;
 
+        void savePath(const RRTPath& path, const std::string& filename) const;
+        RRTPath loadPath(const std::string& filename) const;
 
         void storePolicy(const RRTPolicy& policy, const std::string& file_path) const;
-        RRTPolicy loadStoredPolicy(const std::string& file_path) const;
+        RRTPolicy loadPolicy(const std::string& file_path) const;
 
     private:
         ///////////////////////////////////////////////////////////////////////////////////////
@@ -438,6 +441,7 @@ namespace smmap
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
         const XYZGrid work_space_grid_;
         const TransitionEstimation::Ptr transition_estimator_;
+        const RubberBand template_band_;
         const std::shared_ptr<std::mt19937_64> generator_;
         std::uniform_real_distribution<double> uniform_unit_distribution_;
 

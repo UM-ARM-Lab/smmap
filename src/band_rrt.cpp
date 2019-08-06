@@ -633,6 +633,7 @@ BandRRT::BandRRT(
         const PlanningParams& planning_params,
         const SmoothingParams& smoothing_params,
         const TaskParams& task_params,
+        const RubberBand::ConstPtr& template_band,
         Visualizer::Ptr vis,
         const bool visualization_enabled)
     : nh_(nh)
@@ -642,6 +643,7 @@ BandRRT::BandRRT(
     , sdf_(world_params.sdf_)
     , work_space_grid_(world_params.work_space_grid_)
     , transition_estimator_(world_params.transition_estimator_)
+    , template_band_(*template_band)
 
     , generator_(world_params.generator_)
     , uniform_unit_distribution_(0.0, 1.0)
@@ -1617,7 +1619,7 @@ void BandRRT::storeTree(const RRTTree& tree, std::string file_path) const
         {
             const auto deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
             {
-                return RRTNode::Deserialize(buf, cur, *starting_band_);
+                return RRTNode::Deserialize(buf, cur, template_band_);
             };
 
             const RRTTree retrieved_path =
@@ -1661,7 +1663,7 @@ RRTTree BandRRT::loadStoredTree(std::string file_path) const
 
         const auto deserializer = [&] (const std::vector<uint8_t>& buffer, const uint64_t current)
         {
-            return RRTNode::Deserialize(buffer, current, *starting_band_);
+            return RRTNode::Deserialize(buffer, current, template_band_);
         };
 
         const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(file_path);
@@ -1680,6 +1682,24 @@ bool BandRRT::useStoredTree() const
     return ROSHelpers::GetParamRequired<bool>(*ph_, "use_stored_path", __func__).GetImmutable();
 }
 
+void BandRRT::savePath(const RRTPath& path, const std::string& filename) const
+{
+    std::vector<uint8_t> buffer;
+    SerializeVector<RRTNode>(path, buffer, &RRTNode::Serialize);
+    ZlibHelpers::CompressAndWriteToFile(buffer, filename);
+}
+
+RRTPath BandRRT::loadPath(const std::string& filename) const
+{
+    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
+    const auto deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
+    {
+        return RRTNode::Deserialize(buf, cur, template_band_);
+    };
+    const auto path_deserialized = DeserializeVector<RRTNode, Eigen::aligned_allocator<RRTNode>>(buffer, 0, deserializer);
+    return path_deserialized.first;
+}
+
 void BandRRT::storePolicy(const RRTPolicy& policy, const std::string& file_path) const
 {
     (void)policy;
@@ -1687,7 +1707,7 @@ void BandRRT::storePolicy(const RRTPolicy& policy, const std::string& file_path)
     ROS_ERROR_NAMED("rrt", "storePolicy not implemented.");
 }
 
-RRTPolicy BandRRT::loadStoredPolicy(const std::string& file_path) const
+RRTPolicy BandRRT::loadPolicy(const std::string& file_path) const
 {
     (void)file_path;
     ROS_ERROR_NAMED("rrt", "loadStoredPolicy not implemented.");
@@ -1792,14 +1812,14 @@ RRTNode BandRRT::configSampling(const bool sample_band)
         sample = RRTNode(
                     gripper_poses,
                     robot_config,
-                    std::make_shared<RubberBand>(*starting_band_));
+                    std::make_shared<RubberBand>(template_band_));
     }
     else
     {
         sample = RRTNode(
                     starting_grippers_poses_,
                     robotConfigPairSampling_internal(),
-                    std::make_shared<RubberBand>(*starting_band_));
+                    std::make_shared<RubberBand>(template_band_));
     }
 
     ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.sampling", "Random robot config: " << sample.robotConfiguration().transpose());

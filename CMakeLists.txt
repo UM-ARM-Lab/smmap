@@ -141,7 +141,7 @@ add_custom_target(${PROJECT_NAME}_transitions_headers SOURCES
     include/${PROJECT_NAME}/parabola.h
     include/${PROJECT_NAME}/quinlan_rubber_band.h
     include/${PROJECT_NAME}/min_max_transformer.hpp
-    include/${PROJECT_NAME}/nn_classifier.h
+    include/${PROJECT_NAME}/knn_classifier.h
     include/${PROJECT_NAME}/svm_classifier.h
     include/${PROJECT_NAME}/torch_classifier.h
 )
@@ -150,7 +150,7 @@ add_library(${PROJECT_NAME}_transitions
     src/transition_estimation.cpp
     src/parabola.cpp
     src/quinlan_rubber_band.cpp
-    src/nn_classifier.cpp
+    src/knn_classifier.cpp
     src/svm_classifier.cpp
     src/torch_classifier.cpp
 )
@@ -171,11 +171,13 @@ target_compile_definitions(${PROJECT_NAME}_transitions PUBLIC "-D _DENSE_REP")
 add_custom_target(${PROJECT_NAME}_planning_headers SOURCES
     include/${PROJECT_NAME}/band_rrt.h
     include/${PROJECT_NAME}/task_framework.h
+    include/${PROJECT_NAME}/conversions.h
 )
 
 add_library(${PROJECT_NAME}_planning
     src/band_rrt.cpp
     src/task_framework.cpp
+    src/conversions.cpp
 )
 add_dependencies(${PROJECT_NAME}_planning ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_planning

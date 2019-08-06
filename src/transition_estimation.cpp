@@ -1347,6 +1347,67 @@ void TransitionEstimation::clearVisualizations() const
     vis_->deleteObjects(MDP_TESTING_STATE_NS, 0, (int32_t)(learned_transitions_.size() + 1) * 3);
 }
 
+//////// Savign and loading helpers ////////////////////////////////////////////////////////////////////////////////////////
+
+void TransitionEstimation::saveStateTransition(const StateTransition& state, const std::string& filename) const
+{
+    std::vector<uint8_t> buffer;
+    state.serialize(buffer);
+    ZlibHelpers::CompressAndWriteToFile(buffer, filename);
+}
+
+TransitionEstimation::StateTransition TransitionEstimation::loadStateTransition(const std::string& filename) const
+{
+    const auto test_transition_buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
+    return StateTransition::Deserialize(test_transition_buffer, 0, template_band_).first;
+}
+
+void TransitionEstimation::saveTrajectory(const std::vector<StateMicrostepsPair>& trajectory, const std::string& filename) const
+{
+    const auto microsteps_serializer = [] (const std::vector<WorldState>& microsteps, std::vector<uint8_t>& buf)
+    {
+        return arc_utilities::SerializeVector<WorldState>(microsteps, buf, &WorldState::Serialize);
+    };
+    const auto item_serializer = [&] (const StateMicrostepsPair& item, std::vector<uint8_t>& buf)
+    {
+        return arc_utilities::SerializePair<StateMicrostepsPair::first_type, StateMicrostepsPair::second_type>(item, buf, &State::Serialize, microsteps_serializer);
+    };
+    std::vector<uint8_t> buffer;
+    arc_utilities::SerializeVector<StateMicrostepsPair>(trajectory, buffer, item_serializer);
+    ZlibHelpers::CompressAndWriteToFile(buffer, filename);
+}
+
+std::vector<TransitionEstimation::StateMicrostepsPair> TransitionEstimation::loadTrajectory(const std::string& filename) const
+{
+    const auto state_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
+    {
+        return TransitionEstimation::State::Deserialize(buf, cur, template_band_);
+    };
+    const auto microsteps_deserializer = [] (const std::vector<uint8_t>& buf, const uint64_t cur)
+    {
+        return arc_utilities::DeserializeVector<WorldState>(buf, cur, &WorldState::Deserialize);
+    };
+    const auto item_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
+    {
+        return arc_utilities::DeserializePair<StateMicrostepsPair::first_type, StateMicrostepsPair::second_type>(buf, cur, state_deserializer, microsteps_deserializer);
+    };
+    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
+    return arc_utilities::DeserializeVector<StateMicrostepsPair>(buffer, 0, item_deserializer).first;
+}
+
+void TransitionEstimation::saveAdaptationResult(const TransitionEstimation::TransitionAdaptationResult& result, const std::string& filename) const
+{
+    std::vector<uint8_t> buffer;
+    result.serialize(buffer);
+    ZlibHelpers::CompressAndWriteToFile(buffer, filename);
+}
+
+TransitionEstimation::TransitionAdaptationResult TransitionEstimation::loadAdaptationResult(const std::string& filename) const
+{
+    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
+    return TransitionAdaptationResult::Deserialize(buffer, 0, template_band_).first;
+}
+
 //////// Saving and loading learned transitions ////////////////////////////////////////////////////////////////////////
 
 bool TransitionEstimation::useStoredTransitions() const

@@ -1,19 +1,19 @@
-#ifndef NN_CLASSIFIER_H
-#define NN_CLASSIFIER_H
+#ifndef KNN_CLASSIFIER_H
+#define KNN_CLASSIFIER_H
 
 #include <ros/ros.h>
-#include <Eigen/Core>
+#include <Eigen/Dense>
 #include <flann/flann.hpp>
-#include <arc_utilities/ros_helpers.hpp>
 
 namespace smmap
 {
-    class NNClassifier
+    class kNNClassifier
     {
     public:
-        NNClassifier(std::shared_ptr<ros::NodeHandle> nh,
+        kNNClassifier(std::shared_ptr<ros::NodeHandle> nh,
                      std::shared_ptr<ros::NodeHandle> ph);
 
+        std::string static Name() { return "kNN"; }
         int numFeatures() const { return num_features_; }
         double predict(const Eigen::VectorXd& vec) const;
 
