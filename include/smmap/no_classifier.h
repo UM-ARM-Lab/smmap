@@ -1,26 +1,23 @@
 #ifndef NO_CLASSIFIER_H
 #define NO_CLASSIFIER_H
 
-#include <ros/ros.h>
-#include <Eigen/Dense>
-#include <arc_utilities/ros_helpers.hpp>
+#include "smmap/classifier.h"
 
 namespace smmap
 {
-    class NoClassifier
+    class NoClassifier : public Classifier
     {
     public:
-        NoClassifier(std::shared_ptr<ros::NodeHandle> /* nh */,
+        NoClassifier(std::shared_ptr<ros::NodeHandle> nh,
                      std::shared_ptr<ros::NodeHandle> ph)
-            : num_features_(ROSHelpers::GetParamRequired<int>(*ph, "classifier/dim", __func__).GetImmutable())
+            : Classifier(nh, ph, "none")
         {}
 
-        std::string static Name() { return "none"; }
-        int numFeatures() const { return num_features_; }
-        double predict(Eigen::VectorXd const& /* vec */) const { return -1.0; }
-
     private:
-        int const num_features_;
+        virtual double predict_impl(Eigen::VectorXd const& /* vec */) override final
+        {
+            return -1.0;
+        }
     };
 }
 

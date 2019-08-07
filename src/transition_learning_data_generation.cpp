@@ -7,6 +7,7 @@
 #include <arc_utilities/log.hpp>
 #include <arc_utilities/math_helpers.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
+#include <arc_utilities/simple_kmeans_clustering.hpp>
 #include <sdf_tools/collision_map.hpp>
 #include <smmap_utilities/neighbours.h>
 #include <boost/filesystem.hpp>
@@ -488,6 +489,7 @@ namespace smmap
         , seed_(GetPlannerSeed(*ph_))
         , generator_(std::make_shared<std::mt19937_64>(seed_))
 
+        , task_(std::dynamic_pointer_cast<DijkstrasCoverageTask>(TaskSpecification::MakeTaskSpecification(nh_, ph_, vis_)))
         , sdf_(GetEnvironmentSDF(*nh_))
         , work_space_grid_(sdf_->GetOriginTransform(),
                            sdf_->GetFrame(),
@@ -523,9 +525,10 @@ namespace smmap
         , add_mistake_example_visualization_(nh_->advertiseService("transition_vis/add_mistake_example_visualization", &TransitionTesting::addMistakeExampleVisualizationCallback, this))
 
         , classifier_scaler_(nh_, ph_)
-        , transition_mistake_classifier_(nh_, ph_)
+        , transition_mistake_classifier_(Classifier::MakeClassifier(nh_, ph_))
         , add_classification_example_visualization_(nh_->advertiseService("transition_vis/add_classification_example_visualization", &TransitionTesting::addClassificationExampleVisualizationCallback, this))
     {
+        assert(task_ != nullptr && "This class is only intended for DijkstrasCoverageTask based tasks");
         std::srand((unsigned int)seed_);
         initialize(initial_world_state_);
 
@@ -720,30 +723,37 @@ namespace smmap
         ROS_INFO_STREAM("Finding data files in folder: " << data_folder_);
 
         std::vector<std::string> files;
-        const boost::filesystem::path p(data_folder_);
-        const boost::filesystem::recursive_directory_iterator start(p);
-        const boost::filesystem::recursive_directory_iterator end;
-        for (auto itr = start; itr != end; ++itr)
+        try
         {
-            if (boost::filesystem::is_regular_file(itr->status()))
+            const boost::filesystem::path p(data_folder_);
+            const boost::filesystem::recursive_directory_iterator start(p);
+            const boost::filesystem::recursive_directory_iterator end;
+            for (auto itr = start; itr != end; ++itr)
             {
-                const auto filename = itr->path().string();
-                // Only warn about file types that are not expected
-                if (filename.find("compressed") == std::string::npos &&
-                    filename.find("failed") == std::string::npos &&
-                    filename.find("classification_features") == std::string::npos)
+                if (boost::filesystem::is_regular_file(itr->status()))
                 {
-                    ROS_WARN_STREAM("Ignoring file: " << filename);
-                }
-                if (filename.find("__test_results.compressed") != std::string::npos)
-                {
-                    // Strip off the extra string for simpler use later
-                    files.push_back(filename.substr(0, filename.find("__test_results.compressed")));
+                    const auto filename = itr->path().string();
+                    // Only warn about file types that are not expected
+                    if (filename.find("compressed") == std::string::npos &&
+                        filename.find("failed") == std::string::npos &&
+                        filename.find("classification_features") == std::string::npos)
+                    {
+                        ROS_WARN_STREAM("Ignoring file: " << filename);
+                    }
+                    if (filename.find("__test_results.compressed") != std::string::npos)
+                    {
+                        // Strip off the extra string for simpler use later
+                        files.push_back(filename.substr(0, filename.find("__test_results.compressed")));
+                    }
                 }
             }
+            std::sort(files.begin(), files.end());
+            ROS_INFO_STREAM("Found " << files.size() << " possible data files in " << data_folder_);
         }
-        std::sort(files.begin(), files.end());
-        ROS_INFO_STREAM("Found " << files.size() << " possible data files in " << data_folder_);
+        catch (const boost::filesystem::filesystem_error& ex)
+        {
+            ROS_WARN_STREAM("Error loading file list: " << ex.what());
+        }
         return files;
     }
 
@@ -798,7 +808,10 @@ namespace smmap
 
         if (test_classifiers)
         {
-            assert(false && "Not implemented");
+            Stopwatch stopwatch;
+            ROS_INFO("Testing classifier");
+            testClassifier();
+            ROS_INFO_STREAM("Classifier testing time taken: " << stopwatch(READ));
         }
     }
 }
@@ -942,7 +955,7 @@ namespace smmap
                                 tests.push_back(test);
                                 filenames.push_back(test_results_filename);
 
-                                // Execute the tests if tehre are enough to run
+                                // Execute the tests if there are enough to run
                                 if (tests.size() == num_threads)
                                 {
                                     // Ignore the feedback as the action sever saves the results to file anyway
@@ -2332,7 +2345,7 @@ namespace smmap
         };
         const auto features = extractFeatures(transition);
         const bool mistake = (start_foh && !end_foh) && (end_dist > mistake_dist_thresh_);
-        const bool predicted_mistake = transition_mistake_classifier_.predict(
+        const bool predicted_mistake = transition_mistake_classifier_->predict(
                     classifier_scaler_(
                         transition_estimator_->transitionFeatures(
                             *start_state.planned_rubber_band_, *end_state.planned_rubber_band_, false)));
@@ -2368,6 +2381,397 @@ namespace smmap
                         << "Num filled connected components delta:  " << features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] << std::endl);
 
         return true;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//          Testing Classifiers
+////////////////////////////////////////////////////////////////////////////////
+
+namespace smmap
+{
+    void TransitionTesting::testClassifier()
+    {
+        const auto target_grippers_poses = getGripperTargets();
+
+        const auto classifier_type = ROSHelpers::GetParamRequired<std::string>(*ph_, "classifier/type", __func__).Get();
+        const auto folder = data_folder_ + "/" + classifier_type + "_classifier_" + std::to_string(seed_) + "/";
+        arc_utilities::CreateDirectory(folder);
+
+        const auto num_threads = GetNumOMPThreads();
+        std::vector<dmm::TransitionTest> tests;
+        std::vector<std::string> test_result_filenames;
+        std::vector<RRTPath, Eigen::aligned_allocator<RRTPath>> rrt_paths;
+        std::vector<std::string> trajectory_filenames;
+        tests.reserve(num_threads);
+        test_result_filenames.reserve(num_threads);
+        rrt_paths.reserve(num_threads);
+        trajectory_filenames.reserve(num_threads);
+
+        const auto num_trials = GetRRTNumTrials(*ph_);
+        auto num_succesful_paths = 0;
+        auto num_unsuccesful_paths = 0;
+
+        const auto feedback_fn = [&] (const size_t test_id, const deformable_manipulation_msgs::TransitionTestResult& test_result)
+        {
+            (void)test_id;
+            const auto trajectory = toTrajectory(test_result, rrt_paths[test_id], test_result_filenames[test_id]);
+            transition_estimator_->saveTrajectory(trajectory, trajectory_filenames[test_id]);
+            if (trajectory.size() == rrt_paths[test_id].size())
+            {
+                ++num_succesful_paths;
+            }
+            else
+            {
+                ++num_unsuccesful_paths;
+            }
+        };
+
+        #pragma omp parallel for
+//        #pragma omp parallel for reduction(+ : num_succesful_paths) reduction(+ : num_unsuccesful_paths)
+        for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
+        {
+            const auto path_to_start_file = folder + "trial_idx_" + std::to_string(trial_idx) + "__path_to_start.compressed";
+            const auto test_results_file = folder + "trial_idx_" + std::to_string(trial_idx) + "__test_results.compressed";
+            const auto trajectory_file = folder + "trial_idx_" + std::to_string(trial_idx)+ "__trajectory.compressed";
+
+            const auto rrt_path = generateTestPath(target_grippers_poses);
+            band_rrt_vis_->savePath(rrt_path, path_to_start_file);
+
+            const auto test = robot_->toRosTransitionTest(
+                        initial_world_state_.rope_node_transforms_,
+                        initial_world_state_.all_grippers_single_pose_,
+                        RRTPathToGrippersPoseTrajectory(rrt_path),
+                        ToGripperPoseVector(rrt_path.back().grippers()));
+
+            // Add the test to the list waiting to be executed
+            #pragma omp critical
+            {
+                tests.push_back(test);
+                test_result_filenames.push_back(test_results_file);
+                rrt_paths.push_back(rrt_path);
+                trajectory_filenames.push_back(trajectory_file);
+
+                // Execute the tests if there are enough to run
+                if (tests.size() == num_threads)
+                {
+                    robot_->generateTransitionData(tests, test_result_filenames, feedback_fn, true);
+                    tests.clear();
+                    test_result_filenames.clear();
+                    rrt_paths.clear();
+                    trajectory_filenames.clear();
+                }
+            }
+        }
+
+        // Run any last tests that are left over
+        if (tests.size() != 0)
+        {
+            robot_->generateTransitionData(tests, test_result_filenames, feedback_fn, true);
+            tests.clear();
+            test_result_filenames.clear();
+            rrt_paths.clear();
+            trajectory_filenames.clear();
+        }
+
+        ROS_INFO_STREAM("Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
+    }
+
+    // Duplicated from task_framework.cpp
+    static std::vector<uint32_t> numberOfPointsInEachCluster(
+            const std::vector<uint32_t>& cluster_labels,
+            const uint32_t num_clusters,
+            const std::vector<long>& grapsed_points,
+            const DijkstrasCoverageTask::Correspondences& correspondences)
+    {
+        std::vector<uint32_t> counts(num_clusters, 0);
+        const auto& uncovered_target_point_idxs = correspondences.uncovered_target_points_idxs_;
+
+        for (size_t grasped_point_idx = 0; grasped_point_idx < grapsed_points.size(); ++grasped_point_idx)
+        {
+            const long deform_idx = grapsed_points[grasped_point_idx];
+
+            const std::vector<ssize_t>& correspondences_for_current_deform_idx            = correspondences.correspondences_[deform_idx];
+            const std::vector<bool>&    correspondences_is_covered_for_current_deform_idx = correspondences.correspondences_is_covered_[deform_idx];
+
+            for (size_t correspondence_idx = 0; correspondence_idx < correspondences_for_current_deform_idx.size(); ++correspondence_idx)
+            {
+                const ssize_t cover_idx = correspondences_for_current_deform_idx[correspondence_idx];
+                const bool is_covered   = correspondences_is_covered_for_current_deform_idx[correspondence_idx];
+
+                // If the current correspondece is not covered, lookup its position in cluster_labels
+                if (!is_covered)
+                {
+                    const auto found_itr = std::find(uncovered_target_point_idxs.begin(), uncovered_target_point_idxs.end(), cover_idx);
+                    assert(found_itr != uncovered_target_point_idxs.end()); // The point is not covered, so it should exist in the vector
+                    const ssize_t found_idx = std::distance(uncovered_target_point_idxs.begin(), found_itr);
+                    assert(found_idx >= 0);
+                    assert(found_idx < (ssize_t)cluster_labels.size());
+                    const uint32_t cluster_label = cluster_labels[found_idx];
+                    counts[cluster_label]++;
+                }
+            }
+        }
+
+        return counts;
+    }
+
+    // Duplicated from task_framework.cpp and modified slightly
+    AllGrippersSinglePose TransitionTesting::getGripperTargets()
+    {
+        const auto& correspondences = task_->getCoverPointCorrespondences(initial_world_state_);
+        const auto& cover_point_indices_= correspondences.uncovered_target_points_idxs_;
+
+        // Only cluster the points that are not covered
+        VectorVector3d cluster_targets;
+        cluster_targets.reserve(cover_point_indices_.size());
+        for (size_t idx = 0; idx < cover_point_indices_.size(); ++idx)
+        {
+            const ssize_t cover_idx = cover_point_indices_[idx];
+            cluster_targets.push_back(task_->cover_points_.col(cover_idx));
+        }
+
+        const ObjectPointSet cluster_targets_as_matrix = VectorEigenVector3dToEigenMatrix3Xd(cluster_targets);
+        const MatrixXd distance_matrix = CalculateSquaredDistanceMatrix(cluster_targets_as_matrix);
+
+        // Get the 2 most disparate points to initialize the clustering
+        ssize_t row, col;
+        distance_matrix.maxCoeff(&row, &col);
+        assert(row != col);
+        const VectorVector3d starting_cluster_centers = {cluster_targets[row], cluster_targets[col]};
+
+        // Cluster the target points using K-means, then extract the cluster centers
+        const std::function<double(const Vector3d&, const Vector3d&)> distance_fn = [] (const Vector3d& v1, const Vector3d& v2)
+        {
+            return (v1 - v2).norm();
+        };
+        const std::function<Vector3d(const VectorVector3d&)> average_fn = [] (const VectorVector3d& data)
+        {
+            return AverageEigenVector3d(data);
+        };
+        const auto cluster_results = simple_kmeans_clustering::SimpleKMeansClustering::Cluster(cluster_targets, distance_fn, average_fn, starting_cluster_centers);
+        const std::vector<uint32_t>& cluster_labels = cluster_results.first;
+        const VectorVector3d cluster_centers = cluster_results.second;
+        const uint32_t num_clusters = (uint32_t)cluster_centers.size();
+        assert(num_clusters == 2);
+
+        // Get the orientations for each gripper based on their starting orientation
+        AllGrippersSinglePose target_gripper_poses = initial_world_state_.all_grippers_single_pose_;
+
+        // Decide which gripper goes to which cluster
+        {
+            const auto& gripper0_grapsed_points = robot_->getGrippersData().at(0).node_indices_;
+            const auto& gripper1_grapsed_points = robot_->getGrippersData().at(1).node_indices_;
+
+            const auto gripper0_cluster_counts = numberOfPointsInEachCluster(cluster_labels, num_clusters, gripper0_grapsed_points, correspondences);
+            const auto gripper1_cluster_counts = numberOfPointsInEachCluster(cluster_labels, num_clusters, gripper1_grapsed_points, correspondences);
+
+            // Set some values so that the logic used in the if-else chain makes sense to read
+            const bool gripper0_no_match_to_cluster0    = gripper0_cluster_counts[0] == 0;
+            const bool gripper0_no_match_to_cluster1    = gripper0_cluster_counts[1] == 0;
+            const bool gripper0_no_match_to_any_cluster = gripper0_no_match_to_cluster0 && gripper0_no_match_to_cluster1;
+            const bool gripper0_best_match_to_cluster0  = gripper0_cluster_counts[0] > gripper1_cluster_counts[0]; // Note that this requires at least 1 correspondence for gripper0 to cluster0
+            const bool gripper0_best_match_to_cluster1  = gripper0_cluster_counts[1] > gripper1_cluster_counts[1]; // Note that this requires at least 1 correspondence for gripper0 to cluster1
+
+            const bool gripper1_no_match_to_cluster0    = gripper1_cluster_counts[0] == 0;
+            const bool gripper1_no_match_to_cluster1    = gripper1_cluster_counts[1] == 0;
+            const bool gripper1_no_match_to_any_cluster = gripper1_no_match_to_cluster0 && gripper1_no_match_to_cluster1;
+            const bool gripper1_best_match_to_cluster0  = gripper1_cluster_counts[0] > gripper0_cluster_counts[0]; // Note that this requires at least 1 correspondence for gripper1 to cluster0
+            const bool gripper1_best_match_to_cluster1  = gripper1_cluster_counts[1] > gripper0_cluster_counts[1]; // Note that this requires at least 1 correspondence for gripper1 to cluster1
+
+            const bool equal_match_to_cluster0 = (!gripper0_no_match_to_cluster0) && (!gripper1_no_match_to_cluster0) && (gripper0_cluster_counts[0] == gripper1_cluster_counts[0]);
+            const bool equal_match_to_cluster1 = (!gripper0_no_match_to_cluster1) && (!gripper1_no_match_to_cluster1) && (gripper0_cluster_counts[1] == gripper1_cluster_counts[1]);
+
+            const bool gripper0_best_match_to_both = gripper0_best_match_to_cluster0 && gripper0_best_match_to_cluster1;
+            const bool gripper1_best_match_to_both = gripper1_best_match_to_cluster0 && gripper1_best_match_to_cluster1;
+
+            // If each gripper has a unique best pull direction, use it
+            if (gripper0_best_match_to_cluster0 && gripper1_best_match_to_cluster1)
+            {
+                target_gripper_poses[0].translation() = cluster_centers[0];
+                target_gripper_poses[1].translation() = cluster_centers[1];
+            }
+            else if (gripper0_best_match_to_cluster1 && gripper1_best_match_to_cluster0)
+            {
+                target_gripper_poses[0].translation() = cluster_centers[1];
+                target_gripper_poses[1].translation() = cluster_centers[0];
+            }
+            // If a single gripper has the best pull to both, then that gripper dominates the choice
+            else if (gripper0_best_match_to_both)
+            {
+                if (gripper0_cluster_counts[0] > gripper0_cluster_counts[1])
+                {
+                    target_gripper_poses[0].translation() = cluster_centers[0];
+                    target_gripper_poses[1].translation() = cluster_centers[1];
+                }
+                else if (gripper0_cluster_counts[0] < gripper0_cluster_counts[1])
+                {
+                    target_gripper_poses[0].translation() = cluster_centers[1];
+                    target_gripper_poses[1].translation() = cluster_centers[0];
+                }
+                // If gripper0 has no unique best target, then allow gripper1 to make the choice
+                else
+                {
+                    if (gripper1_cluster_counts[0] > gripper1_cluster_counts[1])
+                    {
+                        target_gripper_poses[0].translation() = cluster_centers[1];
+                        target_gripper_poses[1].translation() = cluster_centers[0];
+                    }
+                    else if (gripper1_cluster_counts[0] < gripper1_cluster_counts[1])
+                    {
+                        target_gripper_poses[0].translation() = cluster_centers[0];
+                        target_gripper_poses[1].translation() = cluster_centers[1];
+                    }
+                    // If everything is all tied up, decide what to do later
+                    else
+                    {
+                        assert(false && "Setting gripper targets needs more logic");
+                    }
+                }
+            }
+            else if (gripper1_best_match_to_both)
+            {
+                if (gripper1_cluster_counts[0] > gripper1_cluster_counts[1])
+                {
+                    target_gripper_poses[0].translation() = cluster_centers[1];
+                    target_gripper_poses[1].translation() = cluster_centers[0];
+                }
+                else if (gripper1_cluster_counts[0] < gripper1_cluster_counts[1])
+                {
+                    target_gripper_poses[0].translation() = cluster_centers[0];
+                    target_gripper_poses[1].translation() = cluster_centers[1];
+                }
+                // If gripper1 has no unique best target, then allow gripper0 to make the choice
+                else
+                {
+                    if (gripper0_cluster_counts[0] > gripper0_cluster_counts[1])
+                    {
+                        target_gripper_poses[0].translation() = cluster_centers[0];
+                        target_gripper_poses[1].translation() = cluster_centers[1];
+                    }
+                    else if (gripper0_cluster_counts[0] < gripper0_cluster_counts[1])
+                    {
+                        target_gripper_poses[0].translation() = cluster_centers[1];
+                        target_gripper_poses[1].translation() = cluster_centers[0];
+                    }
+                    // If everything is all tied up, decide what to do later
+                    else
+                    {
+                        assert(false && "Setting gripper targets needs more logic");
+                    }
+                }
+            }
+            // If there is only a pull on a single gripper, then that gripper dominates the choice
+            else if (!gripper0_no_match_to_any_cluster &&  gripper1_no_match_to_any_cluster)
+            {
+                // Double check the logic that got us here; lets me simplify the resulting logic
+                // Gripper1 has no pulls on it, and gripper0 has pulls from only 1 cluster, otherwise
+                // one of the other caes would have triggered before this one
+                assert(!gripper0_best_match_to_both);
+                if (gripper0_best_match_to_cluster0)
+                {
+                    assert(gripper0_no_match_to_cluster1);
+                    target_gripper_poses[0].translation() = cluster_centers[0];
+                    target_gripper_poses[1].translation() = cluster_centers[1];
+                }
+                else if (gripper0_best_match_to_cluster1)
+                {
+                    assert(gripper0_no_match_to_cluster0);
+                    target_gripper_poses[0].translation() = cluster_centers[1];
+                    target_gripper_poses[1].translation() = cluster_centers[0];
+                }
+                else
+                {
+                    assert(false && "Logic error in set gripper targets");
+                }
+
+            }
+            else if ( gripper0_no_match_to_any_cluster && !gripper1_no_match_to_any_cluster)
+            {
+                // Double check the logic that got us here; lets me simplify the resulting logic
+                // Gripper0 has no pulls on it, and gripper1 has pulls from only 1 cluster, otherwise
+                // one of the other caes would have triggered before this one
+                assert(!gripper1_best_match_to_both);
+                if (gripper1_best_match_to_cluster0)
+                {
+                    assert(gripper1_no_match_to_cluster1);
+                    target_gripper_poses[0].translation() = cluster_centers[1];
+                    target_gripper_poses[1].translation() = cluster_centers[0];
+                }
+                else if (gripper1_best_match_to_cluster1)
+                {
+                    assert(gripper1_no_match_to_cluster0);
+                    target_gripper_poses[0].translation() = cluster_centers[0];
+                    target_gripper_poses[1].translation() = cluster_centers[1];
+                }
+                else
+                {
+                    assert(false && "Logic error in set gripper targets");
+                }
+            }
+            // If neither gripper has a pull on it, or both grippers have equal pull, then use some other metric
+            else if ((gripper0_no_match_to_any_cluster  && gripper1_no_match_to_any_cluster) ||
+                     (equal_match_to_cluster0           && equal_match_to_cluster1))
+            {
+                const std::vector<double> gripper0_distances_to_clusters =
+                        task_->averageDijkstrasDistanceBetweenGrippersAndClusters(
+                            initial_world_state_.all_grippers_single_pose_[0],
+                            correspondences.uncovered_target_points_idxs_,
+                            cluster_labels,
+                            num_clusters);
+                const std::vector<double> gripper1_distances_to_clusters =
+                        task_->averageDijkstrasDistanceBetweenGrippersAndClusters(
+                            initial_world_state_.all_grippers_single_pose_[1],
+                            correspondences.uncovered_target_points_idxs_,
+                            cluster_labels,
+                            num_clusters);
+
+                const bool gripper0_is_closest_to_cluster0 = gripper0_distances_to_clusters[0] <= gripper1_distances_to_clusters[0];
+                const bool gripper0_is_closest_to_cluster1 = gripper0_distances_to_clusters[1] <= gripper1_distances_to_clusters[1];
+
+                // If there is a unique best match, then use it
+                if (gripper0_is_closest_to_cluster0 && !gripper0_is_closest_to_cluster1)
+                {
+                    target_gripper_poses[0].translation() = cluster_centers[0];
+                    target_gripper_poses[1].translation() = cluster_centers[1];
+                }
+                else if (!gripper0_is_closest_to_cluster0 && gripper0_is_closest_to_cluster1)
+                {
+                    target_gripper_poses[0].translation() = cluster_centers[1];
+                    target_gripper_poses[1].translation() = cluster_centers[0];
+                }
+                // Otherwise, pick the combination that minimizes the total distance
+                else
+                {
+                    const double dist_version0 = gripper0_distances_to_clusters[0] + gripper1_distances_to_clusters[1];
+                    const double dist_version1 = gripper0_distances_to_clusters[1] + gripper1_distances_to_clusters[0];
+
+                    if (dist_version0 <= dist_version1)
+                    {
+                        target_gripper_poses[0].translation() = cluster_centers[0];
+                        target_gripper_poses[1].translation() = cluster_centers[1];
+                    }
+                    else
+                    {
+                        target_gripper_poses[0].translation() = cluster_centers[1];
+                        target_gripper_poses[1].translation() = cluster_centers[0];
+                    }
+                }
+            }
+            // If none of the above are true, than there is a logic error
+            else
+            {
+                assert(false && "Unhandled edge case in get gripper targets");
+            }
+        }
+
+        // Project the targets out of collision
+        const double min_dist_to_obstacles = std::max(GetControllerMinDistanceToObstacles(*ph_), GetRRTMinGripperDistanceToObstacles(*ph_)) * GetRRTTargetMinDistanceScaleFactor(*ph_);
+        const auto gripper_positions_pre_project = ToGripperPositions(target_gripper_poses);
+        target_gripper_poses[0].translation() = sdf_->ProjectOutOfCollisionToMinimumDistance3d(gripper_positions_pre_project.first, min_dist_to_obstacles);
+        target_gripper_poses[1].translation() = sdf_->ProjectOutOfCollisionToMinimumDistance3d(gripper_positions_pre_project.second, min_dist_to_obstacles);
+
+        return target_gripper_poses;
     }
 }
 

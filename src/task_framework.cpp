@@ -63,7 +63,7 @@ static size_t sizeOfLargestVector(const std::vector<T, Alloc>& vectors)
     return largest_vector;
 }
 
-std::vector<uint32_t> numberOfPointsInEachCluster(
+static std::vector<uint32_t> numberOfPointsInEachCluster(
         const std::vector<uint32_t>& cluster_labels,
         const uint32_t num_clusters,
         const std::vector<long>& grapsed_points,
@@ -1360,7 +1360,7 @@ AllGrippersSinglePose TaskFramework::getGripperTargets(const WorldState& world_s
 
 //    vis_->visualizePoints(CLUSTERING_TARGETS_NS, cluster_targets, Visualizer::Blue(), 1);
 
-    const Matrix3Xd cluster_targets_as_matrix = VectorEigenVector3dToEigenMatrix3Xd(cluster_targets);
+    const ObjectPointSet cluster_targets_as_matrix = VectorEigenVector3dToEigenMatrix3Xd(cluster_targets);
     const MatrixXd distance_matrix = CalculateSquaredDistanceMatrix(cluster_targets_as_matrix);
 
     // Get the 2 most disparate points to initialize the clustering
@@ -1673,26 +1673,26 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     // Planning if we did not load a plan from file
     if (rrt_planned_policy_.size() == 0)
     {
-        const RRTGrippersRepresentation gripper_config(
-                    world_state.all_grippers_single_pose_[0],
-                    world_state.all_grippers_single_pose_[1]);
-
-        RRTRobotRepresentation robot_config;
-        if (world_state.robot_configuration_valid_)
+        const RRTNode start_config = [&]
         {
-            robot_config = world_state.robot_configuration_;
-        }
-        else
-        {
-            robot_config.resize(6);
-            robot_config.head<3>() = gripper_config.first.translation();
-            robot_config.tail<3>() = gripper_config.second.translation();
-        }
+            const RRTGrippersRepresentation gripper_config(
+                        world_state.all_grippers_single_pose_[0],
+                        world_state.all_grippers_single_pose_[1]);
 
-        const RRTNode start_config(
-                    gripper_config,
-                    robot_config,
-                    rubber_band_);
+            RRTRobotRepresentation robot_config;
+            if (world_state.robot_configuration_valid_)
+            {
+                robot_config = world_state.robot_configuration_;
+            }
+            else
+            {
+                robot_config.resize(6);
+                robot_config.head<3>() = gripper_config.first.translation();
+                robot_config.tail<3>() = gripper_config.second.translation();
+            }
+
+            return RRTNode(gripper_config, robot_config, rubber_band_);
+        }();
 
         const AllGrippersSinglePose target_grippers_poses_vec = getGripperTargets(world_state);
         const RRTGrippersRepresentation target_grippers_poses(
@@ -1702,6 +1702,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         const std::chrono::duration<double> time_limit(GetRRTTimeout(*ph_));
         const size_t num_trials = GetRRTNumTrials(*ph_);
         const bool test_paths_in_bullet = GetRRTTestPathsInBullet(*ph_);
+        const auto classifier_type = ROSHelpers::GetParamRequired<std::string>(*ph_, "classifier/type", __func__).Get();
         auto num_succesful_paths = 0;
         auto num_unsuccesful_paths = 0;
         for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
@@ -1750,7 +1751,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                             ToGripperPoseVector(rrt_path.back().grippers()));
                 const auto base_folder = "/mnt/big_narstie_data/dmcconac/transition_learning_data_generation/smmap_generated_plans/";
                 const auto folder = base_folder + GetTaskTypeString(*nh_) + "/" + test_id_ +"/"
-                        + TransitionEstimation::Classifier::Name() + "_classifier_"
+                        + classifier_type + "_classifier_"
                         + std::to_string(seed_) + "/";
                 arc_utilities::CreateDirectory(folder);
                 const auto timestamp = arc_helpers::GetCurrentTimeAsString();
@@ -1758,13 +1759,8 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 const auto path_to_start_file = folder + timestamp + "__path_to_start.compressed";
                 const auto test_results_file = folder + timestamp + "__test_results.compressed";
                 const auto trajectory_file = folder + timestamp + "__test_results.compressed";
+                band_rrt_->savePath(rrt_path, path_to_start_file);
 
-                // Save the path to file in the correct folder
-                {
-                    std::vector<uint8_t> buffer;
-                    SerializeVector<RRTNode>(rrt_path, buffer, &RRTNode::Serialize);
-                    ZlibHelpers::CompressAndWriteToFile(buffer, path_to_start_file);
-                }
                 const auto feedback_fn = [&] (const size_t test_id, const deformable_manipulation_msgs::TransitionTestResult& test_result)
                 {
                     (void)test_id;

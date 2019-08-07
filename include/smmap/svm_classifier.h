@@ -1,13 +1,12 @@
 #ifndef SVM_CLASSIFIER_H
 #define SVM_CLASSIFIER_H
 
-#include <ros/ros.h>
+#include "smmap/classifier.h"
 #include <svm/svm.h>
-#include <Eigen/Dense>
 
 namespace smmap
 {
-    class SVMClassifier
+    class SVMClassifier : public Classifier
     {
     public:
         SVMClassifier(std::shared_ptr<ros::NodeHandle> nh,
@@ -15,16 +14,10 @@ namespace smmap
 
         ~SVMClassifier();
 
-        std::string static Name() { return "svm"; }
-        int numFeatures() const { return num_features_; }
-        double predict(const Eigen::VectorXd& vec);
-
     private:
-        std::shared_ptr<ros::NodeHandle> const nh_;
-        std::shared_ptr<ros::NodeHandle> const ph_;
+        virtual double predict_impl(Eigen::VectorXd const& vec) override final;
 
         svm_model* model_;
-        int const num_features_;
         svm_node query_;
     };
 }

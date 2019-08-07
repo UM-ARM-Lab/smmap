@@ -61,6 +61,7 @@ namespace smmap
         const unsigned long seed_;
         const std::shared_ptr<std::mt19937_64> generator_;
 
+        const DijkstrasCoverageTask::Ptr task_;
         // Note that work_space_grid_ and the environment_sdf_ are using different
         // resolutions due to the way the SDF is created in CustomScene
         const sdf_tools::SignedDistanceField::ConstPtr sdf_;
@@ -163,6 +164,10 @@ namespace smmap
         void generateFeatures();
         std::vector<std::string> extractFeatures(const TransitionEstimation::StateTransition& transition) const;
 
+        void testClassifier();
+        AllGrippersSinglePose getGripperTargets();
+
+
         std::vector<TransitionEstimation::StateMicrostepsPair> toTrajectory(
                 const deformable_manipulation_msgs::TransitionTestResult& test,
                 const RRTPath& path,
@@ -206,7 +211,7 @@ namespace smmap
 
         // Classification Example
         MinMaxTransformer classifier_scaler_;
-        TransitionEstimation::Classifier transition_mistake_classifier_;
+        Classifier::Ptr transition_mistake_classifier_;
         ros::ServiceServer add_classification_example_visualization_;
 
     public:

@@ -141,6 +141,8 @@ add_custom_target(${PROJECT_NAME}_transitions_headers SOURCES
     include/${PROJECT_NAME}/parabola.h
     include/${PROJECT_NAME}/quinlan_rubber_band.h
     include/${PROJECT_NAME}/min_max_transformer.hpp
+    include/${PROJECT_NAME}/classifier.h
+    include/${PROJECT_NAME}/no_classifier.h
     include/${PROJECT_NAME}/knn_classifier.h
     include/${PROJECT_NAME}/svm_classifier.h
     include/${PROJECT_NAME}/torch_classifier.h
@@ -150,6 +152,7 @@ add_library(${PROJECT_NAME}_transitions
     src/transition_estimation.cpp
     src/parabola.cpp
     src/quinlan_rubber_band.cpp
+    src/classifier.cpp
     src/knn_classifier.cpp
     src/svm_classifier.cpp
     src/torch_classifier.cpp

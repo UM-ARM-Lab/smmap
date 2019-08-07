@@ -19,10 +19,6 @@ namespace smmap
     public:
         typedef std::shared_ptr<TransitionEstimation> Ptr;
         typedef std::shared_ptr<const TransitionEstimation> ConstPtr;
-        typedef NoClassifier Classifier;
-//        typedef kNNClassifier Classifier;
-//        typedef SVMClassifier Classifier;
-//        typedef TorchClassifier Classifier;
 
         struct State
         {
@@ -261,7 +257,7 @@ namespace smmap
         ////////////////////////////////////////////////////////////////////////
 
         MinMaxTransformer classifier_scaler_;
-        Classifier transition_mistake_classifier_;
+        Classifier::Ptr transition_mistake_classifier_;
 
         ////////////////////////////////////////////////////////////////////////
         // Saving and loading learned transitions
@@ -270,7 +266,7 @@ namespace smmap
         bool useStoredTransitions() const;
         void storeTransitions() const;
         void loadSavedTransitions();
-        const RubberBand& template_band_;
+        const RubberBand template_band_;
     };
 
     std::ostream& operator<<(

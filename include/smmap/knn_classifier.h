@@ -1,27 +1,20 @@
 #ifndef KNN_CLASSIFIER_H
 #define KNN_CLASSIFIER_H
 
-#include <ros/ros.h>
-#include <Eigen/Dense>
+#include "smmap/classifier.h"
 #include <flann/flann.hpp>
 
 namespace smmap
 {
-    class kNNClassifier
+    class kNNClassifier : public Classifier
     {
     public:
         kNNClassifier(std::shared_ptr<ros::NodeHandle> nh,
-                     std::shared_ptr<ros::NodeHandle> ph);
-
-        std::string static Name() { return "kNN"; }
-        int numFeatures() const { return num_features_; }
-        double predict(const Eigen::VectorXd& vec) const;
+                      std::shared_ptr<ros::NodeHandle> ph);
 
     private:
-        std::shared_ptr<ros::NodeHandle> const nh_;
-        std::shared_ptr<ros::NodeHandle> const ph_;
+        virtual double predict_impl(const Eigen::VectorXd& vec) override final;
 
-        int const num_features_;
         std::vector<double> nn_raw_data_;
         std::vector<double> labels_;
         flann::KDTreeSingleIndex<flann::L2<double>> nn_index_;

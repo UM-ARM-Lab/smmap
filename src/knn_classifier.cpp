@@ -12,9 +12,7 @@ inline std::string getModelFilename(ros::NodeHandle& nh)
 
 kNNClassifier::kNNClassifier(std::shared_ptr<ros::NodeHandle> nh,
                            std::shared_ptr<ros::NodeHandle> ph)
-    : nh_(nh)
-    , ph_(ph)
-    , num_features_(ROSHelpers::GetParamRequired<int>(*ph_, "classifier/dim", __func__).GetImmutable())
+    : Classifier(nh, ph, "kNN")
 {
     auto const filename = getModelFilename(*ph_);
     auto file = std::ifstream(filename);
@@ -45,7 +43,7 @@ kNNClassifier::kNNClassifier(std::shared_ptr<ros::NodeHandle> nh,
     nn_index_.buildIndex(data);
 }
 
-double kNNClassifier::predict(const Eigen::VectorXd& vec) const
+double kNNClassifier::predict_impl(const Eigen::VectorXd& vec)
 {
     Eigen::VectorXd vec_mut = vec;
     const flann::Matrix<double> query(vec_mut.data(), 1, num_features_);

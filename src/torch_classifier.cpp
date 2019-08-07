@@ -11,14 +11,12 @@ inline std::string getModelFilename(ros::NodeHandle& nh)
 TorchClassifier::TorchClassifier(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph)
-    : nh_(nh)
-    , ph_(ph)
-    , num_features_(ROSHelpers::GetParamRequired<int>(*ph_, "classifier/dim", __func__).GetImmutable())
-    , threshold_(ROSHelpers::GetParamRequired<double>(*ph_, "torch/threshold", __func__).GetImmutable())
+    : Classifier(nh, ph, "dnn")
     , model_(torch::jit::load(getModelFilename(*ph_)))
+    , threshold_(ROSHelpers::GetParamRequired<double>(*ph_, "torch/threshold", __func__).GetImmutable())
 {}
 
-double TorchClassifier::predict(Eigen::VectorXd const& vec)
+double TorchClassifier::predict_impl(Eigen::VectorXd const& vec)
 {
     auto vec_torch = torch::empty({num_features_});
     for (int idx = 0; idx < num_features_; ++idx)

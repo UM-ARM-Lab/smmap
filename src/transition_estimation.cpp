@@ -508,7 +508,7 @@ TransitionEstimation::TransitionEstimation(
     , homotopy_changes_scale_factor_(GetTransitionHomotopyChangesScaleFactor(*ph_))
 
     , classifier_scaler_(nh_, ph_)
-    , transition_mistake_classifier_(nh_, ph_)
+    , transition_mistake_classifier_(Classifier::MakeClassifier(nh_, ph_))
 
     , template_band_(template_band)
 {
@@ -979,9 +979,9 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
         DUMMY_ITEM
     };
 
-    assert(transition_mistake_classifier_.numFeatures() == 4 ||
-           transition_mistake_classifier_.numFeatures() == 13);
-    Eigen::VectorXd features(transition_mistake_classifier_.numFeatures());
+    assert(transition_mistake_classifier_->numFeatures() == 4 ||
+           transition_mistake_classifier_->numFeatures() == 13);
+    Eigen::VectorXd features(transition_mistake_classifier_->numFeatures());
 
     const auto grippers_pre = initial_band.getEndpoints();
     const auto grippers_post = default_prediction.getEndpoints();
@@ -993,7 +993,7 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
     features[STARTING_BAND_LENGTH]          = band_length_pre;
     features[ENDING_DEFAULT_BAND_LENGTH]    = default_band_length_post;
 
-    if (transition_mistake_classifier_.numFeatures() == 13)
+    if (transition_mistake_classifier_->numFeatures() == 13)
     {
         const double dmax = initial_band.maxSafeLength();
         const double resolution = work_space_grid_.minStepDimension() / 2.0;
@@ -1110,7 +1110,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     else
     {
         const auto features = transitionFeatures(test_band_start, *default_next_band);
-        const auto predicted_mistake = transition_mistake_classifier_.predict(classifier_scaler_(features));
+        const auto predicted_mistake = transition_mistake_classifier_->predict(classifier_scaler_(features));
 //        const auto nn_prediction = transition_mistake_classifier_.nearestNeighbour(classifier_scaler_(features));
 //        std::cout << "Classifier prediction: " << predicted_mistake << std::endl;
 //        std::cout << "NN prediction: " << nn_prediction.first << std::endl;
