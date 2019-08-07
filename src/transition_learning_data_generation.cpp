@@ -92,7 +92,9 @@ namespace smmap
         };
     }
 
-    std::vector<TransitionEstimation::StateMicrostepsPair> TransitionTesting::toTrajectory(
+    // Returns the trajectory, and a flag indicating if everything was parsed cleanly
+    // I.e.; {traj, true} means "no problem"
+    std::pair<std::vector<TransitionEstimation::StateMicrostepsPair>, bool> TransitionTesting::toTrajectory(
             const dmm::TransitionTestResult& test_result,
             const RRTPath& path,
             const std::string& filename)
@@ -125,9 +127,12 @@ namespace smmap
         // I.e.; the path starts at the same place that the grippers are already at
         assert(test.path_num_substeps.at(0) == 0);
 
+        bool clean_trajectory = true;
         if ((int)test_result.microsteps_all.size() != (path_total_substeps * simsteps_per_gripper_cmd))
         {
+            assert(!has_last_action);
             ROS_WARN_STREAM_NAMED("to_traj", filename << ": Only a partial trajectory exists.");
+            clean_trajectory = false;
         }
 
         const auto total_steps = has_last_action ? path_num_steps + 1 : path_num_steps;
@@ -164,7 +169,8 @@ namespace smmap
                 (test_result.microsteps_all.begin() + microsteps_end_idx   > test_result.microsteps_all.end() - (test.final_num_substeps * simsteps_per_gripper_cmd)))
             {
                 ROS_WARN_STREAM_NAMED("to_traj", filename << ": Results only contains " << idx << " path steps. Path steps anticipated: " << path_num_steps);
-                return trajectory;
+                clean_trajectory = false;
+                return {trajectory, clean_trajectory};
             }
 
             const std::vector<dmm::WorldState> dmm_microsteps(
@@ -183,7 +189,8 @@ namespace smmap
             if (tes.rubber_band_->isOverstretched())
             {
                 ROS_WARN_STREAM_NAMED("to_traj", filename << ": Band overstretched at index " << idx << ". Path steps anticipated: " << path_num_steps);
-                return trajectory;
+                clean_trajectory = false;
+                return {trajectory, clean_trajectory};
             }
             trajectory.push_back({tes, microsteps});
         }
@@ -205,12 +212,13 @@ namespace smmap
             if (tes.rubber_band_->isOverstretched())
             {
                 ROS_WARN_STREAM_NAMED("to_traj", filename << ": Band overstretched at last action.");
-                return trajectory;
+                clean_trajectory = false;
+                return {trajectory, clean_trajectory};
             }
             trajectory.push_back({tes, ConvertToEigenFeedback(test_result.microsteps_last_action)});
         }
 
-        return trajectory;
+        return {trajectory, clean_trajectory};
     }
 }
 
@@ -1114,6 +1122,13 @@ namespace smmap
         world_params.generator_ = std::make_shared<std::mt19937_64>(*world_params_->generator_);
         world_params.generator_->discard(num_discards);
 
+        // If the classifier is not threadsafe, then make a copy of the transition estimator
+        if (transition_mistake_classifier_->name() == "dnn")
+        {
+            world_params.transition_estimator_ = std::make_shared<TransitionEstimation>(
+                        nh_, ph_, sdf_, work_space_grid_, vis_, *initial_band_);
+        }
+
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         auto band_rrt = BandRRT(nh_,
                                 ph_,
@@ -1476,7 +1491,8 @@ namespace smmap
                 {
                     const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
                     const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
-                    const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
+                    const auto traj_gen_result = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
+                    const auto& traj = traj_gen_result.first;
                     transition_estimator_->saveTrajectory(traj, trajectory_file);
                 }
             }
@@ -1552,7 +1568,7 @@ namespace smmap
                             {
                                 const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
                                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
-                                const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
+                                const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1)).first;
                                 transition_estimator_->saveTrajectory(traj, trajectory_file);
                                 return traj;
                             }
@@ -1638,7 +1654,7 @@ namespace smmap
             if (!boost::filesystem::is_regular_file(trajectory_file))
             {
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
-                const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
+                const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1)).first;
                 transition_estimator_->saveTrajectory(traj, trajectory_file);
                 return traj;
             }
@@ -1876,7 +1892,7 @@ namespace smmap
                         if (!boost::filesystem::is_regular_file(trajectory_file))
                         {
                             const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
-                            const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
+                            const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1)).first;
                             transition_estimator_->saveTrajectory(traj, trajectory_file);
                             return traj;
                         }
@@ -2301,7 +2317,7 @@ namespace smmap
             if (!boost::filesystem::is_regular_file(trajectory_file))
             {
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
-                const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
+                const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1)).first;
                 transition_estimator_->saveTrajectory(traj, trajectory_file);
                 return traj;
             }
@@ -2433,9 +2449,10 @@ namespace smmap
         const auto feedback_fn = [&] (const size_t test_id, const deformable_manipulation_msgs::TransitionTestResult& test_result)
         {
             (void)test_id;
-            const auto trajectory = toTrajectory(test_result, rrt_paths[test_id], test_result_filenames[test_id]);
+            const auto traj_gen_result = toTrajectory(test_result, rrt_paths[test_id], test_result_filenames[test_id]);
+            const auto& trajectory = traj_gen_result.first;
             transition_estimator_->saveTrajectory(trajectory, trajectory_filenames[test_id]);
-            if (trajectory.size() == rrt_paths[test_id].size())
+            if (traj_gen_result.second)
             {
                 ++num_succesful_paths;
             }

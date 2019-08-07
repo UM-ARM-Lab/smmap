@@ -167,8 +167,7 @@ namespace smmap
         void testClassifier();
         AllGrippersSinglePose getGripperTargets();
 
-
-        std::vector<TransitionEstimation::StateMicrostepsPair> toTrajectory(
+        std::pair<std::vector<TransitionEstimation::StateMicrostepsPair>, bool> toTrajectory(
                 const deformable_manipulation_msgs::TransitionTestResult& test,
                 const RRTPath& path,
                 const std::string& filename);

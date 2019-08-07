@@ -4,7 +4,9 @@ namespace dmm = deformable_manipulation_msgs;
 
 namespace smmap
 {
-    std::vector<TransitionEstimation::StateMicrostepsPair> ToTrajectory(
+    // Returns the trajectory, and a flag indicating if everything was parsed cleanly
+    // I.e.; {traj, true} means "no problem"
+    std::pair<std::vector<TransitionEstimation::StateMicrostepsPair>, bool> ToTrajectory(
             const WorldState& initial_world_state,
             const RRTPath& path,
             const dmm::TransitionTest& test,
@@ -28,9 +30,12 @@ namespace smmap
         // I.e.; the path starts at the same place that the grippers are already at
         assert(test.path_num_substeps.at(0) == 0);
 
+        bool clean_trajectory = true;
         if ((int)test_result.microsteps_all.size() != (path_total_substeps * simsteps_per_gripper_cmd))
         {
+            assert(!has_last_action);
             ROS_WARN_STREAM_NAMED("conversions", "Only a partial trajectory exists.");
+            clean_trajectory = false;
         }
 
         const auto total_steps = has_last_action ? path_num_steps + 1 : path_num_steps;
@@ -67,7 +72,8 @@ namespace smmap
                 (test_result.microsteps_all.begin() + microsteps_end_idx   > test_result.microsteps_all.end() - (test.final_num_substeps * simsteps_per_gripper_cmd)))
             {
                 ROS_WARN_STREAM_NAMED("conversions", "Results only contains " << idx << " path steps. Path steps anticipated: " << path_num_steps);
-                return trajectory;
+                clean_trajectory = false;
+                return {trajectory, clean_trajectory};
             }
 
             const std::vector<dmm::WorldState> dmm_microsteps(
@@ -87,7 +93,8 @@ namespace smmap
             if (tes.rubber_band_->isOverstretched())
             {
                 ROS_WARN_STREAM_NAMED("conversions", "Band overstretched at index " << idx << ". Path steps anticipated: " << path_num_steps);
-                return trajectory;
+                clean_trajectory = false;
+                return {trajectory, clean_trajectory};
             }
             trajectory.push_back({tes, microsteps});
         }
@@ -109,12 +116,12 @@ namespace smmap
             if (tes.rubber_band_->isOverstretched())
             {
                 ROS_WARN_STREAM_NAMED("to_traj", "Band overstretched at last action.");
-                return trajectory;
+                clean_trajectory = false;
+                return {trajectory, clean_trajectory};
             }
             trajectory.push_back({tes, ConvertToEigenFeedback(test_result.microsteps_last_action)});
         }
 
-
-        return trajectory;
+        return {trajectory, clean_trajectory};
     }
 }

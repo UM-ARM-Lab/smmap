@@ -47,7 +47,7 @@ int main(int argc, char* argv[])
                 ROSHelpers::GetParam<bool>(*ph, "generate_trajectories", false),
                 ROSHelpers::GetParam<bool>(*ph, "generate_meaningful_mistakes", false),
                 ROSHelpers::GetParam<bool>(*ph, "generate_features", true),
-                ROSHelpers::GetParam<bool>(*ph, "test_classifiers", true));
+                ROSHelpers::GetParam<bool>(*ph, "test_classifier", true));
 
     if (!GetDisableAllVisualizations(*ph))
     {

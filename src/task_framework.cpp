@@ -1765,9 +1765,10 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 const auto feedback_fn = [&] (const size_t test_id, const deformable_manipulation_msgs::TransitionTestResult& test_result)
                 {
                     (void)test_id;
-                    const auto trajectory = ToTrajectory(world_state, rrt_path, test, test_result);
+                    const auto traj_gen_result = ToTrajectory(world_state, rrt_path, test, test_result);
+                    const auto& trajectory = traj_gen_result.first;
                     transition_estimator_->saveTrajectory(trajectory, trajectory_file);
-                    if (trajectory.size() == rrt_path.size())
+                    if (!traj_gen_result.second)
                     {
                         ++num_succesful_paths;
                     }
