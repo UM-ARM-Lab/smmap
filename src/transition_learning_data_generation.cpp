@@ -881,13 +881,16 @@ namespace smmap
 
             if (!boost::filesystem::is_regular_file(test_results_filename))
             {
+                const auto trial_idx = 0;
+
                 Isometry3d gripper_a_ending_pose_ = Translation3d(gripper_a_action_vector_) * gripper_a_starting_pose_;
                 Isometry3d gripper_b_ending_pose_ = Translation3d(gripper_b_action_vector_) * gripper_b_starting_pose_;
 
                 // Generate a path and convert the test to a ROS format (if needed)
                 const RRTPath path_to_start_of_test = loadOrGeneratePath(
                             path_to_start_filename,
-                            {gripper_a_starting_pose_, gripper_b_starting_pose_});
+                            {gripper_a_starting_pose_, gripper_b_starting_pose_},
+                            trial_idx);
 
                 const auto canonical_test = robot_->toRosTransitionTest(
                             initial_world_state_.rope_node_transforms_,
@@ -920,6 +923,8 @@ namespace smmap
 
                 for (size_t b_idx = 0; b_idx < perturbations.size(); ++b_idx)
                 {
+                    const auto trial_idx = a_idx * perturbations.size() + b_idx + 1;
+
                     const Isometry3d gripper_b_starting_pose = Translation3d(perturbations[b_idx]) * gripper_b_starting_pose_;
                     const Isometry3d gripper_b_ending_pose = Translation3d(gripper_b_action_vector_) * gripper_b_starting_pose;
 
@@ -941,7 +946,8 @@ namespace smmap
                             // Generate a path and convert the test to a ROS format (if needed)
                             const RRTPath path_to_start_of_test = loadOrGeneratePath(
                                         path_to_start_filename,
-                                        {gripper_a_starting_pose, gripper_b_starting_pose});
+                                        {gripper_a_starting_pose, gripper_b_starting_pose},
+                                        trial_idx * 0xFFFF);
 
                             const auto test = robot_->toRosTransitionTest(
                                         initial_world_state_.rope_node_transforms_,
@@ -999,6 +1005,10 @@ namespace smmap
                 const Vector3d gripper_a_action_vector = gripper_a_action_vector_ + perturbations[a_idx];
                 for (size_t b_idx = 0; b_idx < perturbations.size(); ++b_idx)
                 {
+                    const auto trial_idx =
+                            perturbations.size() * perturbations.size() +
+                            a_idx * perturbations.size() + b_idx + 1;
+
                     const Vector3d gripper_b_action_vector = gripper_b_action_vector_ + perturbations[b_idx];
                     Vector3d gripper_a_action_vector_normalized = gripper_a_action_vector;
                     Vector3d gripper_b_action_vector_normalized = gripper_b_action_vector;
@@ -1025,7 +1035,8 @@ namespace smmap
                             // Generate a path and convert the test to a ROS format (if needed)
                             const RRTPath path_to_start_of_test = loadOrGeneratePath(
                                         path_to_start_filename,
-                                        {gripper_a_starting_pose_, gripper_b_starting_pose_});
+                                        {gripper_a_starting_pose_, gripper_b_starting_pose_},
+                                        trial_idx * 0xFFFF);
 
                             const auto test = robot_->toRosTransitionTest(
                                         initial_world_state_.rope_node_transforms_,
@@ -1079,7 +1090,8 @@ namespace smmap
 
     RRTPath TransitionTesting::loadOrGeneratePath(
             const std::string& filename,
-            const AllGrippersSinglePose& gripper_target_poses)
+            const AllGrippersSinglePose& gripper_target_poses,
+            const unsigned long long num_discards)
     {
         if (boost::filesystem::is_regular_file(filename))
         {
@@ -1087,15 +1099,21 @@ namespace smmap
         }
         else
         {
-            const auto path = generateTestPath(gripper_target_poses);
+            const auto path = generateTestPath(gripper_target_poses, num_discards);
             band_rrt_vis_->savePath(path, filename);
             return path;
         }
     }
 
     RRTPath TransitionTesting::generateTestPath(
-            const AllGrippersSinglePose& gripper_target_poses)
+            const AllGrippersSinglePose& gripper_target_poses,
+            const unsigned long long num_discards)
     {
+        // Update the seed for this particular trial
+        BandRRT::WorldParams world_params = *world_params_;
+        world_params.generator_ = std::make_shared<std::mt19937_64>(*world_params_->generator_);
+        world_params.generator_->discard(num_discards);
+
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         auto band_rrt = BandRRT(nh_,
                                 ph_,
@@ -2428,14 +2446,13 @@ namespace smmap
         };
 
         #pragma omp parallel for
-//        #pragma omp parallel for reduction(+ : num_succesful_paths) reduction(+ : num_unsuccesful_paths)
         for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
         {
             const auto path_to_start_file = folder + "trial_idx_" + std::to_string(trial_idx) + "__path_to_start.compressed";
             const auto test_results_file = folder + "trial_idx_" + std::to_string(trial_idx) + "__test_results.compressed";
             const auto trajectory_file = folder + "trial_idx_" + std::to_string(trial_idx)+ "__trajectory.compressed";
 
-            const auto rrt_path = generateTestPath(target_grippers_poses);
+            const auto rrt_path = generateTestPath(target_grippers_poses, trial_idx * 0xFFFF);
             band_rrt_vis_->savePath(rrt_path, path_to_start_file);
 
             const auto test = robot_->toRosTransitionTest(

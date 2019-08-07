@@ -1711,9 +1711,10 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
             if (num_trials > 1)
             {
                 robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
-                std::srand((unsigned int)seed_);
                 generator_->seed(seed_);
                 generator_->discard(trial_idx * 0xFFFF);
+                // Eigen uses std::rand() for its generator
+                std::srand((unsigned int)seed_);
                 for (size_t discard_idx = 0; discard_idx < trial_idx * 0xFFFF; ++discard_idx)
                 {
                     std::rand();

@@ -183,8 +183,10 @@ namespace smmap
         //// Data Generation ///////////////////////////////////////////////////
 
         RRTPath loadOrGeneratePath(const std::string& filename,
-                                   const AllGrippersSinglePose& gripper_target_poses);
-        RRTPath generateTestPath(const AllGrippersSinglePose& gripper_target_poses);
+                                   const AllGrippersSinglePose& gripper_target_poses,
+                                   const unsigned long long num_discards);
+        RRTPath generateTestPath(const AllGrippersSinglePose& gripper_target_poses,
+                                 const unsigned long long num_discards);
 
         //// Data Visualization ////////////////////////////////////////////////
 
