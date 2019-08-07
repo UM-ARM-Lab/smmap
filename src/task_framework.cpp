@@ -1758,7 +1758,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 std::cout << "Saving path and result to prefix: " << folder << timestamp << std::endl;
                 const auto path_to_start_file = folder + timestamp + "__path_to_start.compressed";
                 const auto test_results_file = folder + timestamp + "__test_results.compressed";
-                const auto trajectory_file = folder + timestamp + "__test_results.compressed";
+                const auto trajectory_file = folder + timestamp + "__trajectory.compressed";
                 band_rrt_->savePath(rrt_path, path_to_start_file);
 
                 const auto feedback_fn = [&] (const size_t test_id, const deformable_manipulation_msgs::TransitionTestResult& test_result)
