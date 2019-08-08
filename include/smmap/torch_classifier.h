@@ -13,7 +13,7 @@ namespace smmap
                         std::shared_ptr<ros::NodeHandle> ph);
 
     private:
-        virtual double predict_impl(Eigen::VectorXd const& vec) override final;
+        virtual double predict_impl(Eigen::VectorXd const& vec) const override final;
 
         torch::jit::script::Module model_;
         double const threshold_;

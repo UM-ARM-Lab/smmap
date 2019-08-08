@@ -15,10 +15,9 @@ namespace smmap
         ~SVMClassifier();
 
     private:
-        virtual double predict_impl(Eigen::VectorXd const& vec) override final;
+        virtual double predict_impl(Eigen::VectorXd const& vec) const override final;
 
         svm_model* model_;
-        svm_node query_;
     };
 }
 

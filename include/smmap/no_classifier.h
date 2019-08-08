@@ -14,7 +14,7 @@ namespace smmap
         {}
 
     private:
-        virtual double predict_impl(Eigen::VectorXd const& /* vec */) override final
+        virtual double predict_impl(Eigen::VectorXd const& /* vec */) const override final
         {
             return -1.0;
         }

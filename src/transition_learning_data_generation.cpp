@@ -1122,17 +1122,10 @@ namespace smmap
         world_params.generator_ = std::make_shared<std::mt19937_64>(*world_params_->generator_);
         world_params.generator_->discard(num_discards);
 
-        // If the classifier is not threadsafe, then make a copy of the transition estimator
-        if (transition_mistake_classifier_->name() == "dnn")
-        {
-            world_params.transition_estimator_ = std::make_shared<TransitionEstimation>(
-                        nh_, ph_, sdf_, work_space_grid_, vis_, *initial_band_);
-        }
-
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         auto band_rrt = BandRRT(nh_,
                                 ph_,
-                                *world_params_,
+                                world_params,
                                 planning_params_,
                                 smoothing_params_,
                                 task_params_,

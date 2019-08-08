@@ -43,7 +43,7 @@ kNNClassifier::kNNClassifier(std::shared_ptr<ros::NodeHandle> nh,
     nn_index_.buildIndex(data);
 }
 
-double kNNClassifier::predict_impl(const Eigen::VectorXd& vec)
+double kNNClassifier::predict_impl(const Eigen::VectorXd& vec) const
 {
     Eigen::VectorXd vec_mut = vec;
     const flann::Matrix<double> query(vec_mut.data(), 1, num_features_);

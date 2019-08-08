@@ -34,7 +34,7 @@ namespace smmap
             return num_features_;
         }
 
-        double predict(Eigen::VectorXd const& vec)
+        double predict(Eigen::VectorXd const& vec) const
         {
             return predict_impl(vec);
         }
@@ -49,7 +49,7 @@ namespace smmap
         int const num_features_;
 
     private:
-        virtual double predict_impl(Eigen::VectorXd const& vec) = 0;
+        virtual double predict_impl(Eigen::VectorXd const& vec) const = 0;
     };
 }
 

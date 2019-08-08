@@ -20,21 +20,24 @@ SVMClassifier::SVMClassifier(std::shared_ptr<ros::NodeHandle> nh,
     assert(model_->SV != nullptr);
     assert(num_features_ == model_->SV[0].dim - 1);
     assert(num_features_ > 0);
-    query_.dim = num_features_ + 1;
-    query_.values = (double*)(calloc(model_->SV[0].dim, sizeof(double)));
 }
 
 
 SVMClassifier::~SVMClassifier()
 {
     svm_free_and_destroy_model(&model_);
-    free(query_.values);
 }
 
-double SVMClassifier::predict_impl(Eigen::VectorXd const& vec)
+double SVMClassifier::predict_impl(Eigen::VectorXd const& vec) const
 {
     assert(static_cast<int>(vec.rows()) == num_features_);
-    memcpy(&query_.values[1], vec.data(), num_features_ * sizeof(double));
-    auto const mistake = svm_predict(model_, &query_);
+
+    svm_node query;
+    query.dim = num_features_ + 1;
+    query.values = (double*)(malloc(model_->SV[0].dim * sizeof(double)));
+    query.values[0] = 0.0;
+    memcpy(&query.values[1], vec.data(), num_features_ * sizeof(double));
+    auto const mistake = svm_predict(model_, &query);
+    free(query.values);
     return mistake;
 }
