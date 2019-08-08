@@ -1516,6 +1516,7 @@ namespace smmap
 
     void TransitionTesting::visualizeIncompleteTrajectories()
     {
+        #pragma omp parallel for
         for (size_t idx = 0; idx < data_files_.size(); ++idx)
         {
             const auto& experiment = data_files_[idx];
@@ -1528,7 +1529,10 @@ namespace smmap
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
                 const auto traj_gen_result = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
                 const auto& traj = traj_gen_result.first;
+
+                // If the generated trajectory was not parsed cleanly, then visualize it
                 if (!traj_gen_result.second)
+                #pragma omp critical
                 {
                     std::vector<Visualizer::NamespaceId> marker_ids;
                     const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
@@ -1556,7 +1560,7 @@ namespace smmap
                         }
                     }
 
-                    std::cout << experiment.substr(data_folder_.length() + 1) << std::endl;
+                    std::cout << "Experiment: " << experiment.substr(data_folder_.length() + 1) << "    ";
                     PressAnyKeyToContinue();
 
                     for (const auto& nsid : marker_ids)

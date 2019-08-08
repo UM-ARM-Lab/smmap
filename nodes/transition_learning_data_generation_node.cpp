@@ -52,11 +52,18 @@ int main(int argc, char* argv[])
 
     if (!GetDisableAllVisualizations(*ph))
     {
-        // Set the source to make sense, if this file exists
-        dmm::TransitionTestingVisualizationRequest req;
-        req.data = "cannonical_straight_test/unmodified__test_results.compressed";
-        dmm::TransitionTestingVisualizationResponse res;
-        transition_tester.setTransitionAdaptationSourceCallback(req, res);
+        try
+        {
+            // Set the source to make sense, if this file exists
+            dmm::TransitionTestingVisualizationRequest req;
+            req.data = "cannonical_straight_test/unmodified__test_results.compressed";
+            dmm::TransitionTestingVisualizationResponse res;
+            transition_tester.setTransitionAdaptationSourceCallback(req, res);
+        }
+        catch (const std::runtime_error& ex)
+        {
+            ROS_ERROR_STREAM("Unable to set source transition for adaptation visualization: " << ex.what());
+        }
         ROS_INFO("Waiting for visualization requests...");
         ros::spin();
     }
