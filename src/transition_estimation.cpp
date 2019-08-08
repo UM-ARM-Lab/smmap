@@ -1101,39 +1101,46 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     std::vector<std::pair<RubberBand::Ptr, double>> transitions;
 
     auto default_next_band = std::make_shared<RubberBand>(test_band_start);
-    default_next_band->forwardPropagate(ending_gripper_positions, verbose);
-    // Only add this transition if the band is not overstretched after moving
-    if (default_next_band->isOverstretched())
+    try
     {
-        ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Stopped due to band overstretch");
-    }
-    else
-    {
-        const auto features = transitionFeatures(test_band_start, *default_next_band);
-        const auto predicted_mistake = transition_mistake_classifier_->predict(classifier_scaler_(features));
-//        const auto nn_prediction = transition_mistake_classifier_.nearestNeighbour(classifier_scaler_(features));
-//        std::cout << "Classifier prediction: " << predicted_mistake << std::endl;
-//        std::cout << "NN prediction: " << nn_prediction.first << std::endl;
-        if (predicted_mistake == -1.0)
+        default_next_band->forwardPropagate(ending_gripper_positions, verbose);
+        // Only add this transition if the band is not overstretched after moving
+        if (default_next_band->isOverstretched())
         {
-            transitions.push_back({default_next_band, default_propogation_confidence_});
+            ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Stopped due to band overstretch");
         }
-//        else
-//        {
-//            std::cout << "\nFeatures: " << transitionFeatures(test_band_start, *default_next_band, true).transpose() << std::endl;
-//            PressAnyKeyToContinue("Classifier reports bad transition");
-//        }
+        else
+        {
+            const auto features = transitionFeatures(test_band_start, *default_next_band);
+            const auto predicted_mistake = transition_mistake_classifier_->predict(classifier_scaler_(features));
+    //        const auto nn_prediction = transition_mistake_classifier_.nearestNeighbour(classifier_scaler_(features));
+    //        std::cout << "Classifier prediction: " << predicted_mistake << std::endl;
+    //        std::cout << "NN prediction: " << nn_prediction.first << std::endl;
+            if (predicted_mistake == -1.0)
+            {
+                transitions.push_back({default_next_band, default_propogation_confidence_});
+            }
+    //        else
+    //        {
+    //            std::cout << "\nFeatures: " << transitionFeatures(test_band_start, *default_next_band, true).transpose() << std::endl;
+    //            PressAnyKeyToContinue("Classifier reports bad transition");
+    //        }
 
-//        if (predicted_mistake != nn_prediction.first)
-//        {
-//            std::cout << "\nFeatures:    " << transitionFeatures(test_band_start, *default_next_band, true).transpose() << std::endl;
-//            std::cout << "Classifier prediction: " << predicted_mistake << std::endl;
-//            std::cout << "NN prediction: " << nn_prediction.first << std::endl;
-//            std::cout << "NN Feautres: " << classifier_scaler_.inverse(nn_prediction.second).transpose() << std::endl;
-//            PressAnyKeyToContinue("NN vs SVM Prediction mismatch");
-//        }
+    //        if (predicted_mistake != nn_prediction.first)
+    //        {
+    //            std::cout << "\nFeatures:    " << transitionFeatures(test_band_start, *default_next_band, true).transpose() << std::endl;
+    //            std::cout << "Classifier prediction: " << predicted_mistake << std::endl;
+    //            std::cout << "NN prediction: " << nn_prediction.first << std::endl;
+    //            std::cout << "NN Feautres: " << classifier_scaler_.inverse(nn_prediction.second).transpose() << std::endl;
+    //            PressAnyKeyToContinue("NN vs SVM Prediction mismatch");
+    //        }
+        }
     }
-
+    catch (const std::runtime_error& /* ex */)
+    {
+        // Catch any weird error conditions from the band process here,
+        // and then discard the default model from consideration
+    }
 
 #if false
     for (size_t transition_idx = 0; transition_idx < learned_transitions_.size(); ++transition_idx)
