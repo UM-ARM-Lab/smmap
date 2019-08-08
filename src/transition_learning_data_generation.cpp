@@ -1,4 +1,9 @@
 #include "smmap/transition_learning_data_generation.h"
+
+#include <iomanip>
+#include <sstream>
+#include <boost/filesystem.hpp>
+
 #include <arc_utilities/arc_helpers.hpp>
 #include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/timing.hpp>
@@ -10,7 +15,6 @@
 #include <arc_utilities/simple_kmeans_clustering.hpp>
 #include <sdf_tools/collision_map.hpp>
 #include <smmap_utilities/neighbours.h>
-#include <boost/filesystem.hpp>
 #include <deformable_manipulation_experiment_params/conversions.hpp>
 #include <deformable_manipulation_experiment_params/utility.hpp>
 #include <deformable_manipulation_msgs/GenerateTransitionDataAction.h>
@@ -748,10 +752,11 @@ namespace smmap
                     {
                         ROS_WARN_STREAM("Ignoring file: " << filename);
                     }
-                    if (filename.find("__test_results.compressed") != std::string::npos)
+                    const auto pos = filename.find("__test_results.compressed");
+                    if (pos != std::string::npos)
                     {
                         // Strip off the extra string for simpler use later
-                        files.push_back(filename.substr(0, filename.find("__test_results.compressed")));
+                        files.push_back(filename.substr(0, pos));
                     }
                 }
             }
@@ -768,6 +773,7 @@ namespace smmap
     void TransitionTesting::runTests(const bool generate_test_data,
                                      const bool generate_last_step_transition_approximations,
                                      const bool generate_trajectories,
+                                     const bool visualize_incomplete_trajectories,
                                      const bool generate_meaningful_mistake_examples,
                                      const bool generate_features,
                                      const bool test_classifiers)
@@ -796,6 +802,18 @@ namespace smmap
             Stopwatch stopwatch;
             generateTrajectories();
             ROS_INFO_STREAM("Generate trajectories time taken: " << stopwatch(READ));
+        }
+
+        if (visualize_incomplete_trajectories)
+        {
+            if (vis_->visualizationsEnabled())
+            {
+                visualizeIncompleteTrajectories();
+            }
+            else
+            {
+                ROS_ERROR("Asked to visualize trajectories, but visualization is disabled");
+            }
         }
 
         if (generate_meaningful_mistake_examples)
@@ -1487,6 +1505,64 @@ namespace smmap
                     const auto traj_gen_result = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
                     const auto& traj = traj_gen_result.first;
                     transition_estimator_->saveTrajectory(traj, trajectory_file);
+                }
+            }
+            catch (const std::exception& ex)
+            {
+                ROS_ERROR_STREAM_NAMED("generate_trajectories", "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
+            }
+        }
+    }
+
+    void TransitionTesting::visualizeIncompleteTrajectories()
+    {
+        for (size_t idx = 0; idx < data_files_.size(); ++idx)
+        {
+            const auto& experiment = data_files_[idx];
+            const auto test_result_file =       experiment + "__test_results.compressed";
+            const auto path_to_start_file =     experiment + "__path_to_start.compressed";
+
+            try
+            {
+                const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+                const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
+                const auto traj_gen_result = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
+                const auto& traj = traj_gen_result.first;
+                if (!traj_gen_result.second)
+                {
+                    std::vector<Visualizer::NamespaceId> marker_ids;
+                    const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
+
+                    // Planned Path
+                    {
+                        const auto draw_bands = true;
+                        const auto path_ids = band_rrt_vis_->visualizePath(path_to_start, ns_prefix + "PLANNED_", 1, draw_bands);
+
+                        const auto gripper_a_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_A_NS, {traj.back().first.planned_rubber_band_->getEndpoints().first}, Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 2);
+                        const auto gripper_b_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_B_NS, {traj.back().first.planned_rubber_band_->getEndpoints().second}, Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), 2);
+
+                        marker_ids.insert(marker_ids.end(), path_ids.begin(), path_ids.end());
+                        marker_ids.insert(marker_ids.end(), gripper_a_last_id.begin(), gripper_a_last_id.end());
+                        marker_ids.insert(marker_ids.end(), gripper_b_last_id.begin(), gripper_b_last_id.end());
+                    }
+
+                    // Actual Path
+                    {
+                        for (size_t path_idx = 0; path_idx < traj.size(); ++path_idx)
+                        {
+                            const auto& state = traj[path_idx].first;
+                            const auto new_ids = state.rubber_band_->visualize(ns_prefix + "EXECUTED_BAND", Visualizer::Yellow(), Visualizer::Yellow(), (int32_t)(path_idx + 1));
+                            marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
+                        }
+                    }
+
+                    std::cout << experiment.substr(data_folder_.length() + 1) << std::endl;
+                    PressAnyKeyToContinue();
+
+                    for (const auto& nsid : marker_ids)
+                    {
+                        vis_->deleteObject(nsid.first, nsid.second);
+                    }
                 }
             }
             catch (const std::exception& ex)
@@ -2428,39 +2504,39 @@ namespace smmap
         const auto num_threads = GetNumOMPThreads();
         std::vector<dmm::TransitionTest> tests;
         std::vector<std::string> test_result_filenames;
-        std::vector<RRTPath, Eigen::aligned_allocator<RRTPath>> rrt_paths;
-        std::vector<std::string> trajectory_filenames;
         tests.reserve(num_threads);
         test_result_filenames.reserve(num_threads);
-        rrt_paths.reserve(num_threads);
-        trajectory_filenames.reserve(num_threads);
 
         const auto num_trials = GetRRTNumTrials(*ph_);
         auto num_succesful_paths = 0;
         auto num_unsuccesful_paths = 0;
 
-        const auto feedback_fn = [&] (const size_t test_id, const deformable_manipulation_msgs::TransitionTestResult& test_result)
+        const auto num_digits = [&]
         {
-            (void)test_id;
-            const auto traj_gen_result = toTrajectory(test_result, rrt_paths[test_id], test_result_filenames[test_id]);
-            const auto& trajectory = traj_gen_result.first;
-            transition_estimator_->saveTrajectory(trajectory, trajectory_filenames[test_id]);
-            if (traj_gen_result.second)
-            {
-                ++num_succesful_paths;
-            }
-            else
-            {
-                ++num_unsuccesful_paths;
-            }
+            assert(num_trials < 10000000000);
+            return (num_trials < 10 ? 1 :
+                   (num_trials < 100 ? 2 :
+                   (num_trials < 1000 ? 3 :
+                   (num_trials < 10000 ? 4 :
+                   (num_trials < 100000 ? 5 :
+                   (num_trials < 1000000 ? 6 :
+                   (num_trials < 10000000 ? 7 :
+                   (num_trials < 100000000 ? 8 :
+                   (num_trials < 1000000000 ? 9 :
+                   10)))))))));
+        }();
+        const auto to_str = [&] (const size_t idx)
+        {
+            std::stringstream ss;
+            ss << std::setw(num_digits) << std::setfill('0') << idx;
+            return ss.str();
         };
 
         #pragma omp parallel for
         for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
         {
-            const auto path_to_start_file = folder + "trial_idx_" + std::to_string(trial_idx) + "__path_to_start.compressed";
-            const auto test_results_file = folder + "trial_idx_" + std::to_string(trial_idx) + "__test_results.compressed";
-            const auto trajectory_file = folder + "trial_idx_" + std::to_string(trial_idx)+ "__trajectory.compressed";
+            const auto path_to_start_file = folder + "trial_idx_" + to_str(trial_idx) + "__path_to_start.compressed";
+            const auto test_result_file = folder + "trial_idx_" + to_str(trial_idx) + "__test_results.compressed";
 
             const auto rrt_path = generateTestPath(target_grippers_poses, trial_idx * 0xFFFF);
             band_rrt_vis_->savePath(rrt_path, path_to_start_file);
@@ -2475,18 +2551,14 @@ namespace smmap
             #pragma omp critical
             {
                 tests.push_back(test);
-                test_result_filenames.push_back(test_results_file);
-                rrt_paths.push_back(rrt_path);
-                trajectory_filenames.push_back(trajectory_file);
+                test_result_filenames.push_back(test_result_file);
 
                 // Execute the tests if there are enough to run
                 if (tests.size() == num_threads)
                 {
-                    robot_->generateTransitionData(tests, test_result_filenames, feedback_fn, true);
+                    robot_->generateTransitionData(tests, test_result_filenames, nullptr, false);
                     tests.clear();
                     test_result_filenames.clear();
-                    rrt_paths.clear();
-                    trajectory_filenames.clear();
                 }
             }
         }
@@ -2494,11 +2566,33 @@ namespace smmap
         // Run any last tests that are left over
         if (tests.size() != 0)
         {
-            robot_->generateTransitionData(tests, test_result_filenames, feedback_fn, true);
+            robot_->generateTransitionData(tests, test_result_filenames, nullptr, false);
             tests.clear();
             test_result_filenames.clear();
-            rrt_paths.clear();
-            trajectory_filenames.clear();
+        }
+
+        // We can't rely on ROS messaging to get all feedback, so post-process everything instead
+        #pragma omp parallel for
+        for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
+        {
+            const auto path_to_start_file = folder + "trial_idx_" + to_str(trial_idx) + "__path_to_start.compressed";
+            const auto test_result_file = folder + "trial_idx_" + to_str(trial_idx) + "__test_results.compressed";
+            const auto trajectory_file = folder + "trial_idx_" + to_str(trial_idx)+ "__trajectory.compressed";
+
+            const auto path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+            const auto test_result = loadTestResult(test_result_file);
+
+            const auto traj_gen_result = toTrajectory(test_result, path_to_start, test_result_file);
+            const auto& trajectory = traj_gen_result.first;
+            transition_estimator_->saveTrajectory(trajectory, trajectory_file);
+            if (traj_gen_result.second)
+            {
+                ++num_succesful_paths;
+            }
+            else
+            {
+                ++num_unsuccesful_paths;
+            }
         }
 
         ROS_INFO_STREAM("Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);

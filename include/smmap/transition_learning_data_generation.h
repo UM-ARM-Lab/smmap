@@ -112,12 +112,14 @@ namespace smmap
         void runTests(const bool generate_test_data,
                       const bool generate_last_step_transition_approximations,
                       const bool generate_trajectories,
+                      const bool visualize_incomplete_trajectories,
                       const bool generate_meaningful_mistake_examples,
                       const bool generate_features,
                       const bool test_classifiers);
         void generateTestData();
         void generateLastStepTransitionApproximations();
         void generateTrajectories();
+        void visualizeIncompleteTrajectories();
         void generateMeaningfulMistakeExamples();
 
         enum Features
