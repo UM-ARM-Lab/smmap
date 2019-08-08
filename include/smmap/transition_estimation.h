@@ -83,6 +83,7 @@ namespace smmap
         };
 
         typedef std::pair<State, std::vector<WorldState>> StateMicrostepsPair;
+        typedef std::vector<StateMicrostepsPair> StateTrajectory;
 
         ////////////////////////////////////////////////////////////////////////
         // Constructor
@@ -120,7 +121,7 @@ namespace smmap
         ////////////////////////////////////////////////////////////////////////
 
         Maybe::Maybe<StateTransition> findMostRecentBadTransition(
-                const std::vector<std::pair<State, std::vector<WorldState>>>& trajectory,
+                const StateTrajectory& trajectory,
                 const bool visualize = false) const;
 
         void learnTransition(const StateTransition& transition);
@@ -228,8 +229,8 @@ namespace smmap
         void saveStateTransition(const StateTransition& state, const std::string& filename) const;
         StateTransition loadStateTransition(const std::string& filename) const;
 
-        void saveTrajectory(const std::vector<StateMicrostepsPair>& trajectory, const std::string& filename) const;
-        std::vector<StateMicrostepsPair> loadTrajectory(const std::string& filename) const;
+        void saveTrajectory(const StateTrajectory& trajectory, const std::string& filename) const;
+        StateTrajectory loadTrajectory(const std::string& filename) const;
 
         void saveAdaptationResult(const TransitionAdaptationResult& result, const std::string& filename) const;
         TransitionAdaptationResult loadAdaptationResult(const std::string& filename) const;

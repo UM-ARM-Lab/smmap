@@ -99,7 +99,7 @@ namespace smmap
 
     // Returns the trajectory, and a flag indicating if everything was parsed cleanly
     // I.e.; {traj, true} means "no problem"
-    std::pair<std::vector<TransitionEstimation::StateMicrostepsPair>, bool> TransitionTesting::toTrajectory(
+    std::pair<TransitionEstimation::StateTrajectory, bool> TransitionTesting::toTrajectory(
             const dmm::TransitionTestResult& test_result,
             const RRTPath& path,
             const std::string& filename)
@@ -141,7 +141,7 @@ namespace smmap
         }
 
         const auto total_steps = has_last_action ? path_num_steps + 1 : path_num_steps;
-        std::vector<TransitionEstimation::StateMicrostepsPair> trajectory;
+        TransitionEstimation::StateTrajectory trajectory;
         trajectory.reserve(total_steps);
 
         // Add the first state with no history
@@ -1534,35 +1534,13 @@ namespace smmap
                 if (!traj_gen_result.second)
                 #pragma omp critical
                 {
-                    std::vector<Visualizer::NamespaceId> marker_ids;
+                    // Visualize and then pause, waiting for the user to move to the next trajectory
                     const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
-
-                    // Planned Path
-                    {
-                        const auto draw_bands = true;
-                        const auto path_ids = band_rrt_vis_->visualizePath(path_to_start, ns_prefix + "PLANNED_", 1, draw_bands);
-
-                        const auto gripper_a_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_A_NS, {traj.back().first.planned_rubber_band_->getEndpoints().first}, Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 2);
-                        const auto gripper_b_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_B_NS, {traj.back().first.planned_rubber_band_->getEndpoints().second}, Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), 2);
-
-                        marker_ids.insert(marker_ids.end(), path_ids.begin(), path_ids.end());
-                        marker_ids.insert(marker_ids.end(), gripper_a_last_id.begin(), gripper_a_last_id.end());
-                        marker_ids.insert(marker_ids.end(), gripper_b_last_id.begin(), gripper_b_last_id.end());
-                    }
-
-                    // Actual Path
-                    {
-                        for (size_t path_idx = 0; path_idx < traj.size(); ++path_idx)
-                        {
-                            const auto& state = traj[path_idx].first;
-                            const auto new_ids = state.rubber_band_->visualize(ns_prefix + "EXECUTED_BAND", Visualizer::Yellow(), Visualizer::Yellow(), (int32_t)(path_idx + 1));
-                            marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
-                        }
-                    }
-
+                    const auto marker_ids = visualizePathAndTrajectory(path_to_start, traj, ns_prefix);
                     std::cout << "Experiment: " << experiment.substr(data_folder_.length() + 1) << "    ";
                     PressAnyKeyToContinue();
 
+                    // Rmove any visualizations added to make a clean slate for the next set of visualizations
                     for (const auto& nsid : marker_ids)
                     {
                         vis_->deleteObject(nsid.first, nsid.second);
@@ -1772,7 +1750,6 @@ namespace smmap
 
         // Visualization
         {
-            std::vector<Visualizer::NamespaceId> marker_ids;
             const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
 
             // Remove any existing visualization at this id (if there is one)
@@ -1783,29 +1760,8 @@ namespace smmap
                 removeVisualizationCallback(dmmreq, dmmres);
             }
 
-            // Planned Path
-            {
-                const auto draw_bands = true;
-                const auto path_ids = band_rrt_vis_->visualizePath(path_to_start, ns_prefix + "PLANNED_", 1, draw_bands);
-
-                const auto gripper_a_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_A_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().first}, Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 2);
-                const auto gripper_b_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_B_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().second}, Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), 2);
-
-                marker_ids.insert(marker_ids.end(), path_ids.begin(), path_ids.end());
-                marker_ids.insert(marker_ids.end(), gripper_a_last_id.begin(), gripper_a_last_id.end());
-                marker_ids.insert(marker_ids.end(), gripper_b_last_id.begin(), gripper_b_last_id.end());
-
-            }
-
-            // Actual Path
-            {
-                for (size_t idx = 0; idx < trajectory.size(); ++idx)
-                {
-                    const auto& state = trajectory[idx].first;
-                    const auto new_ids = state.rubber_band_->visualize(ns_prefix + "EXECUTED_BAND", Visualizer::Yellow(), Visualizer::Yellow(), (int32_t)(idx + 1));
-                    marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
-                }
-            }
+            // Planned path and actual trajectory taken
+            auto marker_ids = visualizePathAndTrajectory(path_to_start, trajectory, ns_prefix);
 
             // Discovered mistake
             {
@@ -2933,5 +2889,37 @@ namespace smmap
             res.response = "Invalid vis id";
             return false;
         }
+    }
+
+    std::vector<Visualizer::NamespaceId> TransitionTesting::visualizePathAndTrajectory(
+            const RRTPath& path,
+            const TransitionEstimation::StateTrajectory& trajectory,
+            const std::string ns_prefix) const
+    {
+        std::vector<Visualizer::NamespaceId> marker_ids;
+
+        // Planned Path
+        {
+            const auto draw_bands = true;
+            const auto path_ids = band_rrt_vis_->visualizePath(path, ns_prefix + "PLANNED_", 1, draw_bands);
+
+            const auto gripper_a_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_A_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().first}, Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 2);
+            const auto gripper_b_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_B_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().second}, Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), 2);
+
+            marker_ids.insert(marker_ids.end(), path_ids.begin(), path_ids.end());
+            marker_ids.insert(marker_ids.end(), gripper_a_last_id.begin(), gripper_a_last_id.end());
+            marker_ids.insert(marker_ids.end(), gripper_b_last_id.begin(), gripper_b_last_id.end());
+        }
+
+        // Actual Path
+        {
+            for (size_t path_idx = 0; path_idx < trajectory.size(); ++path_idx)
+            {
+                const auto& state = trajectory[path_idx].first;
+                const auto new_ids = state.rubber_band_->visualize(ns_prefix + "EXECUTED_BAND", Visualizer::Yellow(), Visualizer::Yellow(), (int32_t)(path_idx + 1));
+                marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
+            }
+        }
+        return marker_ids;
     }
 }

@@ -785,35 +785,6 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
             world_feedback.rope_node_transforms_
         };
         rrt_executed_path_.push_back({tes, microstep_history_buffer_});
-
-//        if (false && rrt_executed_path_.size() >= 30)
-//        {
-//            vis_->visualizeLineStrip("planned_band_step0", (rrt_executed_path_.end() - 3)->first.planned_rubber_band_->getVectorRepresentation(), Visualizer::Blue(), 1, 0.002);
-//            vis_->visualizeLineStrip("planned_band_step1", (rrt_executed_path_.end() - 2)->first.planned_rubber_band_->getVectorRepresentation(), Visualizer::Blue(), 1, 0.002);
-//            vis_->visualizeLineStrip("planned_band_step2", (rrt_executed_path_.end() - 1)->first.planned_rubber_band_->getVectorRepresentation(), Visualizer::Blue(), 1, 0.002);
-//            vis_->visualizeLineStrip("executed_band_step0", (rrt_executed_path_.end() - 3)->first.rubber_band_->getVectorRepresentation(), Visualizer::Yellow(), 1, 0.002);
-//            vis_->visualizeLineStrip("executed_band_step1", (rrt_executed_path_.end() - 2)->first.rubber_band_->getVectorRepresentation(), Visualizer::Yellow(), 1, 0.002);
-//            vis_->visualizeLineStrip("executed_band_step2", (rrt_executed_path_.end() - 1)->first.rubber_band_->getVectorRepresentation(), Visualizer::Yellow(), 1, 0.002);
-//            vis_->visualizeLineStrip("true_rope_state_step0", (rrt_executed_path_.end() - 3)->first.deform_config_, Visualizer::Green(), 1, 0.002);
-//            vis_->visualizeLineStrip("true_rope_state_step1", (rrt_executed_path_.end() - 2)->first.deform_config_, Visualizer::Green(), 1, 0.002);
-//            vis_->visualizeLineStrip("true_rope_state_step2", (rrt_executed_path_.end() - 1)->first.deform_config_, Visualizer::Green(), 1, 0.002);
-
-//            vis_->visualizeArrows("step0_to_step1",
-//                                  {(rrt_executed_path_.end() - 3)->first.rubber_band_->getEndpoints().first,
-//                                   (rrt_executed_path_.end() - 3)->first.rubber_band_->getEndpoints().second},
-//                                  {(rrt_executed_path_.end() - 2)->first.rubber_band_->getEndpoints().first,
-//                                   (rrt_executed_path_.end() - 2)->first.rubber_band_->getEndpoints().second},
-//                                  Visualizer::Magenta(), 0.002, 0.004, 0.008, 1);
-//            vis_->visualizeArrows("step1_to_step2",
-//                                  {(rrt_executed_path_.end() - 2)->first.rubber_band_->getEndpoints().first,
-//                                   (rrt_executed_path_.end() - 2)->first.rubber_band_->getEndpoints().second},
-//                                  {(rrt_executed_path_.end() - 1)->first.rubber_band_->getEndpoints().first,
-//                                   (rrt_executed_path_.end() - 1)->first.rubber_band_->getEndpoints().second},
-//                                  Visualizer::Magenta(), 0.002, 0.005, 0.008, 1);
-
-//            PressAnyKeyToContinue("Finished step of plan");
-//        }
-
         ++policy_segment_next_idx_;
         microstep_history_buffer_.clear();
     }

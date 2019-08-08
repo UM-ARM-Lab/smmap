@@ -685,7 +685,7 @@ std::vector<RubberBand::Ptr> TransitionEstimation::reduceMicrostepsToBands(
 /////// Learning transitions ///////////////////////////////////////////////////////////////////////////////////////////
 
 Maybe::Maybe<TransitionEstimation::StateTransition> TransitionEstimation::findMostRecentBadTransition(
-        const std::vector<std::pair<TransitionEstimation::State, std::vector<WorldState>>>& trajectory,
+        const StateTrajectory& trajectory,
         const bool visualize) const
 {
     // We can only learn a transition if there are at least states
@@ -1362,7 +1362,7 @@ TransitionEstimation::StateTransition TransitionEstimation::loadStateTransition(
     return StateTransition::Deserialize(test_transition_buffer, 0, template_band_).first;
 }
 
-void TransitionEstimation::saveTrajectory(const std::vector<StateMicrostepsPair>& trajectory, const std::string& filename) const
+void TransitionEstimation::saveTrajectory(const StateTrajectory& trajectory, const std::string& filename) const
 {
     const auto microsteps_serializer = [] (const std::vector<WorldState>& microsteps, std::vector<uint8_t>& buf)
     {
@@ -1377,7 +1377,7 @@ void TransitionEstimation::saveTrajectory(const std::vector<StateMicrostepsPair>
     ZlibHelpers::CompressAndWriteToFile(buffer, filename);
 }
 
-std::vector<TransitionEstimation::StateMicrostepsPair> TransitionEstimation::loadTrajectory(const std::string& filename) const
+TransitionEstimation::StateTrajectory TransitionEstimation::loadTrajectory(const std::string& filename) const
 {
     const auto state_deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
     {
