@@ -1102,7 +1102,7 @@ namespace smmap
     {
         assert(bandIsValidWithVisualization());
 
-        if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_)
+        if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_ && verbose)
         {
             std::cout << "Start of removeExtraBandPoints\n";
             visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
@@ -1113,7 +1113,7 @@ namespace smmap
         EigenHelpers::VectorVector3d forward_pass;
         forward_pass.reserve(band_.size());
         forward_pass.push_back(band_.front());
-        if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_)
+        if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_ && verbose)
         {
             vis_->visualizePoint(  "remove_extra_test_points_kept_points",   forward_pass.back(),  Visualizer::Cyan(1.0f), (int32_t)forward_pass.size(), 0.002);
             vis_->visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, Visualizer::Cyan(0.2f), (int32_t)forward_pass.size(), getBubbleSize(forward_pass.back()));
@@ -1121,7 +1121,7 @@ namespace smmap
 
         for (size_t curr_idx = 1; curr_idx + 1 < band_.size(); ++curr_idx)
         {
-            if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_)
+            if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_ && verbose)
             {
                 std::cout << "Start of removeExtraBandPoints loop, idx: " << curr_idx << std::endl;
             }
@@ -1147,7 +1147,7 @@ namespace smmap
             // Discard this point if it is containted in either neighbouring bubble
             if (curr_bubble_is_wholey_contained_in_prev || curr_bubble_is_wholey_contained_in_next)
             {
-                if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_)
+                if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_ && verbose)
                 {
                     std::cout << "Removing point as it is wholey contained, idx: " << curr_idx << std::endl;
                 }
@@ -1157,7 +1157,7 @@ namespace smmap
             // Discard this point if prev overlaps next by enough
             if (sufficientOverlap(prev_bubble_size, next_bubble_size, prev_next_dist * node_removal_overlap_factor_))
             {
-                if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_)
+                if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_ && verbose)
                 {
                     std::cout << "Removing point as it has enough overlap, idx: " << curr_idx << std::endl;
                 }
@@ -1167,7 +1167,7 @@ namespace smmap
             // Discard this point if it is too close to the previous, or too close to the next
             if (prev.isApprox(curr) || next.isApprox(curr))
             {
-                if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_)
+                if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_ && verbose)
                 {
                     std::cout << "Removing point as it is really really really close to and adjacent one, idx: " << curr_idx << std::endl;
                 }
@@ -1181,14 +1181,14 @@ namespace smmap
 
             if (band_backtracks)
             {
-                if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_)
+                if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_ && verbose)
                 {
                     std::cout << "Removing point as it is a backtrack, idx: " << curr_idx << std::endl;
                 }
                 continue;
             }
 
-            if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_)
+            if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_ && verbose)
             {
                 vis_->visualizePoint(  "remove_extra_test_prev",  prev,  Visualizer::Red(1.0f),   1, 0.002);
                 vis_->visualizeSpheres("remove_extra_test_prev", {prev}, Visualizer::Red(0.2f),   2, prev_bubble_size);
@@ -1207,7 +1207,7 @@ namespace smmap
             }
             // If no item said we should delete this item, then keep it
             forward_pass.push_back(curr);
-            if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_)
+            if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_ && verbose)
             {
                 vis_->visualizePoint(  "remove_extra_test_points_kept_points",   forward_pass.back(),  Visualizer::Cyan(1.0f), (int32_t)forward_pass.size(), 0.002);
                 vis_->visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, Visualizer::Cyan(0.2f), (int32_t)forward_pass.size(), getBubbleSize(forward_pass.back()));
@@ -1215,16 +1215,15 @@ namespace smmap
             }
         }
         forward_pass.push_back(band_.back());
-        if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_)
+        if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_ && verbose)
         {
             vis_->visualizePoints( "remove_extra_test_points_kept_points",   forward_pass.back(), Visualizer::Cyan(1.0f), (int32_t)forward_pass.size(), 0.002);
             vis_->visualizeSpheres("remove_extra_test_points_kept_spheres", {forward_pass.back()}, Visualizer::Cyan(0.2f), (int32_t)forward_pass.size(), getBubbleSize(forward_pass.back()));
         }
 
         band_ = forward_pass;
-//        visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, verbose);
 
-        if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_)
+        if (ENABLE_BAND_DEBUGGING_ && ENABLE_REMOVE_DEBUGGING_ && verbose)
         {
             std::cout << "End of removeExtraBandPoints\n";
             visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
@@ -1235,7 +1234,7 @@ namespace smmap
 
     bool QuinlanRubberBand::smoothBandPoints(const bool verbose)
     {
-        if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_)
+        if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_ && verbose)
         {
             visualizeWithBubbles(band_, "StartOfSmoothingBand", Visualizer::Black(), Visualizer::Cyan(), 1, true);
             assert(bandIsValidWithVisualization());
@@ -1244,7 +1243,7 @@ namespace smmap
 
         for (size_t smoothing_iter = 0; smoothing_iter < smoothing_iterations_; ++smoothing_iter)
         {
-            if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_)
+            if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_ && verbose)
             {
                 visualizeWithBubbles("StartOfSmoothingOuterLoop", Visualizer::Black(), Visualizer::Cyan(), 1, true);
                 vis_->forcePublishNow();
@@ -1259,7 +1258,7 @@ namespace smmap
 
             for (size_t curr_idx = 1; curr_idx + 1 < band_.size(); ++ curr_idx)
             {
-                if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_)
+                if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_ && verbose)
                 {
                     visualizeWithBubbles("StartOfSmoothingInnerLoop", Visualizer::Black(), Visualizer::Cyan(), 1, true);
                     std::cout << "Start of smoothBandPointsInnerLoop: band idx: " << curr_idx << std::endl;
@@ -1288,7 +1287,7 @@ namespace smmap
                 const Eigen::Vector3d projected = projectToValidBubble(prime);
                 const double projected_bubble_size = getBubbleSize(projected);
 
-                if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_)
+                if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_ && verbose)
                 {
                     if (projected_bubble_size < min_distance_to_obstacle_)
                     {
@@ -1383,7 +1382,7 @@ namespace smmap
                     }
                 }
 
-                if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_)
+                if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_ && verbose)
                 {
                     std::cout << "End of smoothBandPointsInnerLoop: band idx: " << curr_idx << std::endl;
                 }
@@ -1399,7 +1398,7 @@ namespace smmap
             }
 
             band_ = next_band;
-            if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_)
+            if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_ && verbose)
             {
                 std::cout << "\n\n\nEnd of smoothing loop, iteration: " << smoothing_iter << std::endl;
                 visualizeWithBubbles("quinlan_band_test", Visualizer::Black(), Visualizer::Cyan(), 1, true);
@@ -1411,7 +1410,7 @@ namespace smmap
             removeExtraBandPoints(verbose);
         }
 
-        if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_)
+        if (ENABLE_BAND_DEBUGGING_ && ENABLE_SMOOTHING_DEBUGGING_ && verbose)
         {
             printBandData(band_);
             assert(bandIsValidWithVisualization());

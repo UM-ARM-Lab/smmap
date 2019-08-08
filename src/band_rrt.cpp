@@ -1724,11 +1724,6 @@ void BandRRT::planningMainLoop()
     // Make sure we've been given a start and goal state
     assert(forward_tree_.size() > 0);
     assert(grippers_goal_set_.size() > 0);
-    // Make sure the tree is properly linked
-    assert(CheckTreeLinkage(forward_tree_));
-
-    #pragma message "Backwards tree linkage check disabled as backwards tree is not really used"
-//    assert(CheckTreeLinkage(backward_tree_));
 
     // Plan
     ROS_INFO_NAMED("rrt", "Using single directional tree");

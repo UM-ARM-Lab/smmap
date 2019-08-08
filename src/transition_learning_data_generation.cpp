@@ -17,6 +17,7 @@
 #include <smmap_utilities/neighbours.h>
 #include <deformable_manipulation_experiment_params/conversions.hpp>
 #include <deformable_manipulation_experiment_params/utility.hpp>
+#include <deformable_manipulation_experiment_params/ros_params.hpp>
 #include <deformable_manipulation_msgs/GenerateTransitionDataAction.h>
 #include <smmap_utilities/grippers.h>
 
@@ -532,8 +533,7 @@ namespace smmap
         , set_transition_adaptation_source_(nh_->advertiseService("transition_vis/set_transition_adaptation_source", &TransitionTesting::setTransitionAdaptationSourceCallback, this))
         , add_transition_adaptation_visualization_(nh_->advertiseService("transition_vis/add_transition_adaptation_visualization", &TransitionTesting::addTransitionAdaptationVisualizationCallback, this))
 
-        #warning("Hard coded mistake dist thresh here")
-        , mistake_dist_thresh_(0.5)
+        , mistake_dist_thresh_(GetTransitionMistakeThreshold(*ph_))
         , add_mistake_example_visualization_(nh_->advertiseService("transition_vis/add_mistake_example_visualization", &TransitionTesting::addMistakeExampleVisualizationCallback, this))
 
         , classifier_scaler_(nh_, ph_)
