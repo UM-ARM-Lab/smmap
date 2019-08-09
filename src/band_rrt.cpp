@@ -948,7 +948,7 @@ RRTPolicy BandRRT::plan(
 //        planning_statistics_["planning_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
 //        planning_statistics_["planning_size11_backward_connections_made               "] = (double)backward_connections_made_;
 
-//        ROS_INFO_STREAM_NAMED("rrt", "RRT Helper Planning Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl);
+        ROS_INFO_STREAM_NAMED("rrt", "RRT Helper Planning Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl);
 //        storeTree(forward_tree_);
 
         if (visualization_enabled_globally_)
@@ -987,7 +987,7 @@ RRTPolicy BandRRT::plan(
         const bool visualize_rrt_smoothing = visualization_enabled_globally_ && true;
         shortcutSmoothPolicy(policy, visualize_rrt_smoothing);
         robot_->unlockEnvironment();
-//        std::cout << "RRT Helper Smoothing Statistics:\n" << PrettyPrint::PrettyPrint(smoothing_statistics_, false, "\n") << std::endl << std::endl;
+        std::cout << "RRT Helper Smoothing Statistics:\n" << PrettyPrint::PrettyPrint(smoothing_statistics_, false, "\n") << std::endl << std::endl;
 
 //        ROS_INFO_NAMED("rrt", "Playing back smoothed path in OpenRAVE");
 //        robot_->testPathForCollision(ConvertRRTPathToRobotPath(smoothed_path));

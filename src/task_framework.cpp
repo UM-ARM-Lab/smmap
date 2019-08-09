@@ -15,6 +15,7 @@
 #include <arc_utilities/zlib_helpers.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
 #include <arc_utilities/arc_helpers.hpp>
+#include <arc_utilities/serialization_ros.hpp>
 #include <deformable_manipulation_experiment_params/utility.hpp>
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
 
@@ -1674,8 +1675,9 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         const size_t num_trials = GetRRTNumTrials(*ph_);
         const bool test_paths_in_bullet = GetRRTTestPathsInBullet(*ph_);
         const auto classifier_type = ROSHelpers::GetParamRequired<std::string>(*ph_, "classifier/type", __func__).Get();
-        auto num_succesful_paths = 0;
-        auto num_unsuccesful_paths = 0;
+
+        std::vector<std::string> file_basenames;
+        std::vector<deformable_manipulation_msgs::TransitionTest> dmm_tests;
         for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
         {
             // Only use the seed resetting if we are performing more than 1 trial
@@ -1730,30 +1732,52 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 std::cout << "Saving path and result to prefix: " << folder << timestamp << std::endl;
                 const auto path_to_start_file = folder + timestamp + "__path_to_start.compressed";
                 const auto test_results_file = folder + timestamp + "__test_results.compressed";
-                const auto trajectory_file = folder + timestamp + "__trajectory.compressed";
                 band_rrt_->savePath(rrt_path, path_to_start_file);
 
-                const auto feedback_fn = [&] (const size_t test_id, const deformable_manipulation_msgs::TransitionTestResult& test_result)
-                {
-                    (void)test_id;
-                    const auto traj_gen_result = ToTrajectory(world_state, rrt_path, test, test_result);
-                    const auto& trajectory = traj_gen_result.first;
-                    transition_estimator_->saveTrajectory(trajectory, trajectory_file);
-                    if (!traj_gen_result.second)
-                    {
-                        ++num_succesful_paths;
-                    }
-                    else
-                    {
-                        ++num_unsuccesful_paths;
-                    }
-                };
                 // Run the path through the simulator which will save the results to file,
                 // and then convert the result to a trajectory, recording the result to file
-                robot_->generateTransitionData({test}, {test_results_file}, feedback_fn, true);
+                robot_->generateTransitionData({test}, {test_results_file}, nullptr, false);
+
+                file_basenames.push_back(folder + timestamp);
+                dmm_tests.push_back(test);
             }
         }
-        ROS_INFO_STREAM_COND_NAMED(test_paths_in_bullet, "task_framework", "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
+
+        if (test_paths_in_bullet)
+        {
+            auto num_succesful_paths = 0;
+            auto num_unsuccesful_paths = 0;
+            #pragma omp parallel for
+            for (size_t idx = 0; idx < dmm_tests.size(); ++idx)
+            {
+                const auto& basename = file_basenames[idx];
+                const auto& test = dmm_tests[idx];
+
+                const auto path_to_start_file = basename + "__path_to_start.compressed";
+                const auto test_result_file = basename + "__test_results.compressed";
+                const auto trajectory_file = basename + "__trajectory.compressed";
+
+                const auto rrt_path = band_rrt_->loadPath(path_to_start_file);
+                const auto test_result = [&]
+                {
+                    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
+                    return arc_utilities::RosMessageDeserializationWrapper<deformable_manipulation_msgs::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+                }();
+
+                const auto traj_gen_result = ToTrajectory(world_state, rrt_path, test, test_result);
+                const auto& trajectory = traj_gen_result.first;
+                transition_estimator_->saveTrajectory(trajectory, trajectory_file);
+                if (!traj_gen_result.second)
+                {
+                    ++num_succesful_paths;
+                }
+                else
+                {
+                    ++num_unsuccesful_paths;
+                }
+            }
+            ROS_INFO_STREAM_NAMED("task_framework", "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
+        }
 
         // Serialization
         if (GetRRTStoreNewResults(*ph_))

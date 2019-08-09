@@ -2552,7 +2552,7 @@ namespace smmap
         {
             const auto path_to_start_file = folder + "trial_idx_" + to_str(trial_idx) + "__path_to_start.compressed";
             const auto test_result_file = folder + "trial_idx_" + to_str(trial_idx) + "__test_results.compressed";
-            const auto trajectory_file = folder + "trial_idx_" + to_str(trial_idx)+ "__trajectory.compressed";
+            const auto trajectory_file = folder + "trial_idx_" + to_str(trial_idx) + "__trajectory.compressed";
 
             const auto path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
             const auto test_result = loadTestResult(test_result_file);
