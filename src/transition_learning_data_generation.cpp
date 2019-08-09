@@ -1488,6 +1488,8 @@ namespace smmap
 {
     void TransitionTesting::generateTrajectories()
     {
+        auto num_succesful_paths = 0;
+        auto num_unsuccesful_paths = 0;
         #pragma omp parallel for
         for (size_t idx = 0; idx < data_files_.size(); ++idx)
         {
@@ -1498,20 +1500,33 @@ namespace smmap
 
             try
             {
-                if (!boost::filesystem::is_regular_file(trajectory_file))
+//                if (!boost::filesystem::is_regular_file(trajectory_file))
                 {
-                    const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
-                    const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
-                    const auto traj_gen_result = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
-                    const auto& traj = traj_gen_result.first;
-                    transition_estimator_->saveTrajectory(traj, trajectory_file);
+                    const auto path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+                    const auto test_result = loadTestResult(test_result_file);
+
+                    const auto traj_gen_result = toTrajectory(test_result, path_to_start, test_result_file);
+                    const auto& trajectory = traj_gen_result.first;
+                    transition_estimator_->saveTrajectory(trajectory, trajectory_file);
+
+                    if (traj_gen_result.second)
+                    {
+                        ++num_succesful_paths;
+                    }
+                    else
+                    {
+                        ++num_unsuccesful_paths;
+                    }
                 }
             }
             catch (const std::exception& ex)
             {
                 ROS_ERROR_STREAM_NAMED("generate_trajectories", "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
+                ++num_unsuccesful_paths;
             }
         }
+
+        ROS_INFO_STREAM("Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
     }
 
     void TransitionTesting::visualizeIncompleteTrajectories()
@@ -2468,8 +2483,6 @@ namespace smmap
         test_result_filenames.reserve(num_threads);
 
         const auto num_trials = GetRRTNumTrials(*ph_);
-        auto num_succesful_paths = 0;
-        auto num_unsuccesful_paths = 0;
 
         const auto num_digits = [&]
         {
@@ -2532,6 +2545,8 @@ namespace smmap
         }
 
         // We can't rely on ROS messaging to get all feedback, so post-process everything instead
+        auto num_succesful_paths = 0;
+        auto num_unsuccesful_paths = 0;
         #pragma omp parallel for
         for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
         {
