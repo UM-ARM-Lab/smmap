@@ -102,6 +102,15 @@ static std::vector<uint32_t> numberOfPointsInEachCluster(
     return counts;
 }
 
+template< typename T >
+static std::string int_to_hex(const T i)
+{
+    std::stringstream stream;
+    stream << std::setfill ('0') << std::setw(sizeof(T) * 2)
+           << std::hex << i;
+    return stream.str();
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constructor and model list builder
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -155,7 +164,7 @@ TaskFramework::TaskFramework(
     , visualize_gripper_motion_(vis_->visualizationsEnabled() && GetVisualizeGripperMotion(*ph_))
     , visualize_predicted_motion_(vis_->visualizationsEnabled() && GetVisualizeObjectPredictedMotion(*ph_))
 {
-    ROS_INFO_STREAM_NAMED("task_framework", "Using seed " << std::hex << seed_ );
+    ROS_INFO_STREAM_NAMED("task_framework", "Using seed " << int_to_hex(seed_));
     std::srand((unsigned int)seed_);
     initializeBanditsLogging();
     initializeControllerLogging();
@@ -1723,10 +1732,11 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                             world_state.all_grippers_single_pose_,
                             RRTPathToGrippersPoseTrajectory(rrt_path),
                             ToGripperPoseVector(rrt_path.back().grippers()));
+
                 const auto base_folder = "/mnt/big_narstie_data/dmcconac/transition_learning_data_generation/smmap_generated_plans/";
                 const auto folder = base_folder + GetTaskTypeString(*nh_) + "/" + test_id_ +"/"
                         + classifier_type + "_classifier_"
-                        + std::to_string(seed_) + "/";
+                        + int_to_hex(seed_) + "/";
                 arc_utilities::CreateDirectory(folder);
                 const auto timestamp = arc_helpers::GetCurrentTimeAsString();
                 std::cout << "Saving path and result to prefix: " << folder << timestamp << std::endl;
@@ -1751,30 +1761,37 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
             for (size_t idx = 0; idx < dmm_tests.size(); ++idx)
             {
                 const auto& basename = file_basenames[idx];
-                const auto& test = dmm_tests[idx];
+	            const auto& test = dmm_tests[idx];
+    	        const auto path_to_start_file = basename + "__path_to_start.compressed";
+        	    const auto test_result_file = basename + "__test_results.compressed";
+            	const auto trajectory_file = basename + "__trajectory.compressed";
 
-                const auto path_to_start_file = basename + "__path_to_start.compressed";
-                const auto test_result_file = basename + "__test_results.compressed";
-                const auto trajectory_file = basename + "__trajectory.compressed";
+				try
+				{
+                	const auto rrt_path = band_rrt_->loadPath(path_to_start_file);
+	                const auto test_result = [&]
+    	            {
+        	            const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
+            	        return arc_utilities::RosMessageDeserializationWrapper<deformable_manipulation_msgs::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
+                	}();
 
-                const auto rrt_path = band_rrt_->loadPath(path_to_start_file);
-                const auto test_result = [&]
-                {
-                    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
-                    return arc_utilities::RosMessageDeserializationWrapper<deformable_manipulation_msgs::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
-                }();
-
-                const auto traj_gen_result = ToTrajectory(world_state, rrt_path, test, test_result);
-                const auto& trajectory = traj_gen_result.first;
-                transition_estimator_->saveTrajectory(trajectory, trajectory_file);
-                if (!traj_gen_result.second)
-                {
-                    ++num_succesful_paths;
-                }
-                else
-                {
-                    ++num_unsuccesful_paths;
-                }
+	                const auto traj_gen_result = ToTrajectory(world_state, rrt_path, test, test_result);
+    	            const auto& trajectory = traj_gen_result.first;
+        	        transition_estimator_->saveTrajectory(trajectory, trajectory_file);
+            	    if (!traj_gen_result.second)
+                	{
+	                    ++num_succesful_paths;
+    	            }
+        	        else
+            	    {
+                	    ++num_unsuccesful_paths;
+	                }
+				}
+				catch (const std::runtime_error& ex)
+				{
+					ROS_ERROR_STREAM_NAMED("task_framework", "Error evalutating trajectory: " << basename << ": " << ex.what());
+                	++num_unsuccesful_paths;
+				}
             }
             ROS_INFO_STREAM_NAMED("task_framework", "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
         }
