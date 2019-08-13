@@ -1794,6 +1794,8 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 				}
             }
             ROS_INFO_STREAM_NAMED("task_framework", "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
+            ROS_INFO_NAMED("task_framwork", "Terminating.");
+            throw_arc_exception(std::runtime_error, "Bullet tests done, terminating.");
         }
 
         // Serialization
