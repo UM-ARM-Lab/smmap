@@ -133,7 +133,7 @@ namespace smmap
         assert(test.path_num_substeps.at(0) == 0);
 
         bool clean_trajectory = true;
-        if ((int)test_result.microsteps_all.size() != (path_total_substeps * simsteps_per_gripper_cmd))
+        if (static_cast<int>(test_result.microsteps_all.size()) != (path_total_substeps * simsteps_per_gripper_cmd))
         {
             assert(!has_last_action);
             ROS_WARN_STREAM_NAMED("to_traj", filename << ": Only a partial trajectory exists.");
@@ -513,12 +513,6 @@ namespace smmap
                            GetWorldYNumSteps(*nh_),
                            GetWorldZNumSteps(*nh_))
 
-        , gripper_a_starting_pose_(GetPoseFromParamSerer(*ph_, "gripper_a_test_start", true))
-        , gripper_b_starting_pose_(GetPoseFromParamSerer(*ph_, "gripper_b_test_start", true))
-        , gripper_a_action_vector_(GetVector3FromParamServer(*ph_, "gripper_a_action_vector"))
-        , gripper_b_action_vector_(GetVector3FromParamServer(*ph_, "gripper_b_action_vector"))
-        , experiment_center_of_rotation_(Isometry3d(Translation3d(GetVector3FromParamServer(*ph_, "experiment_cor"))))
-
         , deformable_type_(GetDeformableType(*nh_))
         , task_type_(GetTaskType(*nh_))
         , initial_world_state_(robot_->start())
@@ -891,6 +885,12 @@ namespace smmap
 
     void TransitionTesting::generateTestData()
     {
+        gripper_a_starting_pose_ = GetPoseFromParamSerer(*ph_, "gripper_a_test_start", true);
+        gripper_b_starting_pose_ = GetPoseFromParamSerer(*ph_, "gripper_b_test_start", true);
+        gripper_a_action_vector_ = GetVector3FromParamServer(*ph_, "gripper_a_action_vector");
+        gripper_b_action_vector_ = GetVector3FromParamServer(*ph_, "gripper_b_action_vector");
+        experiment_center_of_rotation_ = Isometry3d(Translation3d(GetVector3FromParamServer(*ph_, "experiment_cor")));
+
         const auto num_threads = GetNumOMPThreads();
         std::vector<dmm::TransitionTest> tests;
         std::vector<std::string> filenames;

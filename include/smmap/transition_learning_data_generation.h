@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 
+#include <Eigen/Dense>
 #include <std_msgs/Int32.h>
 #include <arc_utilities/arc_helpers.hpp>
 #include <deformable_manipulation_msgs/TransitionTest.h>
@@ -77,7 +78,7 @@ namespace smmap
         Eigen::Isometry3d gripper_b_starting_pose_;
         Eigen::Vector3d gripper_a_action_vector_;
         Eigen::Vector3d gripper_b_action_vector_;
-        const Eigen::Isometry3d experiment_center_of_rotation_;
+        Eigen::Isometry3d experiment_center_of_rotation_;
 
         const DeformableType deformable_type_;
         const TaskType task_type_;

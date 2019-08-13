@@ -20,7 +20,7 @@ find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 ## System dependencies are found with CMake's conventions
 find_package(cmake_modules REQUIRED)
 find_package(Eigen3 REQUIRED)
-set(Eigen3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
+set(EIGEN3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
 find_package(Flann REQUIRED)
@@ -43,7 +43,7 @@ catkin_package(
     INCLUDE_DIRS    include
     LIBRARIES       ${PROJECT_NAME}_planning
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
-    DEPENDS         Eigen3 FLANN SVM
+    DEPENDS         EIGEN3 FLANN SVM
 )
 
 ###########
