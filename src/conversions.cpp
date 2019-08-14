@@ -16,6 +16,7 @@ namespace smmap
         static const auto simsteps_per_gripper_cmd = ROSHelpers::GetParamRequiredDebugLog<int>(nh, "deform_simulator_node/num_simsteps_per_gripper_command", __func__).Get();
 
         const bool has_last_action = test.final_num_substeps > 0;
+        const auto template_band = *path.front().band();
         const auto path_num_steps = path.size();
         const auto path_total_substeps = std::accumulate(test.path_num_substeps.begin(), test.path_num_substeps.end(), test.final_num_substeps);
         const auto path_cummulative_substeps = [&]
@@ -31,23 +32,23 @@ namespace smmap
         assert(test.path_num_substeps.at(0) == 0);
 
         bool clean_trajectory = true;
-        if ((int)test_result.microsteps_all.size() != (path_total_substeps * simsteps_per_gripper_cmd))
+        if (static_cast<int>(test_result.microsteps_all.size()) != (path_total_substeps * simsteps_per_gripper_cmd))
         {
             assert(!has_last_action);
             ROS_WARN_STREAM_NAMED("conversions", "Only a partial trajectory exists.");
             clean_trajectory = false;
         }
 
-        const auto total_steps = has_last_action ? path_num_steps + 1 : path_num_steps;
-        std::vector<TransitionEstimation::StateMicrostepsPair> trajectory;
-        trajectory.reserve(total_steps);
+        const auto expected_total_steps = has_last_action ? path_num_steps + 1 : path_num_steps;
+        TransitionEstimation::StateTrajectory trajectory;
+        trajectory.reserve(expected_total_steps);
 
         // Add the first state with no history
         {
             const TransitionEstimation::State tes =
             {
                 initial_world_state.object_configuration_,
-                std::make_shared<RubberBand>(*path.front().band()),
+                std::make_shared<RubberBand>(template_band),
                 std::make_shared<RubberBand>(*path.front().band()),
                 initial_world_state.rope_node_transforms_
             };
@@ -81,12 +82,11 @@ namespace smmap
                         test_result.microsteps_all.begin() + microsteps_end_idx);
             const auto microsteps = ConvertToEigenFeedback(dmm_microsteps);
 
-            const auto planned_band = std::make_shared<RubberBand>(*path[idx].band());
             const TransitionEstimation::State tes =
             {
                 microsteps.back().object_configuration_,
-                RubberBand::BandFromWorldState(microsteps.back(), *planned_band),
-                planned_band,
+                RubberBand::BandFromWorldState(microsteps.back(), template_band),
+                std::make_shared<RubberBand>(*path[idx].band()),
                 microsteps.back().rope_node_transforms_,
             };
             // Shortcut if the band becomes overstretched
@@ -109,7 +109,7 @@ namespace smmap
             const auto tes = TransitionEstimation::State
             {
                 end.object_configuration_,
-                RubberBand::BandFromWorldState(end, *planned_band),
+                RubberBand::BandFromWorldState(end, template_band),
                 planned_band,
                 end.rope_node_transforms_
             };

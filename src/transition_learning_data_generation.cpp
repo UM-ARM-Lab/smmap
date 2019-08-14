@@ -23,6 +23,7 @@
 
 #include "smmap/band_rrt.h"
 #include "smmap/parabola.h"
+#include "smmap/conversions.h"
 
 using namespace arc_utilities;
 using namespace arc_helpers;
@@ -117,113 +118,13 @@ namespace smmap
                     ToGripperPoseVector(path.front().grippers()),
                     RRTPathToGrippersPoseTrajectory(path),
                     grippers_ending_poses);
-        const auto path_num_steps = path.size();
-        const auto simsteps_per_gripper_cmd = ROSHelpers::GetParamRequiredDebugLog<int>(*nh_, "deform_simulator_node/num_simsteps_per_gripper_command", __func__).Get();
-        const auto path_total_substeps = std::accumulate(test.path_num_substeps.begin(), test.path_num_substeps.end(), test.final_num_substeps);
-        const auto path_cummulative_substeps = [&]
-        {
-            auto res = std::vector<int>(path_num_steps);
-            std::partial_sum(test.path_num_substeps.begin(), test.path_num_substeps.end(), res.begin());
-            return res;
-        }();
 
-        // Make sure that the data is in the format we're expecting
-        assert(test.path_num_substeps.size() == path_num_steps);
-        // I.e.; the path starts at the same place that the grippers are already at
-        assert(test.path_num_substeps.at(0) == 0);
-
-        bool clean_trajectory = true;
-        if (static_cast<int>(test_result.microsteps_all.size()) != (path_total_substeps * simsteps_per_gripper_cmd))
+        const auto traj = ToTrajectory(initial_world_state_, path, test, test_result);
+        if (!traj.second)
         {
-            assert(!has_last_action);
-            ROS_WARN_STREAM_NAMED("to_traj", filename << ": Only a partial trajectory exists.");
-            clean_trajectory = false;
+            ROS_WARN_STREAM_NAMED("to_traj", "Short path returned for " << filename);
         }
-
-        const auto total_steps = has_last_action ? path_num_steps + 1 : path_num_steps;
-        TransitionEstimation::StateTrajectory trajectory;
-        trajectory.reserve(total_steps);
-
-        // Add the first state with no history
-        {
-            const TransitionEstimation::State tes =
-            {
-                initial_world_state_.object_configuration_,
-                std::make_shared<RubberBand>(*initial_band_),
-                std::make_shared<RubberBand>(*initial_band_),
-                initial_world_state_.rope_node_transforms_
-            };
-            trajectory.push_back({tes, std::vector<WorldState>(0)});
-        }
-
-        // Add the rest of the states other than the last step
-        for (size_t idx = 1; idx < path_num_steps; ++idx)
-        {
-            const auto microsteps_start_idx = path_cummulative_substeps.at(idx - 1) * simsteps_per_gripper_cmd;
-            const auto microsteps_end_idx = path_cummulative_substeps.at(idx) * simsteps_per_gripper_cmd;
-
-            // If the grippers do not move, then skip this part of the path
-            if (microsteps_end_idx == microsteps_start_idx)
-            {
-                continue;
-            }
-
-            // Ensure that we don't overflow the end of the vector (assuming one set of data at the end for the "last step")
-            // Given the earlier assertions; only a logic error or an imcomplete trajectory would trigger this
-            if ((test_result.microsteps_all.begin() + microsteps_start_idx > test_result.microsteps_all.end() - (test.final_num_substeps * simsteps_per_gripper_cmd)) ||
-                (test_result.microsteps_all.begin() + microsteps_end_idx   > test_result.microsteps_all.end() - (test.final_num_substeps * simsteps_per_gripper_cmd)))
-            {
-                ROS_WARN_STREAM_NAMED("to_traj", filename << ": Results only contains " << idx << " path steps. Path steps anticipated: " << path_num_steps);
-                clean_trajectory = false;
-                return {trajectory, clean_trajectory};
-            }
-
-            const std::vector<dmm::WorldState> dmm_microsteps(
-                        test_result.microsteps_all.begin() + microsteps_start_idx,
-                        test_result.microsteps_all.begin() + microsteps_end_idx);
-            const auto microsteps = ConvertToEigenFeedback(dmm_microsteps);
-
-            const TransitionEstimation::State tes =
-            {
-                microsteps.back().object_configuration_,
-                RubberBand::BandFromWorldState(microsteps.back(), *initial_band_),
-                std::make_shared<RubberBand>(*path[idx].band()),
-                microsteps.back().rope_node_transforms_,
-            };
-            // Shortcut if the band becomes overstretched
-            if (tes.rubber_band_->isOverstretched())
-            {
-                ROS_WARN_STREAM_NAMED("to_traj", filename << ": Band overstretched at index " << idx << ". Path steps anticipated: " << path_num_steps);
-                clean_trajectory = false;
-                return {trajectory, clean_trajectory};
-            }
-            trajectory.push_back({tes, microsteps});
-        }
-
-        // Propagate the planned band the last step, and record the resulting state
-        if (has_last_action)
-        {
-            const WorldState end = ConvertToEigenFeedback(test_result.microsteps_last_action.back());
-
-            auto planned_band = std::make_shared<RubberBand>(*path.back().band());
-            planned_band->forwardPropagate(ToGripperPositions(grippers_ending_poses), false);
-            const auto tes = TransitionEstimation::State
-            {
-                end.object_configuration_,
-                RubberBand::BandFromWorldState(end, *initial_band_),
-                planned_band,
-                end.rope_node_transforms_
-            };
-            if (tes.rubber_band_->isOverstretched())
-            {
-                ROS_WARN_STREAM_NAMED("to_traj", filename << ": Band overstretched at last action.");
-                clean_trajectory = false;
-                return {trajectory, clean_trajectory};
-            }
-            trajectory.push_back({tes, ConvertToEigenFeedback(test_result.microsteps_last_action)});
-        }
-
-        return {trajectory, clean_trajectory};
+        return traj;
     }
 }
 
@@ -1490,7 +1391,7 @@ namespace smmap
     {
         auto num_succesful_paths = 0;
         auto num_unsuccesful_paths = 0;
-        #pragma omp parallel for
+        #pragma omp parallel for reduction(+: num_succesful_paths) reduction(+: num_unsuccesful_paths)
         for (size_t idx = 0; idx < data_files_.size(); ++idx)
         {
             const auto& experiment = data_files_[idx];
