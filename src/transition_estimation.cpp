@@ -507,6 +507,7 @@ TransitionEstimation::TransitionEstimation(
     , band_tighten_scale_factor_(GetTransitionTightenDeltaScaleFactor(*ph_))
     , homotopy_changes_scale_factor_(GetTransitionHomotopyChangesScaleFactor(*ph_))
 
+    , classifier_time_(0.0)
     , classifier_scaler_(nh_, ph_)
     , transition_mistake_classifier_(Classifier::MakeClassifier(nh_, ph_))
 
@@ -1111,8 +1112,14 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
         }
         else
         {
+            Stopwatch stopwatch;
+            arc_helpers::DoNotOptimize(default_next_band);
             const auto features = transitionFeatures(test_band_start, *default_next_band);
             const auto predicted_mistake = transition_mistake_classifier_->predict(classifier_scaler_(features));
+            arc_helpers::DoNotOptimize(predicted_mistake);
+            classifier_time_ += stopwatch(READ);
+
+
     //        const auto nn_prediction = transition_mistake_classifier_.nearestNeighbour(classifier_scaler_(features));
     //        std::cout << "Classifier prediction: " << predicted_mistake << std::endl;
     //        std::cout << "NN prediction: " << nn_prediction.first << std::endl;
@@ -1310,6 +1317,16 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     }
 #endif
     return transitions;
+}
+
+double TransitionEstimation::classifierTime() const
+{
+    return classifier_time_;
+}
+
+void TransitionEstimation::resetClassifierTime()
+{
+    classifier_time_ = 0.0;
 }
 
 //////// Visualization /////////////////////////////////////////////////////////////////////////////////////////////////

@@ -1683,7 +1683,6 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         const std::chrono::duration<double> time_limit(GetRRTTimeout(*ph_));
         const size_t num_trials = GetRRTNumTrials(*ph_);
         const bool test_paths_in_bullet = GetRRTTestPathsInBullet(*ph_);
-        const auto classifier_type = ROSHelpers::GetParamRequired<std::string>(*ph_, "classifier/type", __func__).Get();
 
         std::vector<std::string> file_basenames;
         std::vector<deformable_manipulation_msgs::TransitionTest> dmm_tests;
@@ -1733,22 +1732,19 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                             RRTPathToGrippersPoseTrajectory(rrt_path),
                             ToGripperPoseVector(rrt_path.back().grippers()));
 
-                const auto base_folder = "/mnt/big_narstie_data/dmcconac/transition_learning_data_generation/smmap_generated_plans/";
-                const auto folder = base_folder + GetTaskTypeString(*nh_) + "/" + test_id_ +"/"
-                        + classifier_type + "_classifier_"
-                        + int_to_hex(seed_) + "/";
-                arc_utilities::CreateDirectory(folder);
+                const auto data_folder = GetDataFolder(*nh_);
+                arc_utilities::CreateDirectory(data_folder);
                 const auto timestamp = arc_helpers::GetCurrentTimeAsString();
-                std::cout << "Saving path and result to prefix: " << folder << timestamp << std::endl;
-                const auto path_to_start_file = folder + timestamp + "__path_to_start.compressed";
-                const auto test_results_file = folder + timestamp + "__test_results.compressed";
+                std::cout << "Saving path and result to prefix: " << data_folder << timestamp << std::endl;
+                const auto path_to_start_file = data_folder + timestamp + "__path_to_start.compressed";
+                const auto test_results_file = data_folder + timestamp + "__test_results.compressed";
                 band_rrt_->savePath(rrt_path, path_to_start_file);
 
                 // Run the path through the simulator which will save the results to file,
                 // and then convert the result to a trajectory, recording the result to file
                 robot_->generateTransitionData({test}, {test_results_file}, nullptr, false);
 
-                file_basenames.push_back(folder + timestamp);
+                file_basenames.push_back(data_folder + timestamp);
                 dmm_tests.push_back(test);
             }
         }

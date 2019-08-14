@@ -197,6 +197,9 @@ namespace smmap
                 const PairGripperPositions& ending_gripper_positions,
                 const bool verbose = false);
 
+        double classifierTime() const;
+        void resetClassifierTime();
+
         ////////////////////////////////////////////////////////////////////////
         // Visualizing transitions
         ////////////////////////////////////////////////////////////////////////
@@ -257,6 +260,7 @@ namespace smmap
         // Default transition mistake estimation
         ////////////////////////////////////////////////////////////////////////
 
+        double classifier_time_;
         MinMaxTransformer classifier_scaler_;
         Classifier::Ptr transition_mistake_classifier_;
 

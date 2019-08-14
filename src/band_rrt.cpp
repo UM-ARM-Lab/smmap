@@ -875,6 +875,7 @@ RRTPolicy BandRRT::plan(
     }
 
     // Clear statistics
+    transition_estimator_->resetClassifierTime();
     total_sampling_time_ = 0.0;
     total_nearest_neighbour_index_building_time_ = 0.0;
     total_nearest_neighbour_index_searching_time_ = 0.0;
@@ -927,8 +928,9 @@ RRTPolicy BandRRT::plan(
         planning_statistics_["planning_time2_1_forward_propogation_fk                 "] = total_forward_kinematics_time_;
         planning_statistics_["planning_time2_2_forward_propogation_projection         "] = total_projection_time_;
         planning_statistics_["planning_time2_3_forward_propogation_collision_check    "] = total_collision_check_time_;
-        planning_statistics_["planning_time2_4_forward_propogation_band_sim           "] = total_band_forward_propogation_time_;
-        planning_statistics_["planning_time2_5_forward_propogation_first_order_vis    "] = total_first_order_vis_propogation_time_;
+        planning_statistics_["planning_time2_4_forward_propogation_forward_propagation"] = total_band_forward_propogation_time_ - transition_estimator_->classifierTime();
+        planning_statistics_["planning_time2_5_classifier                             "] = transition_estimator_->classifierTime();
+        planning_statistics_["planning_time2_6_forward_propogation_first_order_vis    "] = total_first_order_vis_propogation_time_;
         planning_statistics_["planning_time2_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
         planning_statistics_["planning_time3_total                                    "] = planning_time.count();
 
@@ -3157,6 +3159,7 @@ void BandRRT::shortcutSmoothPolicy(
 {
     Stopwatch function_wide_stopwatch;
 
+    transition_estimator_->resetClassifierTime();
     total_forward_kinematics_time_ = 0.0;
     total_projection_time_ = 0.0;
     total_collision_check_time_ = 0.0;
@@ -3187,10 +3190,11 @@ void BandRRT::shortcutSmoothPolicy(
     smoothing_statistics_["smoothing2_forward_propogation_fk_time                  "] = total_forward_kinematics_time_;
     smoothing_statistics_["smoothing3_forward_propogation_crrt_projection_time     "] = total_projection_time_;
     smoothing_statistics_["smoothing4_forward_propogation_collision_check_time     "] = total_collision_check_time_;
-    smoothing_statistics_["smoothing5_forward_propogation_band_sim_time            "] = total_band_forward_propogation_time_;
-    smoothing_statistics_["smoothing6_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
-    smoothing_statistics_["smoothing7_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
-    smoothing_statistics_["smoothing8_total_time                                   "] = smoothing_time;
+    smoothing_statistics_["smoothing5_forward_propogation_band_sim_time            "] = total_band_forward_propogation_time_ - transition_estimator_->classifierTime();
+    smoothing_statistics_["smoothing6_classifier                                   "] = transition_estimator_->classifierTime();
+    smoothing_statistics_["smoothing7_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
+    smoothing_statistics_["smoothing8_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
+    smoothing_statistics_["smoothing9_total_time                                   "] = smoothing_time;
 }
 
 void BandRRT::shortcutSmoothPath(

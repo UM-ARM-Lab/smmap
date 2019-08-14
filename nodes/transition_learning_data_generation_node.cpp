@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
                 ROSHelpers::GetParam<bool>(*ph, "generate_features", false),
                 ROSHelpers::GetParam<bool>(*ph, "test_classifier", false));
 
-    if (!GetDisableAllVisualizations(*ph))
+    if (!GetDisableSmmapVisualizations(*ph))
     {
         try
         {
