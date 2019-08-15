@@ -147,6 +147,7 @@ TaskFramework::TaskFramework(
     , enable_stuck_detection_(GetEnableStuckDetection(*ph_))
     , max_lookahead_steps_(GetNumLookaheadSteps(*ph_))
     , max_grippers_pose_history_length_(GetMaxGrippersPoseHistoryLength(*ph_))
+    , plan_triggered_once_(false)
     , executing_global_trajectory_(false)
     , num_times_planner_invoked_(0)
     , band_rrt_(nullptr)
@@ -267,6 +268,7 @@ void TaskFramework::execute()
             if (GetRRTNumTrials(*ph_) == 1 && false)
             {
                 ROS_INFO_NAMED("task_framework", "------------------------------- RESETING RESETING -------------------------------------");
+                plan_triggered_once_ = false;
                 robot_->reset();
                 world_feedback = robot_->start();
                 start_time = world_feedback.sim_time_;
@@ -499,7 +501,7 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
     // It is assumed that the robot's internal state matches that that is passed to us, so we do not need to set active dof values
     const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian();
     // Build the constraints for the gippers and other points of interest on the robot - includes the grippers
-    const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data_ = robot_->getPointsOfInterestCollisionData();
+    const std::vector<std::pair<CollisionData, Matrix3Xd>> full_robot_poi_collision_data_ = robot_->getPointsOfInterestCollisionData();
 
     const bool handle_overstretch = true;
     const DeformableController::InputData model_input_data(
@@ -508,7 +510,7 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
                 robot_,
                 robot_dof_to_grippers_poses_jacobian,
                 current_world_state.robot_configuration_valid_,
-                poi_collision_data_,
+                full_robot_poi_collision_data_,
                 robot_->max_gripper_velocity_norm_ * robot_->dt_,
                 robot_->max_dof_velocity_norm_ * robot_->dt_,
                 handle_overstretch);
@@ -588,7 +590,7 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
 
     if (visualize_gripper_motion_)
     {
-        ROS_WARN_THROTTLE_NAMED(1.0, "task_framework", "Asked to visualize grippper motion but this is disabled. Manually enable the type of visualization you want.");
+//        ROS_WARN_THROTTLE_NAMED(1.0, "task_framework", "Asked to visualize grippper motion but this is disabled. Manually enable the type of visualization you want.");
 
 //        for (ssize_t model_ind = 0; model_ind < num_models_; ++model_ind)
 //        {
@@ -597,10 +599,41 @@ WorldState TaskFramework::sendNextCommandUsingLocalController(
 //                                   suggested_robot_commands[(size_t)model_ind].grippers_motion_,
 //                                   model_ind);
 //        }
-//        for (size_t gripper_idx = 0; gripper_idx < all_grippers_single_pose.size(); ++gripper_idx)
-//        {
-//            vis_->visualizeGripper("target_gripper_positions", all_grippers_single_pose[gripper_idx], Visualizer::Yellow(), (int)gripper_idx + 1);
-//        }
+        std::cout << "min dist: " << robot_->min_controller_distance_to_obstacles_ << std::endl;
+        const auto all_grippers_single_pose = kinematics::applyTwist(current_world_state.all_grippers_single_pose_, selected_command.grippers_motion_);
+        for (size_t gripper_idx = 0; gripper_idx < all_grippers_single_pose.size(); ++gripper_idx)
+        {
+            vis_->visualizeGripper("target_gripper_positions", all_grippers_single_pose[gripper_idx], Visualizer::Yellow(), (int)gripper_idx + 1);
+        }
+
+        const auto updated_collision_data = robot_->checkGripperCollision(all_grippers_single_pose);
+        for (size_t idx = 1; idx < current_world_state.gripper_collision_data_.size(); ++idx)
+        {
+            {
+                const auto& data = current_world_state.gripper_collision_data_[idx];
+
+                vis_->visualizeSpheres("collision_poi",
+                                       {data.nearest_point_to_obstacle_},
+                                       Visualizer::Red(0.5),
+                                       static_cast<int32_t>(idx + 1),
+                                       {data.distance_to_obstacle_});
+
+                std::cout << "Start:        " << data.nearest_point_to_obstacle_.transpose() << "    dist: " << data.distance_to_obstacle_ << std::endl;
+            }
+            {
+                const auto& data = updated_collision_data[idx];
+
+                vis_->visualizeSpheres("collision_poi_updated",
+                                       {data.nearest_point_to_obstacle_},
+                                       Visualizer::Yellow(0.5),
+                                       static_cast<int32_t>(idx + 1),
+                                       {data.distance_to_obstacle_});
+
+                std::cout << "After move:   " << data.nearest_point_to_obstacle_.transpose() << "    dist: " << data.distance_to_obstacle_ << std::endl;
+            }
+        }
+        vis_->forcePublishNow();
+        PressAnyKeyToContinue();
 
 //        const size_t num_grippers = world_feedback.all_grippers_single_pose_.size();
 //        for (size_t gripper_idx = 0; gripper_idx < num_grippers; ++gripper_idx)
@@ -946,9 +979,9 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
         desired_object_manipulation_direction.stretching_correction_ = ObjectDeltaAndWeight(world_state_copy.object_configuration_.size());
         desired_object_manipulation_direction.combined_correction_ = desired_object_manipulation_direction.error_correction_;
 
-        // It is assumed that the robot's internal state matches that that is passed to us, so we do not need to set active dof values
+        // It is assumed that the robot's internal state matches what is passed to us, so we do not need to set active dof values
         const MatrixXd robot_dof_to_grippers_poses_jacobian = robot_->getGrippersJacobian();
-        const std::vector<std::pair<CollisionData, Matrix3Xd>> poi_collision_data_ = robot_->getPointsOfInterestCollisionData();
+        const std::vector<std::pair<CollisionData, Matrix3Xd>> full_robot_poi_collision_data_ = robot_->getPointsOfInterestCollisionData();
 
         const double normal_motion_grippers_max_step = robot_->max_gripper_velocity_norm_ * robot_->dt_;
         const double forward_prediction_grippers_max_step = dijkstras_task_->work_space_grid_.minStepDimension() * 1.1;
@@ -963,14 +996,14 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
                     robot_,
                     robot_dof_to_grippers_poses_jacobian,
                     world_state_copy.robot_configuration_valid_,
-                    poi_collision_data_,
+                    full_robot_poi_collision_data_,
                     forward_prediction_grippers_max_step,
                     forward_prediction_robot_dof_max_step,
                     handle_overstretch);
 
         const DeformableController::OutputData robot_command = controller_list_[0]->getGripperMotion(input_data);
 
-        /*
+        /**
            Things to be updated in world_state_copy after "executing" a robot commad
                 ObjectPointSet object_configuration_;
                 AllGrippersSinglePose all_grippers_single_pose_;
@@ -978,8 +1011,7 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
                 bool robot_configuration_valid_;
                 std::vector<CollisionData> gripper_collision_data_;
                 double sim_time_;
-        */
-
+         */
 
         // Move the grippers forward
         world_state_copy.all_grippers_single_pose_
@@ -1044,6 +1076,15 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
 bool TaskFramework::globalPlannerNeededDueToOverstretch(
         const WorldState& current_world_state)
 {
+    static const bool first_iteration_always_requires_plan = ROSHelpers::GetParamRequired<bool>(*ph_, "task/first_control_loop_triggers_plan", __func__).GetImmutable();
+    if (first_iteration_always_requires_plan && !plan_triggered_once_)
+    {
+        ROS_WARN_NAMED("task_framework", "Triggering global planner regardless of local controller on first iteration");
+        plan_triggered_once_ = true;
+        return true;
+    }
+
+
     static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(*ph_);
 
     const bool visualization_enabled = true;

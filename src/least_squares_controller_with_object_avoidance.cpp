@@ -63,13 +63,13 @@ DeformableController::OutputData LeastSquaresControllerWithObjectAvoidance::getG
         const MatrixXd robot_dof_to_deformable_object_jacobian =
                 grippers_poses_to_object_jacobian * robot_dof_to_grippers_poses_jacobian;
 
-        const size_t num_poi = input_data.poi_collision_data_.size();
+        const size_t num_poi = input_data.full_robot_poi_collision_data_.size();
         std::vector<RowVectorXd> linear_constraint_linear_terms(num_poi);
         std::vector<double> linear_constraint_affine_terms(num_poi);
         for (size_t poi_ind = 0; poi_ind < num_poi; ++poi_ind)
         {
-            const CollisionData& collision_data = input_data.poi_collision_data_[poi_ind].first;
-            const MatrixXd& poi_jacobian = input_data.poi_collision_data_[poi_ind].second;
+            const CollisionData& collision_data = input_data.full_robot_poi_collision_data_[poi_ind].first;
+            const MatrixXd& poi_jacobian = input_data.full_robot_poi_collision_data_[poi_ind].second;
             linear_constraint_linear_terms[poi_ind] =
                     -collision_data.obstacle_surface_normal_.transpose() * poi_jacobian;
 

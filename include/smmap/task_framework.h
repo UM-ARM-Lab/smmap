@@ -142,6 +142,7 @@ namespace smmap
             AllGrippersPoseTrajectory grippers_pose_history_;
             std::vector<double> error_history_;
 
+            bool plan_triggered_once_;
             bool executing_global_trajectory_;
             size_t num_times_planner_invoked_;
             std::shared_ptr<BandRRT> band_rrt_;

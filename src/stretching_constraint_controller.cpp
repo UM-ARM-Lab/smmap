@@ -852,14 +852,14 @@ DeformableController::OutputData StretchingConstraintController::solvedByGradien
 
         // Collision constraints
         {
-            const size_t num_poi = input_data.poi_collision_data_.size();
+            const size_t num_poi = input_data.full_robot_poi_collision_data_.size();
 
             linear_constraint_linear_terms.reserve(linear_constraint_linear_terms.size() + num_poi);
             linear_constraint_affine_terms.reserve(linear_constraint_affine_terms.size() + num_poi);
 
             for (size_t poi_ind = 0; poi_ind < num_poi; ++poi_ind)
             {
-                const auto& collision_data = input_data.poi_collision_data_[poi_ind];
+                const auto& collision_data = input_data.full_robot_poi_collision_data_[poi_ind];
 
                 const MatrixXd& poi_jacobian = collision_data.second;
                 linear_constraint_linear_terms.push_back(

@@ -152,11 +152,15 @@ DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint:
             const auto J_collision_g1 = ComputeGripperMotionToPointMotionJacobian(collision_data[1].nearest_point_to_obstacle_, grippers_poses[1]);
             const auto J_distance_g1 = collision_data[0].obstacle_surface_normal_.transpose() * J_collision_g1;
 
+//            std::cout << "J_collision_g1:\n" << J_collision_g1 << std::endl;
+//            std::cout << "J_distance_g1:\n" << J_distance_g1 << std::endl;
+
             RowVectorXd full_constraint_vec_g1(num_grippers * 6);
             full_constraint_vec_g1 << RowVectorXd::Zero(6), (-1.0 * J_distance_g1);
 
             linear_constraint_linear_terms.push_back(full_constraint_vec_g1);
             linear_constraint_affine_terms.push_back(collision_data[1].distance_to_obstacle_ - robot_->min_controller_distance_to_obstacles_);
+//            std::cout << "max movement towards wall: " << linear_constraint_affine_terms.back() << std::endl;
         }
 
         // Stretching constraints
@@ -199,6 +203,8 @@ DeformableController::OutputData LeastSquaresControllerWithStretchingConstraint:
                     linear_constraint_affine_terms);
 
         object_delta_as_vector = grippers_poses_to_object_jacobian * grippers_motion;
+
+//        std::cout << linear_constraint_linear_terms[1] * grippers_motion << "   shall be <=    " << linear_constraint_affine_terms[1] << std::endl;
 
         suggested_robot_motion.grippers_motion_ =
                 EigenVectorXToVectorEigenVector<double, 6>(grippers_motion);

@@ -33,7 +33,7 @@ namespace smmap
                         , robot_(robot)
                         , robot_jacobian_(robot_jacobian)
                         , robot_jacobian_valid_(robot_jacobian_valid)
-                        , poi_collision_data_(poi_collision_data)
+                        , full_robot_poi_collision_data_(poi_collision_data)
                         , max_grippers_step_size_(max_step_size)
                         , max_robot_dof_step_size_(max_robot_dof_step_size)
                         , handle_overstretch_(handle_overstretch)
@@ -44,7 +44,7 @@ namespace smmap
                     const RobotInterface::Ptr robot_;
                     const Eigen::MatrixXd robot_jacobian_;
                     const bool robot_jacobian_valid_;
-                    const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> poi_collision_data_;
+                    const std::vector<std::pair<CollisionData, Eigen::Matrix3Xd>> full_robot_poi_collision_data_;
                     const double max_grippers_step_size_;
                     const double max_robot_dof_step_size_;
                     const bool handle_overstretch_;
