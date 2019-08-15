@@ -952,7 +952,7 @@ void DijkstrasCoverageTask::visualizeFreeSpaceGraph() const
         }
     }
 
-    vis_->visualizeSpheres("free_space_graph_nodes", node_centers, Visualizer::Cyan(), 1, 0.002);
+//    vis_->visualizeSpheres("free_space_graph_nodes", node_centers, Visualizer::Cyan(), 1, 0.002);
     vis_->visualizeLines("free_space_graph_edges", start_points, end_points, Visualizer::Cyan(), 1, 0.0002);
     vis_->forcePublishNow(0.2);
 }
