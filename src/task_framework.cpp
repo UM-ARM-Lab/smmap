@@ -264,7 +264,7 @@ void TaskFramework::execute()
 
             // If rrt/num_trials is larger than 1, then all the seeds are reset in planGlobalGripperTrajectory,
             // so reseting and running another full system trial makes no sense
-            if (GetRRTNumTrials(*ph_) == 1)
+            if (GetRRTNumTrials(*ph_) == 1 && false)
             {
                 ROS_INFO_NAMED("task_framework", "------------------------------- RESETING RESETING -------------------------------------");
                 robot_->reset();
