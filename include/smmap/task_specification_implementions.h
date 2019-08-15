@@ -80,6 +80,28 @@ namespace smmap
             const Grid4Neighbours neighbours_;
     };
 
+    /**
+     * @brief The RopeDistanceBasedCorrespondences class. Uses the Dijkstra's
+     * field to determine distances and directions to manipulate objects.
+     * Correspondences are determined based on a dynamic "what's nearest right
+     * now basis.
+     */
+    class RopeDistanceBasedCorrespondences : public DistanceBasedCorrespondencesTask
+    {
+        public:
+            RopeDistanceBasedCorrespondences(
+                    std::shared_ptr<ros::NodeHandle> nh,
+                    std::shared_ptr<ros::NodeHandle> ph,
+                    Visualizer::Ptr vis);
+
+        private:
+            virtual std::vector<ssize_t> getNodeNeighbours_impl(const ssize_t node) const override final;
+
+            virtual bool taskDone_impl(
+                    const WorldState& world_state) override final;
+
+            const LineNeighbours neighbours_;
+    };
 
     /**
      * @brief The ClothDistanceBasedCorrespondences class. Uses the Dijkstra's

@@ -786,8 +786,8 @@ namespace smmap
 
     void TransitionTesting::generateTestData()
     {
-        gripper_a_starting_pose_ = GetPoseFromParamSerer(*ph_, "gripper_a_test_start", true);
-        gripper_b_starting_pose_ = GetPoseFromParamSerer(*ph_, "gripper_b_test_start", true);
+        gripper_a_starting_pose_ = GetPoseFromParamServer(*ph_, "gripper_a_test_start", true);
+        gripper_b_starting_pose_ = GetPoseFromParamServer(*ph_, "gripper_b_test_start", true);
         gripper_a_action_vector_ = GetVector3FromParamServer(*ph_, "gripper_a_action_vector");
         gripper_b_action_vector_ = GetVector3FromParamServer(*ph_, "gripper_b_action_vector");
         experiment_center_of_rotation_ = Isometry3d(Translation3d(GetVector3FromParamServer(*ph_, "experiment_cor")));

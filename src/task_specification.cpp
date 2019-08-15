@@ -60,6 +60,16 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::CLOTH_TABLE_COVERAGE:
             return std::make_shared<ClothDirectCoverage>(nh, ph, vis);
 
+        case TaskType::ROPE_GENERIC_DIJKSTRAS_COVERAGE:
+            return std::make_shared<RopeDistanceBasedCorrespondences>(nh, ph, vis);
+
+        case TaskType::ROPE_MAZE:
+        case TaskType::ROPE_ZIG_MATCH:
+        case TaskType::ROPE_HOOKS:
+        case TaskType::ROPE_HOOKS_DATA_GENERATION:
+        case TaskType::ROPE_GENERIC_FIXED_COVERAGE:
+            return std::make_shared<RopeFixedCorrespondences>(nh, ph, vis);
+
         case TaskType::CLOTH_PLACEMAT:
         case TaskType::CLOTH_MFLAG:
         case TaskType::CLOTH_CYLINDER_COVERAGE:
@@ -67,13 +77,11 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::CLOTH_WALL:
         case TaskType::CLOTH_SINGLE_POLE:
         case TaskType::CLOTH_DOUBLE_SLIT:
+        case TaskType::CLOTH_GENERIC_DIJKSTRAS_COVERAGE:
             return std::make_shared<ClothDistanceBasedCorrespondences>(nh, ph, vis);
 
-        case TaskType::ROPE_MAZE:
-        case TaskType::ROPE_ZIG_MATCH:
-        case TaskType::ROPE_HOOKS:
-        case TaskType::ROPE_HOOKS_DATA_GENERATION:
-            return std::make_shared<RopeFixedCorrespondences>(nh, ph, vis);
+        case TaskType::CLOTH_GENERIC_FIXED_COVERAGE:
+            return std::make_shared<ClothFixedCorrespondences>(nh, ph, vis);
 
         default:
             throw_arc_exception(std::invalid_argument, "Invalid task type in MakeTaskSpecification(), this should not be possible");

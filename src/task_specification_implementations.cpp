@@ -159,6 +159,30 @@ bool ClothDirectCoverage::taskDone_impl(
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Rope - Distance Based Correspondences - Using Dijkstras
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+RopeDistanceBasedCorrespondences::RopeDistanceBasedCorrespondences(
+        std::shared_ptr<ros::NodeHandle> nh,
+        std::shared_ptr<ros::NodeHandle> ph,
+        Visualizer::Ptr vis)
+    : DistanceBasedCorrespondencesTask(nh, ph, vis)
+    , neighbours_(num_nodes_)
+{}
+
+std::vector<ssize_t> RopeDistanceBasedCorrespondences::getNodeNeighbours_impl(const ssize_t node) const
+{
+    return neighbours_.getNodeNeighbours(node);
+}
+
+bool RopeDistanceBasedCorrespondences::taskDone_impl(
+        const WorldState& world_state)
+{
+    return calculateError(world_state) < error_threshold_task_done_;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cloth - Distance Based Correspondences - Using Dijkstras
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
