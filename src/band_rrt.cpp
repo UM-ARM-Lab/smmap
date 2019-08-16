@@ -928,7 +928,7 @@ RRTPolicy BandRRT::plan(
         planning_statistics_["planning_time2_1_forward_propogation_fk                 "] = total_forward_kinematics_time_;
         planning_statistics_["planning_time2_2_forward_propogation_projection         "] = total_projection_time_;
         planning_statistics_["planning_time2_3_forward_propogation_collision_check    "] = total_collision_check_time_;
-        planning_statistics_["planning_time2_4_forward_propogation_forward_propagation"] = total_band_forward_propogation_time_ - transition_estimator_->classifierTime();
+        planning_statistics_["planning_time2_4_forward_propogation_band               "] = total_band_forward_propogation_time_ - transition_estimator_->classifierTime();
         planning_statistics_["planning_time2_5_classifier                             "] = transition_estimator_->classifierTime();
         planning_statistics_["planning_time2_6_forward_propogation_first_order_vis    "] = total_first_order_vis_propogation_time_;
         planning_statistics_["planning_time2_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
@@ -1739,6 +1739,7 @@ void BandRRT::planningMainLoop()
         ROS_INFO_NAMED("rrt", "Goal found with probability 1.0 before the main loop started");
     }
 
+    size_t main_loop_itr = 0;
     while (!path_found && time_ellapsed < time_limit_)
     {
         ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Starting forward iteration. Tree size: " << forward_tree_.size());
@@ -1789,6 +1790,72 @@ void BandRRT::planningMainLoop()
 
         time_ellapsed = std::chrono::steady_clock::now() - start_time_;
         ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Ending forward iteration. Tree size: " << forward_tree_.size());
+
+        ++main_loop_itr;
+        if (main_loop_itr % 10000 == 0)
+        {
+            const std::chrono::time_point<std::chrono::steady_clock> end_time = std::chrono::steady_clock::now();
+            const std::chrono::duration<double> planning_time(end_time - start_time_);
+
+            planning_statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
+            planning_statistics_["planning_time1_1_nearest_neighbour_index_building       "] = total_nearest_neighbour_index_building_time_;
+            planning_statistics_["planning_time1_2_nearest_neighbour_index_searching      "] = total_nearest_neighbour_index_searching_time_;
+            planning_statistics_["planning_time1_3_nearest_neighbour_linear_searching     "] = total_nearest_neighbour_linear_searching_time_;
+            planning_statistics_["planning_time1_4_nearest_neighbour_radius_searching     "] = total_nearest_neighbour_radius_searching_time_;
+            planning_statistics_["planning_time1_5_nearest_neighbour_best_searching       "] = total_nearest_neighbour_best_searching_time_;
+            planning_statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
+            planning_statistics_["planning_time2_1_forward_propogation_fk                 "] = total_forward_kinematics_time_;
+            planning_statistics_["planning_time2_2_forward_propogation_projection         "] = total_projection_time_;
+            planning_statistics_["planning_time2_3_forward_propogation_collision_check    "] = total_collision_check_time_;
+            planning_statistics_["planning_time2_4_forward_propogation_band               "] = total_band_forward_propogation_time_ - transition_estimator_->classifierTime();
+            planning_statistics_["planning_time2_5_classifier                             "] = transition_estimator_->classifierTime();
+            planning_statistics_["planning_time2_6_forward_propogation_first_order_vis    "] = total_first_order_vis_propogation_time_;
+            planning_statistics_["planning_time2_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
+            planning_statistics_["planning_time3_total                                    "] = planning_time.count();
+
+            planning_statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless_;
+            planning_statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful_;
+            planning_statistics_["planning_size02_forward_states                          "] = (double)forward_tree_.size();
+
+            planning_statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless_;
+            planning_statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful_;
+            planning_statistics_["planning_size05_backward_states                         "] = (double)grippers_goal_set_.size();
+
+            planning_statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless_;
+            planning_statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful_;
+            planning_statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made_;
+
+    //        planning_statistics_["planning_size09_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless_;
+    //        planning_statistics_["planning_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
+    //        planning_statistics_["planning_size11_backward_connections_made               "] = (double)backward_connections_made_;
+
+            ROS_INFO_STREAM_NAMED("rrt", "Planning Statistics @ Main Loop Itr: " << main_loop_itr << "\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl);
+
+            if (true)
+            {
+                const bool draw_band = true;
+                visualizeTree(
+                            forward_tree_,
+                            forward_tree_next_visualized_node_,
+                            RRT_FORWARD_TREE_GRIPPER_A_NS,
+                            RRT_FORWARD_TREE_GRIPPER_B_NS,
+                            RRT_TREE_BAND_NS,
+                            tree_marker_id_,
+                            tree_marker_id_,
+                            1,
+                            gripper_a_forward_tree_color_,
+                            gripper_b_forward_tree_color_,
+                            band_tree_color_,
+                            draw_band);
+                ++tree_marker_id_;
+                if (tree_marker_id_ % 10 == 0)
+                {
+                    vis_->forcePublishNow(0.02);
+                    vis_->purgeMarkerList();
+                }
+                forward_tree_next_visualized_node_ = forward_tree_.size();
+            }
+        }
     }
 }
 
