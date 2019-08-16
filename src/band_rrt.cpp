@@ -1797,41 +1797,43 @@ void BandRRT::planningMainLoop()
             const std::chrono::time_point<std::chrono::steady_clock> end_time = std::chrono::steady_clock::now();
             const std::chrono::duration<double> planning_time(end_time - start_time_);
 
-            planning_statistics_["planning_time0_sampling                                 "] = total_sampling_time_;
-            planning_statistics_["planning_time1_1_nearest_neighbour_index_building       "] = total_nearest_neighbour_index_building_time_;
-            planning_statistics_["planning_time1_2_nearest_neighbour_index_searching      "] = total_nearest_neighbour_index_searching_time_;
-            planning_statistics_["planning_time1_3_nearest_neighbour_linear_searching     "] = total_nearest_neighbour_linear_searching_time_;
-            planning_statistics_["planning_time1_4_nearest_neighbour_radius_searching     "] = total_nearest_neighbour_radius_searching_time_;
-            planning_statistics_["planning_time1_5_nearest_neighbour_best_searching       "] = total_nearest_neighbour_best_searching_time_;
-            planning_statistics_["planning_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
-            planning_statistics_["planning_time2_1_forward_propogation_fk                 "] = total_forward_kinematics_time_;
-            planning_statistics_["planning_time2_2_forward_propogation_projection         "] = total_projection_time_;
-            planning_statistics_["planning_time2_3_forward_propogation_collision_check    "] = total_collision_check_time_;
-            planning_statistics_["planning_time2_4_forward_propogation_band               "] = total_band_forward_propogation_time_ - transition_estimator_->classifierTime();
-            planning_statistics_["planning_time2_5_classifier                             "] = transition_estimator_->classifierTime();
-            planning_statistics_["planning_time2_6_forward_propogation_first_order_vis    "] = total_first_order_vis_propogation_time_;
-            planning_statistics_["planning_time2_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
-            planning_statistics_["planning_time3_total                                    "] = planning_time.count();
+            std::map<std::string, double> partial_stats;
 
-            planning_statistics_["planning_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless_;
-            planning_statistics_["planning_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful_;
-            planning_statistics_["planning_size02_forward_states                          "] = (double)forward_tree_.size();
+            partial_stats["planning_partial_time0_sampling                                 "] = total_sampling_time_;
+            partial_stats["planning_partial_time1_1_nearest_neighbour_index_building       "] = total_nearest_neighbour_index_building_time_;
+            partial_stats["planning_partial_time1_2_nearest_neighbour_index_searching      "] = total_nearest_neighbour_index_searching_time_;
+            partial_stats["planning_partial_time1_3_nearest_neighbour_linear_searching     "] = total_nearest_neighbour_linear_searching_time_;
+            partial_stats["planning_partial_time1_4_nearest_neighbour_radius_searching     "] = total_nearest_neighbour_radius_searching_time_;
+            partial_stats["planning_partial_time1_5_nearest_neighbour_best_searching       "] = total_nearest_neighbour_best_searching_time_;
+            partial_stats["planning_partial_time1_nearest_neighbour                        "] = total_nearest_neighbour_time_;
+            partial_stats["planning_partial_time2_1_forward_propogation_fk                 "] = total_forward_kinematics_time_;
+            partial_stats["planning_partial_time2_2_forward_propogation_projection         "] = total_projection_time_;
+            partial_stats["planning_partial_time2_3_forward_propogation_collision_check    "] = total_collision_check_time_;
+            partial_stats["planning_partial_time2_4_forward_propogation_band               "] = total_band_forward_propogation_time_ - transition_estimator_->classifierTime();
+            partial_stats["planning_partial_time2_5_classifier                             "] = transition_estimator_->classifierTime();
+            partial_stats["planning_partial_time2_6_forward_propogation_first_order_vis    "] = total_first_order_vis_propogation_time_;
+            partial_stats["planning_partial_time2_forward_propogation_everything_included  "] = total_everything_included_forward_propogation_time_;
+            partial_stats["planning_partial_time3_total                                    "] = planning_time.count();
 
-            planning_statistics_["planning_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless_;
-            planning_statistics_["planning_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful_;
-            planning_statistics_["planning_size05_backward_states                         "] = (double)grippers_goal_set_.size();
+            partial_stats["planning_partial_size00_forward_random_samples_useless          "] = (double)forward_random_samples_useless_;
+            partial_stats["planning_partial_size01_forward_random_samples_useful           "] = (double)forward_random_samples_useful_;
+            partial_stats["planning_partial_size02_forward_states                          "] = (double)forward_tree_.size();
 
-            planning_statistics_["planning_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless_;
-            planning_statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful_;
-            planning_statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made_;
+            partial_stats["planning_partial_size03_backward_random_samples_useless         "] = (double)backward_random_samples_useless_;
+            partial_stats["planning_partial_size04_backward_random_samples_useful          "] = (double)backward_random_samples_useful_;
+            partial_stats["planning_partial_size05_backward_states                         "] = (double)grippers_goal_set_.size();
 
-    //        planning_statistics_["planning_size09_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless_;
-    //        planning_statistics_["planning_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
-    //        planning_statistics_["planning_size11_backward_connections_made               "] = (double)backward_connections_made_;
+            partial_stats["planning_partial_size06_forward_connection_attempts_useless     "] = (double)forward_connection_attempts_useless_;
+            partial_stats["planning_partial_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful_;
+            partial_stats["planning_partial_size08_forward_connections_made                "] = (double)forward_connections_made_;
 
-            ROS_INFO_STREAM_NAMED("rrt", "Planning Statistics @ Main Loop Itr: " << main_loop_itr << "\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl);
+    //        partial_stats["planning_partial_size09_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless_;
+    //        partial_stats["planning_partial_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
+    //        partial_stats["planning_partial_size11_backward_connections_made               "] = (double)backward_connections_made_;
 
-            if (true)
+            ROS_INFO_STREAM_NAMED("rrt", "Planning Statistics @ Main Loop Itr: " << main_loop_itr << "\n" << PrettyPrint::PrettyPrint(partial_stats, false, "\n") << std::endl);
+
+            if (forward_tree_next_visualized_node_ < forward_tree_.size())
             {
                 const bool draw_band = true;
                 visualizeTree(
