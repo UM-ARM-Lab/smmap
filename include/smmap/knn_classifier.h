@@ -3,6 +3,7 @@
 
 #include "smmap/classifier.h"
 #include <flann/flann.hpp>
+#include <mutex>
 
 namespace smmap
 {
@@ -15,9 +16,12 @@ namespace smmap
     private:
         virtual double predict_impl(const Eigen::VectorXd& vec) const override final;
 
-        std::vector<double> nn_raw_data_;
-        std::vector<double> labels_;
-        flann::KDTreeSingleIndex<flann::L2<double>> nn_index_;
+        // https://www.modernescpp.com/index.php/thread-safe-initialization-of-data
+        static void Initialize(kNNClassifier* knn);
+        static std::once_flag init_instance_flag_;
+        static std::vector<double> nn_raw_data_;
+        static std::vector<double> labels_;
+        static flann::KDTreeSingleIndex<flann::L2<double>> nn_index_;
     };
 }
 

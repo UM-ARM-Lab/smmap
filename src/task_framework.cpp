@@ -226,7 +226,7 @@ void TaskFramework::execute()
 
         // Initialize the MDP transition learner
         transition_estimator_ = std::make_shared<TransitionEstimation>(
-                    nh_, ph_, dijkstras_task_->sdf_, dijkstras_task_->work_space_grid_, vis_, *rubber_band_);
+                    nh_, ph_, generator_, dijkstras_task_->sdf_, dijkstras_task_->work_space_grid_, vis_, *rubber_band_);
         // Initialize the BandRRT structure
         initializeBandRRT(world_feedback.robot_configuration_valid_);
     }

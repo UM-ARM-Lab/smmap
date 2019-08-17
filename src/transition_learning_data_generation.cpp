@@ -458,7 +458,7 @@ namespace smmap
     {
         initializeBand(world_state);
         transition_estimator_ = std::make_shared<TransitionEstimation>(
-                    nh_, ph_, sdf_, work_space_grid_, vis_, *initial_band_);
+                    nh_, ph_, generator_, sdf_, work_space_grid_, vis_, *initial_band_);
         initializeRRTParams();
     }
 
@@ -1040,6 +1040,9 @@ namespace smmap
         BandRRT::WorldParams world_params = *world_params_;
         world_params.generator_ = std::make_shared<std::mt19937_64>(*world_params_->generator_);
         world_params.generator_->discard(num_discards);
+        world_params.transition_estimator_ =
+                std::make_shared<TransitionEstimation>(
+                    nh_, ph_, world_params.generator_, sdf_, work_space_grid_, vis_, *initial_band_);
 
         // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
         auto band_rrt = BandRRT(nh_,

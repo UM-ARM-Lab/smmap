@@ -490,6 +490,7 @@ bool TransitionEstimation::TransitionAdaptationResult::operator!=(const Transiti
 TransitionEstimation::TransitionEstimation(
         std::shared_ptr<ros::NodeHandle> nh,
         std::shared_ptr<ros::NodeHandle> ph,
+        std::shared_ptr<std::mt19937_64> generator,
         const sdf_tools::SignedDistanceField::ConstPtr& sdf,
         const XYZGrid work_space_grid,
         const Visualizer::Ptr& vis,
@@ -510,6 +511,10 @@ TransitionEstimation::TransitionEstimation(
     , classifier_time_(0.0)
     , classifier_scaler_(nh_, ph_)
     , transition_mistake_classifier_(Classifier::MakeClassifier(nh_, ph_))
+    , accept_scale_factor_(ROSHelpers::GetParamRequired<double>(*ph_, "classifier/accept_scale_factor", __func__).GetImmutable())
+    , accept_mistake_rate_(std::exp(-accept_scale_factor_ * transition_mistake_classifier_->accuracy_))
+    , accept_transition_distribution_(0.0, 1.0)
+    , generator_(generator)
 
     , template_band_(template_band)
 {
@@ -980,9 +985,9 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
         DUMMY_ITEM
     };
 
-    assert(transition_mistake_classifier_->numFeatures() == 4 ||
-           transition_mistake_classifier_->numFeatures() == 13);
-    Eigen::VectorXd features(transition_mistake_classifier_->numFeatures());
+    assert(transition_mistake_classifier_->num_features_ == 4 ||
+           transition_mistake_classifier_->num_features_ == 13);
+    Eigen::VectorXd features(transition_mistake_classifier_->num_features_);
 
     const auto grippers_pre = initial_band.getEndpoints();
     const auto grippers_post = default_prediction.getEndpoints();
@@ -994,7 +999,7 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
     features[STARTING_BAND_LENGTH]          = band_length_pre;
     features[ENDING_DEFAULT_BAND_LENGTH]    = default_band_length_post;
 
-    if (transition_mistake_classifier_->numFeatures() == 13)
+    if (transition_mistake_classifier_->num_features_ == 13)
     {
         const double dmax = initial_band.maxSafeLength();
         const double resolution = work_space_grid_.minStepDimension() / 2.0;
@@ -1127,11 +1132,23 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
             {
                 transitions.push_back({default_next_band, default_propogation_confidence_});
             }
-    //        else
-    //        {
+            else
+            {
     //            std::cout << "\nFeatures: " << transitionFeatures(test_band_start, *default_next_band, true).transpose() << std::endl;
     //            PressAnyKeyToContinue("Classifier reports bad transition");
-    //        }
+
+                // Label some (small) percentage of predicted mistakes as non-mistakes;
+                double const p = accept_transition_distribution_(*generator_);
+                if (p < accept_mistake_rate_)
+                {
+                    ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Ignored classifier predicting mistake");
+                    transitions.push_back({default_next_band, default_propogation_confidence_});
+                }
+                else
+                {
+                    ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Stopped due to band mistake predicted");
+                }
+            }
 
     //        if (predicted_mistake != nn_prediction.first)
     //        {

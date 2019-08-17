@@ -5,20 +5,30 @@
 
 using namespace smmap;
 
+std::once_flag kNNClassifier::init_instance_flag_;
+std::vector<double> kNNClassifier::nn_raw_data_;
+std::vector<double> kNNClassifier::labels_;
+flann::KDTreeSingleIndex<flann::L2<double>> kNNClassifier::nn_index_;
+
 inline std::string getModelFilename(ros::NodeHandle& nh)
 {
     return ROSHelpers::GetParamRequired<std::string>(nh, "knn/data_file", __func__).GetImmutable();
 }
 
 kNNClassifier::kNNClassifier(std::shared_ptr<ros::NodeHandle> nh,
-                           std::shared_ptr<ros::NodeHandle> ph)
+                             std::shared_ptr<ros::NodeHandle> ph)
     : Classifier(nh, ph, "kNN")
 {
-    auto const filename = getModelFilename(*ph_);
+    std::call_once(init_instance_flag_, kNNClassifier::Initialize, this);
+}
+
+void kNNClassifier::Initialize(kNNClassifier* knn)
+{
+    auto const filename = getModelFilename(*knn->ph_);
     auto file = std::ifstream(filename);
 
     auto const expected_line_count = 965110;
-    nn_raw_data_.reserve(num_features_ * expected_line_count);
+    nn_raw_data_.reserve(knn->num_features_ * expected_line_count);
     labels_.reserve(expected_line_count);
 
     std::string line;
@@ -31,7 +41,7 @@ kNNClassifier::kNNClassifier(std::shared_ptr<ros::NodeHandle> nh,
         double label;
         iss >> label;
         labels_.push_back(label);
-        for (int i = 0; i < num_features_; ++i)
+        for (int i = 0; i < knn->num_features_; ++i)
         {
             double val;
             iss >> val;
@@ -39,7 +49,7 @@ kNNClassifier::kNNClassifier(std::shared_ptr<ros::NodeHandle> nh,
         }
     }
 
-    flann::Matrix<double> data(nn_raw_data_.data(), labels_.size(), num_features_);
+    flann::Matrix<double> data(nn_raw_data_.data(), labels_.size(), knn->num_features_);
     nn_index_.buildIndex(data);
 }
 

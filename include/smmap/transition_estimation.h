@@ -92,6 +92,7 @@ namespace smmap
         TransitionEstimation(
                 std::shared_ptr<ros::NodeHandle> nh,
                 std::shared_ptr<ros::NodeHandle> ph,
+                std::shared_ptr<std::mt19937_64> generator,
                 const sdf_tools::SignedDistanceField::ConstPtr& sdf,
                 const XYZGrid work_space_grid,
                 const Visualizer::Ptr& vis,
@@ -263,6 +264,10 @@ namespace smmap
         double classifier_time_;
         MinMaxTransformer classifier_scaler_;
         Classifier::Ptr transition_mistake_classifier_;
+        double const accept_scale_factor_;
+        double const accept_mistake_rate_;
+        std::uniform_real_distribution<double> accept_transition_distribution_;
+        std::shared_ptr<std::mt19937_64> generator_;
 
         ////////////////////////////////////////////////////////////////////////
         // Saving and loading learned transitions
