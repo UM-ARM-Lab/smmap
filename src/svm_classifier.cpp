@@ -4,24 +4,27 @@
 
 using namespace smmap;
 
-inline std::string getModelFilename(ros::NodeHandle& nh)
-{
-    return ROSHelpers::GetParamRequired<std::string>(nh, "svm/model_file", __func__).GetImmutable();
-}
+std::once_flag SVMClassifier::init_instance_flag_;
+svm_model* SVMClassifier::model_;
 
 SVMClassifier::SVMClassifier(std::shared_ptr<ros::NodeHandle> nh,
                              std::shared_ptr<ros::NodeHandle> ph)
     : Classifier(nh, ph, "svm")
-    , model_(svm_load_model(getModelFilename(*ph_).c_str()))
 {
+    std::call_once(init_instance_flag_, SVMClassifier::Initialize, this);
+}
+
+void SVMClassifier::Initialize(SVMClassifier *svm)
+{
+    const auto filename = ROSHelpers::GetParamRequired<std::string>(*svm->ph_, "svm/model_file", __func__).GetImmutable();
+    model_ = svm_load_model(filename.c_str());
     assert(model_->nr_class = 2);
     assert(model_->l >= 1);
     assert(model_->nSV != nullptr);
     assert(model_->SV != nullptr);
-    assert(num_features_ == model_->SV[0].dim - 1);
-    assert(num_features_ > 0);
+    assert(svm->num_features_ > 0);
+    assert(svm->num_features_ == model_->SV[0].dim - 1);
 }
-
 
 SVMClassifier::~SVMClassifier()
 {

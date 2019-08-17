@@ -3,6 +3,7 @@
 
 #include "smmap/classifier.h"
 #include <svm/svm.h>
+#include <mutex>
 
 namespace smmap
 {
@@ -17,7 +18,9 @@ namespace smmap
     private:
         virtual double predict_impl(Eigen::VectorXd const& vec) const override final;
 
-        svm_model* model_;
+        static void Initialize(SVMClassifier* svm);
+        static std::once_flag init_instance_flag_;
+        static svm_model* model_;
     };
 }
 
