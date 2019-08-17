@@ -26,7 +26,7 @@ void SVMClassifier::Initialize(SVMClassifier *svm)
     assert(svm->num_features_ == model_->SV[0].dim - 1);
 }
 
-SVMClassifier::~SVMClassifier()
+void SVMClassifier::Deinitialize()
 {
     svm_free_and_destroy_model(&model_);
 }

@@ -13,12 +13,11 @@ namespace smmap
         SVMClassifier(std::shared_ptr<ros::NodeHandle> nh,
                       std::shared_ptr<ros::NodeHandle> ph);
 
-        ~SVMClassifier();
-
     private:
         virtual double predict_impl(Eigen::VectorXd const& vec) const override final;
 
         static void Initialize(SVMClassifier* svm);
+        static void Deinitialize();
         static std::once_flag init_instance_flag_;
         static svm_model* model_;
     };
