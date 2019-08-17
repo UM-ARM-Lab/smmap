@@ -946,16 +946,16 @@ RRTPolicy BandRRT::plan(
         planning_statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful_;
         planning_statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made_;
 
-        planning_statistics_["planning_size09_classifier_num_band_wierdness           "] = (double)transition_estimator_->numBandWeirdness();
-        planning_statistics_["planning_size09_classifier_num_band_safe                "] = (double)transition_estimator_->numBandSafe();
-        planning_statistics_["planning_size09_classifier_num_band_overstretch         "] = (double)transition_estimator_->numBandOverstretch();
-        planning_statistics_["planning_size09_classifier_num_band_no_mistake          "] = (double)transition_estimator_->numNoMistakes();
-        planning_statistics_["planning_size09_classifier_num_band_mistakes            "] = (double)transition_estimator_->numMistakes();
-        planning_statistics_["planning_size09_classifier_num_band_accepted_mistakes   "] = (double)transition_estimator_->numAcceptedMistakes();
+        planning_statistics_["planning_classifier_num0_band_wierdness                 "] = (double)transition_estimator_->numBandWeirdness();
+        planning_statistics_["planning_classifier_num1_band_safe                      "] = (double)transition_estimator_->numBandSafe();
+        planning_statistics_["planning_classifier_num2_band_overstretch               "] = (double)transition_estimator_->numBandOverstretch();
+        planning_statistics_["planning_classifier_num3_band_no_mistake                "] = (double)transition_estimator_->numNoMistakes();
+        planning_statistics_["planning_classifier_num4_band_mistakes                  "] = (double)transition_estimator_->numMistakes();
+        planning_statistics_["planning_classifier_num5_band_accepted_mistakes         "] = (double)transition_estimator_->numAcceptedMistakes();
 
-//        planning_statistics_["planning_size10_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless_;
-//        planning_statistics_["planning_size11_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
-//        planning_statistics_["planning_size12_backward_connections_made               "] = (double)backward_connections_made_;
+//        planning_statistics_["planning_size09_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless_;
+//        planning_statistics_["planning_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
+//        planning_statistics_["planning_size11_backward_connections_made               "] = (double)backward_connections_made_;
 
         ROS_INFO_STREAM_NAMED("rrt", "RRT Helper Planning Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl);
 //        storeTree(forward_tree_);
@@ -1834,16 +1834,16 @@ void BandRRT::planningMainLoop()
             partial_stats["planning_partial_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful_;
             partial_stats["planning_partial_size08_forward_connections_made                "] = (double)forward_connections_made_;
 
-            partial_stats["planning_partial_size09_classifier_num_band_wierdness           "] = (double)transition_estimator_->numBandWeirdness();
-            partial_stats["planning_partial_size09_classifier_num_band_safe                "] = (double)transition_estimator_->numBandSafe();
-            partial_stats["planning_partial_size09_classifier_num_band_overstretch         "] = (double)transition_estimator_->numBandOverstretch();
-            partial_stats["planning_partial_size09_classifier_num_band_no_mistake          "] = (double)transition_estimator_->numNoMistakes();
-            partial_stats["planning_partial_size09_classifier_num_band_mistakes            "] = (double)transition_estimator_->numMistakes();
-            partial_stats["planning_partial_size09_classifier_num_band_accepted_mistakes   "] = (double)transition_estimator_->numAcceptedMistakes();
+            partial_stats["planning_partial_classifier_num0_band_wierdness                 "] = (double)transition_estimator_->numBandWeirdness();
+            partial_stats["planning_partial_classifier_num1_band_safe                      "] = (double)transition_estimator_->numBandSafe();
+            partial_stats["planning_partial_classifier_num2_band_overstretch               "] = (double)transition_estimator_->numBandOverstretch();
+            partial_stats["planning_partial_classifier_num3_band_no_mistake                "] = (double)transition_estimator_->numNoMistakes();
+            partial_stats["planning_partial_classifier_num4_band_mistakes                  "] = (double)transition_estimator_->numMistakes();
+            partial_stats["planning_partial_classifier_num5_band_accepted_mistakes         "] = (double)transition_estimator_->numAcceptedMistakes();
 
-    //        partial_stats["planning_partial_size10_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless_;
-    //        partial_stats["planning_partial_size11_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
-    //        partial_stats["planning_partial_size12_backward_connections_made               "] = (double)backward_connections_made_;
+    //        partial_stats["planning_partial_size09_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless_;
+    //        partial_stats["planning_partial_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
+    //        partial_stats["planning_partial_size11_backward_connections_made               "] = (double)backward_connections_made_;
 
             ROS_INFO_STREAM_NAMED("rrt", "Planning Statistics @ Main Loop Itr: " << main_loop_itr << "\n" << PrettyPrint::PrettyPrint(partial_stats, false, "\n") << std::endl);
 
@@ -2411,7 +2411,8 @@ void BandRRT::rebuildNNIndex(
 
 size_t BandRRT::connectForwardTree(const int64_t forward_tree_start_idx, const RRTNode& target, const bool is_random)
 {
-    const bool fwd_prop_local_visualization_enabled = true;
+    constexpr bool allow_mistakes = true;
+    constexpr bool fwd_prop_local_visualization_enabled = true;
 
     // Forward propagate towards the sampled target
     const size_t num_random_nodes_created =
@@ -2419,6 +2420,7 @@ size_t BandRRT::connectForwardTree(const int64_t forward_tree_start_idx, const R
                 forward_tree_,
                 forward_tree_start_idx,
                 target,
+                allow_mistakes,
                 fwd_prop_local_visualization_enabled);
 
     ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt", "Nodes created: " << num_random_nodes_created << " Tree size: " << forward_tree_.size());
@@ -2461,8 +2463,9 @@ size_t BandRRT::connectForwardTree(const int64_t forward_tree_start_idx, const R
 
 size_t BandRRT::connectTreeToGrippersGoalSet(const int64_t last_node_idx_in_forward_tree_branch)
 {
-    const bool nn_forward_tree = false;
-    const bool fwd_prop_local_visualization_enabled = true;
+    constexpr bool nn_forward_tree = false;
+    constexpr bool allow_mistakes = true;
+    constexpr bool fwd_prop_local_visualization_enabled = true;
 
     const int64_t backward_tree_nearest_neighbour_idx = nearestNeighbour(
                 nn_forward_tree, forward_tree_[last_node_idx_in_forward_tree_branch]);
@@ -2473,6 +2476,7 @@ size_t BandRRT::connectTreeToGrippersGoalSet(const int64_t last_node_idx_in_forw
                 forward_tree_,
                 last_node_idx_in_forward_tree_branch,
                 target_in_backward_tree,
+                allow_mistakes,
                 fwd_prop_local_visualization_enabled);
 
     // Record statistics for the goal biased extension
@@ -2492,6 +2496,7 @@ size_t BandRRT::forwardPropogationFunction(
         RRTTree& tree_to_extend,
         const int64_t& nearest_neighbor_idx,
         const RRTNode& target,
+        const bool allow_mistakes,
         const bool visualization_enabled_locally)
 {
     arc_helpers::DoNotOptimize(target.parentIndex());
@@ -2673,7 +2678,7 @@ size_t BandRRT::forwardPropogationFunction(
         }
 
         // Generate next possible bands (no clustering)
-        const auto next_bands = forwardPropogateBand(prev_band, next_grippers_poses);
+        const auto next_bands = forwardPropogateBand(prev_band, next_grippers_poses, allow_mistakes);
         if (next_bands.size() == 0)
         {
             break;
@@ -2821,13 +2826,14 @@ size_t BandRRT::forwardPropogationFunction(
 
 std::vector<std::pair<RubberBand::Ptr, double>> BandRRT::forwardPropogateBand(
         const RubberBand::ConstPtr& starting_band,
-        const RRTGrippersRepresentation& next_grippers_poses)
+        const RRTGrippersRepresentation& next_grippers_poses,
+        const bool allow_mistakes)
 {
     Stopwatch stopwatch;
     arc_helpers::DoNotOptimize(next_grippers_poses);
 
     const PairGripperPositions test_gripper_positions = ToGripperPositions(next_grippers_poses);
-    const auto transitions = transition_estimator_->estimateTransitions(*starting_band, test_gripper_positions);
+    const auto transitions = transition_estimator_->estimateTransitions(*starting_band, test_gripper_positions, allow_mistakes);
     ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.prop", transitions.size() << " transitions possible");
     if (SMMAP_RRT_VERBOSE)
     {
@@ -3279,12 +3285,12 @@ void BandRRT::shortcutSmoothPolicy(
     smoothing_statistics_["smoothing8_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
     smoothing_statistics_["smoothing9_total_time                                   "] = smoothing_time;
 
-    smoothing_statistics_["smoothing_size01_classifier_num_band_wierdness          "] = (double)transition_estimator_->numBandWeirdness();
-    smoothing_statistics_["smoothing_size01_classifier_num_band_safe               "] = (double)transition_estimator_->numBandSafe();
-    smoothing_statistics_["smoothing_size01_classifier_num_band_overstretch        "] = (double)transition_estimator_->numBandOverstretch();
-    smoothing_statistics_["smoothing_size01_classifier_num_band_no_mistake         "] = (double)transition_estimator_->numNoMistakes();
-    smoothing_statistics_["smoothing_size01_classifier_num_band_mistakes           "] = (double)transition_estimator_->numMistakes();
-    smoothing_statistics_["smoothing_size01_classifier_num_band_accepted_mistakes  "] = (double)transition_estimator_->numAcceptedMistakes();
+    smoothing_statistics_["smoothing_classifier_num0_band_wierdness                "] = (double)transition_estimator_->numBandWeirdness();
+    smoothing_statistics_["smoothing_classifier_num1_band_safe                     "] = (double)transition_estimator_->numBandSafe();
+    smoothing_statistics_["smoothing_classifier_num2_band_overstretch              "] = (double)transition_estimator_->numBandOverstretch();
+    smoothing_statistics_["smoothing_classifier_num3_band_no_mistake               "] = (double)transition_estimator_->numNoMistakes();
+    smoothing_statistics_["smoothing_classifier_num4_band_mistakes                 "] = (double)transition_estimator_->numMistakes();
+    smoothing_statistics_["smoothing_classifier_num5_band_accepted_mistakes        "] = (double)transition_estimator_->numAcceptedMistakes();
 }
 
 void BandRRT::shortcutSmoothPath(
@@ -3350,7 +3356,8 @@ void BandRRT::shortcutSmoothPath(
         smoothed_segment.reserve(256);
         std::pair<bool, RRTTree> end_of_smoothing_to_goal_results;
 
-        const bool fwd_prop_local_visualization_enabled = false;
+        constexpr bool allow_mistakes = false;
+        constexpr bool fwd_prop_local_visualization_enabled = false;
 
         if (planning_for_whole_robot_)
         {
@@ -3370,7 +3377,7 @@ void BandRRT::shortcutSmoothPath(
             // Forward simulate the rubber band along the straight line between gripper/robot positions
             const int64_t start_idx = 0;
             smoothed_segment.push_back(smoothing_start_config);
-            forwardPropogationFunction(smoothed_segment, start_idx, smoothing_end_config, fwd_prop_local_visualization_enabled);
+            forwardPropogationFunction(smoothed_segment, start_idx, smoothing_end_config, allow_mistakes, fwd_prop_local_visualization_enabled);
 
             // Check if the rubber band gets overstretched while propogating the grippers/robot on the new path
             const auto& target_robot_configuration = smoothing_end_config.robotConfiguration();
@@ -3428,7 +3435,7 @@ void BandRRT::shortcutSmoothPath(
                 // Forward simulate the rubber band along the straight line between gripper positions
                 const int64_t start_idx = 0;
                 smoothed_segment.push_back(smoothing_start_config);
-                forwardPropogationFunction(smoothed_segment, start_idx, smoothing_end_config, fwd_prop_local_visualization_enabled);
+                forwardPropogationFunction(smoothed_segment, start_idx, smoothing_end_config, allow_mistakes, fwd_prop_local_visualization_enabled);
             }
             else if (smoothing_type == 3 || smoothing_type == 4)
             {
@@ -3521,7 +3528,7 @@ void BandRRT::shortcutSmoothPath(
                                 path.front().band());
 
                     const int64_t start_idx = (int64_t)smoothed_segment.size() - 1;
-                    forwardPropogationFunction(smoothed_segment, start_idx, forward_prop_target_config, fwd_prop_local_visualization_enabled);
+                    forwardPropogationFunction(smoothed_segment, start_idx, forward_prop_target_config, allow_mistakes, fwd_prop_local_visualization_enabled);
                     // Exit early if we hit any of "failure" conditions
                     // Check if the we hit a split
                     if (smoothed_segment.back().splitIndex() >= 0)

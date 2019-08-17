@@ -1109,6 +1109,7 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
 std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTransitions(
         const RubberBand& test_band_start,
         const PairGripperPositions& ending_gripper_positions,
+        const bool allow_mistakes,
         const bool verbose)
 {
     static const bool classifier_valid = transition_mistake_classifier_->name_ != "none";
@@ -1151,8 +1152,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     //            PressAnyKeyToContinue("Classifier reports bad transition");
 
                 // Label some (small) percentage of predicted mistakes as non-mistakes;
-                double const p = accept_transition_distribution_(*generator_);
-                if (p > accept_mistake_rate_)
+                if (!allow_mistakes || accept_transition_distribution_(*generator_) > accept_mistake_rate_)
                 {
                     ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Stopped due to band mistake predicted");
                 }

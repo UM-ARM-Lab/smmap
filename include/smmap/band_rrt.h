@@ -396,12 +396,14 @@ namespace smmap
                 RRTTree& tree_to_extend,
                 const int64_t& nearest_neighbor_idx,
                 const RRTNode& target,
+                const bool allow_mistakes,
                 const bool visualization_enabled_locally);
 
         // Returns possible bands, and our confidence in each
         std::vector<std::pair<RubberBand::Ptr, double>> forwardPropogateBand(
                 const RubberBand::ConstPtr& starting_band,
-                const RRTGrippersRepresentation& next_grippers_poses);
+                const RRTGrippersRepresentation& next_grippers_poses,
+                const bool allow_mistakes);
 
         //////// Goal check and node blacklist management functions //////////////////////////
 

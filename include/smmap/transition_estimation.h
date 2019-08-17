@@ -196,6 +196,7 @@ namespace smmap
         std::vector<std::pair<RubberBand::Ptr, double>> estimateTransitions(
                 const RubberBand& test_band_start,
                 const PairGripperPositions& ending_gripper_positions,
+                const bool allow_mistakes,
                 const bool verbose = false);
 
         void resetStatistics();

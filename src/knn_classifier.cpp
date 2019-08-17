@@ -10,11 +10,6 @@ std::vector<double> kNNClassifier::nn_raw_data_;
 std::vector<double> kNNClassifier::labels_;
 flann::KDTreeSingleIndex<flann::L2<double>> kNNClassifier::nn_index_;
 
-inline std::string getModelFilename(ros::NodeHandle& nh)
-{
-    return ROSHelpers::GetParamRequired<std::string>(nh, "knn/data_file", __func__).GetImmutable();
-}
-
 kNNClassifier::kNNClassifier(std::shared_ptr<ros::NodeHandle> nh,
                              std::shared_ptr<ros::NodeHandle> ph)
     : Classifier(nh, ph, "kNN")
@@ -24,10 +19,10 @@ kNNClassifier::kNNClassifier(std::shared_ptr<ros::NodeHandle> nh,
 
 void kNNClassifier::Initialize(kNNClassifier* knn)
 {
-    auto const filename = getModelFilename(*knn->ph_);
+    auto const filename = ROSHelpers::GetParamRequired<std::string>(*knn->ph_, "kNN/data_file", __func__).GetImmutable();
     auto file = std::ifstream(filename);
 
-    auto const expected_line_count = 965110;
+    auto constexpr expected_line_count = 965110;
     nn_raw_data_.reserve(knn->num_features_ * expected_line_count);
     labels_.reserve(expected_line_count);
 
