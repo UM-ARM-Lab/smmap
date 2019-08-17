@@ -1111,6 +1111,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
         const PairGripperPositions& ending_gripper_positions,
         const bool verbose)
 {
+    static const bool classifier_valid = transition_mistake_classifier_->name_ != "none";
     std::vector<std::pair<RubberBand::Ptr, double>> transitions;
 
     auto default_next_band = std::make_shared<RubberBand>(test_band_start);
@@ -1123,7 +1124,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
             ++num_band_overstretch_;
             ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Stopped due to band overstretch");
         }
-        else
+        else if (classifier_valid)
         {
             ++num_band_safe_;
 
@@ -1139,7 +1140,8 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     //        std::cout << "Classifier prediction: " << predicted_mistake << std::endl;
     //        std::cout << "NN prediction: " << nn_prediction.first << std::endl;
             if (predicted_mistake == -1.0)
-{               ++num_no_mistake_;
+            {
+                ++num_no_mistake_;
                 transitions.push_back({default_next_band, default_propogation_confidence_});
             }
             else
@@ -1170,6 +1172,11 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     //            std::cout << "NN Feautres: " << classifier_scaler_.inverse(nn_prediction.second).transpose() << std::endl;
     //            PressAnyKeyToContinue("NN vs SVM Prediction mismatch");
     //        }
+        }
+        else
+        {
+            ++num_band_safe_;
+            transitions.push_back({default_next_band, default_propogation_confidence_});
         }
     }
     catch (const std::runtime_error& /* ex */)
