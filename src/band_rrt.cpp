@@ -875,7 +875,7 @@ RRTPolicy BandRRT::plan(
     }
 
     // Clear statistics
-    transition_estimator_->resetClassifierTime();
+    transition_estimator_->resetStatistics();
     total_sampling_time_ = 0.0;
     total_nearest_neighbour_index_building_time_ = 0.0;
     total_nearest_neighbour_index_searching_time_ = 0.0;
@@ -946,9 +946,16 @@ RRTPolicy BandRRT::plan(
         planning_statistics_["planning_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful_;
         planning_statistics_["planning_size08_forward_connections_made                "] = (double)forward_connections_made_;
 
-//        planning_statistics_["planning_size09_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless_;
-//        planning_statistics_["planning_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
-//        planning_statistics_["planning_size11_backward_connections_made               "] = (double)backward_connections_made_;
+        planning_statistics_["planning_size09_classifier_num_band_wierdness           "] = (double)transition_estimator_->numBandWeirdness();
+        planning_statistics_["planning_size09_classifier_num_band_safe                "] = (double)transition_estimator_->numBandSafe();
+        planning_statistics_["planning_size09_classifier_num_band_overstretch         "] = (double)transition_estimator_->numBandOverstretch();
+        planning_statistics_["planning_size09_classifier_num_band_no_mistake          "] = (double)transition_estimator_->numNoMistakes();
+        planning_statistics_["planning_size09_classifier_num_band_mistakes            "] = (double)transition_estimator_->numMistakes();
+        planning_statistics_["planning_size09_classifier_num_band_accepted_mistakes   "] = (double)transition_estimator_->numAcceptedMistakes();
+
+//        planning_statistics_["planning_size10_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless_;
+//        planning_statistics_["planning_size11_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
+//        planning_statistics_["planning_size12_backward_connections_made               "] = (double)backward_connections_made_;
 
         ROS_INFO_STREAM_NAMED("rrt", "RRT Helper Planning Statistics:\n" << PrettyPrint::PrettyPrint(planning_statistics_, false, "\n") << std::endl);
 //        storeTree(forward_tree_);
@@ -1827,9 +1834,16 @@ void BandRRT::planningMainLoop()
             partial_stats["planning_partial_size07_forward_connection_attempts_useful      "] = (double)forward_connection_attempts_useful_;
             partial_stats["planning_partial_size08_forward_connections_made                "] = (double)forward_connections_made_;
 
-    //        partial_stats["planning_partial_size09_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless_;
-    //        partial_stats["planning_partial_size10_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
-    //        partial_stats["planning_partial_size11_backward_connections_made               "] = (double)backward_connections_made_;
+            partial_stats["planning_partial_size09_classifier_num_band_wierdness           "] = (double)transition_estimator_->numBandWeirdness();
+            partial_stats["planning_partial_size09_classifier_num_band_safe                "] = (double)transition_estimator_->numBandSafe();
+            partial_stats["planning_partial_size09_classifier_num_band_overstretch         "] = (double)transition_estimator_->numBandOverstretch();
+            partial_stats["planning_partial_size09_classifier_num_band_no_mistake          "] = (double)transition_estimator_->numNoMistakes();
+            partial_stats["planning_partial_size09_classifier_num_band_mistakes            "] = (double)transition_estimator_->numMistakes();
+            partial_stats["planning_partial_size09_classifier_num_band_accepted_mistakes   "] = (double)transition_estimator_->numAcceptedMistakes();
+
+    //        partial_stats["planning_partial_size10_backward_connection_attempts_useless    "] = (double)backward_connection_attempts_useless_;
+    //        partial_stats["planning_partial_size11_backward_connection_attempts_useful     "] = (double)backward_connection_attempts_useful_;
+    //        partial_stats["planning_partial_size12_backward_connections_made               "] = (double)backward_connections_made_;
 
             ROS_INFO_STREAM_NAMED("rrt", "Planning Statistics @ Main Loop Itr: " << main_loop_itr << "\n" << PrettyPrint::PrettyPrint(partial_stats, false, "\n") << std::endl);
 
@@ -3228,7 +3242,7 @@ void BandRRT::shortcutSmoothPolicy(
 {
     Stopwatch function_wide_stopwatch;
 
-    transition_estimator_->resetClassifierTime();
+    transition_estimator_->resetStatistics();
     total_forward_kinematics_time_ = 0.0;
     total_projection_time_ = 0.0;
     total_collision_check_time_ = 0.0;
@@ -3264,6 +3278,13 @@ void BandRRT::shortcutSmoothPolicy(
     smoothing_statistics_["smoothing7_forward_propogation_first_order_vis_time     "] = total_first_order_vis_propogation_time_;
     smoothing_statistics_["smoothing8_forward_propogation_everything_included_time "] = total_everything_included_forward_propogation_time_;
     smoothing_statistics_["smoothing9_total_time                                   "] = smoothing_time;
+
+    smoothing_statistics_["smoothing_size01_classifier_num_band_wierdness          "] = (double)transition_estimator_->numBandWeirdness();
+    smoothing_statistics_["smoothing_size01_classifier_num_band_safe               "] = (double)transition_estimator_->numBandSafe();
+    smoothing_statistics_["smoothing_size01_classifier_num_band_overstretch        "] = (double)transition_estimator_->numBandOverstretch();
+    smoothing_statistics_["smoothing_size01_classifier_num_band_no_mistake         "] = (double)transition_estimator_->numNoMistakes();
+    smoothing_statistics_["smoothing_size01_classifier_num_band_mistakes           "] = (double)transition_estimator_->numMistakes();
+    smoothing_statistics_["smoothing_size01_classifier_num_band_accepted_mistakes  "] = (double)transition_estimator_->numAcceptedMistakes();
 }
 
 void BandRRT::shortcutSmoothPath(

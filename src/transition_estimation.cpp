@@ -508,13 +508,20 @@ TransitionEstimation::TransitionEstimation(
     , band_tighten_scale_factor_(GetTransitionTightenDeltaScaleFactor(*ph_))
     , homotopy_changes_scale_factor_(GetTransitionHomotopyChangesScaleFactor(*ph_))
 
-    , classifier_time_(0.0)
     , classifier_scaler_(nh_, ph_)
     , transition_mistake_classifier_(Classifier::MakeClassifier(nh_, ph_))
     , accept_scale_factor_(ROSHelpers::GetParamRequired<double>(*ph_, "classifier/accept_scale_factor", __func__).GetImmutable())
     , accept_mistake_rate_(std::exp(-accept_scale_factor_ * transition_mistake_classifier_->accuracy_))
     , accept_transition_distribution_(0.0, 1.0)
     , generator_(generator)
+
+    , classifier_time_(0.0)
+    , num_band_weirdness_(0)
+    , num_band_safe_(0)
+    , num_band_overstretch_(0)
+    , num_no_mistake_(0)
+    , num_mistake_(0)
+    , num_accepted_mistake_(0)
 
     , template_band_(template_band)
 {
@@ -1113,10 +1120,13 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
         // Only add this transition if the band is not overstretched after moving
         if (default_next_band->isOverstretched())
         {
+            ++num_band_overstretch_;
             ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Stopped due to band overstretch");
         }
         else
         {
+            ++num_band_safe_;
+
             Stopwatch stopwatch;
             arc_helpers::DoNotOptimize(default_next_band);
             const auto features = transitionFeatures(test_band_start, *default_next_band);
@@ -1129,24 +1139,26 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     //        std::cout << "Classifier prediction: " << predicted_mistake << std::endl;
     //        std::cout << "NN prediction: " << nn_prediction.first << std::endl;
             if (predicted_mistake == -1.0)
-            {
+{               ++num_no_mistake_;
                 transitions.push_back({default_next_band, default_propogation_confidence_});
             }
             else
             {
+                ++num_mistake_;
     //            std::cout << "\nFeatures: " << transitionFeatures(test_band_start, *default_next_band, true).transpose() << std::endl;
     //            PressAnyKeyToContinue("Classifier reports bad transition");
 
                 // Label some (small) percentage of predicted mistakes as non-mistakes;
                 double const p = accept_transition_distribution_(*generator_);
-                if (p < accept_mistake_rate_)
+                if (p > accept_mistake_rate_)
                 {
-                    ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Ignored classifier predicting mistake");
-                    transitions.push_back({default_next_band, default_propogation_confidence_});
+                    ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Stopped due to band mistake predicted");
                 }
                 else
                 {
-                    ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Stopped due to band mistake predicted");
+                    ++num_accepted_mistake_;
+                    ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Ignored classifier predicting mistake");
+                    transitions.push_back({default_next_band, default_propogation_confidence_});
                 }
             }
 
@@ -1162,10 +1174,14 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     }
     catch (const std::runtime_error& /* ex */)
     {
+        ++num_band_weirdness_;
         // Catch any weird error conditions from the band process here,
         // and then discard the default model from consideration
     }
 
+    // Disabled code
+
+    {
 #if false
     for (size_t transition_idx = 0; transition_idx < learned_transitions_.size(); ++transition_idx)
     {
@@ -1333,7 +1349,20 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
         transitions.push_back({next_band, confidence});
     }
 #endif
+    }
+
     return transitions;
+}
+
+void TransitionEstimation::resetStatistics()
+{
+    classifier_time_ = 0.0;
+    num_band_weirdness_ = 0;
+    num_band_safe_ = 0;
+    num_band_overstretch_ = 0;
+    num_no_mistake_ = 0;
+    num_mistake_ = 0;
+    num_accepted_mistake_ = 0;
 }
 
 double TransitionEstimation::classifierTime() const
@@ -1341,9 +1370,34 @@ double TransitionEstimation::classifierTime() const
     return classifier_time_;
 }
 
-void TransitionEstimation::resetClassifierTime()
+size_t TransitionEstimation::numBandWeirdness() const
 {
-    classifier_time_ = 0.0;
+    return num_band_weirdness_;
+}
+
+size_t TransitionEstimation::numBandSafe() const
+{
+    return num_band_safe_;
+}
+
+size_t TransitionEstimation::numBandOverstretch() const
+{
+    return num_band_overstretch_;
+}
+
+size_t TransitionEstimation::numNoMistakes() const
+{
+    return num_no_mistake_;
+}
+
+size_t TransitionEstimation::numMistakes() const
+{
+    return num_mistake_;
+}
+
+size_t TransitionEstimation::numAcceptedMistakes() const
+{
+    return num_accepted_mistake_;
 }
 
 //////// Visualization /////////////////////////////////////////////////////////////////////////////////////////////////

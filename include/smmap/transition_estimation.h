@@ -198,8 +198,14 @@ namespace smmap
                 const PairGripperPositions& ending_gripper_positions,
                 const bool verbose = false);
 
+        void resetStatistics();
         double classifierTime() const;
-        void resetClassifierTime();
+        size_t numBandWeirdness() const;
+        size_t numBandSafe() const;
+        size_t numBandOverstretch() const;
+        size_t numNoMistakes() const;
+        size_t numMistakes() const;
+        size_t numAcceptedMistakes() const;
 
         ////////////////////////////////////////////////////////////////////////
         // Visualizing transitions
@@ -261,13 +267,19 @@ namespace smmap
         // Default transition mistake estimation
         ////////////////////////////////////////////////////////////////////////
 
-        double classifier_time_;
         MinMaxTransformer classifier_scaler_;
         Classifier::Ptr transition_mistake_classifier_;
         double const accept_scale_factor_;
         double const accept_mistake_rate_;
         std::uniform_real_distribution<double> accept_transition_distribution_;
         std::shared_ptr<std::mt19937_64> generator_;
+        double classifier_time_;
+        size_t num_band_weirdness_;
+        size_t num_band_safe_;
+        size_t num_band_overstretch_;
+        size_t num_no_mistake_;
+        size_t num_mistake_;
+        size_t num_accepted_mistake_;
 
         ////////////////////////////////////////////////////////////////////////
         // Saving and loading learned transitions
