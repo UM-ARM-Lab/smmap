@@ -5,7 +5,7 @@ using namespace smmap;
 
 inline std::string getModelFilename(ros::NodeHandle& nh)
 {
-    return ROSHelpers::GetParamRequired<std::string>(nh, "torch/model_file", __func__).GetImmutable();
+    return ROSHelpers::GetParamRequired<std::string>(nh, "dnn/model_file", __func__).GetImmutable();
 }
 
 TorchClassifier::TorchClassifier(
@@ -13,7 +13,7 @@ TorchClassifier::TorchClassifier(
         std::shared_ptr<ros::NodeHandle> ph)
     : Classifier(nh, ph, "dnn")
     , model_(torch::jit::load(getModelFilename(*ph_)))
-    , threshold_(ROSHelpers::GetParamRequired<double>(*ph_, "torch/threshold", __func__).GetImmutable())
+    , threshold_(ROSHelpers::GetParamRequired<double>(*ph_, "dnn/threshold", __func__).GetImmutable())
 {
     // Ensure that the model's forward module has already been initialized
     // https://github.com/pytorch/pytorch/issues/23920#issuecomment-519355570
