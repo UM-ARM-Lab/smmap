@@ -1816,7 +1816,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 	                const auto traj_gen_result = ToTrajectory(world_state, rrt_path, test, test_result);
     	            const auto& trajectory = traj_gen_result.first;
         	        transition_estimator_->saveTrajectory(trajectory, trajectory_file);
-            	    if (!traj_gen_result.second)
+                    if (traj_gen_result.second)
                 	{
 	                    ++num_succesful_paths;
     	            }
