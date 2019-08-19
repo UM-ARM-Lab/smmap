@@ -229,10 +229,10 @@ namespace smmap
                                      parabola_origin * (ObjectPointSet(3, x.rows()) << x.transpose(),
                                                                                        y.transpose(),
                                                                                        z.transpose()).finished(),
-                                     Visualizer::Blue(), 1, 0.002);
+                                     Visualizer::Magenta(), 1, 0.002);
             vis_->visualizeLineStrip("parabola",
                                      (ObjectPointSet(3, 2) << gripper_positions.first, gripper_positions.second).finished(),
-                                     Visualizer::Blue(), 2, 0.002);
+                                     Visualizer::Magenta(), 2, 0.002);
             vis_->visualizeAxes("parabola_origin", parabola_origin, 0.05, 0.005, 1);
         }
 

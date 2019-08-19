@@ -836,7 +836,7 @@ RRTPolicy BandRRT::plan(
         std::cerr << "Min gripper collision distance: " << gripper_min_distance_to_obstacles_ << " Current Distances: " << first_gripper_dist_to_env << " " << second_gripper_dist_to_env << std::endl;
         std::cerr << "Max allowable distance: " << max_grippers_distance_ << " Distance beteween goal grippers: " << dist_between_grippers << std::endl;
 
-        vis_->visualizeGrippers("weird_gripper_goals", {grippers_goal_poses_.first, grippers_goal_poses_.second}, Visualizer::Red(), 1);
+        vis_->visualizeGrippers("weird_gripper_goals", VectorIsometry3d{grippers_goal_poses_.first, grippers_goal_poses_.second}, Visualizer::Red(), 1);
 //        PressAnyKeyToContinue("Unfeasible goal location");
 //        assert(false && "Unfeasible goal location");
         throw_arc_exception(std::runtime_error, "Unfeasible goal location");

@@ -397,7 +397,7 @@ namespace smmap
         , ph_(ph)
         , robot_(robot)
         , vis_(vis)
-        , disable_visualizations_(vis_->visualizationsEnabled())
+        , disable_visualizations_(!vis_->visualizationsEnabled())
         , visualize_gripper_motion_(!disable_visualizations_ && GetVisualizeGripperMotion(*ph_))
 
         , seed_(GetPlannerSeed(*ph_))
@@ -1442,27 +1442,179 @@ namespace smmap
             const auto test_result_file =       experiment + "__test_results.compressed";
             const auto path_to_start_file =     experiment + "__path_to_start.compressed";
 
+//            if (experiment.substr(data_folder_.length() + 1) != "trial_idx_023")
+//            {
+//                continue;
+//            }
+
             try
             {
                 const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
                 const auto traj_gen_result = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
-                const auto& traj = traj_gen_result.first;
+                const auto& trajectory = traj_gen_result.first;
+                const auto parsed_cleanly = traj_gen_result.second;
 
-                // If the generated trajectory was not parsed cleanly, then visualize it
-                if (!traj_gen_result.second)
+                if (!parsed_cleanly)
                 #pragma omp critical
                 {
-                    // Visualize and then pause, waiting for the user to move to the next trajectory
-                    const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
-                    const auto marker_ids = visualizePathAndTrajectory(path_to_start, traj, ns_prefix);
-                    std::cout << "Experiment: " << experiment.substr(data_folder_.length() + 1) << "    ";
-                    PressAnyKeyToContinue();
-
-                    // Rmove any visualizations added to make a clean slate for the next set of visualizations
-                    for (const auto& nsid : marker_ids)
+                    // Original Visualizations
                     {
-                        vis_->deleteObject(nsid.first, nsid.second);
+                        // Visualize and then pause, waiting for the user to move to the next trajectory
+                        const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
+                        const auto marker_ids = visualizePathAndTrajectory(path_to_start, trajectory, ns_prefix);
+                        std::cout << "Experiment: " << experiment.substr(data_folder_.length() + 1) << "    ";
+                        PressAnyKeyToContinue();
+
+                        // Rmove any visualizations added to make a clean slate for the next set of visualizations
+                        for (const auto& nsid : marker_ids)
+                        {
+                            vis_->deleteObject(nsid.first, nsid.second);
+                        }
+                    }
+
+                    // Extra stuff for workshop figures
+                    if (false)
+                    {
+                        std::vector<Visualizer::NamespaceId> marker_ids;
+                        const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
+
+                        const std::vector<std::string> feature_names =
+                        {
+                            std::string("GRIPPER_A_PRE_X"),
+                            std::string("GRIPPER_A_PRE_Y"),
+                            std::string("GRIPPER_A_PRE_Z"),
+                            std::string("GRIPPER_B_PRE_X"),
+                            std::string("GRIPPER_B_PRE_Y"),
+                            std::string("GRIPPER_B_PRE_Z"),
+                            std::string("GRIPPER_A_POST_X"),
+                            std::string("GRIPPER_A_POST_Y"),
+                            std::string("GRIPPER_A_POST_Z"),
+                            std::string("GRIPPER_B_POST_X"),
+                            std::string("GRIPPER_B_POST_Y"),
+                            std::string("GRIPPER_B_POST_Z"),
+
+                            std::string("GRIPPER_DELTA_LENGTH_PRE"),
+                            std::string("GRIPPER_DELTA_LENGTH_POST"),
+
+                            std::string("MAX_BAND_LENGTH"),
+                            std::string("STARTING_BAND_LENGTH"),
+                            std::string("ENDING_DEFAULT_BAND_LENGTH"),
+
+                //            std::string("STARTING_MAJOR_AXIS_LENGTH"),
+                //            std::string("STARTING_MINOR_AXIS_LENGTH"),
+                //            std::string("ENDING_MAJOR_AXIS_LENGTH"),
+                //            std::string("ENDING_MINOR_AXIS_LENGTH"),
+
+                            std::string("SLICE_NUM_CONNECTED_COMPONENTS_PRE"),
+                            std::string("SLICE_NUM_CONNECTED_COMPONENTS_POST"),
+                            std::string("SLICE_NUM_CONNECTED_COMPONENTS_DELTA"),
+
+                            std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE"),
+                            std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST"),
+                            std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA"),
+
+                            std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE"),
+                            std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST"),
+                            std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA")
+                        };
+
+                        assert(trajectory.size() > 0);
+                        bool start_foh = transition_estimator_->checkFirstOrderHomotopy(
+                                    *trajectory[0].first.planned_rubber_band_,
+                                    *trajectory[0].first.rubber_band_);
+
+                        for (size_t traj_step = 1; traj_step < trajectory.size(); ++traj_step)
+                        {
+//                            if (traj_step != 34)
+//                            {
+//                                continue;
+//                            }
+
+                            const auto& start_state = trajectory[traj_step - 1].first;
+                            const auto& end_state = trajectory[traj_step].first;
+                            const bool end_foh = transition_estimator_->checkFirstOrderHomotopy(
+                                        *end_state.planned_rubber_band_,
+                                        *end_state.rubber_band_);
+                            const auto dist = end_state.planned_rubber_band_->distance(*end_state.rubber_band_);
+                            const bool mistake = (start_foh && !end_foh) && (dist > mistake_dist_thresh_);
+
+                            const TransitionEstimation::StateTransition transition
+                            {
+                                start_state,
+                                end_state,
+                                start_state.planned_rubber_band_->getEndpoints(),
+                                end_state.planned_rubber_band_->getEndpoints(),
+                                trajectory[traj_step].second,
+                                transition_estimator_->reduceMicrostepsToBands(trajectory[traj_step].second)
+                            };
+                            // Add the planned vs executed start and end bands on their own namespaces
+                            {
+                                const auto new_ids1 = transition.starting_state_.planned_rubber_band_->visualize(
+                                            ns_prefix + "MISTAKE_START_PLANNED",
+                                            Visualizer::Green(),
+                                            Visualizer::Green(),
+                                            1);
+                                const auto new_ids2 = transition.starting_state_.rubber_band_->visualize(
+                                            ns_prefix + "MISTAKE_START_EXECUTED",
+                                            Visualizer::Red(),
+                                            Visualizer::Red(),
+                                            1);
+                                const auto new_ids3 = transition.ending_state_.planned_rubber_band_->visualize(
+                                            ns_prefix + "MISTAKE_END_PLANNED",
+                                            Visualizer::Olive(),
+                                            Visualizer::Olive(),
+                                            1);
+                                const auto new_ids4 = transition.ending_state_.rubber_band_->visualize(
+                                            ns_prefix + "MISTAKE_END_EXECUTED",
+                                            Visualizer::Orange(),
+                                            Visualizer::Orange(),
+                                            1);
+
+                                const auto new_ids5 = vis_->visualizeGrippers(
+                                            ns_prefix + "MISTAKE_START_GRIPPERS",
+                                            transition.starting_gripper_positions_,
+                                            Visualizer::Blue(),
+                                            1);
+                                const auto new_ids6 = vis_->visualizeGrippers(
+                                            ns_prefix + "MISTAKE_END_GRIPPERS",
+                                            transition.ending_gripper_positions_,
+                                            Visualizer::Blue(),
+                                            1);
+
+                                marker_ids.insert(marker_ids.begin(), new_ids1.begin(), new_ids1.end());
+                                marker_ids.insert(marker_ids.begin(), new_ids2.begin(), new_ids2.end());
+                                marker_ids.insert(marker_ids.begin(), new_ids3.begin(), new_ids3.end());
+                                marker_ids.insert(marker_ids.begin(), new_ids4.begin(), new_ids4.end());
+                                marker_ids.insert(marker_ids.begin(), new_ids5.begin(), new_ids5.end());
+                                marker_ids.insert(marker_ids.begin(), new_ids6.begin(), new_ids6.end());
+                            }
+
+                            const auto features = extractFeatures(transition);
+                            assert(feature_names.size() == features.size());
+                            if (features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA] != std::to_string(0) ||
+                                features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] != std::to_string(0))
+                            {
+                                assert(features.size() == feature_names.size());
+                                ROS_INFO_STREAM_NAMED("features", test_result_file);
+                                ROS_INFO_STREAM_NAMED("features", "  Transition at idx: " << traj_step << " with distance " << dist << " and mistake recorded: " << mistake);
+                                for (size_t i = 0; i < feature_names.size(); ++i)
+                                {
+                                    ROS_INFO_STREAM_NAMED("features", "  " << /* std::left << */ std::setw(48) << feature_names[i] << ": " << features[i]);
+                                }
+
+                                if (mistake)
+                                {
+                                    PressAnyKeyToContinue();
+                                }
+                            }
+
+                            // Rmove any visualizations added to make a clean slate for the next set of visualizations
+                            for (const auto& nsid : marker_ids)
+                            {
+                                vis_->deleteObject(nsid.first, nsid.second);
+                            }
+                        }
                     }
                 }
             }
@@ -2133,8 +2285,18 @@ namespace smmap
 //        const double minor_axis_length_post = std::sqrt(dmax * dmax / 4.0 - mid_to_gripper_b_post.squaredNorm());
 
         const double resolution = work_space_grid_.minStepDimension() / 2.0;
-        sdf_tools::CollisionMapGrid collision_grid_pre = ExtractParabolaSlice(*sdf_, resolution, transition.starting_gripper_positions_, dmax);//, vis_);
-        sdf_tools::CollisionMapGrid collision_grid_post = ExtractParabolaSlice(*sdf_, resolution, transition.ending_gripper_positions_, dmax);//, vis_);
+        sdf_tools::CollisionMapGrid collision_grid_pre;
+        sdf_tools::CollisionMapGrid collision_grid_post;
+        if (disable_visualizations_)
+        {
+            collision_grid_pre = ExtractParabolaSlice(*sdf_, resolution, transition.starting_gripper_positions_, dmax);
+            collision_grid_post = ExtractParabolaSlice(*sdf_, resolution, transition.ending_gripper_positions_, dmax);
+        }
+        else
+        {
+            collision_grid_pre = ExtractParabolaSlice(*sdf_, resolution, transition.starting_gripper_positions_, dmax, vis_);
+            collision_grid_post = ExtractParabolaSlice(*sdf_, resolution, transition.ending_gripper_positions_, dmax, vis_);
+        }
 
         if (!disable_visualizations_)
         {
@@ -2377,7 +2539,7 @@ namespace smmap
         const auto target_grippers_poses = getGripperTargets();
 
         const auto classifier_type = ROSHelpers::GetParamRequired<std::string>(*ph_, "classifier/type", __func__).Get();
-        const auto folder = data_folder_ + "/" + classifier_type + "_classifier_" + std::to_string(seed_) + "/";
+        const auto folder = data_folder_ + "/" + classifier_type + "_classifier_" + IntToHex(seed_) + "/";
         arc_utilities::CreateDirectory(folder);
 
         const auto num_threads = GetNumOMPThreads();

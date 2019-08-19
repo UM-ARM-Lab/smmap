@@ -102,15 +102,6 @@ static std::vector<uint32_t> numberOfPointsInEachCluster(
     return counts;
 }
 
-template< typename T >
-static std::string int_to_hex(const T i)
-{
-    std::stringstream stream;
-    stream << std::setfill ('0') << std::setw(sizeof(T) * 2)
-           << std::hex << i;
-    return stream.str();
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constructor and model list builder
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -165,7 +156,7 @@ TaskFramework::TaskFramework(
     , visualize_gripper_motion_(vis_->visualizationsEnabled() && GetVisualizeGripperMotion(*ph_))
     , visualize_predicted_motion_(vis_->visualizationsEnabled() && GetVisualizeObjectPredictedMotion(*ph_))
 {
-    ROS_INFO_STREAM_NAMED("task_framework", "Using seed " << int_to_hex(seed_));
+    ROS_INFO_STREAM_NAMED("task_framework", "Using seed " << IntToHex(seed_));
     std::srand((unsigned int)seed_);
     initializeBanditsLogging();
     initializeControllerLogging();
@@ -438,6 +429,9 @@ WorldState TaskFramework::sendNextCommand(
         // If we need to (re)plan due to the local controller getting stuck, or the gobal plan failing, then do so
         if (planning_needed)
         {
+
+//            PressAnyKeyToContinue("pausing before planning ...");
+
             vis_->purgeMarkerList();
             visualization_msgs::Marker marker;
             marker.ns = "delete_markers";
@@ -1216,7 +1210,7 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
 
         // Visualize
         band.visualize(PROJECTED_BAND_NS, PREDICTION_RUBBER_BAND_SAFE_COLOR, PREDICTION_RUBBER_BAND_VIOLATION_COLOR, (int32_t)t + 2, visualization_enabled);
-        vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, {grippers_poses.first, grippers_poses.second}, PREDICTION_GRIPPER_COLOR, (int32_t)(2 * t) + 2);
+        vis_->visualizeGrippers(PROJECTED_GRIPPER_NS, VectorIsometry3d{grippers_poses.first, grippers_poses.second}, PREDICTION_GRIPPER_COLOR, (int32_t)(2 * t) + 2);
     }
 
     vis_->forcePublishNow();
