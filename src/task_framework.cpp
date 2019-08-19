@@ -288,6 +288,8 @@ void TaskFramework::execute()
             }
             else
             {
+                ROS_INFO_NAMED("task_framework", "------------------------------- Pausing for 5 seconds for recording purposes ----------");
+                arc_helpers::Sleep(5.0);
                 robot_->shutdown();
             }
         }
