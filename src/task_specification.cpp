@@ -66,7 +66,8 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::ROPE_MAZE:
         case TaskType::ROPE_ZIG_MATCH:
         case TaskType::ROPE_HOOKS:
-        case TaskType::ROPE_HOOKS_DATA_GENERATION:
+        case TaskType::ROPE_HOOKS_SIMPLE:
+        case TaskType::ROPE_HOOKS_MULTI:
         case TaskType::ROPE_GENERIC_FIXED_COVERAGE:
             return std::make_shared<RopeFixedCorrespondences>(nh, ph, vis);
 
