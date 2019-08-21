@@ -256,7 +256,7 @@ void TaskFramework::execute()
 
             // If rrt/num_trials is larger than 1, then all the seeds are reset in planGlobalGripperTrajectory,
             // so reseting and running another full system trial makes no sense
-            if (GetRRTNumTrials(*ph_) == 1 && false)
+            if (ROSHelpers::GetParam<bool>(*ph_, "rerun_forever", false))
             {
                 ROS_INFO_NAMED("task_framework", "------------------------------- RESETING RESETING -------------------------------------");
                 plan_triggered_once_ = false;
@@ -1779,7 +1779,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 const auto data_folder = GetDataFolder(*nh_);
                 arc_utilities::CreateDirectory(data_folder);
                 const auto timestamp = arc_helpers::GetCurrentTimeAsString();
-                std::cout << "Saving path and result to prefix: " << data_folder << timestamp << std::endl;
+                ROS_INFO_STREAM_NAMED("task_framework", "Saving path and result to prefix: " << data_folder << timestamp);
                 const auto path_to_start_file = data_folder + timestamp + "__path_to_start.compressed";
                 const auto test_results_file = data_folder + timestamp + "__test_results.compressed";
                 band_rrt_->savePath(rrt_path, path_to_start_file);
@@ -1833,9 +1833,13 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 	++num_unsuccesful_paths;
 				}
             }
-            ROS_INFO_STREAM_NAMED("task_framework", "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
-            ROS_INFO_NAMED("task_framwork", "Terminating.");
-            throw_arc_exception(std::runtime_error, "Bullet tests done, terminating.");
+
+            if (!ROSHelpers::GetParam<bool>(*ph_, "rerun_forever", false))
+            {
+                ROS_INFO_STREAM_NAMED("task_framework", "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
+                ROS_INFO_NAMED("task_framwork", "Terminating.");
+                throw_arc_exception(std::runtime_error, "Bullet tests done, terminating.");
+            }
         }
 
         // Serialization
