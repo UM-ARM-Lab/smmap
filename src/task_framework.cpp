@@ -1727,6 +1727,12 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
         {
             // Only use the seed resetting if we are performing more than 1 trial
+            if (num_trials > 1 && num_times_planner_invoked_)
+            {
+                ROS_ERROR_NAMED("task_framework", "Running multiple trials, and invoking the planner more than once. This is not really supported, it'll do strange things with the generator seed");
+                assert(false && "Not supported");
+            }
+
             if (num_trials > 1)
             {
                 robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
