@@ -1779,9 +1779,10 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 const auto data_folder = GetDataFolder(*nh_);
                 arc_utilities::CreateDirectory(data_folder);
                 const auto timestamp = arc_helpers::GetCurrentTimeAsString();
-                ROS_INFO_STREAM_NAMED("task_framework", "Saving path and result to prefix: " << data_folder << timestamp);
-                const auto path_to_start_file = data_folder + timestamp + "__path_to_start.compressed";
-                const auto test_results_file = data_folder + timestamp + "__test_results.compressed";
+                const auto filename = data_folder + "__seed" + IntToHex(seed_) + "__stamp" + timestamp;
+                ROS_INFO_STREAM_NAMED("task_framework", "Saving path and result to prefix: " << filename);
+                const auto path_to_start_file = filename + "__path_to_start.compressed";
+                const auto test_results_file = filename + "__test_results.compressed";
                 band_rrt_->savePath(rrt_path, path_to_start_file);
 
                 // Run the path through the simulator which will save the results to file,
