@@ -1014,22 +1014,22 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
         {
             if (verbose && vis_->visualizationsEnabled())
             {
-                return ExtractParabolaSlice(*sdf_, resolution, grippers_pre, dmax, vis_);
+                return ExtractParabolaSliceBasic(*sdf_, resolution, grippers_pre, dmax, vis_);
             }
             else
             {
-                return ExtractParabolaSlice(*sdf_, resolution, grippers_pre, dmax);
+                return ExtractParabolaSliceBasic(*sdf_, resolution, grippers_pre, dmax);
             }
         }();
         sdf_tools::CollisionMapGrid collision_grid_post = [&]
         {
             if (verbose && vis_->visualizationsEnabled())
             {
-                return ExtractParabolaSlice(*sdf_, resolution, grippers_post, dmax, vis_);
+                return ExtractParabolaSliceBasic(*sdf_, resolution, grippers_post, dmax, vis_);
             }
             else
             {
-                return ExtractParabolaSlice(*sdf_, resolution, grippers_post, dmax);
+                return ExtractParabolaSliceBasic(*sdf_, resolution, grippers_post, dmax);
             }
         }();
 

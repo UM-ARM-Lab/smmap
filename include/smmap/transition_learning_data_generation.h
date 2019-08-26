@@ -123,48 +123,7 @@ namespace smmap
         void visualizeIncompleteTrajectories();
         void generateMeaningfulMistakeExamples();
 
-        enum Features
-        {
-            GRIPPER_A_PRE_X,
-            GRIPPER_A_PRE_Y,
-            GRIPPER_A_PRE_Z,
-            GRIPPER_B_PRE_X,
-            GRIPPER_B_PRE_Y,
-            GRIPPER_B_PRE_Z,
-            GRIPPER_A_POST_X,
-            GRIPPER_A_POST_Y,
-            GRIPPER_A_POST_Z,
-            GRIPPER_B_POST_X,
-            GRIPPER_B_POST_Y,
-            GRIPPER_B_POST_Z,
-
-            GRIPPER_DELTA_LENGTH_PRE,
-            GRIPPER_DELTA_LENGTH_POST,
-
-            MAX_BAND_LENGTH,
-            STARTING_BAND_LENGTH,
-            ENDING_DEFAULT_BAND_LENGTH,
-
-//            STARTING_MAJOR_AXIS_LENGTH,
-//            STARTING_MINOR_AXIS_LENGTH,
-//            ENDING_MAJOR_AXIS_LENGTH,
-//            ENDING_MINOR_AXIS_LENGTH,
-
-            SLICE_NUM_CONNECTED_COMPONENTS_PRE,
-            SLICE_NUM_CONNECTED_COMPONENTS_POST,
-            SLICE_NUM_CONNECTED_COMPONENTS_DELTA,
-
-            SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE,
-            SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST,
-            SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA,
-
-            SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE,
-            SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST,
-            SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA,
-
-            FEATURES_DUMMY_ITEM
-        };
-        void generateFeatures();
+        void generateFeatures(const std::string& parabola_slice_option);
         std::vector<std::string> extractFeatures(const TransitionEstimation::StateTransition& transition) const;
 
         void testClassifier();

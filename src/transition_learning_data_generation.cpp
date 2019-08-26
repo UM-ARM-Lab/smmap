@@ -33,6 +33,78 @@ using namespace EigenHelpersConversions;
 namespace dmm = deformable_manipulation_msgs;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
+enum Features
+{
+    GRIPPER_A_PRE_X,
+    GRIPPER_A_PRE_Y,
+    GRIPPER_A_PRE_Z,
+    GRIPPER_B_PRE_X,
+    GRIPPER_B_PRE_Y,
+    GRIPPER_B_PRE_Z,
+    GRIPPER_A_POST_X,
+    GRIPPER_A_POST_Y,
+    GRIPPER_A_POST_Z,
+    GRIPPER_B_POST_X,
+    GRIPPER_B_POST_Y,
+    GRIPPER_B_POST_Z,
+
+    GRIPPER_DELTA_LENGTH_PRE,
+    GRIPPER_DELTA_LENGTH_POST,
+
+    MAX_BAND_LENGTH,
+    STARTING_BAND_LENGTH,
+    ENDING_DEFAULT_BAND_LENGTH,
+
+    SLICE_NUM_CONNECTED_COMPONENTS_PRE,
+    SLICE_NUM_CONNECTED_COMPONENTS_POST,
+    SLICE_NUM_CONNECTED_COMPONENTS_DELTA,
+
+    SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE,
+    SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST,
+    SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA,
+
+    SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE,
+    SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST,
+    SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA,
+
+    FEATURES_DUMMY_ITEM
+};
+
+static const std::vector<std::string> FEATURE_NAMES =
+{
+    std::string("GRIPPER_A_PRE_X"),
+    std::string("GRIPPER_A_PRE_Y"),
+    std::string("GRIPPER_A_PRE_Z"),
+    std::string("GRIPPER_B_PRE_X"),
+    std::string("GRIPPER_B_PRE_Y"),
+    std::string("GRIPPER_B_PRE_Z"),
+    std::string("GRIPPER_A_POST_X"),
+    std::string("GRIPPER_A_POST_Y"),
+    std::string("GRIPPER_A_POST_Z"),
+    std::string("GRIPPER_B_POST_X"),
+    std::string("GRIPPER_B_POST_Y"),
+    std::string("GRIPPER_B_POST_Z"),
+
+    std::string("GRIPPER_DELTA_LENGTH_PRE"),
+    std::string("GRIPPER_DELTA_LENGTH_POST"),
+
+    std::string("MAX_BAND_LENGTH"),
+    std::string("STARTING_BAND_LENGTH"),
+    std::string("ENDING_DEFAULT_BAND_LENGTH"),
+
+    std::string("SLICE_NUM_CONNECTED_COMPONENTS_PRE"),
+    std::string("SLICE_NUM_CONNECTED_COMPONENTS_POST"),
+    std::string("SLICE_NUM_CONNECTED_COMPONENTS_DELTA"),
+
+    std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE"),
+    std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST"),
+    std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA"),
+
+    std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE"),
+    std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST"),
+    std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA")
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 //          Conversions and Random Helpers
 ////////////////////////////////////////////////////////////////////////////////
@@ -721,10 +793,21 @@ namespace smmap
 
         if (generate_features)
         {
-            Stopwatch stopwatch;
-            ROS_INFO("Generating transition features");
-            generateFeatures();
-            ROS_INFO_STREAM("Generate features time taken: " << stopwatch(READ));
+            const std::vector<std::string> options =
+            {
+                "basic",
+                "in_plane_gravity_aligned",
+                "in_plane_gripper_aligned",
+                "extend_downwards_gravity_aligned",
+                "extend_downwards_gripper_aligned"
+            };
+            for (const auto& opt : options)
+            {
+                Stopwatch stopwatch;
+                ROS_INFO_STREAM("Generating transition features for option " << opt);
+                generateFeatures(opt);
+                ROS_INFO_STREAM("Generate features time taken: " << stopwatch(READ));
+            }
         }
 
         if (test_classifiers)
@@ -1479,46 +1562,6 @@ namespace smmap
                         std::vector<Visualizer::NamespaceId> marker_ids;
                         const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
 
-                        const std::vector<std::string> feature_names =
-                        {
-                            std::string("GRIPPER_A_PRE_X"),
-                            std::string("GRIPPER_A_PRE_Y"),
-                            std::string("GRIPPER_A_PRE_Z"),
-                            std::string("GRIPPER_B_PRE_X"),
-                            std::string("GRIPPER_B_PRE_Y"),
-                            std::string("GRIPPER_B_PRE_Z"),
-                            std::string("GRIPPER_A_POST_X"),
-                            std::string("GRIPPER_A_POST_Y"),
-                            std::string("GRIPPER_A_POST_Z"),
-                            std::string("GRIPPER_B_POST_X"),
-                            std::string("GRIPPER_B_POST_Y"),
-                            std::string("GRIPPER_B_POST_Z"),
-
-                            std::string("GRIPPER_DELTA_LENGTH_PRE"),
-                            std::string("GRIPPER_DELTA_LENGTH_POST"),
-
-                            std::string("MAX_BAND_LENGTH"),
-                            std::string("STARTING_BAND_LENGTH"),
-                            std::string("ENDING_DEFAULT_BAND_LENGTH"),
-
-                //            std::string("STARTING_MAJOR_AXIS_LENGTH"),
-                //            std::string("STARTING_MINOR_AXIS_LENGTH"),
-                //            std::string("ENDING_MAJOR_AXIS_LENGTH"),
-                //            std::string("ENDING_MINOR_AXIS_LENGTH"),
-
-                            std::string("SLICE_NUM_CONNECTED_COMPONENTS_PRE"),
-                            std::string("SLICE_NUM_CONNECTED_COMPONENTS_POST"),
-                            std::string("SLICE_NUM_CONNECTED_COMPONENTS_DELTA"),
-
-                            std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE"),
-                            std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST"),
-                            std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA"),
-
-                            std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE"),
-                            std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST"),
-                            std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA")
-                        };
-
                         assert(trajectory.size() > 0);
                         bool start_foh = transition_estimator_->checkFirstOrderHomotopy(
                                     *trajectory[0].first.planned_rubber_band_,
@@ -1591,16 +1634,16 @@ namespace smmap
                             }
 
                             const auto features = extractFeatures(transition);
-                            assert(feature_names.size() == features.size());
+                            assert(FEATURE_NAMES.size() == features.size());
                             if (features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA] != std::to_string(0) ||
                                 features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] != std::to_string(0))
                             {
-                                assert(features.size() == feature_names.size());
+                                assert(features.size() == FEATURE_NAMES.size());
                                 ROS_INFO_STREAM_NAMED("features", test_result_file);
                                 ROS_INFO_STREAM_NAMED("features", "  Transition at idx: " << traj_step << " with distance " << dist << " and mistake recorded: " << mistake);
-                                for (size_t i = 0; i < feature_names.size(); ++i)
+                                for (size_t i = 0; i < FEATURE_NAMES.size(); ++i)
                                 {
-                                    ROS_INFO_STREAM_NAMED("features", "  " << /* std::left << */ std::setw(48) << feature_names[i] << ": " << features[i]);
+                                    ROS_INFO_STREAM_NAMED("features", "  " << /* std::left << */ std::setw(48) << FEATURE_NAMES[i] << ": " << features[i]);
                                 }
 
                                 if (mistake)
@@ -1920,52 +1963,12 @@ namespace smmap
 
 namespace smmap
 {
-    void TransitionTesting::generateFeatures()
+    void TransitionTesting::generateFeatures(const std::string& parabola_slice_option)
     {
-        const std::vector<std::string> feature_names =
-        {
-            std::string("GRIPPER_A_PRE_X"),
-            std::string("GRIPPER_A_PRE_Y"),
-            std::string("GRIPPER_A_PRE_Z"),
-            std::string("GRIPPER_B_PRE_X"),
-            std::string("GRIPPER_B_PRE_Y"),
-            std::string("GRIPPER_B_PRE_Z"),
-            std::string("GRIPPER_A_POST_X"),
-            std::string("GRIPPER_A_POST_Y"),
-            std::string("GRIPPER_A_POST_Z"),
-            std::string("GRIPPER_B_POST_X"),
-            std::string("GRIPPER_B_POST_Y"),
-            std::string("GRIPPER_B_POST_Z"),
-
-            std::string("GRIPPER_DELTA_LENGTH_PRE"),
-            std::string("GRIPPER_DELTA_LENGTH_POST"),
-
-            std::string("MAX_BAND_LENGTH"),
-            std::string("STARTING_BAND_LENGTH"),
-            std::string("ENDING_DEFAULT_BAND_LENGTH"),
-
-//            std::string("STARTING_MAJOR_AXIS_LENGTH"),
-//            std::string("STARTING_MINOR_AXIS_LENGTH"),
-//            std::string("ENDING_MAJOR_AXIS_LENGTH"),
-//            std::string("ENDING_MINOR_AXIS_LENGTH"),
-
-            std::string("SLICE_NUM_CONNECTED_COMPONENTS_PRE"),
-            std::string("SLICE_NUM_CONNECTED_COMPONENTS_POST"),
-            std::string("SLICE_NUM_CONNECTED_COMPONENTS_DELTA"),
-
-            std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE"),
-            std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST"),
-            std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA"),
-
-            std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE"),
-            std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST"),
-            std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA")
-        };
-
-//        Log::Log logger(data_folder_ + "/meaningful_mistake_features.csv", false);
-
         int num_examples_delta_eq_0 = 0;
         int num_examples_delta_neq_0 = 0;
+
+//        const auto parabola_slice_option = ROSHelpers::GetParamRequired<std::string>(*ph_, "parabola_slice_option", __func__).GetImmutable();
 
         #pragma omp parallel for
         for (size_t file_idx = 0; file_idx < data_files_.size(); ++file_idx)
@@ -1974,9 +1977,8 @@ namespace smmap
             const auto test_result_file =            experiment + "__test_results.compressed";
             const auto path_to_start_file =          experiment + "__path_to_start.compressed";
             const auto trajectory_file =             experiment + "__trajectory.compressed";
-            const auto features_file =               experiment + "__classification_features.csv";
-            const auto features_complete_flag_file = experiment + "__classification_features.complete";
-//            const auto features_metadata_file =      experiment + "__classification_metadata.csv";
+            const auto features_file =               experiment + "__classification_features__" + parabola_slice_option + "__.csv";
+            const auto features_complete_flag_file = experiment + "__classification_features__" + parabola_slice_option + "__.complete";
 
             Log::Log logger(features_file, false);
 
@@ -2017,7 +2019,8 @@ namespace smmap
                         const bool end_foh = transition_estimator_->checkFirstOrderHomotopy(
                                     *end_state.planned_rubber_band_,
                                     *end_state.rubber_band_);
-                        const auto dist = end_state.planned_rubber_band_->distance(*end_state.rubber_band_);
+                        const auto dist_pre = start_state.planned_rubber_band_->distance(*start_state.rubber_band_);
+                        const auto dist_post = end_state.planned_rubber_band_->distance(*end_state.rubber_band_);
 
                         // Only compute the microstep band history if we're going to actually use it
                         std::vector<RubberBand::Ptr> microstep_band_history;
@@ -2036,8 +2039,10 @@ namespace smmap
                             microstep_band_history
                         };
                         const auto features = extractFeatures(transition);
-                        assert(feature_names.size() == features.size());
-                        const bool mistake = (start_foh && !end_foh) && (dist > mistake_dist_thresh_);
+                        assert(FEATURE_NAMES.size() == features.size());
+                        const bool mistake =
+                                (start_foh && dist_pre <= mistake_dist_thresh_) &&
+                                !(end_foh && dist_post <= mistake_dist_thresh_);
                         ARC_LOG_STREAM(logger, std::to_string(mistake) << ", " << PrettyPrint::PrettyPrint(features, false, ", "));
 
                         if (!disable_visualizations_)
@@ -2103,7 +2108,7 @@ namespace smmap
                                     {
                                         const bool foh = dist_and_foh_values(1, 0);
                                         const auto color = foh ? Visualizer::Green() : Visualizer::Red();
-                                        const auto ns = foh ? ns_prefix + "MISTAKE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "MISTAKE_EXECUTED_BAND_SURFACE_FOH_DIFF";
+                                        const auto ns = foh ? ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_DIFF";
                                         const auto new_ids = transition.microstep_band_history_.back()->visualize(ns, color, color, (int)(dist_and_foh_values.cols() + 1));
                                         marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
                                     }
@@ -2115,7 +2120,7 @@ namespace smmap
                                         const auto color = foh
                                                 ? InterpolateColor(Visualizer::Green(), Visualizer::Cyan(), ratio)
                                                 : InterpolateColor(Visualizer::Red(), Visualizer::Magenta(), ratio);
-                                        const auto ns = foh ? ns_prefix + "MISTAKE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "MISTAKE_EXECUTED_BAND_SURFACE_FOH_DIFF";
+                                        const auto ns = foh ? ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_DIFF";
                                         const auto new_ids = transition.microstep_band_history_[step_idx]->visualize(ns, color, color, (int)(step_idx + 1));
                                         marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
                                     }
@@ -2123,7 +2128,7 @@ namespace smmap
                                     {
                                         const bool foh = dist_and_foh_values(1, dist_and_foh_values.cols() - 1);
                                         const auto color = foh ? Visualizer::Cyan() : Visualizer::Magenta();
-                                        const auto ns = foh ? ns_prefix + "MISTAKE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "MISTAKE_EXECUTED_BAND_SURFACE_FOH_DIFF";
+                                        const auto ns = foh ? ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_DIFF";
                                         const auto new_ids = transition.microstep_band_history_.back()->visualize(ns, color, color, (int)(dist_and_foh_values.cols() + 1));
                                         marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
                                     }
@@ -2131,22 +2136,22 @@ namespace smmap
                                     // Add the planned vs executed start and end bands on their own namespaces
                                     {
                                         const auto new_ids1 = transition.starting_state_.planned_rubber_band_->visualize(
-                                                    ns_prefix + "MISTAKE_START_PLANNED",
+                                                    ns_prefix + "FEATURE_START_PLANNED",
                                                     Visualizer::Green(),
                                                     Visualizer::Green(),
                                                     1);
                                         const auto new_ids2 = transition.starting_state_.rubber_band_->visualize(
-                                                    ns_prefix + "MISTAKE_START_EXECUTED",
+                                                    ns_prefix + "FEATURE_START_EXECUTED",
                                                     Visualizer::Red(),
                                                     Visualizer::Red(),
                                                     1);
                                         const auto new_ids3 = transition.ending_state_.planned_rubber_band_->visualize(
-                                                    ns_prefix + "MISTAKE_END_PLANNED",
+                                                    ns_prefix + "FEATURE_END_PLANNED",
                                                     Visualizer::Olive(),
                                                     Visualizer::Olive(),
                                                     1);
                                         const auto new_ids4 = transition.ending_state_.rubber_band_->visualize(
-                                                    ns_prefix + "MISTAKE_END_EXECUTED",
+                                                    ns_prefix + "FEATURE_END_EXECUTED",
                                                     Visualizer::Orange(),
                                                     Visualizer::Orange(),
                                                     1);
@@ -2175,22 +2180,24 @@ namespace smmap
                                 if (features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA] != std::to_string(0) ||
                                     features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] != std::to_string(0))
                                 {
-                                    assert(features.size() == feature_names.size());
+                                    assert(features.size() == FEATURE_NAMES.size());
                                     ++num_examples_delta_neq_0;
                                     ROS_INFO_STREAM_NAMED("features", "Examples with equal number of components: " << num_examples_delta_eq_0 << "   Not equal components: " << num_examples_delta_neq_0);
                                     ROS_INFO_STREAM_NAMED("features", test_result_file);
-                                    ROS_INFO_STREAM_NAMED("features", "  Transition at idx: " << idx << " with distance " << dist);
-                                    for (size_t i = 0; i < feature_names.size(); ++i)
+                                    ROS_INFO_STREAM_NAMED("features", "  Transition at idx: " << idx << " with distance " << dist_post);
+                                    for (size_t i = 0; i < FEATURE_NAMES.size(); ++i)
                                     {
-                                        ROS_INFO_STREAM_NAMED("features", "  " << /* std::left << */ std::setw(48) << feature_names[i] << ": " << features[i]);
+                                        ROS_INFO_STREAM_NAMED("features", "  " << /* std::left << */ std::setw(48) << FEATURE_NAMES[i] << ": " << features[i]);
                                     }
-                                    PressAnyKeyToContinue();
+//                                    PressAnyKeyToContinue();
                                 }
                                 else
                                 {
                                     ++num_examples_delta_eq_0;
                                 }
                             }
+
+                            PressAnyKeyToContinue("---------------- grid test ----------------");
                         }
                     }
 
@@ -2209,6 +2216,8 @@ namespace smmap
     std::vector<std::string> TransitionTesting::extractFeatures(
             const TransitionEstimation::StateTransition& transition) const
     {
+        static const auto parabola_slice_option = ROSHelpers::GetParamRequired<std::string>(*ph_, "parabola_slice_option", __func__).GetImmutable();
+
 //        static double time = 0.0;
 //        static size_t calls = 0;
 //        ++calls;
@@ -2278,25 +2287,22 @@ namespace smmap
         const double band_length_pre = transition.starting_state_.planned_rubber_band_->totalLength();
         const double default_band_length_post = transition.ending_state_.planned_rubber_band_->totalLength();
 
-        const double dmax = initial_band_->maxSafeLength();
-//        const double major_axis_length_pre = dmax / 2.0;
-//        const double minor_axis_length_pre = std::sqrt(dmax * dmax / 4.0 - mid_to_gripper_b_pre.squaredNorm());
-//        const double major_axis_length_post = dmax / 2.0;
-//        const double minor_axis_length_post = std::sqrt(dmax * dmax / 4.0 - mid_to_gripper_b_post.squaredNorm());
-
         const double resolution = work_space_grid_.minStepDimension() / 2.0;
-        sdf_tools::CollisionMapGrid collision_grid_pre;
-        sdf_tools::CollisionMapGrid collision_grid_post;
-        if (disable_visualizations_)
-        {
-            collision_grid_pre = ExtractParabolaSlice(*sdf_, resolution, transition.starting_gripper_positions_, dmax);
-            collision_grid_post = ExtractParabolaSlice(*sdf_, resolution, transition.ending_gripper_positions_, dmax);
-        }
-        else
-        {
-            collision_grid_pre = ExtractParabolaSlice(*sdf_, resolution, transition.starting_gripper_positions_, dmax, vis_);
-            collision_grid_post = ExtractParabolaSlice(*sdf_, resolution, transition.ending_gripper_positions_, dmax, vis_);
-        }
+        const Visualizer::Ptr vis = disable_visualizations_ ? nullptr : vis_;
+        auto collision_grid_pre = ExtractParabolaSlice(
+                    *sdf_,
+                    resolution,
+                    transition.starting_gripper_positions_,
+                    transition.starting_state_.planned_rubber_band_,
+                    parabola_slice_option,
+                    vis);
+        auto collision_grid_post = ExtractParabolaSlice(
+                    *sdf_,
+                    resolution,
+                    transition.ending_gripper_positions_,
+                    transition.ending_state_.planned_rubber_band_,
+                    parabola_slice_option,
+                    vis);
 
         if (!disable_visualizations_)
         {
@@ -2308,6 +2314,9 @@ namespace smmap
             collision_grid_marker_post.ns = "collision_grid_post";
             vis_->publish(collision_grid_marker_pre);
             vis_->publish(collision_grid_marker_post);
+
+            vis_->visualizePoints("pre_band_planned", transition.starting_state_.planned_rubber_band_->upsampleBand(), Visualizer::Cyan(0.4f), 1, 0.005);
+            vis_->visualizePoints("post_band_planned", transition.ending_state_.planned_rubber_band_->upsampleBand(), Visualizer::Cyan(0.4f), 1, 0.005);
         }
 
         const auto components_pre = collision_grid_pre.ExtractConnectedComponents();
@@ -2372,17 +2381,12 @@ namespace smmap
         features[GRIPPER_B_POST_Y] = std::to_string(gripper_b_post.y());
         features[GRIPPER_B_POST_Z] = std::to_string(gripper_b_post.z());
 
-        features[GRIPPER_DELTA_LENGTH_PRE]  = std::to_string((gripper_a_pre - gripper_b_pre).norm());
-        features[GRIPPER_DELTA_LENGTH_POST] = std::to_string((gripper_a_post - gripper_b_post).norm());
+        features[GRIPPER_DELTA_LENGTH_PRE]  = std::to_string((transition.starting_gripper_positions_.first - transition.starting_gripper_positions_.second).norm());
+        features[GRIPPER_DELTA_LENGTH_POST] = std::to_string((transition.ending_gripper_positions_.first - transition.ending_gripper_positions_.second).norm());
 
-        features[MAX_BAND_LENGTH]            = std::to_string(dmax);
+        features[MAX_BAND_LENGTH]            = std::to_string(initial_band_->maxSafeLength());
         features[STARTING_BAND_LENGTH]       = std::to_string(band_length_pre);
         features[ENDING_DEFAULT_BAND_LENGTH] = std::to_string(default_band_length_post);
-
-//        features[STARTING_MAJOR_AXIS_LENGTH] = std::to_string(major_axis_length_pre);
-//        features[STARTING_MINOR_AXIS_LENGTH] = std::to_string(minor_axis_length_pre);
-//        features[ENDING_MAJOR_AXIS_LENGTH]   = std::to_string(major_axis_length_post);
-//        features[ENDING_MINOR_AXIS_LENGTH]   = std::to_string(minor_axis_length_post);
 
         features[SLICE_NUM_CONNECTED_COMPONENTS_PRE]            = std::to_string(num_connected_components_pre);
         features[SLICE_NUM_CONNECTED_COMPONENTS_POST]           = std::to_string(num_connected_components_post);

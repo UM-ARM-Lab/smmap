@@ -10,6 +10,7 @@ set(CATKIN_PACKAGES
     sdf_tools
     deformable_manipulation_msgs
     deformable_manipulation_experiment_params
+    pcl_ros
     tf2_ros
     tf2_eigen
 )
