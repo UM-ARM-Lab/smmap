@@ -969,13 +969,8 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
         GRIPPER_DELTA_LENGTH_POST,
 
 //        MAX_BAND_LENGTH,
-        STARTING_BAND_LENGTH,
-        ENDING_DEFAULT_BAND_LENGTH,
-
-//        STARTING_MAJOR_AXIS_LENGTH,
-//        STARTING_MINOR_AXIS_LENGTH,
-//        ENDING_MAJOR_AXIS_LENGTH,
-//        ENDING_MINOR_AXIS_LENGTH,
+        BAND_LENGTH_PRE,
+        BAND_LENGTH_POST,
 
         SLICE_NUM_CONNECTED_COMPONENTS_PRE,
         SLICE_NUM_CONNECTED_COMPONENTS_POST,
@@ -1001,10 +996,10 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
     const double band_length_pre = initial_band.totalLength();
     const double default_band_length_post = default_prediction.totalLength();
 
-    features[GRIPPER_DELTA_LENGTH_PRE]      = (grippers_pre.first - grippers_pre.second).norm();
-    features[GRIPPER_DELTA_LENGTH_POST]     = (grippers_post.first - grippers_post.second).norm();
-    features[STARTING_BAND_LENGTH]          = band_length_pre;
-    features[ENDING_DEFAULT_BAND_LENGTH]    = default_band_length_post;
+    features[GRIPPER_DELTA_LENGTH_PRE]  = (grippers_pre.first - grippers_pre.second).norm();
+    features[GRIPPER_DELTA_LENGTH_POST] = (grippers_post.first - grippers_post.second).norm();
+    features[BAND_LENGTH_PRE]           = band_length_pre;
+    features[BAND_LENGTH_POST]          = default_band_length_post;
 
     if (transition_mistake_classifier_->num_features_ == 13)
     {

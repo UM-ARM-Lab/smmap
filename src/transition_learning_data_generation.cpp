@@ -50,22 +50,29 @@ enum Features
 
     GRIPPER_DELTA_LENGTH_PRE,
     GRIPPER_DELTA_LENGTH_POST,
+    GRIPPER_DELTA_LENGTH_RATIO_PRE,
+    GRIPPER_DELTA_LENGTH_RATIO_POST,
 
     MAX_BAND_LENGTH,
-    STARTING_BAND_LENGTH,
-    ENDING_DEFAULT_BAND_LENGTH,
+    BAND_LENGTH_PRE,
+    BAND_LENGTH_POST,
+    BAND_LENGTH_RATIO_PRE,
+    BAND_LENGTH_RATIO_POST,
 
     SLICE_NUM_CONNECTED_COMPONENTS_PRE,
     SLICE_NUM_CONNECTED_COMPONENTS_POST,
     SLICE_NUM_CONNECTED_COMPONENTS_DELTA,
+    SLICE_NUM_CONNECTED_COMPONENTS_DELTA_SIGN,
 
     SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE,
     SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST,
     SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA,
+    SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA_SIGN,
 
     SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE,
     SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST,
     SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA,
+    SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA_SIGN,
 
     FEATURES_DUMMY_ITEM
 };
@@ -87,22 +94,29 @@ static const std::vector<std::string> FEATURE_NAMES =
 
     std::string("GRIPPER_DELTA_LENGTH_PRE"),
     std::string("GRIPPER_DELTA_LENGTH_POST"),
+    std::string("GRIPPER_DELTA_LENGTH_RATIO_PRE"),
+    std::string("GRIPPER_DELTA_LENGTH_RATIO_POST"),
 
     std::string("MAX_BAND_LENGTH"),
-    std::string("STARTING_BAND_LENGTH"),
-    std::string("ENDING_DEFAULT_BAND_LENGTH"),
+    std::string("BAND_LENGTH_PRE"),
+    std::string("BAND_LENGTH_POST"),
+    std::string("BAND_LENGTH_RATIO_PRE"),
+    std::string("BAND_LENGTH_RATIO_POST"),
 
     std::string("SLICE_NUM_CONNECTED_COMPONENTS_PRE"),
     std::string("SLICE_NUM_CONNECTED_COMPONENTS_POST"),
     std::string("SLICE_NUM_CONNECTED_COMPONENTS_DELTA"),
+    std::string("SLICE_NUM_CONNECTED_COMPONENTS_DELTA_SIGN"),
 
     std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE"),
     std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST"),
     std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA"),
+    std::string("SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA_SIGN"),
 
     std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE"),
     std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST"),
-    std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA")
+    std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA"),
+    std::string("SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA_SIGN")
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2381,24 +2395,37 @@ namespace smmap
         features[GRIPPER_B_POST_Y] = std::to_string(gripper_b_post.y());
         features[GRIPPER_B_POST_Z] = std::to_string(gripper_b_post.z());
 
-        features[GRIPPER_DELTA_LENGTH_PRE]  = std::to_string((transition.starting_gripper_positions_.first - transition.starting_gripper_positions_.second).norm());
-        features[GRIPPER_DELTA_LENGTH_POST] = std::to_string((transition.ending_gripper_positions_.first - transition.ending_gripper_positions_.second).norm());
+        const double dmax = initial_band_->maxSafeLength();
+        const double gripper_delta_norm_pre = (transition.starting_gripper_positions_.first - transition.starting_gripper_positions_.second).norm();
+        const double gripper_delta_norm_post = (transition.ending_gripper_positions_.first - transition.ending_gripper_positions_.second).norm();
+        features[GRIPPER_DELTA_LENGTH_PRE]          = std::to_string(gripper_delta_norm_pre);
+        features[GRIPPER_DELTA_LENGTH_POST]         = std::to_string(gripper_delta_norm_post);
+        features[GRIPPER_DELTA_LENGTH_RATIO_PRE]    = std::to_string(gripper_delta_norm_pre / dmax);
+        features[GRIPPER_DELTA_LENGTH_RATIO_POST]   = std::to_string(gripper_delta_norm_post / dmax);
 
-        features[MAX_BAND_LENGTH]            = std::to_string(initial_band_->maxSafeLength());
-        features[STARTING_BAND_LENGTH]       = std::to_string(band_length_pre);
-        features[ENDING_DEFAULT_BAND_LENGTH] = std::to_string(default_band_length_post);
+        features[MAX_BAND_LENGTH]           = std::to_string(dmax);
+        features[BAND_LENGTH_PRE]           = std::to_string(band_length_pre);
+        features[BAND_LENGTH_POST]          = std::to_string(default_band_length_post);
+        features[BAND_LENGTH_RATIO_PRE]     = std::to_string(band_length_pre / dmax);
+        features[BAND_LENGTH_RATIO_POST]    = std::to_string(default_band_length_post / dmax);
 
-        features[SLICE_NUM_CONNECTED_COMPONENTS_PRE]            = std::to_string(num_connected_components_pre);
-        features[SLICE_NUM_CONNECTED_COMPONENTS_POST]           = std::to_string(num_connected_components_post);
-        features[SLICE_NUM_CONNECTED_COMPONENTS_DELTA]          = std::to_string((int)num_connected_components_post - (int)num_connected_components_pre);
+        const int num_connected_components_delta = (int)num_connected_components_post - (int)num_connected_components_pre;
+        features[SLICE_NUM_CONNECTED_COMPONENTS_PRE]        = std::to_string(num_connected_components_pre);
+        features[SLICE_NUM_CONNECTED_COMPONENTS_POST]       = std::to_string(num_connected_components_post);
+        features[SLICE_NUM_CONNECTED_COMPONENTS_DELTA]      = std::to_string(num_connected_components_delta);
+        features[SLICE_NUM_CONNECTED_COMPONENTS_DELTA_SIGN] = std::to_string(Sign(num_connected_components_delta));
 
-        features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE]       = std::to_string(num_free_components_pre);
-        features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST]      = std::to_string(num_free_components_post);
-        features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA]     = std::to_string((int)num_free_components_post - (int)num_free_components_pre);
+        const int num_free_connected_components_delta = (int)num_free_components_post - (int)num_free_components_pre;
+        features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE]           = std::to_string(num_free_components_pre);
+        features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST]          = std::to_string(num_free_components_post);
+        features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA]         = std::to_string(num_free_connected_components_delta);
+        features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA_SIGN]    = std::to_string(Sign(num_free_connected_components_delta));
 
-        features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE]   = std::to_string(num_occupied_components_pre);
-        features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST]  = std::to_string(num_occupied_components_post);
-        features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] = std::to_string((int)num_occupied_components_post - (int)num_occupied_components_pre);
+        const int num_occupied_connected_components_delta = (int)num_occupied_components_post - (int)num_occupied_components_pre;
+        features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE]           = std::to_string(num_occupied_components_pre);
+        features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST]          = std::to_string(num_occupied_components_post);
+        features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA]         = std::to_string(num_occupied_connected_components_delta);
+        features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA_SIGN]    = std::to_string(Sign(num_occupied_connected_components_delta));
 
 //        time += sw(READ);
 //        std::cerr << "Calls: " << calls
@@ -2503,30 +2530,37 @@ namespace smmap
         ++next_vis_prefix_;
 
         ROS_INFO_STREAM("Added vis id: " << res.response << " for file " << req.data << std::endl
-                        << "Planned vs executed start FOH:          " << start_foh << std::endl
-                        << "Planned vs executed start dist:         " << start_dist << std::endl
-                        << "Planned vs executed end FOH:            " << end_foh << std::endl
-                        << "Planned vs executed end dist:           " << end_dist << std::endl
-                        << "Mistake:                                " << std::boolalpha <<  mistake << std::endl
-                        << "Predicted mistake:                      " << std::boolalpha <<  predicted_mistake << std::endl
-//                        << "Gripper a transformed start position:   " << features[GRIPPER_A_PRE_X] << ", " << features[GRIPPER_A_PRE_Y] << ", " << features[GRIPPER_A_PRE_Z] << std::endl
-//                        << "Gripper b transformed start position:   " << features[GRIPPER_B_PRE_X] << ", " << features[GRIPPER_B_PRE_Y] << ", " << features[GRIPPER_B_PRE_Z] << std::endl
-//                        << "Gripper a transformed end position:     " << features[GRIPPER_A_POST_X] << ", " << features[GRIPPER_A_POST_Y] << ", " << features[GRIPPER_A_POST_Z] << std::endl
-//                        << "Gripper b transformed end position:     " << features[GRIPPER_B_POST_X] << ", " << features[GRIPPER_B_POST_Y] << ", " << features[GRIPPER_B_POST_Z] << std::endl
-                        << "Gripper seperation pre:                 " << features[GRIPPER_DELTA_LENGTH_PRE] << std::endl
-                        << "Gripper seperation post:                " << features[GRIPPER_DELTA_LENGTH_POST] << std::endl
-//                        << "Band length max:                        " << features[MAX_BAND_LENGTH] << std::endl
-                        << "Band length pre:                        " << features[STARTING_BAND_LENGTH] << std::endl
-                        << "Band length post:                       " << features[ENDING_DEFAULT_BAND_LENGTH] << std::endl
-                        << "Num connected components pre:           " << features[SLICE_NUM_CONNECTED_COMPONENTS_PRE] << std::endl
-                        << "Num connected components post:          " << features[SLICE_NUM_CONNECTED_COMPONENTS_POST] << std::endl
-                        << "Num connected components delta:         " << features[SLICE_NUM_CONNECTED_COMPONENTS_DELTA] << std::endl
-                        << "Num free connected components pre:      " << features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE] << std::endl
-                        << "Num free connected components post:     " << features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST] << std::endl
-                        << "Num free connected components delta:    " << features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA] << std::endl
-                        << "Num filled connected components pre:    " << features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE] << std::endl
-                        << "Num filled connected components post:   " << features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST] << std::endl
-                        << "Num filled connected components delta:  " << features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] << std::endl);
+                        << "Planned vs executed start FOH:              " << start_foh << std::endl
+                        << "Planned vs executed start dist:             " << start_dist << std::endl
+                        << "Planned vs executed end FOH:                " << end_foh << std::endl
+                        << "Planned vs executed end dist:               " << end_dist << std::endl
+                        << "Mistake:                                    " << std::boolalpha <<  mistake << std::endl
+                        << "Predicted mistake:                          " << std::boolalpha <<  predicted_mistake << std::endl
+//                        << "Gripper a transformed start position:       " << features[GRIPPER_A_PRE_X] << ", " << features[GRIPPER_A_PRE_Y] << ", " << features[GRIPPER_A_PRE_Z] << std::endl
+//                        << "Gripper b transformed start position:       " << features[GRIPPER_B_PRE_X] << ", " << features[GRIPPER_B_PRE_Y] << ", " << features[GRIPPER_B_PRE_Z] << std::endl
+//                        << "Gripper a transformed end position:         " << features[GRIPPER_A_POST_X] << ", " << features[GRIPPER_A_POST_Y] << ", " << features[GRIPPER_A_POST_Z] << std::endl
+//                        << "Gripper b transformed end position:         " << features[GRIPPER_B_POST_X] << ", " << features[GRIPPER_B_POST_Y] << ", " << features[GRIPPER_B_POST_Z] << std::endl
+                        << "Gripper seperation pre:                     " << features[GRIPPER_DELTA_LENGTH_PRE] << std::endl
+                        << "Gripper seperation post:                    " << features[GRIPPER_DELTA_LENGTH_POST] << std::endl
+                        << "Gripper seperation ratio pre:               " << features[GRIPPER_DELTA_LENGTH_RATIO_PRE] << std::endl
+                        << "Gripper seperation ratio post:              " << features[GRIPPER_DELTA_LENGTH_RATIO_POST] << std::endl
+//                        << "Band length max:                            " << features[MAX_BAND_LENGTH] << std::endl
+                        << "Band length pre:                            " << features[BAND_LENGTH_PRE] << std::endl
+                        << "Band length post:                           " << features[BAND_LENGTH_POST] << std::endl
+                        << "Band length ratio pre:                      " << features[BAND_LENGTH_RATIO_PRE] << std::endl
+                        << "Band length ratio post:                     " << features[BAND_LENGTH_RATIO_POST] << std::endl
+                        << "Num connected components pre:               " << features[SLICE_NUM_CONNECTED_COMPONENTS_PRE] << std::endl
+                        << "Num connected components post:              " << features[SLICE_NUM_CONNECTED_COMPONENTS_POST] << std::endl
+                        << "Num connected components delta:             " << features[SLICE_NUM_CONNECTED_COMPONENTS_DELTA] << std::endl
+                        << "Num connected components delta sign:        " << features[SLICE_NUM_CONNECTED_COMPONENTS_DELTA_SIGN] << std::endl
+                        << "Num free connected components pre:          " << features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE] << std::endl
+                        << "Num free connected components post:         " << features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST] << std::endl
+                        << "Num free connected components delta:        " << features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA] << std::endl
+                        << "Num free connected components delta sign:   " << features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA_SIGN] << std::endl
+                        << "Num filled connected components pre:        " << features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE] << std::endl
+                        << "Num filled connected components post:       " << features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST] << std::endl
+                        << "Num filled connected components delta:      " << features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] << std::endl
+                        << "Num filled connected components delta sign: " << features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA_SIGN] << std::endl);
 
         return true;
     }
