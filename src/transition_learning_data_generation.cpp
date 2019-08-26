@@ -1647,7 +1647,8 @@ namespace smmap
                                 marker_ids.insert(marker_ids.begin(), new_ids6.begin(), new_ids6.end());
                             }
 
-                            const auto features = extractFeatures(transition);
+                            static const auto parabola_slice_option = ROSHelpers::GetParam<std::string>(*ph_, "parabola_slice_option", "basic");
+                            const auto features = extractFeatures(transition, parabola_slice_option);
                             assert(FEATURE_NAMES.size() == features.size());
                             if (features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA] != std::to_string(0) ||
                                 features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] != std::to_string(0))
@@ -2052,7 +2053,7 @@ namespace smmap
                             trajectory[idx].second,
                             microstep_band_history
                         };
-                        const auto features = extractFeatures(transition);
+                        const auto features = extractFeatures(transition, parabola_slice_option);
                         assert(FEATURE_NAMES.size() == features.size());
                         const bool mistake =
                                 (start_foh && dist_pre <= mistake_dist_thresh_) &&
@@ -2228,10 +2229,9 @@ namespace smmap
     }
 
     std::vector<std::string> TransitionTesting::extractFeatures(
-            const TransitionEstimation::StateTransition& transition) const
+            const TransitionEstimation::StateTransition& transition,
+            const std::string& parabola_slice_option) const
     {
-        static const auto parabola_slice_option = ROSHelpers::GetParamRequired<std::string>(*ph_, "parabola_slice_option", __func__).GetImmutable();
-
 //        static double time = 0.0;
 //        static size_t calls = 0;
 //        ++calls;
@@ -2518,7 +2518,8 @@ namespace smmap
             trajectory[traj_idx].second,
             microstep_band_history
         };
-        const auto features = extractFeatures(transition);
+        static const auto parabola_slice_option = ROSHelpers::GetParam<std::string>(*ph_, "parabola_slice_option", "basic");
+        const auto features = extractFeatures(transition, parabola_slice_option);
         const bool mistake = (start_foh && !end_foh) && (end_dist > mistake_dist_thresh_);
         const bool predicted_mistake = transition_mistake_classifier_->predict(
                     classifier_scaler_(

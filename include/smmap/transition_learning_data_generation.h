@@ -124,7 +124,9 @@ namespace smmap
         void generateMeaningfulMistakeExamples();
 
         void generateFeatures(const std::string& parabola_slice_option);
-        std::vector<std::string> extractFeatures(const TransitionEstimation::StateTransition& transition) const;
+        std::vector<std::string> extractFeatures(
+                const TransitionEstimation::StateTransition& transition,
+                const std::string& parabola_slice_option) const;
 
         void testClassifier();
         AllGrippersSinglePose getGripperTargets();
