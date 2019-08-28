@@ -531,7 +531,6 @@ TransitionEstimation::TransitionEstimation(
     }
 }
 
-
 //////// Helper functions //////////////////////////////////////////////////////////////////////////////////////////////
 
 // Assumes the vectors have already been appropriately discretized/resampled
@@ -950,25 +949,10 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
         const RubberBand& default_prediction,
         const bool verbose) const
 {
-    enum
+    enum IROS_WORKSHOP_FEATURES
     {
-//        GRIPPER_A_PRE_X,
-//        GRIPPER_A_PRE_Y,
-//        GRIPPER_A_PRE_Z,
-//        GRIPPER_B_PRE_X,
-//        GRIPPER_B_PRE_Y,
-//        GRIPPER_B_PRE_Z,
-//        GRIPPER_A_POST_X,
-//        GRIPPER_A_POST_Y,
-//        GRIPPER_A_POST_Z,
-//        GRIPPER_B_POST_X,
-//        GRIPPER_B_POST_Y,
-//        GRIPPER_B_POST_Z,
-
         GRIPPER_DELTA_LENGTH_PRE,
         GRIPPER_DELTA_LENGTH_POST,
-
-//        MAX_BAND_LENGTH,
         BAND_LENGTH_PRE,
         BAND_LENGTH_POST,
 
@@ -983,12 +967,23 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
         SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE,
         SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST,
         SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA,
+    };
 
-        DUMMY_ITEM
+    enum NORMALIZED_FEATURES
+    {
+        GRIPPER_DELTA_LENGTH_RATIO_PRE,
+        GRIPPER_DELTA_LENGTH_RATIO_POST,
+        BAND_LENGTH_RATIO_PRE,
+        BAND_LENGTH_RATIO_POST,
+
+        SLICE_NUM_CONNECTED_COMPONENTS_DELTA_SIGN,
+        SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA_SIGN,
+        SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA_SIGN,
     };
 
     assert(transition_mistake_classifier_->num_features_ == 4 ||
-           transition_mistake_classifier_->num_features_ == 13);
+           transition_mistake_classifier_->num_features_ == 13 ||
+           transition_mistake_classifier_->num_features_ == 7);
     Eigen::VectorXd features(transition_mistake_classifier_->num_features_);
 
     const auto grippers_pre = initial_band.getEndpoints();
@@ -996,37 +991,34 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
     const double band_length_pre = initial_band.totalLength();
     const double default_band_length_post = default_prediction.totalLength();
 
-    features[GRIPPER_DELTA_LENGTH_PRE]  = (grippers_pre.first - grippers_pre.second).norm();
-    features[GRIPPER_DELTA_LENGTH_POST] = (grippers_post.first - grippers_post.second).norm();
-    features[BAND_LENGTH_PRE]           = band_length_pre;
-    features[BAND_LENGTH_POST]          = default_band_length_post;
+    if (transition_mistake_classifier_->num_features_ == 4 ||
+        transition_mistake_classifier_->num_features_ == 13)
+    {
+        features[IROS_WORKSHOP_FEATURES::GRIPPER_DELTA_LENGTH_PRE]  = (grippers_pre.first - grippers_pre.second).norm();
+        features[IROS_WORKSHOP_FEATURES::GRIPPER_DELTA_LENGTH_POST] = (grippers_post.first - grippers_post.second).norm();
+        features[IROS_WORKSHOP_FEATURES::BAND_LENGTH_PRE]           = band_length_pre;
+        features[IROS_WORKSHOP_FEATURES::BAND_LENGTH_POST]          = default_band_length_post;
+    }
+    else if (transition_mistake_classifier_->num_features_ == 7)
+    {
+        features[NORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_RATIO_PRE]  = (grippers_pre.first - grippers_pre.second).norm() / template_band_.maxSafeLength();
+        features[NORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_RATIO_POST] = (grippers_post.first - grippers_post.second).norm() / template_band_.maxSafeLength();;
+        features[NORMALIZED_FEATURES::BAND_LENGTH_RATIO_PRE]           = band_length_pre / template_band_.maxSafeLength();;
+        features[NORMALIZED_FEATURES::BAND_LENGTH_RATIO_POST]          = default_band_length_post / template_band_.maxSafeLength();;
+    }
+    else
+    {
+        assert(false);
+    }
 
-    if (transition_mistake_classifier_->num_features_ == 13)
+    if (transition_mistake_classifier_->num_features_ == 13 ||
+        transition_mistake_classifier_->num_features_ == 7)
     {
         const double dmax = initial_band.maxSafeLength();
         const double resolution = work_space_grid_.minStepDimension() / 2.0;
-        sdf_tools::CollisionMapGrid collision_grid_pre = [&]
-        {
-            if (verbose && vis_->visualizationsEnabled())
-            {
-                return ExtractParabolaSliceBasic(*sdf_, resolution, grippers_pre, dmax, vis_);
-            }
-            else
-            {
-                return ExtractParabolaSliceBasic(*sdf_, resolution, grippers_pre, dmax);
-            }
-        }();
-        sdf_tools::CollisionMapGrid collision_grid_post = [&]
-        {
-            if (verbose && vis_->visualizationsEnabled())
-            {
-                return ExtractParabolaSliceBasic(*sdf_, resolution, grippers_post, dmax, vis_);
-            }
-            else
-            {
-                return ExtractParabolaSliceBasic(*sdf_, resolution, grippers_post, dmax);
-            }
-        }();
+        const Visualizer::Ptr vis = (verbose && vis_->visualizationsEnabled()) ? vis_ : nullptr;
+        sdf_tools::CollisionMapGrid collision_grid_pre = ExtractParabolaSliceBasic(*sdf_, resolution, grippers_pre, dmax, vis);
+        sdf_tools::CollisionMapGrid collision_grid_post = ExtractParabolaSliceBasic(*sdf_, resolution, grippers_post, dmax, vis);
 
         if (verbose && vis_->visualizationsEnabled())
         {
@@ -1085,17 +1077,26 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
             }
         }
 
-        features[SLICE_NUM_CONNECTED_COMPONENTS_PRE]            = num_connected_components_pre;
-        features[SLICE_NUM_CONNECTED_COMPONENTS_POST]           = num_connected_components_post;
-        features[SLICE_NUM_CONNECTED_COMPONENTS_DELTA]          = num_connected_components_post - num_connected_components_pre;
+        if (transition_mistake_classifier_->num_features_ == 13)
+        {
+            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_CONNECTED_COMPONENTS_PRE]            = num_connected_components_pre;
+            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_CONNECTED_COMPONENTS_POST]           = num_connected_components_post;
+            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_CONNECTED_COMPONENTS_DELTA]          = num_connected_components_post - num_connected_components_pre;
 
-        features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE]       = num_free_components_pre;
-        features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST]      = num_free_components_post;
-        features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA]     = num_free_components_post - num_free_components_pre;
+            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE]       = num_free_components_pre;
+            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST]      = num_free_components_post;
+            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA]     = num_free_components_post - num_free_components_pre;
 
-        features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE]   = num_occupied_components_pre;
-        features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST]  = num_occupied_components_post;
-        features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] = num_occupied_components_post - num_occupied_components_pre;
+            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE]   = num_occupied_components_pre;
+            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST]  = num_occupied_components_post;
+            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] = num_occupied_components_post - num_occupied_components_pre;
+        }
+        else if (transition_mistake_classifier_->num_features_ == 7)
+        {
+            features[NORMALIZED_FEATURES::SLICE_NUM_CONNECTED_COMPONENTS_DELTA_SIGN]          = Sign(num_connected_components_post - num_connected_components_pre);
+            features[NORMALIZED_FEATURES::SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA_SIGN]     = Sign(num_free_components_post - num_free_components_pre);
+            features[NORMALIZED_FEATURES::SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA_SIGN] = Sign(num_occupied_components_post - num_occupied_components_pre);
+        }
     }
 
     return features;

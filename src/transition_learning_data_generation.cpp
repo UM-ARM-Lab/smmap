@@ -2332,12 +2332,12 @@ namespace smmap
 
         const auto components_pre = collision_grid_pre.ExtractConnectedComponents();
         const auto components_post = collision_grid_post.ExtractConnectedComponents();
-        const auto num_connected_components_pre = components_pre.size();
-        const auto num_connected_components_post = components_post.size();
+        const int num_connected_components_pre = static_cast<int>(components_pre.size());
+        const int num_connected_components_post = static_cast<int>(components_post.size());
 
         // Figure out how many "occupied" components there are, and how many "empty" components there are (pre)
-        size_t num_free_components_pre = 0;
-        size_t num_occupied_components_pre = 0;
+        int num_free_components_pre = 0;
+        int num_occupied_components_pre = 0;
         for (size_t idx = 0; idx < components_pre.size(); ++idx)
         {
             const auto grid_idx = components_pre[idx].at(0);
@@ -2357,8 +2357,8 @@ namespace smmap
         }
 
         // Figure out how many "occupied" components there are, and how many "empty" components there are (post)
-        size_t num_free_components_post = 0;
-        size_t num_occupied_components_post = 0;
+        int num_free_components_post = 0;
+        int num_occupied_components_post = 0;
         for (size_t idx = 0; idx < components_post.size(); ++idx)
         {
             const auto grid_idx = components_post[idx].at(0);
@@ -2406,19 +2406,19 @@ namespace smmap
         features[BAND_LENGTH_RATIO_PRE]     = std::to_string(band_length_pre / dmax);
         features[BAND_LENGTH_RATIO_POST]    = std::to_string(default_band_length_post / dmax);
 
-        const int num_connected_components_delta = (int)num_connected_components_post - (int)num_connected_components_pre;
+        const int num_connected_components_delta = num_connected_components_post - num_connected_components_pre;
         features[SLICE_NUM_CONNECTED_COMPONENTS_PRE]        = std::to_string(num_connected_components_pre);
         features[SLICE_NUM_CONNECTED_COMPONENTS_POST]       = std::to_string(num_connected_components_post);
         features[SLICE_NUM_CONNECTED_COMPONENTS_DELTA]      = std::to_string(num_connected_components_delta);
         features[SLICE_NUM_CONNECTED_COMPONENTS_DELTA_SIGN] = std::to_string(Sign(num_connected_components_delta));
 
-        const int num_free_connected_components_delta = (int)num_free_components_post - (int)num_free_components_pre;
+        const int num_free_connected_components_delta = num_free_components_post - num_free_components_pre;
         features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE]           = std::to_string(num_free_components_pre);
         features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST]          = std::to_string(num_free_components_post);
         features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA]         = std::to_string(num_free_connected_components_delta);
         features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA_SIGN]    = std::to_string(Sign(num_free_connected_components_delta));
 
-        const int num_occupied_connected_components_delta = (int)num_occupied_components_post - (int)num_occupied_components_pre;
+        const int num_occupied_connected_components_delta = num_occupied_components_post - num_occupied_components_pre;
         features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE]           = std::to_string(num_occupied_components_pre);
         features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST]          = std::to_string(num_occupied_components_post);
         features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA]         = std::to_string(num_occupied_connected_components_delta);
