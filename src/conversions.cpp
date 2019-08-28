@@ -82,44 +82,62 @@ namespace smmap
                         test_result.microsteps_all.begin() + microsteps_end_idx);
             const auto microsteps = ConvertToEigenFeedback(dmm_microsteps);
 
-            const TransitionEstimation::State tes =
+            try
             {
-                microsteps.back().object_configuration_,
-                RubberBand::BandFromWorldState(microsteps.back(), template_band),
-                std::make_shared<RubberBand>(*path[idx].band()),
-                microsteps.back().rope_node_transforms_,
-            };
-            // Shortcut if the band becomes overstretched
-            if (tes.rubber_band_->isOverstretched())
+                const TransitionEstimation::State tes =
+                {
+                    microsteps.back().object_configuration_,
+                    RubberBand::BandFromWorldState(microsteps.back(), template_band),
+                    std::make_shared<RubberBand>(*path[idx].band()),
+                    microsteps.back().rope_node_transforms_,
+                };
+                // Shortcut if the band becomes overstretched
+                if (tes.rubber_band_->isOverstretched())
+                {
+                    ROS_WARN_STREAM_NAMED("conversions", "Band overstretched at index " << idx << ". Path steps anticipated: " << path_num_steps);
+                    clean_trajectory = false;
+                    return {trajectory, clean_trajectory};
+                }
+                trajectory.push_back({tes, microsteps});
+            }
+            catch (const std::runtime_error& ex)
             {
-                ROS_WARN_STREAM_NAMED("conversions", "Band overstretched at index " << idx << ". Path steps anticipated: " << path_num_steps);
+                ROS_ERROR_STREAM_NAMED("conversions", "Error parsing trajectory at idx " << idx << ": " << ex.what());
                 clean_trajectory = false;
                 return {trajectory, clean_trajectory};
             }
-            trajectory.push_back({tes, microsteps});
         }
 
         // Propagate the planned band the last step, and record the resulting state
         if (has_last_action)
         {
             const WorldState end = ConvertToEigenFeedback(test_result.microsteps_last_action.back());
-
             auto planned_band = std::make_shared<RubberBand>(*path.back().band());
             planned_band->forwardPropagate(ToGripperPositions(end.all_grippers_single_pose_), false);
-            const auto tes = TransitionEstimation::State
+
+            try
             {
-                end.object_configuration_,
-                RubberBand::BandFromWorldState(end, template_band),
-                planned_band,
-                end.rope_node_transforms_
-            };
-            if (tes.rubber_band_->isOverstretched())
+                const auto tes = TransitionEstimation::State
+                {
+                    end.object_configuration_,
+                    RubberBand::BandFromWorldState(end, template_band),
+                    planned_band,
+                    end.rope_node_transforms_
+                };
+                if (tes.rubber_band_->isOverstretched())
+                {
+                    ROS_WARN_STREAM_NAMED("to_traj", "Band overstretched at last action.");
+                    clean_trajectory = false;
+                    return {trajectory, clean_trajectory};
+                }
+                trajectory.push_back({tes, ConvertToEigenFeedback(test_result.microsteps_last_action)});
+            }
+            catch (const std::runtime_error& ex)
             {
-                ROS_WARN_STREAM_NAMED("to_traj", "Band overstretched at last action.");
+                ROS_ERROR_STREAM_NAMED("conversions", "Error parsing trajectory last action: " << ex.what());
                 clean_trajectory = false;
                 return {trajectory, clean_trajectory};
             }
-            trajectory.push_back({tes, ConvertToEigenFeedback(test_result.microsteps_last_action)});
         }
 
         return {trajectory, clean_trajectory};

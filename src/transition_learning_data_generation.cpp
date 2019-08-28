@@ -2223,7 +2223,7 @@ namespace smmap
             }
             catch (const std::exception& ex)
             {
-                ROS_ERROR_STREAM("Error parsing idx: " << file_idx << " file: " << test_result_file << ": " << ex.what());
+                ROS_ERROR_STREAM("Error parsing file idx: " << file_idx << " file: " << test_result_file << ": " << ex.what());
             }
         }
     }
