@@ -2054,7 +2054,8 @@ namespace smmap
                         const auto features = extractFeatures(transition, parabola_slice_option);
                         assert(FEATURE_NAMES.size() == features.size());
                         const bool mistake =
-                                (start_foh && dist_pre <= mistake_dist_thresh_) &&
+//                                (start_foh && dist_pre <= mistake_dist_thresh_) &&
+                                start_foh &&
                                 !(end_foh && dist_post <= mistake_dist_thresh_);
                         ARC_LOG_STREAM(logger, std::to_string(mistake) << ", " << PrettyPrint::PrettyPrint(features, false, ", "));
 
