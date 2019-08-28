@@ -1983,8 +1983,6 @@ namespace smmap
         int num_examples_delta_eq_0 = 0;
         int num_examples_delta_neq_0 = 0;
 
-//        const auto parabola_slice_option = ROSHelpers::GetParamRequired<std::string>(*ph_, "parabola_slice_option", __func__).GetImmutable();
-
         #pragma omp parallel for
         for (size_t file_idx = 0; file_idx < data_files_.size(); ++file_idx)
         {
@@ -1995,12 +1993,12 @@ namespace smmap
             const auto features_file =               experiment + "__classification_features__" + parabola_slice_option + "__.csv";
             const auto features_complete_flag_file = experiment + "__classification_features__" + parabola_slice_option + "__.complete";
 
-            Log::Log logger(features_file, false);
-
             try
             {
                 if (!boost::filesystem::is_regular_file(features_complete_flag_file))
                 {
+                    Log::Log logger(features_file, false);
+
                     const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
 
                     // Load the trajectory if possible, otherwise generate it
@@ -2211,8 +2209,6 @@ namespace smmap
                                     ++num_examples_delta_eq_0;
                                 }
                             }
-
-                            PressAnyKeyToContinue("---------------- grid test ----------------");
                         }
                     }
 
