@@ -1837,7 +1837,14 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
             if (!ROSHelpers::GetParam<bool>(*ph_, "rerun_forever", false))
             {
-                ROS_INFO_STREAM_NAMED("task_framework", "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
+                const int classifier_dim = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/dim", __func__).GetImmutable();
+                const std::string classifier_slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__).GetImmutable();
+                const std::string classifier_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/type", __func__).GetImmutable();
+                ROS_INFO_STREAM_NAMED("task_framework",
+                                      classifier_dim << " " <<
+                                      classifier_slice_type << " " <<
+                                      classifier_type << " " <<
+                                      "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
                 ROS_INFO_NAMED("task_framwork", "Terminating.");
                 throw_arc_exception(std::runtime_error, "Bullet tests done, terminating.");
             }
