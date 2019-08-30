@@ -1727,7 +1727,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
         {
             // Only use the seed resetting if we are performing more than 1 trial
-            if (num_trials > 1 && num_times_planner_invoked_)
+            if (num_trials > 1 && num_times_planner_invoked_ > 1)
             {
                 ROS_ERROR_NAMED("task_framework", "Running multiple trials, and invoking the planner more than once. This is not really supported, it'll do strange things with the generator seed");
                 assert(false && "Not supported");
@@ -1779,17 +1779,17 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
                 const auto data_folder = GetDataFolder(*nh_);
                 arc_utilities::CreateDirectory(data_folder);
                 const auto timestamp = arc_helpers::GetCurrentTimeAsString();
-                const auto filename = data_folder + "__seed" + IntToHex(seed_) + "__stamp" + timestamp;
-                ROS_INFO_STREAM_NAMED("task_framework", "Saving path and result to prefix: " << filename);
-                const auto path_to_start_file = filename + "__path_to_start.compressed";
-                const auto test_results_file = filename + "__test_results.compressed";
+                const auto basename = data_folder + "seed" + IntToHex(seed_) + "__stamp" + timestamp;
+                ROS_INFO_STREAM_NAMED("task_framework", "Saving path and result to prefix: " << basename);
+                const auto path_to_start_file = basename + "__path_to_start.compressed";
+                const auto test_results_file = basename + "__test_results.compressed";
                 band_rrt_->savePath(rrt_path, path_to_start_file);
 
                 // Run the path through the simulator which will save the results to file,
                 // and then convert the result to a trajectory, recording the result to file
                 robot_->generateTransitionData({test}, {test_results_file}, nullptr, false);
 
-                file_basenames.push_back(data_folder + timestamp);
+                file_basenames.push_back(basename);
                 dmm_tests.push_back(test);
             }
         }
