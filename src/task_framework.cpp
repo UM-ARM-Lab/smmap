@@ -1837,7 +1837,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
             if (!ROSHelpers::GetParam<bool>(*ph_, "rerun_forever", false))
             {
-                const int classifier_dim = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/dim", __func__).GetImmutable();
+                const int classifier_dim = ROSHelpers::GetParamRequiredDebugLog<int>(*ph_, "classifier/dim", __func__).GetImmutable();
                 const std::string classifier_slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__).GetImmutable();
                 const std::string classifier_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/type", __func__).GetImmutable();
                 ROS_INFO_STREAM_NAMED("task_framework",
