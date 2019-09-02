@@ -268,6 +268,9 @@ namespace smmap
         // Default transition mistake estimation
         ////////////////////////////////////////////////////////////////////////
 
+        const bool normalize_lengths_;
+        const bool normalize_connected_components_;
+
         MinMaxTransformer classifier_scaler_;
         Classifier::Ptr transition_mistake_classifier_;
         double const accept_scale_factor_;

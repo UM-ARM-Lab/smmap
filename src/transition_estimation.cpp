@@ -508,6 +508,8 @@ TransitionEstimation::TransitionEstimation(
     , band_tighten_scale_factor_(GetTransitionTightenDeltaScaleFactor(*ph_))
     , homotopy_changes_scale_factor_(GetTransitionHomotopyChangesScaleFactor(*ph_))
 
+    , normalize_lengths_(ROSHelpers::GetParamRequired<bool>(*ph_, "classifier/normalize_lengths", __func__).GetImmutable())
+    , normalize_connected_components_(ROSHelpers::GetParamRequired<bool>(*ph_, "classifier/normalize_connected_components", __func__).GetImmutable())
     , classifier_scaler_(nh_, ph_)
     , transition_mistake_classifier_(Classifier::MakeClassifier(nh_, ph_))
     , accept_scale_factor_(ROSHelpers::GetParamRequired<double>(*ph_, "classifier/accept_scale_factor", __func__).GetImmutable())
@@ -525,6 +527,14 @@ TransitionEstimation::TransitionEstimation(
 
     , template_band_(template_band)
 {
+    int calced_feature_dim = 4;
+    calced_feature_dim += normalize_connected_components_ ? 3 : 9;
+    if (calced_feature_dim != transition_mistake_classifier_->num_features_)
+    {
+        ROS_ERROR_STREAM_NAMED("transitions", "Reported num features: " << transition_mistake_classifier_->num_features_ << "    Calced num features: " << calced_feature_dim);
+    }
+    assert(calced_feature_dim == transition_mistake_classifier_->num_features_);
+
     if (useStoredTransitions())
     {
         loadSavedTransitions();
@@ -949,7 +959,7 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
         const RubberBand& default_prediction,
         const bool verbose) const
 {
-    enum IROS_WORKSHOP_FEATURES
+    enum UNNORMALIZED_FEATURES
     {
         GRIPPER_DELTA_LENGTH_PRE,
         GRIPPER_DELTA_LENGTH_POST,
@@ -981,38 +991,31 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
         SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA_SIGN,
     };
 
-    assert(transition_mistake_classifier_->num_features_ == 4 ||
-           transition_mistake_classifier_->num_features_ == 13 ||
-           transition_mistake_classifier_->num_features_ == 7);
     Eigen::VectorXd features(transition_mistake_classifier_->num_features_);
 
     const auto grippers_pre = initial_band.getEndpoints();
     const auto grippers_post = default_prediction.getEndpoints();
     const double band_length_pre = initial_band.totalLength();
     const double default_band_length_post = default_prediction.totalLength();
-
-    if (transition_mistake_classifier_->num_features_ == 4 ||
-        transition_mistake_classifier_->num_features_ == 13)
+    // Length based features
     {
-        features[IROS_WORKSHOP_FEATURES::GRIPPER_DELTA_LENGTH_PRE]  = (grippers_pre.first - grippers_pre.second).norm();
-        features[IROS_WORKSHOP_FEATURES::GRIPPER_DELTA_LENGTH_POST] = (grippers_post.first - grippers_post.second).norm();
-        features[IROS_WORKSHOP_FEATURES::BAND_LENGTH_PRE]           = band_length_pre;
-        features[IROS_WORKSHOP_FEATURES::BAND_LENGTH_POST]          = default_band_length_post;
-    }
-    else if (transition_mistake_classifier_->num_features_ == 7)
-    {
-        features[NORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_RATIO_PRE]  = (grippers_pre.first - grippers_pre.second).norm() / template_band_.maxSafeLength();
-        features[NORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_RATIO_POST] = (grippers_post.first - grippers_post.second).norm() / template_band_.maxSafeLength();;
-        features[NORMALIZED_FEATURES::BAND_LENGTH_RATIO_PRE]           = band_length_pre / template_band_.maxSafeLength();;
-        features[NORMALIZED_FEATURES::BAND_LENGTH_RATIO_POST]          = default_band_length_post / template_band_.maxSafeLength();;
-    }
-    else
-    {
-        assert(false);
+        if (!normalize_lengths_)
+        {
+            features[UNNORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_PRE]  = (grippers_pre.first - grippers_pre.second).norm();
+            features[UNNORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_POST] = (grippers_post.first - grippers_post.second).norm();
+            features[UNNORMALIZED_FEATURES::BAND_LENGTH_PRE]           = band_length_pre;
+            features[UNNORMALIZED_FEATURES::BAND_LENGTH_POST]          = default_band_length_post;
+        }
+        else
+        {
+            features[NORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_RATIO_PRE]  = (grippers_pre.first - grippers_pre.second).norm() / template_band_.maxSafeLength();
+            features[NORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_RATIO_POST] = (grippers_post.first - grippers_post.second).norm() / template_band_.maxSafeLength();;
+            features[NORMALIZED_FEATURES::BAND_LENGTH_RATIO_PRE]           = band_length_pre / template_band_.maxSafeLength();;
+            features[NORMALIZED_FEATURES::BAND_LENGTH_RATIO_POST]          = default_band_length_post / template_band_.maxSafeLength();;
+        }
     }
 
-    if (transition_mistake_classifier_->num_features_ == 13 ||
-        transition_mistake_classifier_->num_features_ == 7)
+    // Connected components based features
     {
         const double dmax = initial_band.maxSafeLength();
         const double resolution = work_space_grid_.minStepDimension() / 2.0;
@@ -1077,21 +1080,21 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
             }
         }
 
-        if (transition_mistake_classifier_->num_features_ == 13)
+        if (!normalize_connected_components_)
         {
-            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_CONNECTED_COMPONENTS_PRE]            = num_connected_components_pre;
-            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_CONNECTED_COMPONENTS_POST]           = num_connected_components_post;
-            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_CONNECTED_COMPONENTS_DELTA]          = num_connected_components_post - num_connected_components_pre;
+            features[UNNORMALIZED_FEATURES::SLICE_NUM_CONNECTED_COMPONENTS_PRE]            = num_connected_components_pre;
+            features[UNNORMALIZED_FEATURES::SLICE_NUM_CONNECTED_COMPONENTS_POST]           = num_connected_components_post;
+            features[UNNORMALIZED_FEATURES::SLICE_NUM_CONNECTED_COMPONENTS_DELTA]          = num_connected_components_post - num_connected_components_pre;
 
-            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE]       = num_free_components_pre;
-            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST]      = num_free_components_post;
-            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA]     = num_free_components_post - num_free_components_pre;
+            features[UNNORMALIZED_FEATURES::SLICE_NUM_FREE_CONNECTED_COMPONENTS_PRE]       = num_free_components_pre;
+            features[UNNORMALIZED_FEATURES::SLICE_NUM_FREE_CONNECTED_COMPONENTS_POST]      = num_free_components_post;
+            features[UNNORMALIZED_FEATURES::SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA]     = num_free_components_post - num_free_components_pre;
 
-            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE]   = num_occupied_components_pre;
-            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST]  = num_occupied_components_post;
-            features[IROS_WORKSHOP_FEATURES::SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] = num_occupied_components_post - num_occupied_components_pre;
+            features[UNNORMALIZED_FEATURES::SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_PRE]   = num_occupied_components_pre;
+            features[UNNORMALIZED_FEATURES::SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_POST]  = num_occupied_components_post;
+            features[UNNORMALIZED_FEATURES::SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] = num_occupied_components_post - num_occupied_components_pre;
         }
-        else if (transition_mistake_classifier_->num_features_ == 7)
+        else
         {
             features[NORMALIZED_FEATURES::SLICE_NUM_CONNECTED_COMPONENTS_DELTA_SIGN]          = Sign(num_connected_components_post - num_connected_components_pre);
             features[NORMALIZED_FEATURES::SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA_SIGN]     = Sign(num_free_components_post - num_free_components_pre);
