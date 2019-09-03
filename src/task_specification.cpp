@@ -78,6 +78,7 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::CLOTH_WALL:
         case TaskType::CLOTH_SINGLE_POLE:
         case TaskType::CLOTH_DOUBLE_SLIT:
+        case TaskType::CLOTH_HOOKS_SIMPLE:
         case TaskType::CLOTH_GENERIC_DIJKSTRAS_COVERAGE:
             return std::make_shared<ClothDistanceBasedCorrespondences>(nh, ph, vis);
 
