@@ -1076,9 +1076,9 @@ bool DijkstrasCoverageTask::saveDijkstrasResults()
         ZlibHelpers::CompressAndWriteToFile(buffer, dijkstras_file_path);
         return true;
     }
-    catch (...)
+    catch (const std::exception& ex)
     {
-        ROS_ERROR_NAMED("coverage_task", "Saving Dijkstras results to file failed");
+        ROS_ERROR_STREAM_NAMED("coverage_task", "Saving Dijkstras results to file failed: " << ex.what());
         return false;
     }
 }
