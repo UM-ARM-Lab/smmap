@@ -69,6 +69,7 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::ROPE_HOOKS_SIMPLE:
         case TaskType::ROPE_HOOKS_MULTI:
         case TaskType::ROPE_GENERIC_FIXED_COVERAGE:
+        case TaskType::ROPE_ENGINE_ASSEMBLY:
             return std::make_shared<RopeFixedCorrespondences>(nh, ph, vis);
 
         case TaskType::CLOTH_PLACEMAT:
