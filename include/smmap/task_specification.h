@@ -49,13 +49,13 @@ namespace smmap
             // Virtual function wrappers
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            void visualizeDeformableObject(
+            std::vector<Visualizer::NamespaceId> visualizeDeformableObject(
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color,
                     const int32_t id = 1) const;
 
-            void visualizeDeformableObject(
+            std::vector<Visualizer::NamespaceId> visualizeDeformableObject(
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors,
@@ -190,13 +190,13 @@ namespace smmap
             // Virtual functions that have a default implementation
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            virtual void visualizeDeformableObject_impl(
+            virtual std::vector<Visualizer::NamespaceId> visualizeDeformableObject_impl(
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std_msgs::ColorRGBA& color,
                     const int32_t id) const;
 
-            virtual void visualizeDeformableObject_impl(
+            virtual std::vector<Visualizer::NamespaceId> visualizeDeformableObject_impl(
                     const std::string& marker_name,
                     const ObjectPointSet& object_configuration,
                     const std::vector<std_msgs::ColorRGBA>& colors,

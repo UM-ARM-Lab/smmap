@@ -80,6 +80,7 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::CLOTH_SINGLE_POLE:
         case TaskType::CLOTH_DOUBLE_SLIT:
         case TaskType::CLOTH_HOOKS_SIMPLE:
+        case TaskType::CLOTH_HOOKS_COMPLEX:
         case TaskType::CLOTH_GENERIC_DIJKSTRAS_COVERAGE:
             return std::make_shared<ClothDistanceBasedCorrespondences>(nh, ph, vis);
 
@@ -132,22 +133,22 @@ TaskSpecification::TaskSpecification(
 // Virtual function wrappers
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void TaskSpecification::visualizeDeformableObject(
+std::vector<Visualizer::NamespaceId> TaskSpecification::visualizeDeformableObject(
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color,
         const int32_t id) const
 {
-    visualizeDeformableObject_impl(marker_name, object_configuration, color, id);
+    return visualizeDeformableObject_impl(marker_name, object_configuration, color, id);
 }
 
-void TaskSpecification::visualizeDeformableObject(
+std::vector<Visualizer::NamespaceId> TaskSpecification::visualizeDeformableObject(
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors,
         const int32_t id) const
 {
-    visualizeDeformableObject_impl(marker_name, object_configuration, colors, id);
+    return visualizeDeformableObject_impl(marker_name, object_configuration, colors, id);
 }
 
 double TaskSpecification::calculateError(const WorldState& world_state)
@@ -470,7 +471,7 @@ const std::vector<long>& TaskSpecification::getGripperAttachedNodesIndices(const
     return grippers_data_[gripper_idx].node_indices_;
 }
 
-void TaskSpecification::visualizeDeformableObject_impl(
+std::vector<Visualizer::NamespaceId> TaskSpecification::visualizeDeformableObject_impl(
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std_msgs::ColorRGBA& color,
@@ -479,19 +480,17 @@ void TaskSpecification::visualizeDeformableObject_impl(
     switch (deformable_type_)
     {
         case ROPE:
-            vis_->visualizeRope(marker_name, object_configuration, color, id);
-            break;
+            return vis_->visualizeRope(marker_name, object_configuration, color, id);
 
         case CLOTH:
-            vis_->visualizeCloth(marker_name, object_configuration, color, id);
-            break;
+            return vis_->visualizeCloth(marker_name, object_configuration, color, id);
 
         default:
             assert(false && "Imposibru!");
     }
 }
 
-void TaskSpecification::visualizeDeformableObject_impl(
+std::vector<Visualizer::NamespaceId> TaskSpecification::visualizeDeformableObject_impl(
         const std::string& marker_name,
         const ObjectPointSet& object_configuration,
         const std::vector<std_msgs::ColorRGBA>& colors,
@@ -500,12 +499,10 @@ void TaskSpecification::visualizeDeformableObject_impl(
     switch (deformable_type_)
     {
         case ROPE:
-            vis_->visualizeRope(marker_name, object_configuration, colors, id);
-            break;
+            return vis_->visualizeRope(marker_name, object_configuration, colors, id);
 
         case CLOTH:
-            vis_->visualizeCloth(marker_name, object_configuration, colors, id);
-            break;
+            return vis_->visualizeCloth(marker_name, object_configuration, colors, id);
 
         default:
             assert(false && "Imposibru!");

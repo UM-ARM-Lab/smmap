@@ -1539,7 +1539,7 @@ namespace smmap
             const auto test_result_file =       experiment + "__test_results.compressed";
             const auto path_to_start_file =     experiment + "__path_to_start.compressed";
 
-//            if (experiment.substr(data_folder_.length() + 1) != "trial_idx_023")
+//            if (experiment.substr(data_folder_.length() + 1) != "none_classifier_a8710913d2b5df6c/trial_idx_014")
 //            {
 //                continue;
 //            }
@@ -3038,8 +3038,10 @@ namespace smmap
             for (size_t path_idx = 0; path_idx < trajectory.size(); ++path_idx)
             {
                 const auto& state = trajectory[path_idx].first;
-                const auto new_ids = state.rubber_band_->visualize(ns_prefix + "EXECUTED_BAND", Visualizer::Yellow(), Visualizer::Yellow(), (int32_t)(path_idx + 1));
-                marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
+                const auto band_ids = state.rubber_band_->visualize(ns_prefix + "EXECUTED_BAND", Visualizer::Yellow(), Visualizer::Yellow(), (int32_t)(path_idx + 1));
+                const auto deform_ids = task_->visualizeDeformableObject("EXECUTED_DEFORMABLE", state.deform_config_, Visualizer::Green(), (int32_t)(path_idx + 1));
+                marker_ids.insert(marker_ids.begin(), band_ids.begin(), band_ids.end());
+                marker_ids.insert(marker_ids.begin(), deform_ids.begin(), deform_ids.end());
             }
         }
         return marker_ids;

@@ -84,6 +84,12 @@ namespace smmap
 
             try
             {
+                if (!microsteps.back().object_configuration_.allFinite())
+                {
+                    ROS_WARN_STREAM_NAMED("conversions", "Input contains non-finite data at index " << idx << ". Path steps anticipated: " << path_num_steps);
+                    clean_trajectory = false;
+                    return {trajectory, clean_trajectory};
+                }
                 const TransitionEstimation::State tes =
                 {
                     microsteps.back().object_configuration_,
@@ -117,6 +123,12 @@ namespace smmap
 
             try
             {
+                if (end.object_configuration_.allFinite())
+                {
+                    ROS_WARN_STREAM_NAMED("conversions", "Input contains non-finite data last action. Path steps anticipated: " << path_num_steps);
+                    clean_trajectory = false;
+                    return {trajectory, clean_trajectory};
+                }
                 const auto tes = TransitionEstimation::State
                 {
                     end.object_configuration_,
