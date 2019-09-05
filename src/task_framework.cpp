@@ -1778,8 +1778,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
                 const auto data_folder = GetDataFolder(*nh_);
                 arc_utilities::CreateDirectory(data_folder);
-                const auto timestamp = arc_helpers::GetCurrentTimeAsString();
-                const auto basename = data_folder + "seed" + IntToHex(seed_) + "__stamp" + timestamp;
+                const auto basename = data_folder + "seed" + IntToHex(seed_) + "__trial_idx_" + std::to_string(trial_idx);
                 ROS_INFO_STREAM_NAMED("task_framework", "Saving path and result to prefix: " << basename);
                 const auto path_to_start_file = basename + "__path_to_start.compressed";
                 const auto test_results_file = basename + "__test_results.compressed";
