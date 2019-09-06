@@ -2123,7 +2123,6 @@ namespace smmap
                     const auto location = local_environment.GridIndexToLocation(x_index, y_index, z_index);
                     const auto sdf_val = sdf_->GetImmutable4d(location);
                     const auto sdf_occupancy = sdf_val.first > 0.f ? 0.f : 1.f;
-
                     local_environment.SetValue(x_index, y_index, z_index, sdf_tools::COLLISION_CELL(sdf_occupancy));
                 }
             }
@@ -2147,15 +2146,17 @@ namespace smmap
 
     void TransitionTesting::generateBetterFeatures()
     {
-        constexpr auto examples_per_file{256};
-        auto example_idx{1u};
-//#pragma omp parallel for
-        for (size_t file_idx = 0; file_idx < 1; ++file_idx)
+        constexpr auto examples_per_file{1024};
+        std::atomic<unsigned int>(example_idx);
+#pragma omp parallel for
+        for (size_t file_idx = 0; file_idx < data_files_.size(); ++file_idx)
         {
             const auto &experiment = data_files_[file_idx];
             const auto test_result_file = experiment + "__test_results.compressed";
             const auto path_to_start_file = experiment + "__path_to_start.compressed";
             const auto trajectory_file = experiment + "__trajectory.compressed";
+
+            const auto root_dir = boost::filesystem::path(experiment).parent_path();
 
             try
             {
@@ -2248,12 +2249,14 @@ namespace smmap
                             static_cast<unsigned long>(features.local_environment.GetNumZCells())
                     };
 
+                    const auto local_example_idx = example_idx++;
                     constexpr auto outfile_buff_size{512};
                     char outfile_name[outfile_buff_size];
-                    auto const ex_start_idx =
-                            static_cast<int>((example_idx - 1) / examples_per_file) * examples_per_file + 1;
-                    snprintf(outfile_name, outfile_buff_size, "%s__examples_%i_to_%i.npz",
-                             experiment.c_str(), ex_start_idx, ex_start_idx + examples_per_file - 1);
+                    const auto ex_start_idx =
+                            static_cast<unsigned int>((example_idx - 1) / examples_per_file) * examples_per_file + 1;
+                    const auto ex_end_idx = ex_start_idx + examples_per_file - 1;
+                    snprintf(outfile_name, outfile_buff_size, "examples_%i_to_%i.npz", ex_start_idx, ex_end_idx);
+                    const auto outpath = root_dir / boost::filesystem::path(outfile_name);
 
                     auto write_grid = [&](std::string const &name,
                                           sdf_tools::CollisionMapGrid const &map,
@@ -2265,19 +2268,24 @@ namespace smmap
                             data.emplace_back(cell.occupancy);
                         }
                         char feature_name[100];
-                        snprintf(feature_name, 100, "%i/%s", example_idx, name.c_str());
-                        cnpy::npz_save(outfile_name, feature_name, &data[0], voxel_shape, mode);
+                        snprintf(feature_name, 100, "%i/%s", local_example_idx, name.c_str());
+                        cnpy::npz_save(outpath.c_str(), feature_name, &data[0], voxel_shape, mode);
                     };
+
+                    if (boost::filesystem::exists(outpath) and local_example_idx == ex_start_idx)
+                    {
+                        // THIS OVERWRITES!!!
+                        std::cout << "removing " << outfile_name << '\n';
+                        boost::filesystem::remove(outpath);
+                    }
 
                     // Write the extracted features to a file
                     write_grid("local_env", features.local_environment, "a");
                     write_grid("band_pre", features.pre_band, "a");
                     write_grid("band_post", features.post_band, "a");
                     char label_feature_name[100];
-                    snprintf(label_feature_name, 100, "%i/label", example_idx);
-                    cnpy::npz_save(outfile_name, label_feature_name, &label_float, std::vector<size_t>{1}, "a");
-
-                    ++example_idx;
+                    snprintf(label_feature_name, 100, "%i/label", local_example_idx);
+                    cnpy::npz_save(outpath.c_str(), label_feature_name, &label_float, std::vector<size_t>{1}, "a");
                 }
             }
             catch (const std::exception &ex)

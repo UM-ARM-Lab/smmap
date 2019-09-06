@@ -15,8 +15,6 @@ def main():
 
     data_dict = np.load(args.file)
 
-    print(sorted(list(data_dict.keys())))
-
     pre_band = data_dict["{}/band_pre".format(args.example_idx)]
     post_band = data_dict["{}/band_post".format(args.example_idx)]
     local_environment = data_dict["{}/local_env".format(args.example_idx)]
@@ -39,8 +37,8 @@ def plot_voxel_grid(voxel_grid, color):
         if voxel_grid[point[0], point[1], point[2]] > 0.5:
             occupied_points.append(point)
     occupied_points = np.array(occupied_points)
-    color.append(1)
-    glt.scatter_generic(occupied_points, color=color)
+    color.append(0.5)
+    glt.scatter_generic(occupied_points, color=color, size=10)
 
 
 if __name__ == '__main__':
