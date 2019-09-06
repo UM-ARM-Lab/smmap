@@ -18,6 +18,9 @@ set(CATKIN_PACKAGES
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 
+## For generating pytorch dataset
+find_package(cnpy REQUIRED)
+
 ## System dependencies are found with CMake's conventions
 find_package(cmake_modules REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -215,7 +218,7 @@ target_link_libraries(${PROJECT_NAME}_learning_testing
 
 add_executable(transition_learning_data_generation_node nodes/transition_learning_data_generation_node.cpp)
 add_dependencies(transition_learning_data_generation_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(transition_learning_data_generation_node ${PROJECT_NAME}_learning_testing ${catkin_LIBRARIES})
+target_link_libraries(transition_learning_data_generation_node ${PROJECT_NAME}_learning_testing cnpy::cnpy ${catkin_LIBRARIES})
 
 add_executable(smmap_svm_tester nodes/svm_tester.cpp)
 add_dependencies(smmap_svm_tester ${catkin_EXPORTED_TARGETS})
