@@ -1534,7 +1534,8 @@ namespace smmap
 
     void TransitionTesting::visualizeIncompleteTrajectories()
     {
-        #pragma omp parallel for
+        const auto omp_threads = (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 1;
+        #pragma omp parallel for num_threads(omp_threads)
         for (size_t idx = 0; idx < data_files_.size(); ++idx)
         {
             const auto& experiment = data_files_[idx];
@@ -2648,10 +2649,13 @@ namespace smmap
             test_result_filenames.clear();
         }
 
+        ROS_INFO("Parsing generated trajectories");
+
         // We can't rely on ROS messaging to get all feedback, so post-process everything instead
-        auto num_succesful_paths = 0;
-        auto num_unsuccesful_paths = 0;
-        #pragma omp parallel for
+        std::atomic<int> num_succesful_paths = 0;
+        std::atomic<int> num_unsuccesful_paths = 0;
+        const auto omp_threads = (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 1;
+        #pragma omp parallel for num_threads(omp_threads)
         for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
         {
             const auto path_to_start_file = folder + "trial_idx_" + to_str(trial_idx) + "__path_to_start.compressed";
@@ -3041,7 +3045,7 @@ namespace smmap
             {
                 const auto& state = trajectory[path_idx].first;
                 const auto band_ids = state.rubber_band_->visualize(ns_prefix + "EXECUTED_BAND", Visualizer::Yellow(), Visualizer::Yellow(), (int32_t)(path_idx + 1));
-                const auto deform_ids = task_->visualizeDeformableObject("EXECUTED_DEFORMABLE", state.deform_config_, Visualizer::Green(), (int32_t)(path_idx + 1));
+                const auto deform_ids = task_->visualizeDeformableObject(ns_prefix + "EXECUTED_DEFORMABLE", state.deform_config_, Visualizer::Green(), (int32_t)(path_idx + 1));
                 marker_ids.insert(marker_ids.begin(), band_ids.begin(), band_ids.end());
                 marker_ids.insert(marker_ids.begin(), deform_ids.begin(), deform_ids.end());
             }
