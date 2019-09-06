@@ -1534,7 +1534,7 @@ namespace smmap
 
     void TransitionTesting::visualizeIncompleteTrajectories()
     {
-        const auto omp_threads = (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 1;
+        const auto omp_threads = (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 2;
         #pragma omp parallel for num_threads(omp_threads)
         for (size_t idx = 0; idx < data_files_.size(); ++idx)
         {
