@@ -1489,9 +1489,11 @@ namespace smmap
 {
     void TransitionTesting::generateTrajectories()
     {
-        auto num_succesful_paths = 0;
-        auto num_unsuccesful_paths = 0;
-        #pragma omp parallel for reduction(+: num_succesful_paths) reduction(+: num_unsuccesful_paths)
+        std::atomic<int> num_succesful_paths = 0;
+        std::atomic<int> num_unsuccesful_paths = 0;
+
+        const auto omp_threads = (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 1;
+        #pragma omp parallel for num_threads(omp_threads)
         for (size_t idx = 0; idx < data_files_.size(); ++idx)
         {
             const auto& experiment = data_files_[idx];

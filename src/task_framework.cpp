@@ -1795,9 +1795,10 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 
         if (test_paths_in_bullet)
         {
-            auto num_succesful_paths = 0;
-            auto num_unsuccesful_paths = 0;
-            #pragma omp parallel for
+            std::atomic<int> num_succesful_paths = 0;
+            std::atomic<int> num_unsuccesful_paths = 0;
+            const auto omp_threads = (task_specification_->deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 1;
+            #pragma omp parallel for num_threads(omp_threads)
             for (size_t idx = 0; idx < dmm_tests.size(); ++idx)
             {
                 const auto& basename = file_basenames[idx];
