@@ -38,7 +38,7 @@ def plot_voxel_grid(voxel_grid, color):
             occupied_points.append(point)
     occupied_points = np.array(occupied_points)
     color.append(0.5)
-    glt.scatter_generic(occupied_points, color=color, size=10)
+    glt.scatter_generic(occupied_points, color=color, size=7)
 
 
 if __name__ == '__main__':

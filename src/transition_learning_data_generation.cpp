@@ -2067,14 +2067,13 @@ namespace smmap
     {
         BestFeature most_best_features;
         const auto max_band_length = GetMaxBandLength(*ph_);
-//        const auto local_env_depth = GetLocalEnvDepth(*ph_);
-        const auto local_env_resolution = GetLocalEnvResolution(*ph_);
+        constexpr auto n_cells = 32l;
 
-        const auto max_band_cells = static_cast<int64_t >(max_band_length / local_env_resolution);
-//        const auto x_cells = static_cast<int64_t >( local_env_depth / sdf_->GetResolution());
-        const auto x_cells = max_band_cells;
-        const auto y_cells = max_band_cells;
-        const auto z_cells = max_band_cells;
+        const auto local_env_resolution = max_band_length / n_cells;
+
+        const auto x_cells = n_cells;
+        const auto y_cells = n_cells;
+        const auto z_cells = n_cells;
 
         Eigen::Vector3d trans = (transition.starting_gripper_positions_.first +
                                  transition.starting_gripper_positions_.second +
@@ -2147,8 +2146,8 @@ namespace smmap
     void TransitionTesting::generateBetterFeatures()
     {
         constexpr auto examples_per_file{1024};
-        std::atomic<unsigned int>(example_idx);
-#pragma omp parallel for
+        std::atomic<unsigned int> example_idx{1};
+        // #pragma omp parallel for
         for (size_t file_idx = 0; file_idx < data_files_.size(); ++file_idx)
         {
             const auto &experiment = data_files_[file_idx];
@@ -2253,7 +2252,8 @@ namespace smmap
                     constexpr auto outfile_buff_size{512};
                     char outfile_name[outfile_buff_size];
                     const auto ex_start_idx =
-                            static_cast<unsigned int>((example_idx - 1) / examples_per_file) * examples_per_file + 1;
+                            static_cast<unsigned int>((local_example_idx - 1) / examples_per_file) * examples_per_file +
+                            1;
                     const auto ex_end_idx = ex_start_idx + examples_per_file - 1;
                     snprintf(outfile_name, outfile_buff_size, "examples_%i_to_%i.npz", ex_start_idx, ex_end_idx);
                     const auto outpath = root_dir / boost::filesystem::path(outfile_name);
