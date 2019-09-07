@@ -26,6 +26,10 @@ Classifier::Ptr Classifier::MakeClassifier(
         case DNN:
             return std::make_shared<TorchClassifier>(nh, ph);
 
+        case VOXNET:
+            #pragma warning "Voxnet classifier hack addition to classification framework"
+            return nullptr;
+
         default:
             ROS_FATAL("Invalid classifier type in MakeClassifier(), this should not be possible");
             throw_arc_exception(std::invalid_argument, "Invalid classifier type in MakeClassifier(), this should not be possible");

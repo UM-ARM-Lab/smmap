@@ -3,7 +3,7 @@
 
 using namespace smmap;
 
-inline std::string getModelFilename(ros::NodeHandle& nh)
+inline static std::string getModelFilename(ros::NodeHandle& nh)
 {
     return ROSHelpers::GetParamRequired<std::string>(nh, "dnn/model_file", __func__).GetImmutable();
 }

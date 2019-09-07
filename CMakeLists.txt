@@ -147,6 +147,7 @@ add_custom_target(${PROJECT_NAME}_transitions_headers SOURCES
     include/${PROJECT_NAME}/knn_classifier.h
     include/${PROJECT_NAME}/svm_classifier.h
     include/${PROJECT_NAME}/torch_classifier.h
+    include/${PROJECT_NAME}/voxnet_classifier.h
 )
 
 add_library(${PROJECT_NAME}_transitions
@@ -157,6 +158,7 @@ add_library(${PROJECT_NAME}_transitions
     src/knn_classifier.cpp
     src/svm_classifier.cpp
     src/torch_classifier.cpp
+    src/voxnet_classifier.cpp
 )
 add_dependencies(${PROJECT_NAME}_transitions ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_transitions
@@ -225,6 +227,12 @@ set_property(TARGET smmap_svm_tester PROPERTY CXX_STANDARD 11)
 ############# Torch Testing #################################################
 add_executable(smmap_torch_tester nodes/torch_tester.cpp)
 target_link_libraries(smmap_torch_tester
+    ${TORCH_LIBRARIES}
+    ${catkin_LIBRARIES}
+)
+
+add_executable(voxnet_tester nodes/voxnet_tester.cpp)
+target_link_libraries(voxnet_tester
     ${TORCH_LIBRARIES}
     ${catkin_LIBRARIES}
 )

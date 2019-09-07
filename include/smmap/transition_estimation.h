@@ -7,10 +7,8 @@
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/task_specification.h"
 #include "smmap/min_max_transformer.hpp"
-#include "smmap/no_classifier.h"
-#include "smmap/knn_classifier.h"
-#include "smmap/svm_classifier.h"
-#include "smmap/torch_classifier.h"
+#include "smmap/classifier.h"
+#include "smmap/voxnet_classifier.h"
 
 namespace smmap
 {
@@ -228,7 +226,7 @@ namespace smmap
 
         void clearVisualizations() const;
 
-        // Topic names used for publishing visualization data
+        // Namespaces used for publishing visualization data
         static constexpr char MDP_PRE_STATE_NS[]        = "mdp_pre_state";
         static constexpr char MDP_TESTING_STATE_NS[]    = "mdp_testing_state";
         static constexpr char MDP_POST_STATE_NS[]       = "mdp_post_state";
@@ -271,10 +269,14 @@ namespace smmap
         const bool normalize_lengths_;
         const bool normalize_connected_components_;
 
-        MinMaxTransformer classifier_scaler_;
-        Classifier::Ptr transition_mistake_classifier_;
+        #warning "Voxnet classifier hack addition to classification framework"
+        std::shared_ptr<VoxnetClassifier> voxnet_classifier_;
+
+        MinMaxTransformer const classifier_scaler_;
+        Classifier::Ptr const transition_mistake_classifier_;
         double const accept_scale_factor_;
-        double const accept_mistake_rate_;
+        #warning "Voxnet classifier hack addition to classification framework"
+        double accept_mistake_rate_;
         std::uniform_real_distribution<double> accept_transition_distribution_;
         std::shared_ptr<std::mt19937_64> generator_;
         double classifier_time_;

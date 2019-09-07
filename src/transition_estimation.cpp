@@ -513,7 +513,8 @@ TransitionEstimation::TransitionEstimation(
     , classifier_scaler_(nh_, ph_)
     , transition_mistake_classifier_(Classifier::MakeClassifier(nh_, ph_))
     , accept_scale_factor_(ROSHelpers::GetParamRequired<double>(*ph_, "classifier/accept_scale_factor", __func__).GetImmutable())
-    , accept_mistake_rate_(std::exp(-accept_scale_factor_ * transition_mistake_classifier_->accuracy_))
+    #warning "Voxnet classifier hack addition to classification framework"
+//    , accept_mistake_rate_(std::exp(-accept_scale_factor_ * transition_mistake_classifier_->accuracy_))
     , accept_transition_distribution_(0.0, 1.0)
     , generator_(generator)
 
@@ -527,13 +528,28 @@ TransitionEstimation::TransitionEstimation(
 
     , template_band_(template_band)
 {
+    #warning "Voxnet classifier hack addition to classification framework"
+    if (transition_mistake_classifier_ == nullptr)
+    {
+        voxnet_classifier_ = std::make_shared<VoxnetClassifier>(nh_, ph_, sdf_);
+        accept_mistake_rate_ = std::exp(-accept_scale_factor_ * voxnet_classifier_->accuracy_);
+    }
+    else
+    {
+        accept_mistake_rate_ = std::exp(-accept_scale_factor_ * transition_mistake_classifier_->accuracy_);
+    }
+
     int calced_feature_dim = 4;
     calced_feature_dim += normalize_connected_components_ ? 3 : 9;
-    if (calced_feature_dim != transition_mistake_classifier_->num_features_)
+    #warning "Voxnet classifier hack addition to classification framework"
+    if (transition_mistake_classifier_ != nullptr)
     {
-        ROS_ERROR_STREAM_NAMED("transitions", "Reported num features: " << transition_mistake_classifier_->num_features_ << "    Calced num features: " << calced_feature_dim);
+        if (calced_feature_dim != transition_mistake_classifier_->num_features_)
+        {
+            ROS_ERROR_STREAM_NAMED("transitions", "Reported num features: " << transition_mistake_classifier_->num_features_ << "    Calced num features: " << calced_feature_dim);
+        }
+        assert(calced_feature_dim == transition_mistake_classifier_->num_features_);
     }
-    assert(calced_feature_dim == transition_mistake_classifier_->num_features_);
 
     if (useStoredTransitions())
     {
@@ -954,11 +970,13 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
     };
 }
 
-Eigen::VectorXd TransitionEstimation::transitionFeatures(
+VectorXd TransitionEstimation::transitionFeatures(
         const RubberBand& initial_band,
         const RubberBand& default_prediction,
         const bool verbose) const
 {
+    assert(transition_mistake_classifier_ != nullptr);
+
     enum UNNORMALIZED_FEATURES
     {
         GRIPPER_DELTA_LENGTH_PRE,
@@ -991,7 +1009,7 @@ Eigen::VectorXd TransitionEstimation::transitionFeatures(
         SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA_SIGN,
     };
 
-    Eigen::VectorXd features(transition_mistake_classifier_->num_features_);
+    VectorXd features(transition_mistake_classifier_->num_features_);
 
     const auto grippers_pre = initial_band.getEndpoints();
     const auto grippers_post = default_prediction.getEndpoints();
@@ -1111,7 +1129,9 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
         const bool allow_mistakes,
         const bool verbose)
 {
-    static const bool classifier_valid = transition_mistake_classifier_->name_ != "none";
+    #warning "Voxnet classifier hack addition to classification framework"
+    static const bool classifier_valid = transition_mistake_classifier_ && transition_mistake_classifier_->name_ != "none";
+
     std::vector<std::pair<RubberBand::Ptr, double>> transitions;
 
     auto default_next_band = std::make_shared<RubberBand>(test_band_start);
@@ -1124,6 +1144,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
             ++num_band_overstretch_;
             ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Stopped due to band overstretch");
         }
+        #warning "Voxnet classifier hack addition to classification framework"
         else if (classifier_valid)
         {
             ++num_band_safe_;
@@ -1171,6 +1192,39 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     //            std::cout << "NN Feautres: " << classifier_scaler_.inverse(nn_prediction.second).transpose() << std::endl;
     //            PressAnyKeyToContinue("NN vs SVM Prediction mismatch");
     //        }
+        }
+        #warning "Voxnet classifier hack addition to classification framework"
+        else if (voxnet_classifier_ != nullptr)
+        {
+            ++num_band_safe_;
+
+            Stopwatch stopwatch;
+            arc_helpers::DoNotOptimize(default_next_band);
+            const auto predicted_mistake = voxnet_classifier_->predict(test_band_start, *default_next_band);
+            arc_helpers::DoNotOptimize(predicted_mistake);
+            classifier_time_ += stopwatch(READ);
+
+            if (predicted_mistake == -1.0)
+            {
+                ++num_no_mistake_;
+                transitions.push_back({default_next_band, default_propogation_confidence_});
+            }
+            else
+            {
+                ++num_mistake_;
+
+                // Label some (small) percentage of predicted mistakes as non-mistakes;
+                if (!allow_mistakes || accept_transition_distribution_(*generator_) > accept_mistake_rate_)
+                {
+                    ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Stopped due to band mistake predicted");
+                }
+                else
+                {
+                    ++num_accepted_mistake_;
+                    ROS_INFO_COND_NAMED(TRANSITION_LEARNING_VERBOSE, "rrt.prop", "Ignored classifier predicting mistake");
+                    transitions.push_back({default_next_band, default_propogation_confidence_});
+                }
+            }
         }
         else
         {
