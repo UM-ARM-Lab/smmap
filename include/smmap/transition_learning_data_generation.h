@@ -17,7 +17,8 @@
 
 namespace smmap
 {
-    struct BestFeature {
+    struct BestFeature
+    {
         sdf_tools::CollisionMapGrid local_environment;
         sdf_tools::CollisionMapGrid pre_band;
         sdf_tools::CollisionMapGrid post_band;
@@ -142,7 +143,7 @@ namespace smmap
 
         void generateMeaningfulMistakeExamples();
 
-        void generateBetterFeatures();
+        void generateBetterFeatures(std::string const &training_metadata_filename);
 
         BestFeature betterExtractFeatures(const TransitionEstimation::StateTransition &transition) const;
 

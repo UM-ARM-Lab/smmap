@@ -1,9 +1,15 @@
 #include "smmap/transition_learning_data_generation.h"
 
 #include <iomanip>
+#include <string>
+#include <algorithm>
+#include <unordered_map>
+#include <fstream>
 #include <cstdio>
 #include <sstream>
+#include <exception>
 #include <boost/filesystem.hpp>
+#include <boost/filesystem/fstream.hpp>
 
 #include <cnpy/cnpy.h>
 
@@ -819,7 +825,10 @@ namespace smmap
         {
             Stopwatch stopwatch;
             ROS_INFO_STREAM("Generating transition THE BEST features");
-            generateBetterFeatures();
+            const auto training_metadata_filename = ROSHelpers::GetParamRequired<std::string>(*ph_,
+                                                                                              "voxnet/training_metadata_filename",
+                                                                                              __func__).GetImmutable();
+            generateBetterFeatures(training_metadata_filename);
             ROS_INFO_STREAM("Generate features time taken: " << stopwatch(READ));
         }
 
@@ -2080,8 +2089,7 @@ namespace smmap
                                  transition.ending_gripper_positions_.first +
                                  transition.ending_gripper_positions_.second) / 4;
         trans = trans - Eigen::Vector3d(max_band_length, max_band_length, max_band_length) / 2;
-        Eigen::Isometry3d origin = Eigen::Isometry3d::Identity();
-        origin = origin.translate(trans);
+        const Isometry3d origin = Isometry3d::Identity() * Translation3d(trans);
 
         // The local environment is centered at the centroid of the pre/post left/right gripper positions
         // and has a fixed size that captures all possible bands by being as large as possible.
@@ -2143,10 +2151,30 @@ namespace smmap
         return most_best_features;
     }
 
-    void TransitionTesting::generateBetterFeatures()
+    void TransitionTesting::generateBetterFeatures(std::string const &training_metadata_filename)
     {
+        boost::filesystem::ifstream training_metadata_file(training_metadata_filename);
+
+        std::unordered_map<std::string, std::vector<size_t>> training_map;
+        std::string line;
+        while (training_metadata_file >> line)
+        {
+            const auto index_of_comma = line.find(',');
+            const auto example_str = line.substr(0, index_of_comma);
+            const auto idx_str = line.substr(index_of_comma + 1, line.length() - index_of_comma - 1);
+            const auto idx_int = static_cast<size_t>(std::stoi(idx_str));
+            training_map[example_str].emplace_back(idx_int);
+        }
+
         constexpr auto examples_per_file{1024};
-        std::atomic<unsigned int> example_idx{1};
+        std::atomic<unsigned int> training_example_idx{1};
+        std::atomic<unsigned int> testing_example_idx{1};
+
+        const auto root_dir = boost::filesystem::path(data_files_[0]).parent_path();
+        // a csv where each row is (example_idx, label) for each example in the training data
+        const auto training_labels_filename = root_dir / "training_labels.csv";
+        boost::filesystem::ofstream training_labels_file(training_labels_filename);
+
         // #pragma omp parallel for
         for (size_t file_idx = 0; file_idx < data_files_.size(); ++file_idx)
         {
@@ -2155,7 +2183,7 @@ namespace smmap
             const auto path_to_start_file = experiment + "__path_to_start.compressed";
             const auto trajectory_file = experiment + "__trajectory.compressed";
 
-            const auto root_dir = boost::filesystem::path(experiment).parent_path();
+            const auto training_indeces = training_map.at(experiment);
 
             try
             {
@@ -2248,7 +2276,18 @@ namespace smmap
                             static_cast<unsigned long>(features.local_environment.GetNumZCells())
                     };
 
-                    const auto local_example_idx = example_idx++;
+                    unsigned int local_example_idx;
+                    std::string mode;
+                    if (std::find(training_indeces.begin(), training_indeces.end(), idx) != training_indeces.end())
+                    {
+                        local_example_idx = training_example_idx++;
+                        mode = "train";
+                        training_labels_file << training_example_idx << "," << label_float << '\n';
+                    } else
+                    {
+                        local_example_idx = testing_example_idx++;
+                        mode = "test";
+                    }
                     constexpr auto outfile_buff_size{512};
                     char outfile_name[outfile_buff_size];
                     const auto ex_start_idx =
@@ -2256,11 +2295,11 @@ namespace smmap
                             1;
                     const auto ex_end_idx = ex_start_idx + examples_per_file - 1;
                     snprintf(outfile_name, outfile_buff_size, "examples_%i_to_%i.npz", ex_start_idx, ex_end_idx);
-                    const auto outpath = root_dir / boost::filesystem::path(outfile_name);
+                    const auto outpath = root_dir / mode / boost::filesystem::path(outfile_name);
 
                     auto write_grid = [&](std::string const &name,
                                           sdf_tools::CollisionMapGrid const &map,
-                                          std::string const &mode)
+                                          std::string const &file_mode)
                     {
                         std::vector<float> data;
                         for (auto const &cell : map.GetImmutableRawData())
@@ -2269,7 +2308,7 @@ namespace smmap
                         }
                         char feature_name[100];
                         snprintf(feature_name, 100, "%i/%s", local_example_idx, name.c_str());
-                        cnpy::npz_save(outpath.c_str(), feature_name, &data[0], voxel_shape, mode);
+                        cnpy::npz_save(outpath.c_str(), feature_name, &data[0], voxel_shape, file_mode);
                     };
 
                     if (boost::filesystem::exists(outpath) and local_example_idx == ex_start_idx)
@@ -2293,6 +2332,8 @@ namespace smmap
                 ROS_ERROR_STREAM(
                         "Error parsing file idx: " << file_idx << " file: " << test_result_file << ": " << ex.what());
             }
+
+            training_labels_file.flush();
         }
 
     }
