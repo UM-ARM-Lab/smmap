@@ -2183,7 +2183,14 @@ namespace smmap
             const auto path_to_start_file = experiment + "__path_to_start.compressed";
             const auto trajectory_file = experiment + "__trajectory.compressed";
 
-            const auto training_indeces = training_map.at(experiment);
+            const auto training_map_iter = training_map.find(experiment);
+            if (training_map_iter == training_map.cend())
+            {
+                std::cout << "Skipping example because train/test information could not be found:\n"
+                          << experiment << " " << file_idx << '\n';
+                continue;
+            }
+            const auto training_indeces = training_map_iter->second;
 
             try
             {
@@ -2278,7 +2285,7 @@ namespace smmap
 
                     unsigned int local_example_idx;
                     std::string mode;
-                    if (std::find(training_indeces.begin(), training_indeces.end(), idx) != training_indeces.end())
+                    if (std::find(training_indeces.cbegin(), training_indeces.cend(), idx) != training_indeces.cend())
                     {
                         local_example_idx = training_example_idx++;
                         mode = "train";
