@@ -31,6 +31,7 @@ using namespace Eigen;
 using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
 namespace dmm = deformable_manipulation_msgs;
+namespace fs = boost::filesystem;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
 
 enum Features
@@ -718,12 +719,12 @@ namespace smmap
         std::vector<std::string> files;
         try
         {
-            const boost::filesystem::path p(data_folder_);
-            const boost::filesystem::recursive_directory_iterator start(p);
-            const boost::filesystem::recursive_directory_iterator end;
+            const fs::path p(data_folder_);
+            const fs::recursive_directory_iterator start(p);
+            const fs::recursive_directory_iterator end;
             for (auto itr = start; itr != end; ++itr)
             {
-                if (boost::filesystem::is_regular_file(itr->status()))
+                if (fs::is_regular_file(itr->status()))
                 {
                     const auto filename = itr->path().string();
                     // Only warn about file types that are not expected
@@ -745,7 +746,7 @@ namespace smmap
             std::sort(files.begin(), files.end());
             ROS_INFO_STREAM("Found " << files.size() << " possible data files in " << data_folder_);
         }
-        catch (const boost::filesystem::filesystem_error& ex)
+        catch (const fs::filesystem_error& ex)
         {
             ROS_WARN_STREAM("Error loading file list: " << ex.what());
         }
@@ -904,7 +905,7 @@ namespace smmap
             const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
             arc_utilities::CreateDirectory(folder);
 
-            if (!boost::filesystem::is_regular_file(test_results_filename))
+            if (!fs::is_regular_file(test_results_filename))
             {
                 const auto trial_idx = 0;
 
@@ -959,14 +960,14 @@ namespace smmap
                     const std::string failure_file = folder + test_id + "__path_to_start.failure";
 
                     // Check for the file flag that indicates that this test is not possible
-                    if (boost::filesystem::is_regular_file(failure_file))
+                    if (fs::is_regular_file(failure_file))
                     {
                         continue;
                     }
 
                     try
                     {
-                        if (!boost::filesystem::is_regular_file(test_results_filename))
+                        if (!fs::is_regular_file(test_results_filename))
                         {
                             // Generate a path and convert the test to a ROS format (if needed)
                             const RRTPath path_to_start_of_test = loadOrGeneratePath(
@@ -1048,14 +1049,14 @@ namespace smmap
                     const std::string failure_file = folder + test_id + "__path_to_start.failure";
 
                     // Check for the file flag that indicates that this test is not possible
-                    if (boost::filesystem::is_regular_file(failure_file))
+                    if (fs::is_regular_file(failure_file))
                     {
                         continue;
                     }
 
                     try
                     {
-                        if (!boost::filesystem::is_regular_file(test_results_filename))
+                        if (!fs::is_regular_file(test_results_filename))
                         {
                             // Generate a path and convert the test to a ROS format (if needed)
                             const RRTPath path_to_start_of_test = loadOrGeneratePath(
@@ -1118,7 +1119,7 @@ namespace smmap
             const AllGrippersSinglePose& gripper_target_poses,
             const unsigned long long num_discards)
     {
-        if (boost::filesystem::is_regular_file(filename))
+        if (fs::is_regular_file(filename))
         {
             return band_rrt_vis_->loadPath(filename);
         }
@@ -1249,7 +1250,7 @@ namespace smmap
             try
             {
                 // Check for the file flag that indicatest that this test is not possible
-                if (boost::filesystem::is_regular_file(failure_file))
+                if (fs::is_regular_file(failure_file))
                 {
                     continue;
                 }
@@ -1260,7 +1261,7 @@ namespace smmap
                 // Load the resulting transition, if needed generate it first
                 const TransitionEstimation::StateTransition test_transition = [&]
                 {
-                    if (!boost::filesystem::is_regular_file(test_transition_file))
+                    if (!fs::is_regular_file(test_transition_file))
                     {
                         // Load the path that generated the test
                         const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
@@ -1278,7 +1279,7 @@ namespace smmap
                 // Load the adaptation record, if needed generate it first
                 const TransitionEstimation::TransitionAdaptationResult adaptation_result = [&]
                 {
-                    if (!boost::filesystem::is_regular_file(adaptation_result_file))
+                    if (!fs::is_regular_file(adaptation_result_file))
                     {
                         const auto ar = transition_estimator_->generateTransition(
                                     source_transition_,
@@ -1349,7 +1350,7 @@ namespace smmap
         source_file_ = req.data;
         source_transition_ = [&]
         {
-            if (!boost::filesystem::is_regular_file(test_transition_file))
+            if (!fs::is_regular_file(test_transition_file))
             {
                 const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
@@ -1421,7 +1422,7 @@ namespace smmap
         // Load the resulting transition, if needed generate it first
         const TransitionEstimation::StateTransition test_transition = [&]
         {
-            if (!boost::filesystem::is_regular_file(test_transition_file))
+            if (!fs::is_regular_file(test_transition_file))
             {
                 // Load the path that generated the test
                 const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
@@ -1504,7 +1505,7 @@ namespace smmap
 
             try
             {
-//                if (!boost::filesystem::is_regular_file(trajectory_file))
+//                if (!fs::is_regular_file(trajectory_file))
                 {
                     const auto path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
                     const auto test_result = loadTestResult(test_result_file);
@@ -1581,10 +1582,6 @@ namespace smmap
                         const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
 
                         assert(trajectory.size() > 0);
-                        bool start_foh = transition_estimator_->checkFirstOrderHomotopy(
-                                    *trajectory[0].first.planned_rubber_band_,
-                                    *trajectory[0].first.rubber_band_);
-
                         for (size_t traj_step = 1; traj_step < trajectory.size(); ++traj_step)
                         {
 //                            if (traj_step != 34)
@@ -1594,11 +1591,17 @@ namespace smmap
 
                             const auto& start_state = trajectory[traj_step - 1].first;
                             const auto& end_state = trajectory[traj_step].first;
+                            const bool start_foh = transition_estimator_->checkFirstOrderHomotopy(
+                                        *start_state.planned_rubber_band_,
+                                        *start_state.rubber_band_);
                             const bool end_foh = transition_estimator_->checkFirstOrderHomotopy(
                                         *end_state.planned_rubber_band_,
                                         *end_state.rubber_band_);
-                            const auto dist = end_state.planned_rubber_band_->distance(*end_state.rubber_band_);
-                            const bool mistake = (start_foh && !end_foh) && (dist > mistake_dist_thresh_);
+                            const auto start_dist = start_state.planned_rubber_band_->distance(*start_state.rubber_band_);
+                            const auto end_dist = end_state.planned_rubber_band_->distance(*end_state.rubber_band_);
+                            const auto start_close = start_foh && (start_dist <= mistake_dist_thresh_);
+                            const auto end_close = end_foh && (end_dist <= mistake_dist_thresh_);
+                            const bool mistake = start_close && !end_close;
 
                             const TransitionEstimation::StateTransition transition
                             {
@@ -1659,7 +1662,7 @@ namespace smmap
                             {
                                 assert(features.size() == FEATURE_NAMES.size());
                                 ROS_INFO_STREAM_NAMED("features", test_result_file);
-                                ROS_INFO_STREAM_NAMED("features", "  Transition at idx: " << traj_step << " with distance " << dist << " and mistake recorded: " << mistake);
+                                ROS_INFO_STREAM_NAMED("features", "  Transition at idx: " << traj_step << " with distance " << end_dist << " and mistake recorded: " << mistake);
                                 for (size_t i = 0; i < FEATURE_NAMES.size(); ++i)
                                 {
                                     ROS_INFO_STREAM_NAMED("features", "  " << /* std::left << */ std::setw(48) << FEATURE_NAMES[i] << ": " << features[i]);
@@ -1735,7 +1738,7 @@ namespace smmap
             try
             {
                 // Check for the file flag that indicatest that this test is not possible
-                if (boost::filesystem::is_regular_file(failure_file))
+                if (fs::is_regular_file(failure_file))
                 {
                     continue;
                 }
@@ -1743,12 +1746,12 @@ namespace smmap
                 // Load the transition example if possible, otherwise generate it
                 const TransitionEstimation::StateTransition transition = [&]
                 {
-                    if (!boost::filesystem::is_regular_file(example_mistake_file))
+                    if (!fs::is_regular_file(example_mistake_file))
                     {
                         // Load the trajectory if possible, otherwise generate it
                         const auto trajectory = [&]
                         {
-                            if (!boost::filesystem::is_regular_file(trajectory_file))
+                            if (!fs::is_regular_file(trajectory_file))
                             {
                                 const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
                                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
@@ -1835,7 +1838,7 @@ namespace smmap
         // Load the trajectory if possible, otherwise generate it
         const auto trajectory = [&]
         {
-            if (!boost::filesystem::is_regular_file(trajectory_file))
+            if (!fs::is_regular_file(trajectory_file))
             {
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
                 const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1)).first;
@@ -1851,7 +1854,7 @@ namespace smmap
         // Load the transition example if possible, otherwise generate it
         const TransitionEstimation::StateTransition transition = [&]
         {
-            if (!boost::filesystem::is_regular_file(example_mistake_file))
+            if (!fs::is_regular_file(example_mistake_file))
             {
                 const auto example = transition_estimator_->findMostRecentBadTransition(trajectory).Get();
                 transition_estimator_->saveStateTransition(example, example_mistake_file);
@@ -1987,6 +1990,51 @@ namespace smmap
         int num_examples_delta_eq_0 = 0;
         int num_examples_delta_neq_0 = 0;
 
+        // The following files all have length 1 trajectories due to overstretch
+        // and band creation failures, and thus lead to no features being generated
+//        "seed15bd52f1e32b1391__stamp2019-08-22__21-59-46"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__21-59-48"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__21-59-50"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__21-59-52"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__21-59-54"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__21-59-56"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__21-59-59"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-01"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-04"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-06"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-08"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-10"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-12"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-15"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-17"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-19"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-22"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-24"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-26"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-29"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-31"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-33"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-35"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-38"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-40"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-42"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-45"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-47"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-49"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-51"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-54"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-57"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-00-59"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-01-02"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-01-04"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-01-06"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-01-08"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-01-10"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-01-13"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-01-15"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-01-17"
+//        "seed15bd52f1e32b1391__stamp2019-08-22__22-01-19"
+
         #pragma omp parallel for
         for (size_t file_idx = 0; file_idx < data_files_.size(); ++file_idx)
         {
@@ -1999,16 +2047,14 @@ namespace smmap
 
             try
             {
-                if (!boost::filesystem::is_regular_file(features_complete_flag_file))
+                if (!fs::is_regular_file(features_complete_flag_file))
                 {
-                    Log::Log logger(features_file, false);
-
                     const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
 
                     // Load the trajectory if possible, otherwise generate it
                     const auto trajectory = [&]
                     {
-                        if (!boost::filesystem::is_regular_file(trajectory_file))
+                        if (!fs::is_regular_file(trajectory_file))
                         {
                             const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
                             const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1)).first;
@@ -2021,18 +2067,24 @@ namespace smmap
                         }
                     }();
 
+                    assert(trajectory.size() > 0);
+                    if (trajectory.size() == 1)
+                    {
+                        ROS_WARN_STREAM_NAMED("features", experiment << " has only one state in the resulting trajectory, skipping this file");
+                        continue;
+                    }
+
                     // Step through the trajectory, looking for cases where the prediction goes
                     // from homotopy match to homotopy mismatch and large Euclidean distance
-
-                    assert(trajectory.size() > 0);
-                    bool start_foh = transition_estimator_->checkFirstOrderHomotopy(
-                                *trajectory[0].first.planned_rubber_band_,
-                                *trajectory[0].first.rubber_band_);
-
+                    Log::Log logger(features_file, false);
                     for (size_t idx = 1; idx < trajectory.size(); ++idx)
                     {
                         const auto& start_state = trajectory[idx - 1].first;
                         const auto& end_state = trajectory[idx].first;
+                        assert(trajectory.size() > 0);
+                        const bool start_foh = transition_estimator_->checkFirstOrderHomotopy(
+                                    *start_state.planned_rubber_band_,
+                                    *start_state.rubber_band_);
                         const bool end_foh = transition_estimator_->checkFirstOrderHomotopy(
                                     *end_state.planned_rubber_band_,
                                     *end_state.rubber_band_);
@@ -2456,7 +2508,7 @@ namespace smmap
         // Load the trajectory if possible, otherwise generate it
         const auto trajectory = [&]
         {
-            if (!boost::filesystem::is_regular_file(trajectory_file))
+            if (!fs::is_regular_file(trajectory_file))
             {
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
                 const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1)).first;
