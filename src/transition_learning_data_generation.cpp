@@ -1993,8 +1993,8 @@ namespace smmap
             const auto test_result_file =            experiment + "__test_results.compressed";
             const auto path_to_start_file =          experiment + "__path_to_start.compressed";
             const auto trajectory_file =             experiment + "__trajectory.compressed";
-            const auto features_file =               experiment + "__classification_features__" + parabola_slice_option + "__.csv";
-            const auto features_complete_flag_file = experiment + "__classification_features__" + parabola_slice_option + "__.complete";
+            const auto features_file =               experiment + "__classification_features__" + parabola_slice_option + "__start_and_end_dists.csv";
+            const auto features_complete_flag_file = experiment + "__classification_features__" + parabola_slice_option + "__start_and_end_dists.complete";
 
             try
             {
@@ -2056,11 +2056,15 @@ namespace smmap
                         };
                         const auto features = extractFeatures(transition, parabola_slice_option);
                         assert(FEATURE_NAMES.size() == features.size());
-                        const bool mistake =
+//                        const bool mistake =
 //                                (start_foh && dist_pre <= mistake_dist_thresh_) &&
-                                start_foh &&
-                                !(end_foh && dist_post <= mistake_dist_thresh_);
-                        ARC_LOG_STREAM(logger, std::to_string(mistake) << ", " << PrettyPrint::PrettyPrint(features, false, ", "));
+//                                start_foh &&
+//                                !(end_foh && dist_post <= mistake_dist_thresh_);
+                        ARC_LOG_STREAM(logger, std::to_string(start_foh) << ", " <<
+                                               std::to_string(dist_pre) << ", " <<
+                                               std::to_string(end_foh) << ", " <<
+                                               std::to_string(dist_post) << ", " <<
+                                               PrettyPrint::PrettyPrint(features, false, ", "));
 
                         if (!disable_visualizations_)
                         {
@@ -2082,136 +2086,132 @@ namespace smmap
                                 }
                             }
 
-                            // Visualization
-//                            if (!disable_visualizations_)
+                            std::vector<Visualizer::NamespaceId> marker_ids;
+                            const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
+
+                            // Remove any existing visualization at this id (if there is one)
                             {
-                                std::vector<Visualizer::NamespaceId> marker_ids;
-                                const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
+                                dmm::TransitionTestingVisualizationRequest dmmreq;
+                                dmmreq.data = std::to_string(next_vis_prefix_);
+                                dmm::TransitionTestingVisualizationResponse dmmres;
+                                removeVisualizationCallback(dmmreq, dmmres);
+                            }
 
-                                // Remove any existing visualization at this id (if there is one)
+                            // Planned Path
+                            {
+                                const auto draw_bands = true;
+                                const auto path_ids = band_rrt_vis_->visualizePath(path_to_start, ns_prefix + "PLANNED_", 1, draw_bands);
+
+                                const auto gripper_a_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_A_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().first}, Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 2);
+                                const auto gripper_b_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_B_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().second}, Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), 2);
+
+                                marker_ids.insert(marker_ids.end(), path_ids.begin(), path_ids.end());
+                                marker_ids.insert(marker_ids.end(), gripper_a_last_id.begin(), gripper_a_last_id.end());
+                                marker_ids.insert(marker_ids.end(), gripper_b_last_id.begin(), gripper_b_last_id.end());
+                            }
+
+                            // Actual Path
+                            {
+                                for (size_t path_idx = 0; path_idx < trajectory.size(); ++path_idx)
                                 {
-                                    dmm::TransitionTestingVisualizationRequest dmmreq;
-                                    dmmreq.data = std::to_string(next_vis_prefix_);
-                                    dmm::TransitionTestingVisualizationResponse dmmres;
-                                    removeVisualizationCallback(dmmreq, dmmres);
+                                    const auto& state = trajectory[path_idx].first;
+                                    const auto new_ids = state.rubber_band_->visualize(ns_prefix + "EXECUTED_BAND", Visualizer::Yellow(), Visualizer::Yellow(), (int32_t)(path_idx + 1));
+                                    marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
+                                }
+                            }
+
+                            // Transition under consideration
+                            {
+                                // Add the first band surface band
+                                {
+                                    const bool foh = dist_and_foh_values(1, 0);
+                                    const auto color = foh ? Visualizer::Green() : Visualizer::Red();
+                                    const auto ns = foh ? ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_DIFF";
+                                    const auto new_ids = transition.microstep_band_history_.back()->visualize(ns, color, color, (int)(dist_and_foh_values.cols() + 1));
+                                    marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
+                                }
+                                // Add the "middle" band surface bands
+                                for (size_t step_idx = 1; step_idx < transition.microstep_band_history_.size() - 1; ++step_idx)
+                                {
+                                    const auto ratio = (float)(step_idx) / (float)(transition.microstep_band_history_.size() - 1);
+                                    const bool foh = (bool)dist_and_foh_values(1, step_idx - 1) && (bool)dist_and_foh_values(1, step_idx);
+                                    const auto color = foh
+                                            ? InterpolateColor(Visualizer::Green(), Visualizer::Cyan(), ratio)
+                                            : InterpolateColor(Visualizer::Red(), Visualizer::Magenta(), ratio);
+                                    const auto ns = foh ? ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_DIFF";
+                                    const auto new_ids = transition.microstep_band_history_[step_idx]->visualize(ns, color, color, (int)(step_idx + 1));
+                                    marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
+                                }
+                                // Add the last band surface band
+                                {
+                                    const bool foh = dist_and_foh_values(1, dist_and_foh_values.cols() - 1);
+                                    const auto color = foh ? Visualizer::Cyan() : Visualizer::Magenta();
+                                    const auto ns = foh ? ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_DIFF";
+                                    const auto new_ids = transition.microstep_band_history_.back()->visualize(ns, color, color, (int)(dist_and_foh_values.cols() + 1));
+                                    marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
                                 }
 
-                                // Planned Path
+                                // Add the planned vs executed start and end bands on their own namespaces
                                 {
-                                    const auto draw_bands = true;
-                                    const auto path_ids = band_rrt_vis_->visualizePath(path_to_start, ns_prefix + "PLANNED_", 1, draw_bands);
+                                    const auto new_ids1 = transition.starting_state_.planned_rubber_band_->visualize(
+                                                ns_prefix + "FEATURE_START_PLANNED",
+                                                Visualizer::Green(),
+                                                Visualizer::Green(),
+                                                1);
+                                    const auto new_ids2 = transition.starting_state_.rubber_band_->visualize(
+                                                ns_prefix + "FEATURE_START_EXECUTED",
+                                                Visualizer::Red(),
+                                                Visualizer::Red(),
+                                                1);
+                                    const auto new_ids3 = transition.ending_state_.planned_rubber_band_->visualize(
+                                                ns_prefix + "FEATURE_END_PLANNED",
+                                                Visualizer::Olive(),
+                                                Visualizer::Olive(),
+                                                1);
+                                    const auto new_ids4 = transition.ending_state_.rubber_band_->visualize(
+                                                ns_prefix + "FEATURE_END_EXECUTED",
+                                                Visualizer::Orange(),
+                                                Visualizer::Orange(),
+                                                1);
 
-                                    const auto gripper_a_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_A_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().first}, Vector3d(0.005, 0.005, 0.005), Visualizer::Magenta(), 2);
-                                    const auto gripper_b_last_id = vis_->visualizeCubes(ns_prefix + "PLANNED_" + BandRRT::RRT_PATH_GRIPPER_B_NS, {trajectory.back().first.planned_rubber_band_->getEndpoints().second}, Vector3d(0.005, 0.005, 0.005), Visualizer::Red(), 2);
-
-                                    marker_ids.insert(marker_ids.end(), path_ids.begin(), path_ids.end());
-                                    marker_ids.insert(marker_ids.end(), gripper_a_last_id.begin(), gripper_a_last_id.end());
-                                    marker_ids.insert(marker_ids.end(), gripper_b_last_id.begin(), gripper_b_last_id.end());
+                                    marker_ids.insert(marker_ids.begin(), new_ids1.begin(), new_ids1.end());
+                                    marker_ids.insert(marker_ids.begin(), new_ids2.begin(), new_ids2.end());
+                                    marker_ids.insert(marker_ids.begin(), new_ids3.begin(), new_ids3.end());
+                                    marker_ids.insert(marker_ids.begin(), new_ids4.begin(), new_ids4.end());
                                 }
+                            }
 
-                                // Actual Path
+//                            res.response = std::to_string(next_vis_prefix_);
+                            visid_to_markers_[std::to_string(next_vis_prefix_)] = marker_ids;
+//                            ++next_vis_prefix_;
+
+//                            ROS_INFO_STREAM("Added vis id: " << std::to_string(next_vis_prefix_) << " for file " << test_result_file << std::endl
+//                                            << "Planned vs executed start FOH:      " << start_foh << std::endl
+//                                            << "Planned vs executed start dist:     " << transition.starting_state_.planned_rubber_band_->distance(*transition.starting_state_.rubber_band_) << std::endl
+//                                            << "Planned vs executed end FOH:        " << end_foh << std::endl
+//                                            << "Planned vs executed end dist:       " << transition.ending_state_.planned_rubber_band_->distance(*transition.ending_state_.rubber_band_) << std::endl
+//                                            << "Start vs end dist planned:          " << transition.starting_state_.planned_rubber_band_->distance(*transition.ending_state_.planned_rubber_band_) << std::endl
+//                                            << "Start vs end dist executed:         " << transition.starting_state_.rubber_band_->distance(*transition.ending_state_.rubber_band_) << std::endl
+//                                            << "Num FOH changes:                    " << num_foh_changes << std::endl
+//                                            << "Distance and FOH values along band surface:\n" << dist_and_foh_values.transpose() << std::endl);
+
+                            if (features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA] != std::to_string(0) ||
+                                features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] != std::to_string(0))
+                            {
+                                assert(features.size() == FEATURE_NAMES.size());
+                                ++num_examples_delta_neq_0;
+                                ROS_INFO_STREAM_NAMED("features", "Examples with equal number of components: " << num_examples_delta_eq_0 << "   Not equal components: " << num_examples_delta_neq_0);
+                                ROS_INFO_STREAM_NAMED("features", test_result_file);
+                                ROS_INFO_STREAM_NAMED("features", "  Transition at idx: " << idx << " with distance " << dist_post);
+                                for (size_t i = 0; i < FEATURE_NAMES.size(); ++i)
                                 {
-                                    for (size_t path_idx = 0; path_idx < trajectory.size(); ++path_idx)
-                                    {
-                                        const auto& state = trajectory[path_idx].first;
-                                        const auto new_ids = state.rubber_band_->visualize(ns_prefix + "EXECUTED_BAND", Visualizer::Yellow(), Visualizer::Yellow(), (int32_t)(path_idx + 1));
-                                        marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
-                                    }
+                                    ROS_INFO_STREAM_NAMED("features", "  " << /* std::left << */ std::setw(48) << FEATURE_NAMES[i] << ": " << features[i]);
                                 }
-
-                                // Transition under consideration
-                                {
-                                    // Add the first band surface band
-                                    {
-                                        const bool foh = dist_and_foh_values(1, 0);
-                                        const auto color = foh ? Visualizer::Green() : Visualizer::Red();
-                                        const auto ns = foh ? ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_DIFF";
-                                        const auto new_ids = transition.microstep_band_history_.back()->visualize(ns, color, color, (int)(dist_and_foh_values.cols() + 1));
-                                        marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
-                                    }
-                                    // Add the "middle" band surface bands
-                                    for (size_t step_idx = 1; step_idx < transition.microstep_band_history_.size() - 1; ++step_idx)
-                                    {
-                                        const auto ratio = (float)(step_idx) / (float)(transition.microstep_band_history_.size() - 1);
-                                        const bool foh = (bool)dist_and_foh_values(1, step_idx - 1) && (bool)dist_and_foh_values(1, step_idx);
-                                        const auto color = foh
-                                                ? InterpolateColor(Visualizer::Green(), Visualizer::Cyan(), ratio)
-                                                : InterpolateColor(Visualizer::Red(), Visualizer::Magenta(), ratio);
-                                        const auto ns = foh ? ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_DIFF";
-                                        const auto new_ids = transition.microstep_band_history_[step_idx]->visualize(ns, color, color, (int)(step_idx + 1));
-                                        marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
-                                    }
-                                    // Add the last band surface band
-                                    {
-                                        const bool foh = dist_and_foh_values(1, dist_and_foh_values.cols() - 1);
-                                        const auto color = foh ? Visualizer::Cyan() : Visualizer::Magenta();
-                                        const auto ns = foh ? ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_SAME" : ns_prefix + "FEATURE_EXECUTED_BAND_SURFACE_FOH_DIFF";
-                                        const auto new_ids = transition.microstep_band_history_.back()->visualize(ns, color, color, (int)(dist_and_foh_values.cols() + 1));
-                                        marker_ids.insert(marker_ids.begin(), new_ids.begin(), new_ids.end());
-                                    }
-
-                                    // Add the planned vs executed start and end bands on their own namespaces
-                                    {
-                                        const auto new_ids1 = transition.starting_state_.planned_rubber_band_->visualize(
-                                                    ns_prefix + "FEATURE_START_PLANNED",
-                                                    Visualizer::Green(),
-                                                    Visualizer::Green(),
-                                                    1);
-                                        const auto new_ids2 = transition.starting_state_.rubber_band_->visualize(
-                                                    ns_prefix + "FEATURE_START_EXECUTED",
-                                                    Visualizer::Red(),
-                                                    Visualizer::Red(),
-                                                    1);
-                                        const auto new_ids3 = transition.ending_state_.planned_rubber_band_->visualize(
-                                                    ns_prefix + "FEATURE_END_PLANNED",
-                                                    Visualizer::Olive(),
-                                                    Visualizer::Olive(),
-                                                    1);
-                                        const auto new_ids4 = transition.ending_state_.rubber_band_->visualize(
-                                                    ns_prefix + "FEATURE_END_EXECUTED",
-                                                    Visualizer::Orange(),
-                                                    Visualizer::Orange(),
-                                                    1);
-
-                                        marker_ids.insert(marker_ids.begin(), new_ids1.begin(), new_ids1.end());
-                                        marker_ids.insert(marker_ids.begin(), new_ids2.begin(), new_ids2.end());
-                                        marker_ids.insert(marker_ids.begin(), new_ids3.begin(), new_ids3.end());
-                                        marker_ids.insert(marker_ids.begin(), new_ids4.begin(), new_ids4.end());
-                                    }
-                                }
-
-    //                            res.response = std::to_string(next_vis_prefix_);
-                                visid_to_markers_[std::to_string(next_vis_prefix_)] = marker_ids;
-    //                            ++next_vis_prefix_;
-
-    //                            ROS_INFO_STREAM("Added vis id: " << std::to_string(next_vis_prefix_) << " for file " << test_result_file << std::endl
-    //                                            << "Planned vs executed start FOH:      " << start_foh << std::endl
-    //                                            << "Planned vs executed start dist:     " << transition.starting_state_.planned_rubber_band_->distance(*transition.starting_state_.rubber_band_) << std::endl
-    //                                            << "Planned vs executed end FOH:        " << end_foh << std::endl
-    //                                            << "Planned vs executed end dist:       " << transition.ending_state_.planned_rubber_band_->distance(*transition.ending_state_.rubber_band_) << std::endl
-    //                                            << "Start vs end dist planned:          " << transition.starting_state_.planned_rubber_band_->distance(*transition.ending_state_.planned_rubber_band_) << std::endl
-    //                                            << "Start vs end dist executed:         " << transition.starting_state_.rubber_band_->distance(*transition.ending_state_.rubber_band_) << std::endl
-    //                                            << "Num FOH changes:                    " << num_foh_changes << std::endl
-    //                                            << "Distance and FOH values along band surface:\n" << dist_and_foh_values.transpose() << std::endl);
-
-                                if (features[SLICE_NUM_FREE_CONNECTED_COMPONENTS_DELTA] != std::to_string(0) ||
-                                    features[SLICE_NUM_OCCUPIED_CONNECTED_COMPONENTS_DELTA] != std::to_string(0))
-                                {
-                                    assert(features.size() == FEATURE_NAMES.size());
-                                    ++num_examples_delta_neq_0;
-                                    ROS_INFO_STREAM_NAMED("features", "Examples with equal number of components: " << num_examples_delta_eq_0 << "   Not equal components: " << num_examples_delta_neq_0);
-                                    ROS_INFO_STREAM_NAMED("features", test_result_file);
-                                    ROS_INFO_STREAM_NAMED("features", "  Transition at idx: " << idx << " with distance " << dist_post);
-                                    for (size_t i = 0; i < FEATURE_NAMES.size(); ++i)
-                                    {
-                                        ROS_INFO_STREAM_NAMED("features", "  " << /* std::left << */ std::setw(48) << FEATURE_NAMES[i] << ": " << features[i]);
-                                    }
 //                                    PressAnyKeyToContinue();
-                                }
-                                else
-                                {
-                                    ++num_examples_delta_eq_0;
-                                }
+                            }
+                            else
+                            {
+                                ++num_examples_delta_eq_0;
                             }
                         }
                     }
