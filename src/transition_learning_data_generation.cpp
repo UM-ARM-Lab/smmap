@@ -810,10 +810,10 @@ namespace smmap
             const std::vector<std::string> options =
             {
                 "basic",
-                "in_plane_gravity_aligned",
-                "in_plane_gripper_aligned",
-                "extend_downwards_gravity_aligned",
-                "extend_downwards_gripper_aligned"
+//                "in_plane_gravity_aligned",
+//                "in_plane_gripper_aligned",
+//                "extend_downwards_gravity_aligned",
+//                "extend_downwards_gripper_aligned"
             };
             for (const auto& opt : options)
             {
