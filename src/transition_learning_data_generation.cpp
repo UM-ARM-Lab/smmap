@@ -1492,7 +1492,7 @@ namespace smmap
         std::atomic<int> num_succesful_paths = 0;
         std::atomic<int> num_unsuccesful_paths = 0;
 
-        const auto omp_threads = (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 1;
+        const auto omp_threads = (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 2;
         #pragma omp parallel for num_threads(omp_threads)
         for (size_t idx = 0; idx < data_files_.size(); ++idx)
         {
@@ -2654,7 +2654,7 @@ namespace smmap
         // We can't rely on ROS messaging to get all feedback, so post-process everything instead
         std::atomic<int> num_succesful_paths = 0;
         std::atomic<int> num_unsuccesful_paths = 0;
-        const auto omp_threads = (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 1;
+        const auto omp_threads = (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 2;
         #pragma omp parallel for num_threads(omp_threads)
         for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
         {
