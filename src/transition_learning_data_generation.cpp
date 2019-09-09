@@ -2216,18 +2216,22 @@ namespace smmap
                 // from homotopy match to homotopy mismatch and large Euclidean distance
 
                 assert(not trajectory.empty());
-                const bool start_foh = transition_estimator_->checkFirstOrderHomotopy(
-                        *trajectory[0].first.planned_rubber_band_,
-                        *trajectory[0].first.rubber_band_);
 
                 for (size_t idx = 1; idx < trajectory.size(); ++idx)
                 {
                     const auto &start_state = trajectory[idx - 1].first;
                     const auto &end_state = trajectory[idx].first;
+                    const bool start_foh = transition_estimator_->checkFirstOrderHomotopy(
+                            *start_state.planned_rubber_band_,
+                            *start_state.rubber_band_);
                     const bool end_foh = transition_estimator_->checkFirstOrderHomotopy(
                             *end_state.planned_rubber_band_,
                             *end_state.rubber_band_);
-                    const auto dist_post = end_state.planned_rubber_band_->distance(*end_state.rubber_band_);
+                    const auto start_dist = start_state.planned_rubber_band_->distance(*start_state.rubber_band_);
+                    const auto end_dist = end_state.planned_rubber_band_->distance(*end_state.rubber_band_);
+                    const auto start_close = start_foh && (start_dist <= mistake_dist_thresh_);
+                    const auto end_close = end_foh && (end_dist <= mistake_dist_thresh_);
+                    const bool label_is_mistake = !(start_close && end_close);
 
                     // Only compute the microstep band history if we're going to actually use it
                     std::vector<RubberBand::Ptr> microstep_band_history;
@@ -2246,7 +2250,6 @@ namespace smmap
                     };
 
                     const auto features = betterExtractFeatures(transition);
-                    const bool label_is_mistake = start_foh && !(end_foh && dist_post <= mistake_dist_thresh_);
                     // floats are the default data type for labels in deep learning
                     const auto label_float = static_cast<float>(label_is_mistake);
 
