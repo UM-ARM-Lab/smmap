@@ -60,6 +60,7 @@ TaskSpecification::Ptr TaskSpecification::MakeTaskSpecification(
         case TaskType::CLOTH_TABLE_COVERAGE:
             return std::make_shared<ClothDirectCoverage>(nh, ph, vis);
 
+        case TaskType::ROPE_ENGINE_ASSEMBLY_LIVE:
         case TaskType::ROPE_GENERIC_DIJKSTRAS_COVERAGE:
             return std::make_shared<RopeDistanceBasedCorrespondences>(nh, ph, vis);
 

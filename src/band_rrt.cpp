@@ -839,7 +839,8 @@ RRTPolicy BandRRT::plan(
         vis_->visualizeGrippers("weird_gripper_goals", VectorIsometry3d{grippers_goal_poses_.first, grippers_goal_poses_.second}, Visualizer::Red(), 1);
 //        PressAnyKeyToContinue("Unfeasible goal location");
 //        assert(false && "Unfeasible goal location");
-        throw_arc_exception(std::runtime_error, "Unfeasible goal location");
+//        throw_arc_exception(std::runtime_error, "Unfeasible goal location");
+        return {};
     }
 
     // Clear the forward tree flann data
@@ -2625,7 +2626,15 @@ size_t BandRRT::forwardPropogationFunction(
             // Collision checking
             {
                 stopwatch(RESET);
-                const bool in_collision = robot_->checkRobotCollision();
+                arc_helpers::DoNotOptimize(next_grippers_poses);
+                const bool in_collision_sdf =
+                        (sdf_->EstimateDistance3d(next_grippers_poses.first.translation()).first < gripper_min_distance_to_obstacles_) ||
+                        (sdf_->EstimateDistance3d(next_grippers_poses.second.translation()).first < gripper_min_distance_to_obstacles_) ||
+                        (sdf_->DistanceToBoundary3d(next_grippers_poses.first.translation()).first < gripper_min_distance_to_obstacles_) ||
+                        (sdf_->DistanceToBoundary3d(next_grippers_poses.second.translation()).first < gripper_min_distance_to_obstacles_);
+                const bool in_collision_openrave = robot_->checkRobotCollision();
+                const bool in_collision = in_collision_sdf || in_collision_openrave;
+                arc_helpers::DoNotOptimize(in_collision);
                 const double collision_check_time = stopwatch(READ);
                 total_collision_check_time_ += collision_check_time;
                 if (in_collision)

@@ -455,10 +455,13 @@ WorldState TaskFramework::sendNextCommand(
         else
         {
             world_feedback = sendNextCommandUsingLocalController(world_state);
+            RubberBand prev_band = *rubber_band_;
             if (!rubber_band_->resetBand(world_feedback))
             {
-                PressAnyKeyToContinue("Error resetting the band after moving the grippers ");
-                assert(false);
+                PressAnyKeyToContinue("Error resetting the band after moving the grippers with the local controller, skipping this reset step and propagating instead ");
+                *rubber_band_ = prev_band;
+                rubber_band_->forwardPropagate(ToGripperPositions(world_state.all_grippers_single_pose_), false);
+//                assert(false);
             }
         }
 
@@ -798,10 +801,13 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     const WorldState& world_feedback = command_result.first;
     microstep_history_buffer_.insert(microstep_history_buffer_.end(), command_result.second.begin(), command_result.second.end());
     // Update the band with the new position of the deformable object
+    RubberBand prev_band = *rubber_band_;
     if (!rubber_band_->resetBand(world_feedback))
     {
-        PressAnyKeyToContinue("Error resetting the band after moving the grippers ");
-        assert(false);
+        PressAnyKeyToContinue("Error resetting the band after moving the grippers with the global planner controller, skipping this reset step and propagating instead ");
+        *rubber_band_ = prev_band;
+        rubber_band_->forwardPropagate(ToGripperPositions(world_state.all_grippers_single_pose_), false);
+//                assert(false);
     }
 
     // If we targetted the last node of the current path segment, then we need to handle
