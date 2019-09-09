@@ -23,9 +23,9 @@ def main():
     glt.grid_generic()
     glt.show(persistent=False)
 
-    plot_voxel_grid(local_environment, [1, 1, 1])
-    plot_voxel_grid(pre_band, [0, 1, 0])
-    plot_voxel_grid(post_band, [0, 0, 1])
+    plot_voxel_grid(local_environment, [1, 1, 1, 0.2])
+    plot_voxel_grid(pre_band, [0, 1, 0, 0.9])
+    plot_voxel_grid(post_band, [0, 0, 1, 0.9])
 
 
 def plot_voxel_grid(voxel_grid, color):
@@ -37,8 +37,7 @@ def plot_voxel_grid(voxel_grid, color):
         if voxel_grid[point[0], point[1], point[2]] > 0.5:
             occupied_points.append(point)
     occupied_points = np.array(occupied_points)
-    color.append(0.5)
-    glt.scatter_generic(occupied_points, color=color, size=7)
+    glt.scatter_generic(occupied_points, color=color, size=20)
 
 
 if __name__ == '__main__':
