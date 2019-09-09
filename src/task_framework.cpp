@@ -806,7 +806,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     {
         PressAnyKeyToContinue("Error resetting the band after moving the grippers with the global planner controller, skipping this reset step and propagating instead ");
         *rubber_band_ = prev_band;
-        rubber_band_->forwardPropagate(ToGripperPositions(world_state.all_grippers_single_pose_), false);
+        rubber_band_->forwardPropagate(ToGripperPositions(world_feedback.all_grippers_single_pose_), false);
 //                assert(false);
     }
 
