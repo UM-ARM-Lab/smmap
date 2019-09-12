@@ -2671,34 +2671,44 @@ namespace smmap
             return ss.str();
         };
 
-        #pragma omp parallel for
-        for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
+        std::atomic<int> num_failed_plans = 0;
+        const auto omp_planning_threads = std::max(1ul, GetNumOMPThreads() / 2);
+        //#pragma omp parallel for num_threads(omp_planning_threads)
+        for (size_t trial_idx = 30; trial_idx < num_trials; ++trial_idx)
         {
-            const auto path_to_start_file = folder + "trial_idx_" + to_str(trial_idx) + "__path_to_start.compressed";
-            const auto test_result_file = folder + "trial_idx_" + to_str(trial_idx) + "__test_results.compressed";
-
-            const auto rrt_path = generateTestPath(target_grippers_poses, trial_idx * 0xFFFF);
-            band_rrt_vis_->savePath(rrt_path, path_to_start_file);
-
-            const auto test = robot_->toRosTransitionTest(
-                        initial_world_state_.rope_node_transforms_,
-                        initial_world_state_.all_grippers_single_pose_,
-                        RRTPathToGrippersPoseTrajectory(rrt_path),
-                        ToGripperPoseVector(rrt_path.back().grippers()));
-
-            // Add the test to the list waiting to be executed
-            #pragma omp critical
+            try
             {
-                tests.push_back(test);
-                test_result_filenames.push_back(test_result_file);
+                const auto path_to_start_file = folder + "trial_idx_" + to_str(trial_idx) + "__path_to_start.compressed";
+                const auto test_result_file = folder + "trial_idx_" + to_str(trial_idx) + "__test_results.compressed";
 
-                // Execute the tests if there are enough to run
-                if (tests.size() == num_threads)
+                const auto rrt_path = generateTestPath(target_grippers_poses, trial_idx * 0xFFFF);
+                band_rrt_vis_->savePath(rrt_path, path_to_start_file);
+
+                const auto test = robot_->toRosTransitionTest(
+                            initial_world_state_.rope_node_transforms_,
+                            initial_world_state_.all_grippers_single_pose_,
+                            RRTPathToGrippersPoseTrajectory(rrt_path),
+                            ToGripperPoseVector(rrt_path.back().grippers()));
+
+                // Add the test to the list waiting to be executed
+//                #pragma omp critical
                 {
-                    robot_->generateTransitionData(tests, test_result_filenames, nullptr, false);
-                    tests.clear();
-                    test_result_filenames.clear();
+                    tests.push_back(test);
+                    test_result_filenames.push_back(test_result_file);
+
+                    // Execute the tests if there are enough to run
+                    if (tests.size() == num_threads)
+                    {
+                        robot_->generateTransitionData(tests, test_result_filenames, nullptr, false);
+                        tests.clear();
+                        test_result_filenames.clear();
+                    }
                 }
+            }
+            catch (const std::runtime_error& ex)
+            {
+                ROS_WARN_STREAM("Planning failed for idx " << trial_idx << ": " << ex.what());
+                ++num_failed_plans;
             }
         }
 
@@ -2715,27 +2725,36 @@ namespace smmap
         // We can't rely on ROS messaging to get all feedback, so post-process everything instead
         std::atomic<int> num_succesful_paths = 0;
         std::atomic<int> num_unsuccesful_paths = 0;
-        const auto omp_threads = (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 2;
-        #pragma omp parallel for num_threads(omp_threads)
+        std::atomic<int> num_unparsable_paths = 0;
+        const auto omp_parsing_threads = std::max(1ul, (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() / 2 : 1);
+        #pragma omp parallel for num_threads(omp_parsing_threads)
         for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
         {
-            const auto path_to_start_file = folder + "trial_idx_" + to_str(trial_idx) + "__path_to_start.compressed";
-            const auto test_result_file = folder + "trial_idx_" + to_str(trial_idx) + "__test_results.compressed";
-            const auto trajectory_file = folder + "trial_idx_" + to_str(trial_idx) + "__trajectory.compressed";
-
-            const auto path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
-            const auto test_result = loadTestResult(test_result_file);
-
-            const auto traj_gen_result = toTrajectory(test_result, path_to_start, test_result_file);
-            const auto& trajectory = traj_gen_result.first;
-            transition_estimator_->saveTrajectory(trajectory, trajectory_file);
-            if (traj_gen_result.second)
+            try
             {
-                ++num_succesful_paths;
+                const auto path_to_start_file = folder + "trial_idx_" + to_str(trial_idx) + "__path_to_start.compressed";
+                const auto test_result_file = folder + "trial_idx_" + to_str(trial_idx) + "__test_results.compressed";
+                const auto trajectory_file = folder + "trial_idx_" + to_str(trial_idx) + "__trajectory.compressed";
+
+                const auto path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+                const auto test_result = loadTestResult(test_result_file);
+
+                const auto traj_gen_result = toTrajectory(test_result, path_to_start, test_result_file);
+                const auto& trajectory = traj_gen_result.first;
+                transition_estimator_->saveTrajectory(trajectory, trajectory_file);
+                if (traj_gen_result.second)
+                {
+                    ++num_succesful_paths;
+                }
+                else
+                {
+                    ++num_unsuccesful_paths;
+                }
             }
-            else
+            catch (const std::exception& ex)
             {
-                ++num_unsuccesful_paths;
+                ROS_WARN_STREAM("Unable to parse idx " << trial_idx << ": " << ex.what());
+                ++num_unparsable_paths;
             }
         }
 
@@ -2744,7 +2763,10 @@ namespace smmap
         ROS_INFO_STREAM(classifier_dim << " " <<
                         classifier_slice_type << " " <<
                         classifier_type << " " <<
-                        "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
+                        "Total successful paths: " << num_succesful_paths <<
+                        "    Total unsuccessful paths: " << num_unsuccesful_paths <<
+                        "    Total plan failures: " << num_failed_plans <<
+                        "    Total unparsable paths: " << num_unparsable_paths);
     }
 
     // Duplicated from task_framework.cpp
