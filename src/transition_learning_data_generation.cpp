@@ -2673,7 +2673,7 @@ namespace smmap
 
         std::atomic<int> num_failed_plans = 0;
         const auto omp_planning_threads = std::max(1ul, GetNumOMPThreads() / 2);
-        //#pragma omp parallel for num_threads(omp_planning_threads)
+        #pragma omp parallel for num_threads(omp_planning_threads)
         for (size_t trial_idx = 30; trial_idx < num_trials; ++trial_idx)
         {
             try
@@ -2691,7 +2691,7 @@ namespace smmap
                             ToGripperPoseVector(rrt_path.back().grippers()));
 
                 // Add the test to the list waiting to be executed
-//                #pragma omp critical
+                #pragma omp critical
                 {
                     tests.push_back(test);
                     test_result_filenames.push_back(test_result_file);
