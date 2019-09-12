@@ -404,6 +404,7 @@ WorldState TaskFramework::sendNextCommand(
         // Check if the local controller will be stuck
         else
         {
+
             Stopwatch stopwatch;
             arc_helpers::DoNotOptimize(world_state);
             const bool global_planner_needed_due_to_overstretch = globalPlannerNeededDueToOverstretch(world_state);
@@ -443,6 +444,11 @@ WorldState TaskFramework::sendNextCommand(
             vis_->purgeMarkerList();
 
             planGlobalGripperTrajectory(world_state);
+
+            if (task_specification_->task_type_ == TaskType::ROPE_ENGINE_ASSEMBLY_LIVE)
+            {
+                PressAnyKeyToContinue("Pausing before executing plan ... ");
+            }
         }
 
         // Execute a single step in the global plan, or use the local controller if we have no plan to follow
@@ -459,9 +465,10 @@ WorldState TaskFramework::sendNextCommand(
             if (!rubber_band_->resetBand(world_feedback))
             {
                 PressAnyKeyToContinue("Error resetting the band after moving the grippers with the local controller, skipping this reset step and propagating instead ");
-                *rubber_band_ = prev_band;
-                rubber_band_->forwardPropagate(ToGripperPositions(world_state.all_grippers_single_pose_), false);
-//                assert(false);
+                assert(false);
+//                ROS_WARN_NAMED("task_framework", "Error resetting the band after moving the grippers with the local controller, skipping this reset step and propagating instead ");
+//                *rubber_band_ = prev_band;
+//                rubber_band_->forwardPropagate(ToGripperPositions(world_state.all_grippers_single_pose_), false);
             }
         }
 
@@ -805,9 +812,10 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     if (!rubber_band_->resetBand(world_feedback))
     {
         PressAnyKeyToContinue("Error resetting the band after moving the grippers with the global planner controller, skipping this reset step and propagating instead ");
-        *rubber_band_ = prev_band;
-        rubber_band_->forwardPropagate(ToGripperPositions(world_feedback.all_grippers_single_pose_), false);
-//                assert(false);
+        assert(false);
+//        ROS_WARN_NAMED("task_framework", "Error resetting the band after moving the grippers with the local controller, skipping this reset step and propagating instead ");
+//        *rubber_band_ = prev_band;
+//        rubber_band_->forwardPropagate(ToGripperPositions(world_feedback.all_grippers_single_pose_), false);
     }
 
     // If we targetted the last node of the current path segment, then we need to handle
@@ -1086,7 +1094,6 @@ bool TaskFramework::globalPlannerNeededDueToOverstretch(
         return true;
     }
 
-
     static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(*ph_);
 
     const bool visualization_enabled = true;
@@ -1109,11 +1116,6 @@ bool TaskFramework::globalPlannerNeededDueToOverstretch(
 
         // Apply a low pass filter to the band length to try and remove "blips" in the estimate
         filtered_band_length = annealing_factor * filtered_band_length + (1.0 - annealing_factor) * band_length;
-
-//        std::cout << "Band length:          " << band_length << std::endl;
-//        std::cout << "Filtered band length: " << filtered_band_length << std::endl;
-//        std::cout << "Max band length:      " << band.maxSafeLength() << std::endl;
-//        std::cout << "distance between endpoints: " << distance_between_endpoints << std::endl;
 
         // If the band is currently overstretched, and not in free space, then predict future problems
         if (filtered_band_length > band.maxSafeLength() && !CloseEnough(band_length, distance_between_endpoints, 1e-3))
@@ -1179,10 +1181,7 @@ bool TaskFramework::predictStuckForGlobalPlannerResults(const bool visualization
 {
     static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(*ph_);
 
-//    #warning "!!!!!!! Global plan overstretch check disabled!!!!!"
-//    return false;
-
-    ROS_WARN_THROTTLE_NAMED(4.0, "task_framewor", "Only predicting stuck using the current segment, and not using transition learning in the process");
+    ROS_WARN_THROTTLE_NAMED(4.0, "task_framework", "Only predicting stuck using the current segment, and not using transition learning in the process");
 
     const RRTPath& current_segment = rrt_planned_policy_[policy_current_idx_].first;
     assert(policy_segment_next_idx_ < current_segment.size());

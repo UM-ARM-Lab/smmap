@@ -1531,7 +1531,15 @@ namespace smmap
             }
         }
 
-        ROS_INFO_STREAM("Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
+        const int classifier_dim = ROSHelpers::GetParamRequiredDebugLog<int>(*ph_, "classifier/dim", __func__).GetImmutable();
+        const std::string classifier_slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__).GetImmutable();
+        const std::string classifier_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/type", __func__).GetImmutable();
+
+        ROS_INFO_STREAM(
+                    classifier_dim << " " <<
+                    classifier_slice_type << " " <<
+                    classifier_type << " " <<
+                    "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
     }
 
     void TransitionTesting::visualizeIncompleteTrajectories()
