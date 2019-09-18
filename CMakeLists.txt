@@ -27,7 +27,6 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Mo
 find_package(Flann REQUIRED)
 find_package(SVM REQUIRED)
 
-#set(Torch_DIR "/home/dmcconac/local/libtorch/share/cmake/Torch")
 find_package(Torch REQUIRED)
 
 ################################################
