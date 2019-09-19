@@ -25,6 +25,8 @@ set(EIGEN3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
 find_package(Flann REQUIRED)
+set(FLANN_INCLUDE_DIRS ${FLANN_INCLUDE_DIR})
+set(FLANN_LIBRARIES ${FLANN_LIBRARY})
 find_package(SVM REQUIRED)
 
 find_package(Torch REQUIRED)
@@ -57,7 +59,6 @@ include_directories(include
     ${Boost_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
-    ${FLANN_INCLUDE_DIRS}
     ${SVM_INCLUDE_DIRS}
     ${TORCH_INCLUDE_DIRS}
 )
@@ -165,6 +166,7 @@ target_link_libraries(${PROJECT_NAME}_transitions
     ${PROJECT_NAME}_infrastructure
     ${SVM_LIBRARIES}
     ${TORCH_LIBRARIES}
+    FLANN::FLANN
 )
 target_compile_definitions(${PROJECT_NAME}_transitions PUBLIC "-D _DENSE_REP")
 
@@ -191,7 +193,7 @@ target_link_libraries(${PROJECT_NAME}_planning
     ${PROJECT_NAME}_models
     ${PROJECT_NAME}_controllers
     ${PROJECT_NAME}_transitions
-    ${FLANN_LIBRARIES}
+    FLANN::FLANN
 )
 set_target_properties(${PROJECT_NAME}_planning PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${FLANN_DEFINITIONS}")
 
