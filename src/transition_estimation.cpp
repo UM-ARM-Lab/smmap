@@ -7,6 +7,7 @@
 #include <arc_utilities/first_order_deformation.h>
 #include <arc_utilities/path_utils.hpp>
 #include <arc_utilities/timing.hpp>
+#include <arc_utilities/filesystem.hpp>
 #include <deformable_manipulation_experiment_params/utility.hpp>
 #include <sdf_tools/collision_map.hpp>
 #include "smmap/parabola.h"
@@ -502,15 +503,17 @@ TransitionEstimation::TransitionEstimation(
     , vis_(vis)
 
     , default_propogation_confidence_(GetTransitionDefaultPropagationConfidence(*ph_))
+#if 0
     , default_band_dist_threshold_(GetTransitionDefaultBandDistThreshold(*ph_))
     , confidence_threshold_(GetTransitionConfidenceThreshold(*ph_))
     , template_misalignment_scale_factor_(GetTransitionTemplateMisalignmentScaleFactor(*ph_))
     , band_tighten_scale_factor_(GetTransitionTightenDeltaScaleFactor(*ph_))
     , homotopy_changes_scale_factor_(GetTransitionHomotopyChangesScaleFactor(*ph_))
+#endif
 
+    , mistake_dist_thresh_(GetTransitionMistakeThreshold(*ph_))
     , normalize_lengths_(ROSHelpers::GetParamRequired<bool>(*ph_, "classifier/normalize_lengths", __func__).GetImmutable())
     , normalize_connected_components_(ROSHelpers::GetParamRequired<bool>(*ph_, "classifier/normalize_connected_components", __func__).GetImmutable())
-    , classifier_scaler_(nh_, ph_)
     , transition_mistake_classifier_(Classifier::MakeClassifier(nh_, ph_))
     , accept_scale_factor_(ROSHelpers::GetParamRequired<double>(*ph_, "classifier/accept_scale_factor", __func__).GetImmutable())
     #warning "Voxnet classifier hack addition to classification framework"
@@ -1152,7 +1155,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
             Stopwatch stopwatch;
             arc_helpers::DoNotOptimize(default_next_band);
             const auto features = transitionFeatures(test_band_start, *default_next_band);
-            const auto predicted_mistake = transition_mistake_classifier_->predict(classifier_scaler_(features));
+            const auto predicted_mistake = transition_mistake_classifier_->predict(features);
             arc_helpers::DoNotOptimize(predicted_mistake);
             classifier_time_ += stopwatch(READ);
 
@@ -1412,6 +1415,61 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     }
 
     return transitions;
+}
+
+void TransitionEstimation::addExperienceToClassifier(
+        const StateTrajectory& trajectory)
+{
+    if (transition_mistake_classifier_ == nullptr)
+    {
+        ROS_WARN_NAMED("transition_estimation", "addExperianceToClassifier() not implemented for Voxnet");
+        return;
+    }
+
+    // We need at least 2 states to get any experiance
+    if (trajectory.size() < 2)
+    {
+        ROS_WARN_NAMED("transition_estimation", "Less than 2 states passed to addExperianceToClassifier; nothing to learn.");
+        return;
+    }
+
+    const auto feature_dim = transition_mistake_classifier_->num_features_;
+    const auto num_examples = trajectory.size() - 1;
+    Eigen::MatrixXd features(feature_dim, num_examples);
+    Eigen::MatrixXd raw_dists(4, num_examples);
+    std::vector<double> labels(num_examples);
+    for (size_t idx = 1; idx < trajectory.size(); ++idx)
+    {
+        const auto& start_state = trajectory[idx - 1].first;
+        const auto& end_state = trajectory[idx].first;
+        const bool start_foh = checkFirstOrderHomotopy(
+                    *start_state.planned_rubber_band_,
+                    *start_state.rubber_band_);
+        const bool end_foh = checkFirstOrderHomotopy(
+                    *end_state.planned_rubber_band_,
+                    *end_state.rubber_band_);
+        const auto start_dist = start_state.planned_rubber_band_->distance(*start_state.rubber_band_);
+        const auto end_dist = end_state.planned_rubber_band_->distance(*end_state.rubber_band_);
+        const auto start_close = start_foh && (start_dist <= mistake_dist_thresh_);
+        const auto end_close = end_foh && (end_dist <= mistake_dist_thresh_);
+        const bool label_is_mistake = (start_close && end_close) ? -1.0 : 1.0;
+
+        raw_dists.col(idx - 1) << start_dist, (double)start_foh, end_dist, (double)end_foh;
+        features.col(idx - 1) = transitionFeatures(*start_state.planned_rubber_band_,
+                                                   *end_state.planned_rubber_band_);
+        labels[idx - 1] = label_is_mistake;
+    }
+
+    const auto data_folder = GetDataFolder(*nh_);
+    CreateDirectory(data_folder);
+    const auto timestamp = GetCurrentTimeAsString();
+    WriteToCSVFile(data_folder + "/transition_features__" + timestamp + ".csv", features);
+    WriteToCSVFile(data_folder + "/transition_distances__" + timestamp + ".csv", raw_dists);
+    saveTrajectory(trajectory, data_folder + "/state_trajectory__" + timestamp + ".compressed");
+
+    ROS_INFO_STREAM_NAMED("transition_estimation", "Adding " << labels.size() << " examples to classifier");
+
+    transition_mistake_classifier_->addData(features, labels);
 }
 
 void TransitionEstimation::resetStatistics()

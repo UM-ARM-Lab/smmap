@@ -18,6 +18,9 @@ namespace smmap
         {
             return -1.0;
         }
+
+        virtual void addData_impl(Eigen::MatrixXd const& /* features */, std::vector<double> const& /* labels */) override final
+        {}
     };
 }
 

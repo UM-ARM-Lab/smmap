@@ -175,7 +175,6 @@ namespace smmap
         ros::ServiceServer add_mistake_example_visualization_;
 
         // Classification Example
-        MinMaxTransformer classifier_scaler_;
         Classifier::Ptr transition_mistake_classifier_;
         ros::ServiceServer add_classification_example_visualization_;
 

@@ -23,6 +23,12 @@ namespace smmap
             const deformable_manipulation_msgs::TransitionTestResult& test_result
             )>
     GenerateTransitionDataFeedbackCallback;
+
+    typedef std::function<void(
+            const size_t test_id,
+            const deformable_manipulation_msgs::RobotPathTestResult& test_result
+            )>
+    TestRobotPathsFeedbackCallback;
 }
 
 #endif // TASK_FUNCTION_POINTER_TYPES_H

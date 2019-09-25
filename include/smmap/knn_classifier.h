@@ -4,6 +4,7 @@
 #include "smmap/classifier.h"
 #include <flann/flann.hpp>
 #include <mutex>
+#include "smmap/min_max_transformer.hpp"
 
 namespace smmap
 {
@@ -14,14 +15,22 @@ namespace smmap
                       std::shared_ptr<ros::NodeHandle> ph);
 
     private:
-        virtual double predict_impl(const Eigen::VectorXd& vec) const override final;
+        virtual double predict_impl(Eigen::VectorXd const& vec) const override final;
+        virtual void addData_impl(Eigen::MatrixXd const& features, std::vector<double> const& labels) override final;
 
         // https://www.modernescpp.com/index.php/thread-safe-initialization-of-data
-        static void Initialize(kNNClassifier* knn);
+        static void Initialize(kNNClassifier* const knn);
         static std::once_flag init_instance_flag_;
-        static std::vector<double> nn_raw_data_;
+
+        void convertScaledDataToUnscaled(const ssize_t start_idx);
+        void convertUnscaledDataToScaled(const ssize_t start_idx);
+
+        static Eigen::MatrixXd unscaled_raw_data_;
+        static Eigen::MatrixXd scaled_raw_data_;
         static std::vector<double> labels_;
         static flann::KDTreeSingleIndex<flann::L2<double>> nn_index_;
+
+        MinMaxTransformer scaler_;
     };
 }
 

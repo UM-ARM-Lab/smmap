@@ -13,7 +13,6 @@
 
 #include "smmap/task_function_pointer_types.h"
 
-
 namespace smmap
 {
     class RobotInterface
@@ -55,6 +54,13 @@ namespace smmap
                 const std::vector<deformable_manipulation_msgs::TransitionTest>& tests,
                 const std::vector<std::string>& filenames,
                 const GenerateTransitionDataFeedbackCallback& feedback_callback,
+                const bool wait_for_feedback);
+
+        bool testRobotPaths(
+                const std::vector<AllGrippersPoseTrajectory>& test_paths,
+                const std::vector<std::string>& filenames,
+                const TestRobotPathsFeedbackCallback& feedback_callback,
+                const bool return_microsteps,
                 const bool wait_for_feedback);
 
         std::pair<WorldState, std::vector<WorldState>> testRobotMotionMicrosteps(
@@ -140,6 +146,28 @@ namespace smmap
 
         const Eigen::Isometry3d& getWorldToTaskFrameTf() const;
 
+        // Returns the pose vector in the direction of target, with the the maximum change allowed from start
+        // Second element is true if target was reached, false otherwise
+        std::pair<AllGrippersSinglePose, bool> clampGrippersMovement(
+                const AllGrippersSinglePose& start,
+                const AllGrippersSinglePose& target) const;
+
+        // Returns the pose vector in the direction of target, with the the maximum change allowed from start
+        // Second element is true if target was reached, false otherwise
+        std::pair<Eigen::VectorXd, bool> clampFullRobotMovement(
+                const Eigen::VectorXd& start,
+                const Eigen::VectorXd& target) const;
+
+        // Returns the interpolated trajectory (as defined by repeated applications of clampGrippersMovement)
+        // and the indices that correspond to the original waypoints
+        std::pair<AllGrippersPoseTrajectory, std::vector<size_t>> interpolateGrippersTrajectory(
+                const AllGrippersPoseTrajectory& waypoints) const;
+
+        // Returns the interpolated trajectory (as defined by repeated applications of clampFullRobotMovement)
+        // and the indices that correspond to the original waypoints
+        std::pair<std::vector<Eigen::VectorXd>, std::vector<size_t>> interpolateFullRobotTrajectory(
+                const std::vector<Eigen::VectorXd>& waypoints) const;
+
     private:
         ////////////////////////////////////////////////////////////////////
         // ROS objects and helpers
@@ -161,6 +189,7 @@ namespace smmap
         ros::ServiceClient execute_gripper_movement_client_;
         actionlib::SimpleActionClient<deformable_manipulation_msgs::TestRobotMotionAction> test_grippers_poses_client_;
         actionlib::SimpleActionClient<deformable_manipulation_msgs::GenerateTransitionDataAction> generate_transition_data_client_;
+        actionlib::SimpleActionClient<deformable_manipulation_msgs::TestRobotPathsAction> test_grippers_paths_client_;
 
     // TODO: comments, and placement, and stuff
     public:
@@ -209,7 +238,6 @@ namespace smmap
         volatile size_t feedback_counter_;
         std::vector<bool> feedback_recieved_;
 
-
         void internalTestPoseFeedbackCallback(
                 const deformable_manipulation_msgs::TestRobotMotionActionFeedbackConstPtr& feedback,
                 const TestRobotMotionFeedbackCallback& feedback_callback);
@@ -244,6 +272,27 @@ namespace smmap
                 const AllGrippersSinglePose& final_gripper_targets) const;
 
     private:
+
+        ////////////////////////////////////////////////////////////////////
+        // Path testing framework
+        ////////////////////////////////////////////////////////////////////
+
+        void internalTestRobotPathsFeedbackCallback(
+                const deformable_manipulation_msgs::TestRobotPathsActionFeedbackConstPtr& feedback,
+                const TestRobotPathsFeedbackCallback& feedback_callback);
+
+        bool testRobotPaths_impl(
+                const deformable_manipulation_msgs::TestRobotPathsGoal& goal,
+                const TestRobotPathsFeedbackCallback& feedback_callback,
+                const bool wait_for_feedback);
+
+        deformable_manipulation_msgs::RobotPathTest toRosTestRobotPath(
+                const AllGrippersPoseTrajectory& grippers_pose_traj,
+                const bool return_microsteps) const;
+
+        ////////////////////////////////////////////////////////////////////
+        // Single motion framework
+        ////////////////////////////////////////////////////////////////////
 
         std::pair<WorldState, std::vector<WorldState>> testRobotMotionMicrosteps_impl(
                 const deformable_manipulation_msgs::TestRobotMotionMicrostepsRequest& request);

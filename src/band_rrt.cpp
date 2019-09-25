@@ -584,8 +584,7 @@ double RRTDistance::Distance(const RRTGrippersRepresentation& c1, const RRTGripp
 
 double RRTDistance::DistanceSquared(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2)
 {
-    const auto delta = r1 - r2;
-    return (delta.cwiseProduct(joint_weights_)).squaredNorm();
+    return ((r1 - r2).cwiseProduct(joint_weights_)).squaredNorm();
 }
 
 double RRTDistance::Distance(const RRTRobotRepresentation& r1, const RRTRobotRepresentation& r2)
@@ -1015,6 +1014,11 @@ RRTPolicy BandRRT::plan(
     return policy;
 }
 
+const std::vector<RubberBand::ConstPtr>& BandRRT::getBlacklist() const
+{
+    return blacklisted_goal_rubber_bands_;
+}
+
 void BandRRT::addBandToBlacklist(const RubberBand& band)
 {
     blacklisted_goal_rubber_bands_.push_back(std::make_shared<const RubberBand>(band));
@@ -1025,6 +1029,11 @@ void BandRRT::addBandToBlacklist(const RubberBand& band)
 void BandRRT::clearBlacklist()
 {
     blacklisted_goal_rubber_bands_.clear();
+}
+
+BandRRT::PlanningSmoothingStatistics BandRRT::getStatistics() const
+{
+    return {planning_statistics_, smoothing_statistics_};
 }
 
 //////////// Helpers used to check abritray trees, and extract policies from planning trees ////////////////////////////
@@ -2389,6 +2398,7 @@ void BandRRT::rebuildNNIndex(
         }
     }
 
+    // TODO: clean up this potential re-allocation (reserve + push_back?)
     // Only some of the raw data was used, so resize down as needed
     nn_raw_data.resize(total_dof_ * nn_data_idx_to_tree_idx.size());
 
@@ -2396,7 +2406,8 @@ void BandRRT::rebuildNNIndex(
     // then we can just add the new points
     if ((new_data_start_idx == 0) || (initial_data_pointer != final_data_pointer))
     {
-        flann::Matrix<float> data(nn_raw_data.data(), num_new_values, total_dof_);
+        const auto num_values = nn_raw_data.size() / total_dof_;
+        flann::Matrix<float> data(nn_raw_data.data(), num_values, total_dof_);
         index->buildIndex(data);
     }
     else

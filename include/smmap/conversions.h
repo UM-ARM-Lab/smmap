@@ -9,11 +9,17 @@
 
 namespace smmap
 {
-    std::pair<std::vector<TransitionEstimation::StateMicrostepsPair>, bool> ToTrajectory(
+    std::pair<TransitionEstimation::StateTrajectory, bool> ToTrajectory(
             const WorldState& initial_world_state,
             const RRTPath& path,
             const deformable_manipulation_msgs::TransitionTest& test,
             const deformable_manipulation_msgs::TransitionTestResult& test_result);
+
+    std::pair<TransitionEstimation::StateTrajectory, bool> ToTrajectory(
+            const WorldState& initial_world_state,
+            const RRTPath& waypoints,
+            const deformable_manipulation_msgs::RobotPathTestResult& test_result,
+            const std::vector<size_t>& test_waypoint_indices);
 }
 
 #endif

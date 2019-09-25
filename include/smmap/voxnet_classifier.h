@@ -8,7 +8,6 @@
 
 namespace smmap
 {
-
     class VoxnetClassifier
     {
     protected:

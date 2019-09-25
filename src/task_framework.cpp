@@ -168,74 +168,70 @@ TaskFramework::TaskFramework(
 
 void TaskFramework::execute()
 {
-    WorldState world_feedback = robot_->start();
-    double start_time = world_feedback.sim_time_;
-    initializeModelAndControllerSet(world_feedback);
+    WorldState world_state = robot_->start();
+    double start_time = world_state.sim_time_;
+    initializeModelAndControllerSet(world_state);
 
     if (false)
     {
-        world_feedback = robot_->start();
-        std::vector<std_msgs::ColorRGBA> colors(world_feedback.object_configuration_.cols());
-        for (ssize_t idx = 0; idx < world_feedback.object_configuration_.cols(); ++idx)
+        std::vector<std_msgs::ColorRGBA> colors(world_state.object_configuration_.cols());
+        for (ssize_t idx = 0; idx < world_state.object_configuration_.cols(); ++idx)
         {
-            colors[idx] = ColorBuilder::InterpolateHotToCold((double)(idx)/(double)(world_feedback.object_configuration_.cols() - 1));
+            colors[idx] = ColorBuilder::InterpolateHotToCold((double)(idx)/(double)(world_state.object_configuration_.cols() - 1));
         }
-        vis_->visualizePoints("object_config_test", world_feedback.object_configuration_, colors);
-        vis_->visualizePoint("gripper0grasped_point", world_feedback.object_configuration_.col(robot_->getGrippersData().at(0).node_indices_[0]), Visualizer::Blue());
-        vis_->visualizePoint("gripper1grasped_point", world_feedback.object_configuration_.col(robot_->getGrippersData().at(1).node_indices_[0]), Visualizer::Cyan());
+        vis_->visualizePoints("object_config_test", world_state.object_configuration_, colors);
+        vis_->visualizePoint("gripper0grasped_point", world_state.object_configuration_.col(robot_->getGrippersData().at(0).node_indices_[0]), Visualizer::Blue());
+        vis_->visualizePoint("gripper1grasped_point", world_state.object_configuration_.col(robot_->getGrippersData().at(1).node_indices_[0]), Visualizer::Cyan());
         PressAnyKeyToContinue("Waiting for object config ordering confirmation");
 //        arc_helpers::Sleep(0.5);
     }
 
     if (enable_stuck_detection_)
     {
-        assert(enable_stuck_detection_ && dijkstras_task_ != nullptr);
+        assert(dijkstras_task_ != nullptr);
 
         // TODO: Assumptions in the implementation that need be addressed later
         assert(robot_->getGrippersData().size() == 2);
         assert(model_list_.size() == 1);
 
-        initializeBand(world_feedback);
-
-#if ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE
-        if (useStoredWorldState())
+        if (ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE && useStoredWorldState())
         {
             const auto world_state_and_band = loadStoredWorldState();
-            world_feedback = world_state_and_band.first;
-            vis_->visualizeCloth("controller_input_deformable_object", world_feedback.object_configuration_, Visualizer::Green(0.5), 1);
-
-            const auto starting_band_points = getPathBetweenGrippersThroughObject(
-                        world_feedback, path_between_grippers_through_object_);
-            rubber_band_between_grippers_ = std::make_shared<RubberBand>(
-                        starting_band_points,
-                        dijkstras_task_->maxBandLength(),
-                        dijkstras_task_,
-                        vis_,
-                        generator_);
+            world_state = world_state_and_band.first;
+            vis_->visualizeCloth("controller_input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
         }
-#endif
+        initializeBand(world_state);
 
         // Initialize the MDP transition learner
         transition_estimator_ = std::make_shared<TransitionEstimation>(
                     nh_, ph_, generator_, dijkstras_task_->sdf_, dijkstras_task_->work_space_grid_, vis_, *rubber_band_);
         // Initialize the BandRRT structure
-        initializeBandRRT(world_feedback.robot_configuration_valid_);
+        initializeBandRRT(world_state.robot_configuration_valid_);
     }
 
     while (robot_->ok())
     {
-        // TODO: Can I remove this extraneous world_state object? All it does is cache the value of world_feedback for
-        // a single function call.
-        const WorldState world_state = world_feedback;
-        world_feedback = sendNextCommand(world_state);
+        static const bool first_iteration_always_requires_plan =
+                ROSHelpers::GetParamRequired<bool>(*ph_, "task/first_control_loop_triggers_plan", __func__).GetImmutable();
+        if (first_iteration_always_requires_plan && !plan_triggered_once_)
+        {
+            ROS_WARN_NAMED("task_framework", "Triggering global planner regardless of local controller on first iteration");
+            planGlobalGripperTrajectory(world_state);
+            plan_triggered_once_ = true;
+        }
 
-        if (world_feedback.sim_time_ - start_time >= task_specification_->maxTime()
-            || task_specification_->taskDone(world_feedback))
+        const WorldState world_feedback = sendNextCommand(world_state);
+        const auto time_ellapsed = world_feedback.sim_time_ - start_time;
+
+        if ((time_ellapsed < task_specification_->maxTime()) && !task_specification_->taskDone(world_feedback))
+        {
+            world_state = world_feedback;
+        }
+        else
         {
             ROS_INFO_NAMED("task_framework", "------------------------------- End of Task -------------------------------------------");
             const double current_error = task_specification_->calculateError(world_feedback);
             ROS_INFO_STREAM_NAMED("task_framework", "   Planner/Task sim time " << world_feedback.sim_time_ << "\t Error: " << current_error);
-
 
             vis_->purgeMarkerList();
             visualization_msgs::Marker marker;
@@ -245,7 +241,7 @@ void TaskFramework::execute()
             vis_->forcePublishNow();
             vis_->purgeMarkerList();
 
-            if (world_feedback.sim_time_ - start_time >= task_specification_->maxTime())
+            if (time_ellapsed >= task_specification_->maxTime())
             {
                 ROS_INFO("Terminating task as time has run out");
             }
@@ -261,12 +257,12 @@ void TaskFramework::execute()
                 ROS_INFO_NAMED("task_framework", "------------------------------- RESETING RESETING -------------------------------------");
                 plan_triggered_once_ = false;
                 robot_->reset();
-                world_feedback = robot_->start();
-                start_time = world_feedback.sim_time_;
+                world_state = robot_->start();
+                start_time = world_state.sim_time_;
                 if (enable_stuck_detection_)
                 {
-                    initializeBand(world_feedback);
-                    initializeBandRRT(world_feedback.robot_configuration_valid_);
+                    initializeBand(world_state);
+                    initializeBandRRT(world_state.robot_configuration_valid_);
 
                     executing_global_trajectory_ = false;
                     num_times_planner_invoked_ = 0;
@@ -297,23 +293,8 @@ void TaskFramework::execute()
  * @return
  */
 WorldState TaskFramework::sendNextCommand(
-        WorldState world_state)
+        const WorldState& world_state)
 {
-//    static bool paused = false;
-//    if (!paused && world_state.sim_time_ > 4.0)
-//    {
-//        int32_t id = 1;
-//        for (size_t idx = 0; idx < rrt_executed_path_.size(); ++idx)
-//        {
-//            for (size_t idx2 = 0; idx2 < rrt_executed_path_[idx].second.size(); ++idx2)
-//            {
-//                vis_->visualizePoints("path_microsteps", rrt_executed_path_[idx].second[idx2].object_configuration_, Visualizer::Green(), id++);
-//            }
-//        }
-//        PressAnyKeyToContinue("Sim time 4.0. Press any key ... ");
-//        paused = true;
-//    }
-
 #if ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE
     if (useStoredWorldState())
     {
@@ -324,7 +305,7 @@ WorldState TaskFramework::sendNextCommand(
     }
     else
     {
-        storeWorldState(world_state, rubber_band_between_grippers_);
+        storeWorldState(world_state, rubber_band_);
     }
 #endif
 
@@ -334,22 +315,6 @@ WorldState TaskFramework::sendNextCommand(
 
     if (enable_stuck_detection_)
     {
-        #if ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE
-        // Update the band with the new position of the deformable object - added here to help with debugging and visualization
-        if (useStoredWorldState())
-        {
-            vis_->purgeMarkerList();
-            vis_->visualizeCloth("controller_input_deformable_object", world_state.object_configuration_, Visualizer::Green(0.5), 1);
-//            const auto band_points = getPathBetweenGrippersThroughObject(world_state, path_between_grippers_through_object_);
-//            rubber_band_between_grippers_->setPointsAndSmooth(band_points);
-        }
-        #endif
-
-
-
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // First, check if we need to (re)plan
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         bool planning_needed = false;
 
         // Check if the global plan has 'hooked' the deformable object on something
@@ -396,7 +361,6 @@ WorldState TaskFramework::sendNextCommand(
                 }
 #endif
 
-
                 ROS_WARN_NAMED("task_framework", "Invoking global planner as the current plan will overstretch the deformable object");
                 ROS_INFO_NAMED("task_framework", "----------------------------------------------------------------------------");
             }
@@ -404,7 +368,6 @@ WorldState TaskFramework::sendNextCommand(
         // Check if the local controller will be stuck
         else
         {
-
             Stopwatch stopwatch;
             arc_helpers::DoNotOptimize(world_state);
             const bool global_planner_needed_due_to_overstretch = globalPlannerNeededDueToOverstretch(world_state);
@@ -418,7 +381,9 @@ WorldState TaskFramework::sendNextCommand(
 
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_overstretch, "task_framework", "Invoking global planner as the controller will overstretch the deformable object");
                 ROS_WARN_COND_NAMED(global_planner_needed_due_to_lack_of_progress, "task_framework", "Invoking global planner due to lack of progress");
+                ROS_WARN_NAMED("task_framework", "Adding current rubber band to blacklist");
                 ROS_INFO_NAMED("task_framework", "----------------------------------------------------------------------------");
+                band_rrt_->addBandToBlacklist(*rubber_band_);
 
                 if (vis_->visualizationsEnabled())
                 {
@@ -430,7 +395,6 @@ WorldState TaskFramework::sendNextCommand(
         // If we need to (re)plan due to the local controller getting stuck, or the gobal plan failing, then do so
         if (planning_needed)
         {
-
 //            PressAnyKeyToContinue("pausing before planning ...");
 
             vis_->purgeMarkerList();
@@ -443,12 +407,13 @@ WorldState TaskFramework::sendNextCommand(
             vis_->forcePublishNow(0.5);
             vis_->purgeMarkerList();
 
+            transition_estimator_->addExperienceToClassifier(rrt_executed_path_);
             planGlobalGripperTrajectory(world_state);
 
-            if (task_specification_->task_type_ == TaskType::ROPE_ENGINE_ASSEMBLY_LIVE)
-            {
-                PressAnyKeyToContinue("Pausing before executing plan ... ");
-            }
+//            if (task_specification_->task_type_ == TaskType::ROPE_ENGINE_ASSEMBLY_LIVE)
+//            {
+//                PressAnyKeyToContinue("Pausing before executing plan ... ");
+//            }
         }
 
         // Execute a single step in the global plan, or use the local controller if we have no plan to follow
@@ -461,15 +426,7 @@ WorldState TaskFramework::sendNextCommand(
         else
         {
             world_feedback = sendNextCommandUsingLocalController(world_state);
-            RubberBand prev_band = *rubber_band_;
-            if (!rubber_band_->resetBand(world_feedback))
-            {
-                PressAnyKeyToContinue("Error resetting the band after moving the grippers with the local controller, skipping this reset step and propagating instead ");
-                assert(false);
-//                ROS_WARN_NAMED("task_framework", "Error resetting the band after moving the grippers with the local controller, skipping this reset step and propagating instead ");
-//                *rubber_band_ = prev_band;
-//                rubber_band_->forwardPropagate(ToGripperPositions(world_state.all_grippers_single_pose_), false);
-            }
+            updateBand(world_feedback);
         }
 
         // Keep the last N grippers positions recorded to detect if the grippers are stuck
@@ -486,8 +443,22 @@ WorldState TaskFramework::sendNextCommand(
     }
     else
     {
-        ROS_WARN_ONCE_NAMED("task_framework", "Unable to do future constraint violation detection");
+        ROS_WARN_ONCE_NAMED("task_framework", "Future constraint violation detection disabled");
         return sendNextCommandUsingLocalController(world_state);
+    }
+}
+
+void TaskFramework::updateBand(const WorldState& world_feedback)
+{
+    RubberBand prev_band = *rubber_band_;
+    if (!rubber_band_->resetBand(world_feedback))
+    {
+//        PressAnyKeyToContinue("Error resetting the band after moving the grippers with the local controller. Aborting.");
+//        assert(false);
+
+        ROS_WARN_NAMED("task_framework", "Error resetting the band after moving the grippers with the local controller, skipping this reset step and propagating instead ");
+        *rubber_band_ = prev_band;
+        rubber_band_->forwardPropagate(ToGripperPositions(world_feedback.all_grippers_single_pose_), false);
     }
 }
 
@@ -759,46 +730,30 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     AllGrippersSinglePose next_grippers_target(0);
     if (current_world_state.robot_configuration_valid_)
     {
-        next_dof_target = current_segment[policy_segment_next_idx_].robotConfiguration();
-        const auto& grippers_poses_as_pair = current_segment[policy_segment_next_idx_].grippers();
-        next_grippers_target = {grippers_poses_as_pair.first, grippers_poses_as_pair.second};
-
-        const double max_dof_delta = robot_->max_dof_velocity_norm_ * robot_->dt_;
-        const double dist_to_waypoint =
-                RRTDistance::Distance(current_world_state.robot_configuration_, next_dof_target);
-
-        if (dist_to_waypoint > max_dof_delta)
+        const auto clamp_result = robot_->clampFullRobotMovement(
+                    current_world_state.robot_configuration_,
+                    current_segment[policy_segment_next_idx_].robotConfiguration());
+        next_dof_target = clamp_result.first;
+        next_waypoint_targetted = clamp_result.second;
+        if (next_waypoint_targetted)
         {
-            const double ratio = max_dof_delta / dist_to_waypoint;
-            next_dof_target = Interpolate(current_world_state.robot_configuration_, next_dof_target, ratio);
+            next_grippers_target = ToGripperPoseVector(current_segment[policy_segment_next_idx_].grippers());
+        }
+        else
+        {
             robot_->lockEnvironment();
             robot_->setActiveDOFValues(next_dof_target);
             next_grippers_target = robot_->getGrippersPosesFunctionPointer();
             robot_->unlockEnvironment();
-            next_waypoint_targetted = false;
         }
     }
     else
     {
-        const auto& grippers_poses_as_pair = current_segment[policy_segment_next_idx_].grippers();
-        next_grippers_target = {grippers_poses_as_pair.first, grippers_poses_as_pair.second};
-
-        const double max_grippers_delta = robot_->max_gripper_velocity_norm_ * robot_->dt_;
-        const double dist_to_waypoint = RRTDistance::Distance(
-                    {current_world_state.all_grippers_single_pose_[0], current_world_state.all_grippers_single_pose_[1]},
-                    grippers_poses_as_pair);
-
-        if (dist_to_waypoint > max_grippers_delta)
-        {
-            const double ratio = max_grippers_delta / dist_to_waypoint;
-            next_grippers_target[0] = Interpolate(
-                        current_world_state.all_grippers_single_pose_[0],
-                        next_grippers_target[0], ratio);
-            next_grippers_target[1] = Interpolate(
-                        current_world_state.all_grippers_single_pose_[1],
-                        next_grippers_target[1], ratio);
-            next_waypoint_targetted = false;
-        }
+        const auto clamp_result = robot_->clampGrippersMovement(
+                    current_world_state.all_grippers_single_pose_,
+                    ToGripperPoseVector(current_segment[policy_segment_next_idx_].grippers()));
+        next_grippers_target = clamp_result.first;
+        next_waypoint_targetted = clamp_result.second;
     }
 
     const std::pair<WorldState, std::vector<WorldState>> command_result =
@@ -808,15 +763,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
     const WorldState& world_feedback = command_result.first;
     microstep_history_buffer_.insert(microstep_history_buffer_.end(), command_result.second.begin(), command_result.second.end());
     // Update the band with the new position of the deformable object
-    RubberBand prev_band = *rubber_band_;
-    if (!rubber_band_->resetBand(world_feedback))
-    {
-        PressAnyKeyToContinue("Error resetting the band after moving the grippers with the global planner controller, skipping this reset step and propagating instead ");
-        assert(false);
-//        ROS_WARN_NAMED("task_framework", "Error resetting the band after moving the grippers with the local controller, skipping this reset step and propagating instead ");
-//        *rubber_band_ = prev_band;
-//        rubber_band_->forwardPropagate(ToGripperPositions(world_feedback.all_grippers_single_pose_), false);
-    }
+    updateBand(world_feedback);
 
     // If we targetted the last node of the current path segment, then we need to handle
     // recording data differently and determine which path segment to follow next
@@ -1086,14 +1033,6 @@ std::pair<std::vector<VectorVector3d>, std::vector<RubberBand>> TaskFramework::p
 bool TaskFramework::globalPlannerNeededDueToOverstretch(
         const WorldState& current_world_state)
 {
-    static const bool first_iteration_always_requires_plan = ROSHelpers::GetParamRequired<bool>(*ph_, "task/first_control_loop_triggers_plan", __func__).GetImmutable();
-    if (first_iteration_always_requires_plan && !plan_triggered_once_)
-    {
-        ROS_WARN_NAMED("task_framework", "Triggering global planner regardless of local controller on first iteration");
-        plan_triggered_once_ = true;
-        return true;
-    }
-
     static double annealing_factor = GetRubberBandOverstretchPredictionAnnealingFactor(*ph_);
 
     const bool visualization_enabled = true;
@@ -1271,7 +1210,7 @@ void TaskFramework::initializeBandRRT(const bool planning_for_whole_robot)
     assert(rubber_band_ != nullptr);
 
     // "World" params used by planning
-    BandRRT::WorldParams world_params =
+    world_params_ = std::make_shared<const BandRRT::WorldParams>(BandRRT::WorldParams
     {
         robot_,
         planning_for_whole_robot,
@@ -1279,7 +1218,7 @@ void TaskFramework::initializeBandRRT(const bool planning_for_whole_robot)
         dijkstras_task_->work_space_grid_,
         transition_estimator_,
         generator_
-    };
+    });
 
     // Algorithm parameters
     const auto use_cbirrt_style_projection      = GetUseCBiRRTStyleProjection(*ph_);
@@ -1291,7 +1230,7 @@ void TaskFramework::initializeBandRRT(const bool planning_for_whole_robot)
     const auto best_near_radius                 = GetRRTBestNearRadius(*ph_);
     const auto feasibility_dist_scale_factor    = GetRRTFeasibilityDistanceScaleFactor(*ph_);
     assert(!use_cbirrt_style_projection && "CBiRRT style projection is no longer supported");
-    BandRRT::PlanningParams planning_params =
+    planning_params_ =
     {
         forward_tree_extend_iterations,
         backward_tree_extend_iterations,
@@ -1307,7 +1246,7 @@ void TaskFramework::initializeBandRRT(const bool planning_for_whole_robot)
     const auto max_smoothing_iterations         = GetRRTMaxSmoothingIterations(*ph_);
     const auto max_failed_smoothing_iterations  = GetRRTMaxFailedSmoothingIterations(*ph_);
     const auto smoothing_band_dist_threshold    = GetRRTSmoothingBandDistThreshold(*ph_);
-    BandRRT::SmoothingParams smoothing_params =
+    smoothing_params_ =
     {
         max_shortcut_index_distance,
         max_smoothing_iterations,
@@ -1333,7 +1272,7 @@ void TaskFramework::initializeBandRRT(const bool planning_for_whole_robot)
     const auto min_gripper_distance_to_obstacles    = GetRRTMinGripperDistanceToObstacles(*ph_); // only matters for simulation
     const auto band_distance2_scaling_factor        = GetRRTBandDistance2ScalingFactor(*ph_);
     const auto upsampled_band_num_points            = GetRRTBandMaxPoints(*ph_);
-    BandRRT::TaskParams task_params =
+    task_params_ =
     {
         task_aligned_frame,
         task_frame_lower_limits,
@@ -1355,10 +1294,10 @@ void TaskFramework::initializeBandRRT(const bool planning_for_whole_robot)
     band_rrt_ = std::make_shared<BandRRT>(
                 nh_,
                 ph_,
-                world_params,
-                planning_params,
-                smoothing_params,
-                task_params,
+                *world_params_,
+                planning_params_,
+                smoothing_params_,
+                task_params_,
                 rubber_band_,
                 vis_,
                 enable_rrt_visualizations);
@@ -1653,12 +1592,6 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     num_times_planner_invoked_++;
     ROS_INFO_STREAM_NAMED("task_framework", "!!!!!!!!!!!!!!!!!! Planner Invoked " << num_times_planner_invoked_ << " times!!!!!!!!!!!");
 
-    // Resample the band for the purposes of first order vis checking
-    if (!executing_global_trajectory_)
-    {
-        band_rrt_->addBandToBlacklist(*rubber_band_);
-    }
-
     vis_->purgeMarkerList();
     visualization_msgs::Marker marker;
     marker.ns = "delete_markers";
@@ -1668,6 +1601,35 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     vis_->publish(marker);
     vis_->forcePublishNow();
     vis_->purgeMarkerList();
+
+    const RRTNode start_config = [&]
+    {
+        const RRTGrippersRepresentation gripper_config(
+                    world_state.all_grippers_single_pose_[0],
+                    world_state.all_grippers_single_pose_[1]);
+
+        RRTRobotRepresentation robot_config;
+        if (world_state.robot_configuration_valid_)
+        {
+            robot_config = world_state.robot_configuration_;
+        }
+        else
+        {
+            robot_config.resize(6);
+            robot_config.head<3>() = gripper_config.first.translation();
+            robot_config.tail<3>() = gripper_config.second.translation();
+        }
+
+        return RRTNode(gripper_config, robot_config, rubber_band_);
+    }();
+    const RRTGrippersRepresentation target_grippers_poses = ToGripperPosePair(getGripperTargets(world_state));
+
+    // Run a batch of planning jobs if needed
+    if (ROSHelpers::GetParam<bool>(*ph_, "test_planning_performance", false))
+    {
+        const auto parallel = ROSHelpers::GetParam<bool>(*ph_, "test_planning_performance_parallel", true);
+        testPlanningPerformance(world_state, seed_, start_config, target_grippers_poses, parallel);
+    }
 
     rrt_planned_policy_.clear();
     if (GetRRTReuseOldResults(*ph_))
@@ -1697,162 +1659,23 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     // Planning if we did not load a plan from file
     if (rrt_planned_policy_.size() == 0)
     {
-        const RRTNode start_config = [&]
-        {
-            const RRTGrippersRepresentation gripper_config(
-                        world_state.all_grippers_single_pose_[0],
-                        world_state.all_grippers_single_pose_[1]);
-
-            RRTRobotRepresentation robot_config;
-            if (world_state.robot_configuration_valid_)
-            {
-                robot_config = world_state.robot_configuration_;
-            }
-            else
-            {
-                robot_config.resize(6);
-                robot_config.head<3>() = gripper_config.first.translation();
-                robot_config.tail<3>() = gripper_config.second.translation();
-            }
-
-            return RRTNode(gripper_config, robot_config, rubber_band_);
-        }();
-
-        const AllGrippersSinglePose target_grippers_poses_vec = getGripperTargets(world_state);
-        const RRTGrippersRepresentation target_grippers_poses(
-                    target_grippers_poses_vec[0],
-                    target_grippers_poses_vec[1]);
-
         const std::chrono::duration<double> time_limit(GetRRTTimeout(*ph_));
-        const size_t num_trials = GetRRTNumTrials(*ph_);
-        const bool test_paths_in_bullet = GetRRTTestPathsInBullet(*ph_);
 
-        std::vector<std::string> file_basenames;
-        std::vector<deformable_manipulation_msgs::TransitionTest> dmm_tests;
-        for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
+        rrt_planned_policy_.clear();
+        do
         {
-            // Only use the seed resetting if we are performing more than 1 trial
-            if (num_trials > 1 && num_times_planner_invoked_ > 1)
-            {
-                ROS_ERROR_NAMED("task_framework", "Running multiple trials, and invoking the planner more than once. This is not really supported, it'll do strange things with the generator seed");
-                assert(false && "Not supported");
-            }
-
-            if (num_trials > 1)
-            {
-                robot_->resetRandomSeeds(seed_, trial_idx * 0xFFFF);
-                generator_->seed(seed_);
-                generator_->discard(trial_idx * 0xFFFF);
-                // Eigen uses std::rand() for its generator
-                std::srand((unsigned int)seed_);
-                for (size_t discard_idx = 0; discard_idx < trial_idx * 0xFFFF; ++discard_idx)
-                {
-                    std::rand();
-                }
-
-                std::cout << "Trial idx: " << trial_idx << std::endl;
-            }
-
-            rrt_planned_policy_.clear();
-            while (rrt_planned_policy_.size() == 0)
-            {
-                rrt_planned_policy_ = band_rrt_->plan(
-                            start_config,
-                            target_grippers_poses,
-                            time_limit);
-            }
-
-            if (vis_->visualizationsEnabled())
-            {
-                vis_->deleteObjects(BandRRT::RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
-                band_rrt_->visualizePolicy(rrt_planned_policy_);
-                vis_->forcePublishNow(0.5);
-            }
-
-            // Record the resulting path execution in its entirety for transition learning purposes
-            if (test_paths_in_bullet)
-            {
-                assert(rrt_planned_policy_.size() == 1);
-                const auto rrt_path = rrt_planned_policy_[0].first;
-
-                const auto test = robot_->toRosTransitionTest(
-                            world_state.rope_node_transforms_,
-                            world_state.all_grippers_single_pose_,
-                            RRTPathToGrippersPoseTrajectory(rrt_path),
-                            ToGripperPoseVector(rrt_path.back().grippers()));
-
-                const auto data_folder = GetDataFolder(*nh_);
-                arc_utilities::CreateDirectory(data_folder);
-                const auto basename = data_folder + "seed_" + IntToHex(seed_) + "__trial_idx_" + std::to_string(trial_idx);
-                ROS_INFO_STREAM_NAMED("task_framework", "Saving path and result to prefix: " << basename);
-                const auto path_to_start_file = basename + "__path_to_start.compressed";
-                const auto test_results_file = basename + "__test_results.compressed";
-                band_rrt_->savePath(rrt_path, path_to_start_file);
-
-                // Run the path through the simulator which will save the results to file,
-                // and then convert the result to a trajectory, recording the result to file
-                robot_->generateTransitionData({test}, {test_results_file}, nullptr, false);
-
-                file_basenames.push_back(basename);
-                dmm_tests.push_back(test);
-            }
+            rrt_planned_policy_ = band_rrt_->plan(
+                        start_config,
+                        target_grippers_poses,
+                        time_limit);
         }
+        while (rrt_planned_policy_.size() == 0);
 
-        if (test_paths_in_bullet)
+        if (vis_->visualizationsEnabled())
         {
-            std::atomic<int> num_succesful_paths = 0;
-            std::atomic<int> num_unsuccesful_paths = 0;
-            const auto omp_threads = (task_specification_->deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 1;
-            #pragma omp parallel for num_threads(omp_threads)
-            for (size_t idx = 0; idx < dmm_tests.size(); ++idx)
-            {
-                const auto& basename = file_basenames[idx];
-	            const auto& test = dmm_tests[idx];
-    	        const auto path_to_start_file = basename + "__path_to_start.compressed";
-        	    const auto test_result_file = basename + "__test_results.compressed";
-            	const auto trajectory_file = basename + "__trajectory.compressed";
-
-				try
-				{
-                	const auto rrt_path = band_rrt_->loadPath(path_to_start_file);
-	                const auto test_result = [&]
-    	            {
-        	            const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
-            	        return arc_utilities::RosMessageDeserializationWrapper<deformable_manipulation_msgs::GenerateTransitionDataFeedback>(buffer, 0).first.test_result;
-                	}();
-
-	                const auto traj_gen_result = ToTrajectory(world_state, rrt_path, test, test_result);
-    	            const auto& trajectory = traj_gen_result.first;
-        	        transition_estimator_->saveTrajectory(trajectory, trajectory_file);
-                    if (traj_gen_result.second)
-                	{
-	                    ++num_succesful_paths;
-    	            }
-        	        else
-            	    {
-                	    ++num_unsuccesful_paths;
-	                }
-				}
-				catch (const std::runtime_error& ex)
-				{
-					ROS_ERROR_STREAM_NAMED("task_framework", "Error evalutating trajectory: " << basename << ": " << ex.what());
-                	++num_unsuccesful_paths;
-				}
-            }
-
-            if (!ROSHelpers::GetParam<bool>(*ph_, "rerun_forever", false))
-            {
-                const int classifier_dim = ROSHelpers::GetParamRequiredDebugLog<int>(*ph_, "classifier/dim", __func__).GetImmutable();
-                const std::string classifier_slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__).GetImmutable();
-                const std::string classifier_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/type", __func__).GetImmutable();
-                ROS_INFO_STREAM_NAMED("task_framework",
-                                      classifier_dim << " " <<
-                                      classifier_slice_type << " " <<
-                                      classifier_type << " " <<
-                                      "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
-                ROS_INFO_NAMED("task_framwork", "Terminating.");
-                throw_arc_exception(std::runtime_error, "Bullet tests done, terminating.");
-            }
+            vis_->deleteObjects(BandRRT::RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
+            band_rrt_->visualizePolicy(rrt_planned_policy_);
+            vis_->forcePublishNow(0.5);
         }
 
         // Serialization
@@ -1874,7 +1697,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     microstep_history_buffer_.clear();
 
     rrt_executed_path_.clear();
-    TransitionEstimation::State tes =
+    const TransitionEstimation::State tes =
     {
         world_state.object_configuration_,
         std::make_shared<RubberBand>(*rubber_band_),
@@ -1882,8 +1705,177 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
         world_state.rope_node_transforms_
     };
     // The first state does not get any microstep history because this history is
-    // how we got to the state, which does not make sense to have for the first state
+    // how we got to the state, which does not make sense to have for the first (zero'th) state
     rrt_executed_path_.push_back({tes, std::vector<WorldState>(0)});
+}
+
+void TaskFramework::testPlanningPerformance(
+        const WorldState& world_state,
+        const unsigned long base_seed,
+        const RRTNode& start_config,
+        const RRTGrippersRepresentation& target_grippers_poses,
+        const bool parallel_planning)
+{
+    const auto omp_default_threads = arc_helpers::GetNumOMPThreads();
+    const auto data_folder = GetDataFolder(*nh_);
+    arc_utilities::CreateDirectory(data_folder);
+
+    vis_->purgeMarkerList();
+    visualization_msgs::Marker marker;
+    marker.ns = "delete_markers";
+    marker.action = visualization_msgs::Marker::DELETEALL;
+    marker.header.frame_id = "world_origin";
+    marker.header.stamp = ros::Time::now();
+    vis_->publish(marker);
+    vis_->forcePublishNow();
+    vis_->purgeMarkerList();
+
+    const std::chrono::duration<double> time_limit(GetRRTTimeout(*ph_));
+    const size_t num_trials = GetRRTNumTrials(*ph_);
+    const bool test_paths_in_bullet = GetRRTTestPathsInBullet(*ph_);
+    const auto enable_rrt_visualizations = !parallel_planning && GetVisualizeRRT(*ph_);
+
+    std::vector<std::string> file_basenames(num_trials);
+    std::vector<RRTPath> planned_paths(num_trials);
+    // Stores the planning and smoothing stats for all trials;
+    // each trial may have more than one planning attempt, so we need a vector of stats for each trial
+    std::vector<std::vector<BandRRT::PlanningSmoothingStatistics>> statistics(num_trials);
+
+    const int omp_planning_threads = parallel_planning ? omp_default_threads : 1;
+    #pragma omp parallel for num_threads(omp_planning_threads) schedule(guided)
+    for (size_t idx = 0; idx < num_trials; ++idx)
+    {
+        ROS_INFO_STREAM_NAMED("task_framework", "Planning performance trial idx: " << idx);
+
+        // Update the seed for this particular trial
+        // When done in parallel, resetting the robot makes no sense, so omit it
+        if (!parallel_planning)
+        {
+            robot_->resetRandomSeeds(base_seed, idx * 0xFFFF);
+        }
+        BandRRT::WorldParams world_params = *world_params_;
+        world_params.generator_ = std::make_shared<std::mt19937_64>(*generator_);
+        world_params.generator_->seed(base_seed);
+        world_params.generator_->discard(idx * 0xFFFF);
+        world_params.transition_estimator_ =
+                std::make_shared<TransitionEstimation>(
+                    nh_, ph_, world_params.generator_, dijkstras_task_->sdf_, dijkstras_task_->work_space_grid_, vis_, *rubber_band_);
+
+        // Pass in all the config values that the RRT needs; for example goal bias, step size, etc.
+        auto band_rrt = BandRRT(nh_,
+                                ph_,
+                                world_params,
+                                planning_params_,
+                                smoothing_params_,
+                                task_params_,
+                                rubber_band_,
+                                vis_,
+                                enable_rrt_visualizations);
+        // Update the blacklist of the RRT copy to match the old
+        for (const auto& band : band_rrt_->getBlacklist())
+        {
+            band_rrt.addBandToBlacklist(*band);
+        }
+
+        RRTPolicy policy;
+        do
+        {
+            policy = band_rrt.plan(
+                        start_config,
+                        target_grippers_poses,
+                        time_limit);
+            statistics[idx].push_back(band_rrt.getStatistics());
+        }
+        while (policy.size() == 0);
+
+        if (enable_rrt_visualizations)
+        {
+            vis_->deleteObjects(BandRRT::RRT_BLACKLISTED_GOAL_BANDS_NS, 1, 2);
+            band_rrt_->visualizePolicy(rrt_planned_policy_);
+            vis_->forcePublishNow(0.5);
+        }
+
+        assert(policy.size() == 1);
+        const auto basename = data_folder + "seed_" + IntToHex(base_seed) + "__trial_idx_" + std::to_string(idx);
+        const auto path_to_start_file = basename + "__path_to_start.compressed";
+        ROS_INFO_STREAM_NAMED("task_framework", "Saving path to prefix: " << basename);
+        band_rrt.savePath(policy[0].first, path_to_start_file);
+
+        file_basenames[idx] = basename;
+        planned_paths[idx] = policy[0].first;
+    }
+
+    if (test_paths_in_bullet)
+    {
+        std::vector<AllGrippersPoseTrajectory> test_paths(num_trials);
+        std::vector<std::string> test_filenames(num_trials);
+        std::vector<std::vector<size_t>> waypoint_indices(num_trials);
+        #pragma omp parallel for
+        for (size_t idx = 0; idx < num_trials; ++idx)
+        {
+            // It is assumed that the robot starts where the path is at idx 0, so trim that element from the planned path
+            const auto& planned_path = planned_paths[idx];
+            const RRTPath commanded_path(planned_path.begin() + 1, planned_path.end());
+            assert(commanded_path.size() > 0 && "If this is false, it probably means that plan_start == plan_goal");
+            const auto robot_path = RRTPathToGrippersPoseTrajectory(commanded_path);
+            const auto interp_result = robot_->interpolateGrippersTrajectory(robot_path);
+            test_paths[idx] = interp_result.first;
+            waypoint_indices[idx] = interp_result.second;
+            test_filenames[idx] = file_basenames[idx] + "__path_test_results.compressed";
+        }
+        robot_->testRobotPaths(test_paths, test_filenames, nullptr, false, false);
+
+        std::atomic<int> num_succesful_paths = 0;
+        std::atomic<int> num_unsuccesful_paths = 0;
+        const auto omp_evaluation_threads = (task_specification_->deformable_type_ == ROPE) ? omp_default_threads : 1;
+        #pragma omp parallel for num_threads(omp_evaluation_threads)
+        for (size_t idx = 0; idx < num_trials; ++idx)
+        {
+            const auto& basename = file_basenames[idx];
+            const auto path_to_start_file = basename + "__path_to_start.compressed";
+            const auto test_result_file = basename + "__path_test_results.compressed";
+            const auto trajectory_file = basename + "__trajectory.compressed";
+
+            try
+            {
+                const auto rrt_path = band_rrt_->loadPath(path_to_start_file);
+                const auto test_result = [&]
+                {
+                    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
+                    return arc_utilities::RosMessageDeserializationWrapper<deformable_manipulation_msgs::TestRobotPathsFeedback>(buffer, 0).first.test_result;
+                }();
+                const auto& test_waypoint_indices = waypoint_indices[idx];
+
+                const auto traj_gen_result = ToTrajectory(world_state, rrt_path, test_result, test_waypoint_indices);
+                const auto& trajectory = traj_gen_result.first;
+                transition_estimator_->saveTrajectory(trajectory, trajectory_file);
+                if (traj_gen_result.second)
+                {
+                    ++num_succesful_paths;
+                }
+                else
+                {
+                    ++num_unsuccesful_paths;
+                }
+            }
+            catch (const std::runtime_error& ex)
+            {
+                ROS_ERROR_STREAM_NAMED("task_framework", "Error evalutating trajectory: " << basename << ": " << ex.what());
+                ++num_unsuccesful_paths;
+            }
+        }
+
+        const int classifier_dim = ROSHelpers::GetParamRequiredDebugLog<int>(*ph_, "classifier/dim", __func__).GetImmutable();
+        const std::string classifier_slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__).GetImmutable();
+        const std::string classifier_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/type", __func__).GetImmutable();
+        ROS_INFO_STREAM_NAMED("task_framework",
+                              classifier_dim << " " <<
+                              classifier_slice_type << " " <<
+                              classifier_type << " " <<
+                              "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
+        ROS_INFO_NAMED("task_framwork", "Terminating.");
+        throw_arc_exception(std::runtime_error, "Bullet tests done, terminating.");
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2722,8 +2714,9 @@ void TaskFramework::controllerLogData(
     }
 }
 
-
-
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Debugging
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void TaskFramework::storeWorldState(const WorldState& world_state, const RubberBand::Ptr band)
 {

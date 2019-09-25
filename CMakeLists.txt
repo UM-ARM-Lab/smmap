@@ -146,7 +146,7 @@ add_custom_target(${PROJECT_NAME}_transitions_headers SOURCES
     include/${PROJECT_NAME}/no_classifier.h
     include/${PROJECT_NAME}/knn_classifier.h
     include/${PROJECT_NAME}/svm_classifier.h
-    include/${PROJECT_NAME}/torch_classifier.h
+    include/${PROJECT_NAME}/mlp_classifier.h
     include/${PROJECT_NAME}/voxnet_classifier.h
 )
 
@@ -157,7 +157,7 @@ add_library(${PROJECT_NAME}_transitions
     src/classifier.cpp
     src/knn_classifier.cpp
     src/svm_classifier.cpp
-    src/torch_classifier.cpp
+    src/mlp_classifier.cpp
     src/voxnet_classifier.cpp
 )
 add_dependencies(${PROJECT_NAME}_transitions ${catkin_EXPORTED_TARGETS})
@@ -177,13 +177,11 @@ target_compile_definitions(${PROJECT_NAME}_transitions PUBLIC "-D _DENSE_REP")
 
 add_custom_target(${PROJECT_NAME}_planning_headers SOURCES
     include/${PROJECT_NAME}/band_rrt.h
-    include/${PROJECT_NAME}/task_framework.h
     include/${PROJECT_NAME}/conversions.h
 )
 
 add_library(${PROJECT_NAME}_planning
     src/band_rrt.cpp
-    src/task_framework.cpp
     src/conversions.cpp
 )
 add_dependencies(${PROJECT_NAME}_planning ${catkin_EXPORTED_TARGETS})
@@ -197,28 +195,32 @@ target_link_libraries(${PROJECT_NAME}_planning
 )
 set_target_properties(${PROJECT_NAME}_planning PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${FLANN_DEFINITIONS}")
 
-add_executable(planner_test_node nodes/planner_test_node.cpp)
+############# Interleaving framework ###########################################
+
+add_custom_target(${PROJECT_NAME}_framework_headers SOURCES
+    include/${PROJECT_NAME}/task_framework.h
+)
+add_executable(planner_test_node
+    src/task_framework.cpp
+    nodes/planner_test_node.cpp
+)
 add_dependencies(planner_test_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(planner_test_node ${PROJECT_NAME}_planning ${catkin_LIBRARIES})
 
 ############# Learning Testing #################################################
 
-add_custom_target(${PROJECT_NAME}_learning_testing_headers SOURCES
+add_custom_target(transition_learning_data_generation_node_headers SOURCES
     include/${PROJECT_NAME}/transition_learning_data_generation.h
 )
 
-add_library(${PROJECT_NAME}_learning_testing
+add_executable(transition_learning_data_generation_node
     src/transition_learning_data_generation.cpp
-)
-add_dependencies(${PROJECT_NAME}_learning_testing ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_learning_testing
-    ${PROJECT_NAME}_planning
-    ${catkin_LIBRARIES}
-)
-
-add_executable(transition_learning_data_generation_node nodes/transition_learning_data_generation_node.cpp)
+    nodes/transition_learning_data_generation_node.cpp)
 add_dependencies(transition_learning_data_generation_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(transition_learning_data_generation_node ${PROJECT_NAME}_learning_testing ${catkin_LIBRARIES})
+target_link_libraries(transition_learning_data_generation_node
+    ${catkin_LIBRARIES}
+    ${PROJECT_NAME}_planning
+)
 
 add_executable(smmap_svm_tester nodes/svm_tester.cpp)
 add_dependencies(smmap_svm_tester ${catkin_EXPORTED_TARGETS})

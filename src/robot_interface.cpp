@@ -29,6 +29,7 @@ namespace smmap
         , execute_gripper_movement_client_(nh_->serviceClient<ExecuteRobotMotion>(GetExecuteRobotMotionTopic(*nh_), true))
         , test_grippers_poses_client_(*nh_, GetTestRobotMotionTopic(*nh_), false)
         , generate_transition_data_client_(*nh_, GetGenerateTransitionDataTopic(*nh_), false)
+        , test_grippers_paths_client_(*nh_, GetTestRobotPathsTopic(*nh_), false)
         , dt_(GetRobotControlPeriod(*nh_))
         , max_gripper_velocity_norm_(GetMaxGripperVelocityNorm(*nh_))
         , max_dof_velocity_norm_(GetMaxDOFVelocityNorm(*nh_))
@@ -193,6 +194,36 @@ namespace smmap
         goal.header.stamp = ros::Time::now();
 
         return generateTransitionData_impl(goal, feedback_callback, wait_for_feedback);
+    }
+
+    bool RobotInterface::testRobotPaths(
+            const std::vector<AllGrippersPoseTrajectory>& test_paths,
+            const std::vector<std::string>& filenames,
+            const TestRobotPathsFeedbackCallback& feedback_callback,
+            const bool return_microsteps,
+            const bool wait_for_feedback)
+    {
+        // TODO: Parameterize this ability to be enabled or not
+        ROS_INFO_NAMED("robot_interface", "Waiting for the robot paths tester to be available");
+        test_grippers_paths_client_.waitForServer();
+
+        TestRobotPathsGoal goal;
+        goal.tests.reserve(test_paths.size());
+        for (size_t idx = 0; idx < test_paths.size(); ++idx)
+        {
+            goal.tests.push_back(toRosTestRobotPath(test_paths[idx], return_microsteps));
+        }
+
+        for (size_t idx = 0; idx < filenames.size(); ++idx)
+        {
+            std_msgs::String str;
+            str.data = filenames[idx];
+            goal.filenames.push_back(str);
+        }
+        goal.header.frame_id = world_frame_name_;
+        goal.header.stamp = ros::Time::now();
+
+        return testRobotPaths_impl(goal, feedback_callback, wait_for_feedback);
     }
 
     std::pair<WorldState, std::vector<WorldState>> RobotInterface::testRobotMotionMicrosteps(
@@ -499,6 +530,100 @@ namespace smmap
         return world_to_bullet_tf_;
     }
 
+    std::pair<AllGrippersSinglePose, bool> RobotInterface::clampGrippersMovement(
+            const AllGrippersSinglePose& start,
+            const AllGrippersSinglePose& target) const
+    {
+        assert(start.size() == target.size());
+        const double max_grippers_delta = max_gripper_velocity_norm_ * dt_;
+        const double dist_to_target = Distance(start, target, true, 1.0);
+        if (dist_to_target > max_grippers_delta)
+        {
+            const double ratio = max_grippers_delta / dist_to_target;
+            AllGrippersSinglePose best_step(start.size());
+            for (size_t idx = 0; idx < start.size(); ++idx)
+            {
+                best_step[idx] = Interpolate(start[idx], target[idx], ratio);
+            }
+            return {best_step, false};
+        }
+        else
+        {
+            return {target, true};
+        }
+    }
+
+    std::pair<VectorXd, bool> RobotInterface::clampFullRobotMovement(
+            const VectorXd& start,
+            const VectorXd& target) const
+    {
+        const double max_dof_delta = max_dof_velocity_norm_ * dt_;
+        const double dist_to_target = ((target - start).cwiseProduct(joint_weights_)).norm();
+        if (dist_to_target > max_dof_delta)
+        {
+            const double ratio = max_dof_delta / dist_to_target;
+            return {Interpolate(start, target, ratio), false};
+        }
+        else
+        {
+            return {target, true};
+        }
+    }
+
+    std::pair<AllGrippersPoseTrajectory, std::vector<size_t>> RobotInterface::interpolateGrippersTrajectory(
+            const AllGrippersPoseTrajectory& waypoints) const
+    {
+        AllGrippersPoseTrajectory traj;
+        std::vector<size_t> indices;
+
+        traj.push_back(waypoints[0]);
+        indices.push_back(0);
+
+        for (size_t waypoint_idx = 1; waypoint_idx < waypoints.size(); ++waypoint_idx)
+        {
+            bool reached_waypoint = false;
+            do
+            {
+                const auto clamped = clampGrippersMovement(traj.back(), waypoints[waypoint_idx]);
+                traj.push_back(clamped.first);
+                reached_waypoint = clamped.second;
+            }
+            while (!reached_waypoint);
+            indices.push_back(traj.size() - 1);
+        }
+
+        assert(indices.size() == waypoints.size());
+        assert(traj.size() >= waypoints.size());
+        return {traj, indices};
+    }
+
+    std::pair<std::vector<VectorXd>, std::vector<size_t>> RobotInterface::interpolateFullRobotTrajectory(
+            const std::vector<VectorXd>& waypoints) const
+    {
+        std::vector<VectorXd> traj;
+        std::vector<size_t> indices;
+
+        traj.push_back(waypoints[0]);
+        indices.push_back(0);
+
+        for (size_t waypoint_idx = 1; waypoint_idx < waypoints.size(); ++waypoint_idx)
+        {
+            bool reached_waypoint = false;
+            do
+            {
+                const auto clamped = clampFullRobotMovement(traj.back(), waypoints[waypoint_idx]);
+                traj.push_back(clamped.first);
+                reached_waypoint = clamped.second;
+            }
+            while (!reached_waypoint);
+            indices.push_back(traj.size() - 1);
+        }
+
+        assert(indices.size() == waypoints.size());
+        assert(traj.size() >= waypoints.size());
+        return {traj, indices};
+    }
+
     ////////////////////////////////////////////////////////////////////
     // ROS objects and helpers
     ////////////////////////////////////////////////////////////////////
@@ -721,6 +846,67 @@ namespace smmap
 
         test.header.frame_id = world_frame_name_;
         test.header.stamp = ros::Time::now();
+        return test;
+    }
+
+
+    void RobotInterface::internalTestRobotPathsFeedbackCallback(
+            const TestRobotPathsActionFeedbackConstPtr& feedback,
+            const TestRobotPathsFeedbackCallback& feedback_callback)
+    {
+        ROS_INFO_STREAM_NAMED("robot_interface", "Got feedback for test number " << feedback->feedback.test_id);
+        CHECK_FRAME_NAME("robot_interface", world_frame_name_, feedback->feedback.test_result.header.frame_id);
+        feedback_callback(feedback->feedback.test_id, feedback->feedback.test_result);
+        if (feedback_recieved_[feedback->feedback.test_id] == false)
+        {
+            feedback_recieved_[feedback->feedback.test_id] = true;
+            feedback_counter_--;
+        }
+    }
+
+    bool RobotInterface::testRobotPaths_impl(
+            const TestRobotPathsGoal& goal,
+            const TestRobotPathsFeedbackCallback& feedback_callback,
+            const bool wait_for_feedback)
+    {
+        feedback_counter_ = goal.tests.size();
+        feedback_recieved_.clear();
+        feedback_recieved_.resize(goal.tests.size(), false);
+
+        ros::Subscriber internal_feedback_sub;
+        if (feedback_callback != nullptr)
+        {
+            internal_feedback_sub = nh_->subscribe<TestRobotPathsActionFeedback>(
+                        GetTestRobotPathsTopic(*nh_) + "/feedback",
+                        1000,
+                        boost::bind(&RobotInterface::internalTestRobotPathsFeedbackCallback, this, _1, feedback_callback));
+        }
+
+        test_grippers_paths_client_.sendGoal(goal);
+
+        // TODO: Why am I waitingForResult and checking the feedback counter?
+        // One possible reason is because messages can arrive out of order
+        const bool result = generate_transition_data_client_.waitForResult();
+        while (wait_for_feedback && feedback_counter_ > 0)
+        {
+            std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));
+        }
+
+        return result;
+    }
+
+    RobotPathTest RobotInterface::toRosTestRobotPath(
+            const AllGrippersPoseTrajectory& grippers_pose_traj,
+            const bool return_microsteps) const
+    {
+        RobotPathTest test;
+        test.return_microsteps = return_microsteps;
+        test.gripper_names = ExtractGripperNames(grippers_data_);
+        test.robot_path.resize(grippers_pose_traj.size());
+        for (size_t idx = 0; idx < grippers_pose_traj.size(); ++idx)
+        {
+            test.robot_path[idx].poses = VectorIsometry3dToVectorGeometryPose(grippers_pose_traj[idx]);
+        }
         return test;
     }
 

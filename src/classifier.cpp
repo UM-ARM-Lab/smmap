@@ -2,7 +2,7 @@
 #include "smmap/no_classifier.h"
 #include "smmap/knn_classifier.h"
 #include "smmap/svm_classifier.h"
-#include "smmap/torch_classifier.h"
+#include "smmap/mlp_classifier.h"
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
 
 using namespace smmap;
@@ -23,8 +23,8 @@ Classifier::Ptr Classifier::MakeClassifier(
         case SVM:
             return std::make_shared<SVMClassifier>(nh, ph);
 
-        case DNN:
-            return std::make_shared<TorchClassifier>(nh, ph);
+        case MLP:
+            return std::make_shared<MLPClassifier>(nh, ph);
 
         case VOXNET:
             #pragma warning "Voxnet classifier hack addition to classification framework"

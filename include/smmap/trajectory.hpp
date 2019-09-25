@@ -13,30 +13,31 @@ namespace smmap
 
     struct ObjectDeltaAndWeight
     {
-        public:
-            ObjectDeltaAndWeight()
-            {}
+    public:
+        ObjectDeltaAndWeight()
+        {}
 
-            ObjectDeltaAndWeight(ssize_t num_elems)
-                : delta(Eigen::VectorXd::Zero(num_elems))
-                , weight(Eigen::VectorXd::Zero(num_elems))
-            {}
+        ObjectDeltaAndWeight(ssize_t num_elems)
+            : delta(Eigen::VectorXd::Zero(num_elems))
+            , weight(Eigen::VectorXd::Zero(num_elems))
+        {}
 
-            Eigen::VectorXd delta;
-            Eigen::VectorXd weight;
+        Eigen::VectorXd delta;
+        Eigen::VectorXd weight;
     };
 
     struct DesiredDirection
     {
-        public:
-            ObjectDeltaAndWeight error_correction_;
-            ObjectDeltaAndWeight stretching_correction_;
-            ObjectDeltaAndWeight combined_correction_;
+    public:
+        ObjectDeltaAndWeight error_correction_;
+        ObjectDeltaAndWeight stretching_correction_;
+        ObjectDeltaAndWeight combined_correction_;
     };
 
     /// World state structure for a single time step
     struct WorldState
     {
+    public:
         ObjectPointSet object_configuration_;
         EigenHelpers::VectorIsometry3d rope_node_transforms_;
         AllGrippersSinglePose all_grippers_single_pose_;

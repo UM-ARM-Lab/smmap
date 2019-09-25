@@ -6,7 +6,6 @@
 #include "smmap/trajectory.hpp"
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/task_specification.h"
-#include "smmap/min_max_transformer.hpp"
 #include "smmap/classifier.h"
 #include "smmap/voxnet_classifier.h"
 
@@ -116,7 +115,7 @@ namespace smmap
                 const std::vector<WorldState>& microsteps) const;
 
         ////////////////////////////////////////////////////////////////////////
-        // Learning
+        // Learning Transitions
         ////////////////////////////////////////////////////////////////////////
 
         Maybe::Maybe<StateTransition> findMostRecentBadTransition(
@@ -130,8 +129,6 @@ namespace smmap
         ////////////////////////////////////////////////////////////////////////
         // Using transitions
         ////////////////////////////////////////////////////////////////////////
-
-        Eigen::VectorXd transitionFeatures();
 
         const std::vector<StateTransition>& transitions() const;
 
@@ -197,6 +194,8 @@ namespace smmap
                 const bool allow_mistakes,
                 const bool verbose = false);
 
+        void addExperienceToClassifier(const StateTrajectory& trajectory);
+
         void resetStatistics();
         double classifierTime() const;
         size_t numBandWeirdness() const;
@@ -256,23 +255,25 @@ namespace smmap
         std::vector<std::vector<RubberBand>> learned_band_surfaces_;
 
         const double default_propogation_confidence_;
+#if 0
         const double default_band_dist_threshold_;
         const double confidence_threshold_;
         const double template_misalignment_scale_factor_;
         const double band_tighten_scale_factor_;
         const double homotopy_changes_scale_factor_;
+#endif
 
         ////////////////////////////////////////////////////////////////////////
         // Default transition mistake estimation
         ////////////////////////////////////////////////////////////////////////
 
+        const double mistake_dist_thresh_;
         const bool normalize_lengths_;
         const bool normalize_connected_components_;
 
         #warning "Voxnet classifier hack addition to classification framework"
         std::shared_ptr<VoxnetClassifier> voxnet_classifier_;
 
-        MinMaxTransformer const classifier_scaler_;
         Classifier::Ptr const transition_mistake_classifier_;
         double const accept_scale_factor_;
         #warning "Voxnet classifier hack addition to classification framework"

@@ -53,7 +53,10 @@ namespace smmap
 
             // TODO: figure out a good way to pass by const reference (Eigen consistency)
             WorldState sendNextCommand(
-                    WorldState current_world_state);
+                    const WorldState& current_world_state);
+
+            void updateBand(
+                    const WorldState& world_feedback);
 
             WorldState sendNextCommandUsingLocalController(
                     const WorldState& current_world_state);
@@ -94,6 +97,15 @@ namespace smmap
 
             void planGlobalGripperTrajectory(
                     const WorldState& world_state);
+
+            BandRRT::Ptr bandRRTCopy(const unsigned long seed);
+
+            void testPlanningPerformance(
+                    const WorldState& world_state,
+                    const unsigned long base_seed,
+                    const RRTNode& start_config,
+                    const RRTGrippersRepresentation& target_grippers_poses,
+                    const bool parallel_planning);
 
             ////////////////////////////////////////////////////////////////////
             // Model list management
@@ -145,7 +157,12 @@ namespace smmap
             bool plan_triggered_once_;
             bool executing_global_trajectory_;
             size_t num_times_planner_invoked_;
-            std::shared_ptr<BandRRT> band_rrt_;
+
+            std::shared_ptr<const BandRRT::WorldParams> world_params_;
+            BandRRT::PlanningParams planning_params_;
+            BandRRT::SmoothingParams smoothing_params_;
+            BandRRT::TaskParams task_params_;
+            BandRRT::Ptr band_rrt_;
             RRTPolicy rrt_planned_policy_;
             size_t policy_current_idx_;
             size_t policy_segment_next_idx_;            
@@ -155,7 +172,7 @@ namespace smmap
 
             // Stores the transition estimator version of state,
             // and the trajectory of world states in microsteps
-            std::vector<std::pair<TransitionEstimation::State, std::vector<WorldState>>> rrt_executed_path_;
+            TransitionEstimation::StateTrajectory rrt_executed_path_;
             TransitionEstimation::Ptr transition_estimator_;
 
             // These are both intended only for logging purposes, the individual

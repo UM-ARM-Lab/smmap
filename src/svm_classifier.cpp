@@ -10,6 +10,7 @@ svm_model* SVMClassifier::model_;
 SVMClassifier::SVMClassifier(std::shared_ptr<ros::NodeHandle> nh,
                              std::shared_ptr<ros::NodeHandle> ph)
     : Classifier(nh, ph, "svm")
+    , scaler_(nh_, ph_)
 {
     std::call_once(init_instance_flag_, SVMClassifier::Initialize, this);
 }
@@ -35,12 +36,19 @@ double SVMClassifier::predict_impl(Eigen::VectorXd const& vec) const
 {
     assert(static_cast<int>(vec.rows()) == num_features_);
 
+    Eigen::VectorXd const scaled_vec = scaler_(vec);
+
     svm_node query;
     query.dim = num_features_ + 1;
     query.values = (double*)(malloc(model_->SV[0].dim * sizeof(double)));
     query.values[0] = 0.0;
-    memcpy(&query.values[1], vec.data(), num_features_ * sizeof(double));
+    memcpy(&query.values[1], scaled_vec.data(), num_features_ * sizeof(double));
     auto const mistake = svm_predict(model_, &query);
     free(query.values);
     return mistake;
+}
+
+void SVMClassifier::addData_impl(Eigen::MatrixXd const& features, std::vector<double> const& labels)
+{
+    throw_arc_exception(std::runtime_error, "Not implemented");
 }

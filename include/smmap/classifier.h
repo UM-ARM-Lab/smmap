@@ -35,7 +35,20 @@ namespace smmap
 
         double predict(Eigen::VectorXd const& vec) const
         {
+            assert(vec.rows() == num_features_);
             return predict_impl(vec);
+        }
+
+        void addData(Eigen::MatrixXd const& features,
+                     std::vector<double> const& labels)
+        {
+            assert(features.rows() == num_features_);
+            assert(features.cols() == static_cast<ssize_t>(labels.size()));
+            if (labels.size() == 0)
+            {
+                return;
+            }
+            addData_impl(features, labels);
         }
 
     protected:
@@ -43,6 +56,7 @@ namespace smmap
 
     private:
         virtual double predict_impl(Eigen::VectorXd const& vec) const = 0;
+        virtual void addData_impl(Eigen::MatrixXd const& features, std::vector<double> const& labels) = 0;
     };
 }
 

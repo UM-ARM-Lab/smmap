@@ -207,6 +207,8 @@ namespace smmap
     class BandRRT
     {
     public:
+        typedef std::shared_ptr<BandRRT> Ptr;
+
         static constexpr double NN_BLACKLIST_DISTANCE = std::numeric_limits<double>::max() - 1e10;
         static constexpr double GRIPPER_TRANSLATION_IS_APPROX_DIST = 0.001;
 
@@ -297,8 +299,13 @@ namespace smmap
                 const RRTGrippersRepresentation& grippers_goal_poses,
                 const std::chrono::duration<double>& time_limit);
 
+        const std::vector<RubberBand::ConstPtr>& getBlacklist() const;
         void addBandToBlacklist(const RubberBand& band);
         void clearBlacklist();
+
+        // returns {planning_statistics_, smoothing_statistics_}
+        typedef std::pair<std::map<std::string, double>, std::map<std::string, double>> PlanningSmoothingStatistics;
+        PlanningSmoothingStatistics getStatistics() const;
 
         //////// Policy extraction functions /////////////////////////////////////////////////
 

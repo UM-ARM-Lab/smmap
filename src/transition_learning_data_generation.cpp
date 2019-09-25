@@ -518,7 +518,6 @@ namespace smmap
         , mistake_dist_thresh_(GetTransitionMistakeThreshold(*ph_))
         , add_mistake_example_visualization_(nh_->advertiseService("transition_vis/add_mistake_example_visualization", &TransitionTesting::addMistakeExampleVisualizationCallback, this))
 
-        , classifier_scaler_(nh_, ph_)
         , transition_mistake_classifier_(Classifier::MakeClassifier(nh_, ph_))
         , add_classification_example_visualization_(nh_->advertiseService("transition_vis/add_classification_example_visualization", &TransitionTesting::addClassificationExampleVisualizationCallback, this))
     {
@@ -2083,13 +2082,12 @@ namespace smmap
                     }
 
                     // Step through the trajectory, looking for cases where the prediction goes
-                    // from homotopy match to homotopy mismatch and large Euclidean distance
+                    // from "close" to "close" with everything else labeled as a mistake
                     Log::Log logger(features_file, false);
                     for (size_t idx = 1; idx < trajectory.size(); ++idx)
                     {
                         const auto& start_state = trajectory[idx - 1].first;
                         const auto& end_state = trajectory[idx].first;
-                        assert(trajectory.size() > 0);
                         const bool start_foh = transition_estimator_->checkFirstOrderHomotopy(
                                     *start_state.planned_rubber_band_,
                                     *start_state.rubber_band_);
@@ -2583,9 +2581,8 @@ namespace smmap
         const auto features = extractFeatures(transition, parabola_slice_option);
         const bool mistake = (start_foh && !end_foh) && (end_dist > mistake_dist_thresh_);
         const bool predicted_mistake = transition_mistake_classifier_->predict(
-                    classifier_scaler_(
-                        transition_estimator_->transitionFeatures(
-                            *start_state.planned_rubber_band_, *end_state.planned_rubber_band_, false)));
+                    transition_estimator_->transitionFeatures(
+                        *start_state.planned_rubber_band_, *end_state.planned_rubber_band_, false));
 
         res.response = std::to_string(next_vis_prefix_);
         visid_to_markers_[res.response] = marker_ids;
@@ -2671,8 +2668,10 @@ namespace smmap
             return ss.str();
         };
 
+        assert(false && "Replace this code with stuff from TaskFramework()");
+
         std::atomic<int> num_failed_plans = 0;
-        const auto omp_planning_threads = std::max(1ul, GetNumOMPThreads() / 2);
+        const auto omp_planning_threads = std::max(1, GetNumOMPThreads() / 2);
         #pragma omp parallel for num_threads(omp_planning_threads)
         for (size_t trial_idx = 30; trial_idx < num_trials; ++trial_idx)
         {
@@ -2699,6 +2698,7 @@ namespace smmap
                     // Execute the tests if there are enough to run
                     if (tests.size() == num_threads)
                     {
+                        assert(false && "Replace this call with a call to robot_->testRobotPaths(...)");
                         robot_->generateTransitionData(tests, test_result_filenames, nullptr, false);
                         tests.clear();
                         test_result_filenames.clear();
@@ -2715,6 +2715,7 @@ namespace smmap
         // Run any last tests that are left over
         if (tests.size() != 0)
         {
+            assert(false && "Replace this call with a call to robot_->testRobotPaths(...)");
             robot_->generateTransitionData(tests, test_result_filenames, nullptr, false);
             tests.clear();
             test_result_filenames.clear();
@@ -2726,7 +2727,7 @@ namespace smmap
         std::atomic<int> num_succesful_paths = 0;
         std::atomic<int> num_unsuccesful_paths = 0;
         std::atomic<int> num_unparsable_paths = 0;
-        const auto omp_parsing_threads = std::max(1ul, (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() / 2 : 1);
+        const auto omp_parsing_threads = std::max(1, (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() / 2 : 1);
         #pragma omp parallel for num_threads(omp_parsing_threads)
         for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
         {
