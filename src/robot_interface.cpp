@@ -732,7 +732,7 @@ namespace smmap
         const bool result = test_grippers_poses_client_.waitForResult();
         while (feedback_counter_ > 0)
         {
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));
+            arc_helpers::Sleep(0.001);
         }
 
         return result;
@@ -810,7 +810,7 @@ namespace smmap
         const bool result = generate_transition_data_client_.waitForResult();
         while (wait_for_feedback && feedback_counter_ > 0)
         {
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));
+            arc_helpers::Sleep(0.001);
         }
 
         return result;
@@ -886,10 +886,10 @@ namespace smmap
 
         // TODO: Why am I waitingForResult and checking the feedback counter?
         // One possible reason is because messages can arrive out of order
-        const bool result = generate_transition_data_client_.waitForResult();
+        const bool result = test_grippers_paths_client_.waitForResult();
         while (wait_for_feedback && feedback_counter_ > 0)
         {
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));
+            arc_helpers::Sleep(0.001);
         }
 
         return result;

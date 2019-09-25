@@ -211,6 +211,34 @@ void TaskFramework::execute()
 
     while (robot_->ok())
     {
+        // Evaluate the performance of the planner at the initial state
+        if (start_time == world_state.sim_time_)
+        {
+            const RRTNode start_config = [&]
+            {
+                const RRTGrippersRepresentation gripper_config(
+                            world_state.all_grippers_single_pose_[0],
+                            world_state.all_grippers_single_pose_[1]);
+
+                RRTRobotRepresentation robot_config;
+                if (world_state.robot_configuration_valid_)
+                {
+                    robot_config = world_state.robot_configuration_;
+                }
+                else
+                {
+                    robot_config.resize(6);
+                    robot_config.head<3>() = gripper_config.first.translation();
+                    robot_config.tail<3>() = gripper_config.second.translation();
+                }
+
+                return RRTNode(gripper_config, robot_config, rubber_band_);
+            }();
+            const RRTGrippersRepresentation target_grippers_poses = ToGripperPosePair(getGripperTargets(world_state));
+
+            testPlanningPerformance(world_state, seed_, start_config, target_grippers_poses, true);
+        }
+
         static const bool first_iteration_always_requires_plan =
                 ROSHelpers::GetParamRequired<bool>(*ph_, "task/first_control_loop_triggers_plan", __func__).GetImmutable();
         if (first_iteration_always_requires_plan && !plan_triggered_once_)
@@ -220,10 +248,14 @@ void TaskFramework::execute()
             plan_triggered_once_ = true;
         }
 
-        const WorldState world_feedback = sendNextCommand(world_state);
+        const auto feedback = sendNextCommand(world_state);
+        const auto& world_feedback = feedback.first;
+        const auto force_restart = feedback.second;
         const auto time_ellapsed = world_feedback.sim_time_ - start_time;
 
-        if ((time_ellapsed < task_specification_->maxTime()) && !task_specification_->taskDone(world_feedback))
+        if (!force_restart &&
+            (time_ellapsed < task_specification_->maxTime()) &&
+            !task_specification_->taskDone(world_feedback))
         {
             world_state = world_feedback;
         }
@@ -241,33 +273,32 @@ void TaskFramework::execute()
             vis_->forcePublishNow();
             vis_->purgeMarkerList();
 
-            if (time_ellapsed >= task_specification_->maxTime())
-            {
-                ROS_INFO("Terminating task as time has run out");
-            }
-            if (task_specification_->taskDone(world_feedback))
-            {
-                ROS_INFO("Terminating task as the task has been completed");
-            }
+            ROS_INFO_COND(force_restart, "Terminating task as a restart has been forced");
+            ROS_INFO_COND(time_ellapsed >= task_specification_->maxTime(), "Terminating task as time has run out");
+            ROS_INFO_COND(task_specification_->taskDone(world_feedback), "Terminating task as the task has been completed");
 
             // If rrt/num_trials is larger than 1, then all the seeds are reset in planGlobalGripperTrajectory,
             // so reseting and running another full system trial makes no sense
             if (ROSHelpers::GetParam<bool>(*ph_, "rerun_forever", false))
             {
                 ROS_INFO_NAMED("task_framework", "------------------------------- RESETING RESETING -------------------------------------");
-                plan_triggered_once_ = false;
                 robot_->reset();
                 world_state = robot_->start();
                 start_time = world_state.sim_time_;
                 if (enable_stuck_detection_)
                 {
+                    transition_estimator_->addExperienceToClassifier(rrt_executed_path_);
+
                     initializeBand(world_state);
                     initializeBandRRT(world_state.robot_configuration_valid_);
 
+                    plan_triggered_once_ = false;
                     executing_global_trajectory_ = false;
+                    rrt_executed_path_.clear();
                     num_times_planner_invoked_ = 0;
                     policy_current_idx_ = -1;
                     policy_segment_next_idx_ = -1;
+
                     grippers_pose_history_.clear();
                     error_history_.clear();
                     microstep_history_buffer_.clear();
@@ -287,12 +318,7 @@ void TaskFramework::execute()
 // Gripper movement functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/**
- * @brief Planner::sendNextCommand
- * @param current_world_state
- * @return
- */
-WorldState TaskFramework::sendNextCommand(
+std::pair<WorldState, bool> TaskFramework::sendNextCommand(
         const WorldState& world_state)
 {
 #if ENABLE_SEND_NEXT_COMMAND_LOAD_SAVE
@@ -408,6 +434,10 @@ WorldState TaskFramework::sendNextCommand(
             vis_->purgeMarkerList();
 
             transition_estimator_->addExperienceToClassifier(rrt_executed_path_);
+
+            // TODO: HACK: force a restart of the scenario after learning rather than continuing
+            return {world_state, true};
+
             planGlobalGripperTrajectory(world_state);
 
 //            if (task_specification_->task_type_ == TaskType::ROPE_ENGINE_ASSEMBLY_LIVE)
@@ -439,12 +469,12 @@ WorldState TaskFramework::sendNextCommand(
             error_history_.erase(error_history_.begin());
         }
 
-        return world_feedback;
+        return {world_feedback, false};
     }
     else
     {
         ROS_WARN_ONCE_NAMED("task_framework", "Future constraint violation detection disabled");
-        return sendNextCommandUsingLocalController(world_state);
+        return {sendNextCommandUsingLocalController(world_state), false};
     }
 }
 
@@ -1714,9 +1744,18 @@ void TaskFramework::testPlanningPerformance(
         const RRTGrippersRepresentation& target_grippers_poses,
         const bool parallel_planning)
 {
+    static int num_batch_tests = 0;
+    ++num_batch_tests;
+
+    ROS_INFO_NAMED("task_framework", "Testing planning performance");
+
     const auto omp_default_threads = arc_helpers::GetNumOMPThreads();
     const auto data_folder = GetDataFolder(*nh_);
     arc_utilities::CreateDirectory(data_folder);
+    Log::Log planning_tests_log(GetLogFolder(*nh_) + "seed_" + IntToHex(base_seed)
+                                + "__batch_test_" + std::to_string(num_batch_tests)
+                                + "__" + arc_helpers::GetCurrentTimeAsString()
+                                + "__planning_statistics.log", true);
 
     vis_->purgeMarkerList();
     visualization_msgs::Marker marker;
@@ -1802,6 +1841,7 @@ void TaskFramework::testPlanningPerformance(
         file_basenames[idx] = basename;
         planned_paths[idx] = policy[0].first;
     }
+    ARC_LOG(planning_tests_log, PrettyPrint::PrettyPrint(statistics, true, "\n"));
 
     if (test_paths_in_bullet)
     {
@@ -1871,8 +1911,13 @@ void TaskFramework::testPlanningPerformance(
                               classifier_slice_type << " " <<
                               classifier_type << " " <<
                               "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
-        ROS_INFO_NAMED("task_framwork", "Terminating.");
-        throw_arc_exception(std::runtime_error, "Bullet tests done, terminating.");
+        ARC_LOG_STREAM(planning_tests_log, classifier_dim << " " <<
+                                           classifier_slice_type << " " <<
+                                           classifier_type << " " <<
+                                           "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
+
+//        ROS_INFO_NAMED("task_framwork", "Terminating.");
+//        throw_arc_exception(std::runtime_error, "Bullet tests done, terminating.");
     }
 }
 

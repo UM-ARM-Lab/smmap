@@ -52,7 +52,8 @@ namespace smmap
             ////////////////////////////////////////////////////////////////////
 
             // TODO: figure out a good way to pass by const reference (Eigen consistency)
-            WorldState sendNextCommand(
+            // TODO: HACK: Second element indicates that we should trigger a reset rather than continuing
+            std::pair<WorldState, bool> sendNextCommand(
                     const WorldState& current_world_state);
 
             void updateBand(
