@@ -677,7 +677,6 @@ BandRRT::BandRRT(
 
     , max_shortcut_index_distance_(smoothing_params.max_shortcut_index_distance_)
     , max_smoothing_iterations_(smoothing_params.max_smoothing_iterations_)
-    , max_failed_smoothing_iterations_(smoothing_params.max_failed_smoothing_iterations_)
     , smoothing_band_dist_threshold_(smoothing_params.smoothing_band_dist_threshold_)
     , uniform_shortcut_smoothing_int_distribution_(1, 4)
 
@@ -3332,12 +3331,10 @@ void BandRRT::shortcutSmoothPath(
     const RRTNode second_last_original_node = *(path.end() - 2);
 
     uint32_t num_iterations = 0;
-    uint32_t failed_iterations = 0;
 
     // The main smoothing loop
     while (path.size() > 2 &&
-           num_iterations < max_smoothing_iterations_ &&
-           failed_iterations < max_failed_smoothing_iterations_)
+           num_iterations < max_smoothing_iterations_)
     {
         ++num_iterations;
 
@@ -3390,7 +3387,6 @@ void BandRRT::shortcutSmoothPath(
             if (IsApprox(path_distance, minimum_distance, 1e-6))
             {
 //                std::cout << "No smoothing possible, continuing\n";
-                ++failed_iterations;
                 continue;
             }
 
@@ -3408,7 +3404,6 @@ void BandRRT::shortcutSmoothPath(
 //                std::cout << "Shortcut failed, continuing"
 //                          << "   Robot configuration equal? " << robotConfigurationsAreApproximatelyEqual(last_robot_configuration, target_robot_configuration)
 //                          << "\n";
-                ++failed_iterations;
                 continue;
             }
 
@@ -3433,7 +3428,6 @@ void BandRRT::shortcutSmoothPath(
                 if (IsApprox(path_distance, minimum_distance, 1e-6))
                 {
                     ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Skipping smoothing attempt as there is very little kink in sampled sub path");
-                    ++failed_iterations;
                     continue;
                 }
 
@@ -3480,7 +3474,6 @@ void BandRRT::shortcutSmoothPath(
                     if (IsApprox(path_distance, minimum_distance, 1e-6))
                     {
                         ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Skipping smoothing attempt as there is very little kink in sampled sub path");
-                        ++failed_iterations;
                         continue;
                     }
 
@@ -3505,7 +3498,6 @@ void BandRRT::shortcutSmoothPath(
                     if (IsApprox(path_distance, minimum_distance, 1e-6))
                     {
                         ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Skipping smoothing attempt as there is very little kink in sampled sub path");
-                        ++failed_iterations;
                         continue;
                     }
 
@@ -3584,7 +3576,6 @@ void BandRRT::shortcutSmoothPath(
             if (!gripperPositionsAreApproximatelyEqual(last_gripper_position, target_gripper_position))
             {
                 ROS_INFO_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Shortcut failed, gripper positions don't match targets, thus the band got overstretched");
-                ++failed_iterations;
                 continue;
             }
 
@@ -3607,7 +3598,6 @@ void BandRRT::shortcutSmoothPath(
                 ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Shortcut failed"
                                                                      << "    Band at goal? " << final_band_at_goal_success
                                                                      << "    Band visible? " << final_band_visible_to_blacklist);
-                ++failed_iterations;
                 continue;
             }
         }
@@ -3631,7 +3621,6 @@ void BandRRT::shortcutSmoothPath(
             {
                 ROS_INFO_STREAM_COND_NAMED(SMMAP_RRT_VERBOSE, "rrt.smoothing", "Shortcut failed"
                                                                      << "    Distance between original 2nd last band and new band: " << band_dist);
-                ++failed_iterations;
                 continue;
             }
         }

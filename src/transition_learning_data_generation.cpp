@@ -647,13 +647,11 @@ namespace smmap
         // Smoothing parameters
         const auto max_shortcut_index_distance      = GetRRTMaxShortcutIndexDistance(*ph_);
         const auto max_smoothing_iterations         = GetRRTMaxSmoothingIterations(*ph_);
-        const auto max_failed_smoothing_iterations  = GetRRTMaxFailedSmoothingIterations(*ph_);
         const auto smoothing_band_dist_threshold    = GetRRTSmoothingBandDistThreshold(*ph_);
         smoothing_params_ =
         {
             max_shortcut_index_distance,
             max_smoothing_iterations,
-            max_failed_smoothing_iterations,
             smoothing_band_dist_threshold
         };
 

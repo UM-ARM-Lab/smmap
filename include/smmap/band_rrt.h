@@ -260,7 +260,6 @@ namespace smmap
         public:
             int64_t max_shortcut_index_distance_;
             uint32_t max_smoothing_iterations_;
-            uint32_t max_failed_smoothing_iterations_;
             double smoothing_band_dist_threshold_;
         };
 
@@ -486,7 +485,6 @@ namespace smmap
 
         const int64_t max_shortcut_index_distance_;
         const uint32_t max_smoothing_iterations_;
-        const uint32_t max_failed_smoothing_iterations_;
         const double smoothing_band_dist_threshold_;
         std::uniform_int_distribution<int> uniform_shortcut_smoothing_int_distribution_;
 
