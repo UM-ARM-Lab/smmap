@@ -236,11 +236,12 @@ void TaskFramework::execute()
             }();
             const RRTGrippersRepresentation target_grippers_poses = ToGripperPosePair(getGripperTargets(world_state));
 
-            testPlanningPerformance(world_state, seed_, start_config, target_grippers_poses, true);
+            const auto parallel = ROSHelpers::GetParam<bool>(*ph_, "test_planning_performance_parallel", false);
+            testPlanningPerformance(world_state, seed_, start_config, target_grippers_poses, parallel);
         }
 
         static const bool first_iteration_always_requires_plan =
-                ROSHelpers::GetParamRequired<bool>(*ph_, "task/first_control_loop_triggers_plan", __func__).GetImmutable();
+                ROSHelpers::GetParamRequired<bool>(*ph_, "task/first_control_loop_triggers_plan", __func__);
         if (first_iteration_always_requires_plan && !plan_triggered_once_)
         {
             ROS_WARN_NAMED("task_framework", "Triggering global planner regardless of local controller on first iteration");
@@ -436,8 +437,17 @@ std::pair<WorldState, bool> TaskFramework::sendNextCommand(
             transition_estimator_->addExperienceToClassifier(rrt_executed_path_);
             rrt_executed_path_.clear();
 
+
+
+
+
             // TODO: HACK: force a restart of the scenario after learning rather than continuing
             return {world_state, true};
+
+
+
+
+
 
             planGlobalGripperTrajectory(world_state);
 
@@ -1656,7 +1666,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     // Run a batch of planning jobs if needed
     if (ROSHelpers::GetParam<bool>(*ph_, "test_planning_performance", false))
     {
-        const auto parallel = ROSHelpers::GetParam<bool>(*ph_, "test_planning_performance_parallel", true);
+        const auto parallel = ROSHelpers::GetParam<bool>(*ph_, "test_planning_performance_parallel", false);
         testPlanningPerformance(world_state, seed_, start_config, target_grippers_poses, parallel);
     }
 
@@ -1750,29 +1760,30 @@ void TaskFramework::testPlanningPerformance(
 
     ROS_INFO_NAMED("task_framework", "Testing planning performance");
 
-    const auto omp_default_threads = arc_helpers::GetNumOMPThreads();
     const auto data_folder = GetDataFolder(*nh_);
     arc_utilities::CreateDirectory(data_folder);
     const std::string batch_name =
             "seed_" + IntToHex(base_seed) +
             "__batch_test_" + std::to_string(num_batch_tests) +
             "__" + arc_helpers::GetCurrentTimeAsString();
-    Log::Log planning_tests_log(GetLogFolder(*nh_) + batch_name + "__planning_statistics.log", true);
 
-    vis_->purgeMarkerList();
-    visualization_msgs::Marker marker;
-    marker.ns = "delete_markers";
-    marker.action = visualization_msgs::Marker::DELETEALL;
-    marker.header.frame_id = "world_origin";
-    marker.header.stamp = ros::Time::now();
-    vis_->publish(marker);
-    vis_->forcePublishNow();
-    vis_->purgeMarkerList();
+    const auto enable_rrt_visualizations = !parallel_planning && GetVisualizeRRT(*ph_);
+    if (enable_rrt_visualizations)
+    {
+        vis_->purgeMarkerList();
+        visualization_msgs::Marker marker;
+        marker.ns = "delete_markers";
+        marker.action = visualization_msgs::Marker::DELETEALL;
+        marker.header.frame_id = "world_origin";
+        marker.header.stamp = ros::Time::now();
+        vis_->publish(marker);
+        vis_->forcePublishNow();
+        vis_->purgeMarkerList();
+    }
 
     const std::chrono::duration<double> time_limit(GetRRTTimeout(*ph_));
     const size_t num_trials = GetRRTNumTrials(*ph_);
     const bool test_paths_in_bullet = GetRRTTestPathsInBullet(*ph_);
-    const auto enable_rrt_visualizations = !parallel_planning && GetVisualizeRRT(*ph_);
 
     std::vector<std::string> file_basenames(num_trials);
     std::vector<RRTPath> planned_paths(num_trials);
@@ -1780,6 +1791,7 @@ void TaskFramework::testPlanningPerformance(
     // each trial may have more than one planning attempt, so we need a vector of stats for each trial
     std::vector<std::vector<BandRRT::PlanningSmoothingStatistics>> statistics(num_trials);
 
+    const auto omp_default_threads = arc_helpers::GetNumOMPThreads();
     const int omp_planning_threads = parallel_planning ? omp_default_threads : 1;
     #pragma omp parallel for num_threads(omp_planning_threads) schedule(guided)
     for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
@@ -1843,6 +1855,7 @@ void TaskFramework::testPlanningPerformance(
         file_basenames[trial_idx] = basename;
         planned_paths[trial_idx] = policy[0].first;
     }
+    Log::Log planning_tests_log(GetLogFolder(*nh_) + batch_name + "__planning_statistics.log", true);
     LogPlanningPerformanceData(planning_tests_log, statistics);
 
     if (test_paths_in_bullet)
@@ -2782,19 +2795,15 @@ void TaskFramework::storeWorldState(const WorldState& world_state, const RubberB
         const auto log_folder = GetLogFolder(*nh_);
         arc_utilities::CreateDirectory(log_folder);
         const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state/file_name_prefix", __func__);
-        if (!file_name_prefix.Valid())
-        {
-            throw_arc_exception(std::invalid_argument, "Unable to load world_state/file_name_prefix from parameter server");
-        }
-
         const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsStringWithMilliseconds();
-        const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
+        const std::string file_name = file_name_prefix + "__" + file_name_suffix + ".compressed";
         const std::string full_path = log_folder + file_name;
         ROS_DEBUG_STREAM_NAMED("task_framework", "Saving world_state to " << full_path);
 
         std::vector<uint8_t> buffer;
         world_state.serializeSelf(buffer);
         band->serialize(buffer);
+        arc_utilities::CreateDirectory(boost::filesystem::path(full_path).parent_path());
         ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
 
         const auto deserialized_results = WorldState::Deserialize(buffer, 0);
@@ -2814,17 +2823,8 @@ std::pair<WorldState, RubberBand::Ptr> TaskFramework::loadStoredWorldState()
     {
         const auto log_folder = GetLogFolder(*nh_);
         const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state/file_name_prefix", __func__);
-        if (!file_name_prefix.Valid())
-        {
-            throw_arc_exception(std::invalid_argument, "Unable to load world_state/file_name_prefix from parameter server");
-        }
         const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state/file_name_suffix_to_load", __func__);
-        if (!file_name_suffix.Valid())
-        {
-            throw_arc_exception(std::invalid_argument, "Unable to load world_state/file_name_suffix_to_load from parameter server");
-        }
-
-        const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix.GetImmutable() + ".compressed";
+        const std::string file_name = file_name_prefix + "__" + file_name_suffix + ".compressed";
         const std::string full_path = log_folder + file_name;
         ROS_INFO_STREAM_NAMED("task_framework", "Loading world state from " << full_path);
 

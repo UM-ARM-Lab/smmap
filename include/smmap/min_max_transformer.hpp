@@ -15,9 +15,9 @@ namespace smmap
             , feature_max_(1.0)
         {
             (void)nh;
-            const int vec_len = ROSHelpers::GetParamRequired<int>(*ph, "classifier/dim", __func__).GetImmutable();
-            const auto scale = ROSHelpers::GetVectorRequired<double>(*ph, "classifier/transformer/scale", __func__).GetImmutable();
-            const auto offset = ROSHelpers::GetVectorRequired<double>(*ph, "classifier/transformer/offset", __func__).GetImmutable();
+            const int vec_len = ROSHelpers::GetParamRequired<int>(*ph, "classifier/dim", __func__);
+            const auto scale = ROSHelpers::GetVectorRequired<double>(*ph, "classifier/transformer/scale", __func__);
+            const auto offset = ROSHelpers::GetVectorRequired<double>(*ph, "classifier/transformer/offset", __func__);
             assert(static_cast<int>(scale.size()) == vec_len);
             assert(static_cast<int>(offset.size()) == vec_len);
 

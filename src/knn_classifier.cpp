@@ -33,7 +33,7 @@ kNNClassifier::kNNClassifier(std::shared_ptr<ros::NodeHandle> nh,
 
 void kNNClassifier::Initialize(kNNClassifier* const knn)
 {
-    auto const filename = ROSHelpers::GetParamRequired<std::string>(*knn->ph_, "kNN/data_file", __func__).GetImmutable();
+    auto const filename = ROSHelpers::GetParamRequired<std::string>(*knn->ph_, "kNN/data_file", __func__);
     auto const is_scaled_data = (filename.substr(filename.length() - 3) == "ssv");
     auto const line_count = GetLineCount(filename);
     ROS_INFO_STREAM_COND_NAMED(is_scaled_data, "kNN", "Parsing " << line_count << " scaled examples from " << filename);

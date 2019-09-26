@@ -1511,24 +1511,16 @@ namespace smmap
         try
         {
             const auto log_folder = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "log_folder", __func__);
-            if (!log_folder.Valid())
-            {
-                throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
-            }
-            arc_utilities::CreateDirectory(log_folder.GetImmutable());
             const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "file_name_prefix", __func__);
-            if (!file_name_prefix.Valid())
-            {
-                throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_prefix from parameter server");
-            }
 
             const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsString();
-            const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
-            const std::string full_path = log_folder.GetImmutable() + file_name;
+            const std::string file_name = file_name_prefix + "__" + file_name_suffix + ".compressed";
+            const std::string full_path = log_folder + file_name;
             ROS_DEBUG_STREAM("Saving band to " << full_path);
 
             std::vector<uint8_t> buffer;
             serialize(buffer);
+            arc_utilities::CreateDirectory(log_folder);
             ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
         }
         catch (const std::exception& e)
@@ -1542,23 +1534,11 @@ namespace smmap
         try
         {
             const auto log_folder = ROSHelpers::GetParamRequired<std::string>(*nh_, "log_folder", __func__);
-            if (!log_folder.Valid())
-            {
-                throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
-            }
             const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "file_name_prefix", __func__);
-            if (!file_name_prefix.Valid())
-            {
-                throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_prefix from parameter server");
-            }
             const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "file_name_suffix_to_load", __func__);
-            if (!file_name_suffix.Valid())
-            {
-                throw_arc_exception(std::invalid_argument, "Unable to load band_file_name_suffix_to_load from parameter server");
-            }
 
-            const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix.GetImmutable() + ".compressed";
-            const std::string full_path = log_folder.GetImmutable() + file_name;
+            const std::string file_name = file_name_prefix + "__" + file_name_suffix + ".compressed";
+            const std::string full_path = log_folder + file_name;
             ROS_INFO_STREAM("Loading band from " << full_path);
 
             const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(full_path);
@@ -1574,7 +1554,7 @@ namespace smmap
 
     bool QuinlanRubberBand::useStoredBand() const
     {
-        return ROSHelpers::GetParamRequired<bool>(*ph_, "use_stored_band", __func__).GetImmutable();
+        return ROSHelpers::GetParamRequired<bool>(*ph_, "use_stored_band", __func__);
     }
 
 

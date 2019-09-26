@@ -1613,25 +1613,16 @@ void BandRRT::storeTree(const RRTTree& tree, std::string file_path) const
         if (file_path.empty())
         {
             const auto log_folder = ROSHelpers::GetParamRequiredDebugLog<std::string>(*nh_, "log_folder", __func__);
-            if (!log_folder.Valid())
-            {
-                throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
-            }
-            arc_utilities::CreateDirectory(log_folder.GetImmutable());
             const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "path_file_name_prefix", __func__);
-            if (!file_name_prefix.Valid())
-            {
-                throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_prefix from parameter server");
-            }
-
             const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsString();
-            const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
-            file_path = log_folder.GetImmutable() + file_name;
+            const std::string file_name = file_name_prefix + "__" + file_name_suffix + ".compressed";
+            file_path = log_folder + "/" + file_name;
         }
         ROS_DEBUG_STREAM_NAMED("rrt", "Saving path to " << file_path);
 
         std::vector<uint8_t> buffer;
         arc_utilities::SerializeVector<RRTNode, RRTAllocator>(tree, buffer, &RRTNode::Serialize);
+        arc_utilities::CreateDirectory(boost::filesystem::path(file_path).parent_path());
         ZlibHelpers::CompressAndWriteToFile(buffer, file_path);
         // Verify no mistakes were made
         {
@@ -1659,23 +1650,10 @@ RRTTree BandRRT::loadStoredTree(std::string file_path) const
         if (file_path.empty())
         {
             const auto log_folder = ROSHelpers::GetParamRequired<std::string>(*nh_, "log_folder", __func__);
-            if (!log_folder.Valid())
-            {
-                throw_arc_exception(std::invalid_argument, "Unable to load log_folder from parameter server");
-            }
             const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "path_file_name_prefix", __func__);
-            if (!file_name_prefix.Valid())
-            {
-                throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_prefix from parameter server");
-            }
             const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "path_file_name_suffix_to_load", __func__);
-            if (!file_name_suffix.Valid())
-            {
-                throw_arc_exception(std::invalid_argument, "Unable to load path_file_name_suffix_to_load from parameter server");
-            }
-
-            const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix.GetImmutable() + ".compressed";
-            file_path = log_folder.GetImmutable() + file_name;
+            const std::string file_name = file_name_prefix + "__" + file_name_suffix + ".compressed";
+            file_path = log_folder + "/" + file_name;
         }
         ROS_INFO_STREAM_NAMED("rrt", "Loading path from " << file_path);
 
@@ -1697,7 +1675,7 @@ RRTTree BandRRT::loadStoredTree(std::string file_path) const
 
 bool BandRRT::useStoredTree() const
 {
-    return ROSHelpers::GetParamRequired<bool>(*ph_, "use_stored_path", __func__).GetImmutable();
+    return ROSHelpers::GetParamRequired<bool>(*ph_, "use_stored_path", __func__);
 }
 
 void BandRRT::savePath(const RRTPath& path, const std::string& filename) const

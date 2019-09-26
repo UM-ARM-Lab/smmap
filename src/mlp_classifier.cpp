@@ -5,7 +5,7 @@ using namespace smmap;
 
 inline static std::string getModelFilename(ros::NodeHandle& nh)
 {
-    return ROSHelpers::GetParamRequired<std::string>(nh, "mlp/model_file", __func__).GetImmutable();
+    return ROSHelpers::GetParamRequired<std::string>(nh, "mlp/model_file", __func__);
 }
 
 MLPClassifier::MLPClassifier(
@@ -13,7 +13,7 @@ MLPClassifier::MLPClassifier(
         std::shared_ptr<ros::NodeHandle> ph)
     : Classifier(nh, ph, "mlp")
     , model_(torch::jit::load(getModelFilename(*ph_)))
-    , threshold_(ROSHelpers::GetParamRequired<double>(*ph_, "mlp/threshold", __func__).GetImmutable())
+    , threshold_(ROSHelpers::GetParamRequired<double>(*ph_, "mlp/threshold", __func__))
     , scaler_(nh_, ph_)
 {
     // Ensure that the model's forward module has already been initialized

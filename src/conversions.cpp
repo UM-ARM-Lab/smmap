@@ -14,7 +14,7 @@ namespace smmap
     {
         static ros::NodeHandle nh;
         static const auto simsteps_per_gripper_cmd = ROSHelpers::GetParamRequiredDebugLog<int>(
-                    nh, "deform_simulator_node/num_simsteps_per_gripper_command", __func__).Get();
+                    nh, "deform_simulator_node/num_simsteps_per_gripper_command", __func__);
 
         const bool has_last_action = test.final_num_substeps > 0;
         const auto template_band = *path.front().band();
@@ -168,7 +168,7 @@ namespace smmap
     {
         static ros::NodeHandle nh;
         static const auto simsteps_per_gripper_cmd = ROSHelpers::GetParamRequiredDebugLog<int>(
-                    nh, "deform_simulator_node/num_simsteps_per_gripper_command", __func__).Get();
+                    nh, "deform_simulator_node/num_simsteps_per_gripper_command", __func__);
 
         // It is assumed that the robot starts where the path is at idx 0, so we assume that the first waypoint is not commanded
         assert(waypoints.size() == test_waypoint_indices.size() + 1);

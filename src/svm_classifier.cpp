@@ -17,7 +17,7 @@ SVMClassifier::SVMClassifier(std::shared_ptr<ros::NodeHandle> nh,
 
 void SVMClassifier::Initialize(SVMClassifier *svm)
 {
-    const auto filename = ROSHelpers::GetParamRequired<std::string>(*svm->ph_, "svm/model_file", __func__).GetImmutable();
+    const auto filename = ROSHelpers::GetParamRequired<std::string>(*svm->ph_, "svm/model_file", __func__);
     model_ = svm_load_model(filename.c_str());
     assert(model_->nr_class = 2);
     assert(model_->l >= 1);

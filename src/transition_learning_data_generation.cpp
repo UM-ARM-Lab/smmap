@@ -900,7 +900,7 @@ namespace smmap
             const std::string test_id("/unmodified");
             const std::string test_results_filename = folder + test_id + "__test_results.compressed";
             const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
-            arc_utilities::CreateDirectory(folder);
+            arc_utilities::CreateDirectory(fs::path(test_results_filename).parent_path());
 
             if (!fs::is_regular_file(test_results_filename))
             {
@@ -929,8 +929,8 @@ namespace smmap
 
         //// Generate versions with perturbed gripper start positions //////////
         {
-            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*ph_, "perturbations/gripper_positions/max_magnitude", __func__).GetImmutable();
-            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*ph_, "perturbations/gripper_positions/num_divisions", __func__).GetImmutable();
+            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*ph_, "perturbations/gripper_positions/max_magnitude", __func__);
+            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*ph_, "perturbations/gripper_positions/num_divisions", __func__);
             const auto perturbations = Vec3dPerturbations(max_magnitude, num_divisions);
             std::cerr << "Num position perturbations: " << perturbations.size() * perturbations.size()<< std::endl;
             #pragma omp parallel for
@@ -1013,8 +1013,8 @@ namespace smmap
 
         //// Generate versions with perturbed action vectors ///////////////////
         {
-            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*ph_, "perturbations/action_vectors/max_magnitude", __func__).GetImmutable();
-            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*ph_, "perturbations/action_vectors/num_divisions", __func__).GetImmutable();
+            const auto max_magnitude = ROSHelpers::GetParamRequired<double>(*ph_, "perturbations/action_vectors/max_magnitude", __func__);
+            const auto num_divisions = ROSHelpers::GetParamRequired<int>(*ph_, "perturbations/action_vectors/num_divisions", __func__);
             const auto perturbations = Vec3dPerturbations(max_magnitude, num_divisions);
             std::cerr << "Num action perturbations: " << perturbations.size() * perturbations.size()<< std::endl;
             #pragma omp parallel for
@@ -1528,9 +1528,9 @@ namespace smmap
             }
         }
 
-        const int classifier_dim = ROSHelpers::GetParamRequiredDebugLog<int>(*ph_, "classifier/dim", __func__).GetImmutable();
-        const std::string classifier_slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__).GetImmutable();
-        const std::string classifier_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/type", __func__).GetImmutable();
+        const int classifier_dim = ROSHelpers::GetParamRequiredDebugLog<int>(*ph_, "classifier/dim", __func__);
+        const std::string classifier_slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__);
+        const std::string classifier_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/type", __func__);
 
         ROS_INFO_STREAM(
                     classifier_dim << " " <<
@@ -2633,7 +2633,7 @@ namespace smmap
     {
         const auto target_grippers_poses = getGripperTargets();
 
-        const auto classifier_type = ROSHelpers::GetParamRequired<std::string>(*ph_, "classifier/type", __func__).Get();
+        const auto classifier_type = ROSHelpers::GetParamRequired<std::string>(*ph_, "classifier/type", __func__);
         const auto folder = data_folder_ + "/" + classifier_type + "_classifier_" + IntToHex(seed_) + "/";
         arc_utilities::CreateDirectory(folder);
 
@@ -2742,8 +2742,8 @@ namespace smmap
             }
         }
 
-        const int classifier_dim = ROSHelpers::GetParamRequiredDebugLog<int>(*ph_, "classifier/dim", __func__).GetImmutable();
-        const std::string classifier_slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__).GetImmutable();
+        const int classifier_dim = ROSHelpers::GetParamRequiredDebugLog<int>(*ph_, "classifier/dim", __func__);
+        const std::string classifier_slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__);
         ROS_INFO_STREAM(classifier_dim << " " <<
                         classifier_slice_type << " " <<
                         classifier_type << " " <<

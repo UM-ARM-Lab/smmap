@@ -512,10 +512,10 @@ TransitionEstimation::TransitionEstimation(
 #endif
 
     , mistake_dist_thresh_(GetTransitionMistakeThreshold(*ph_))
-    , normalize_lengths_(ROSHelpers::GetParamRequired<bool>(*ph_, "classifier/normalize_lengths", __func__).GetImmutable())
-    , normalize_connected_components_(ROSHelpers::GetParamRequired<bool>(*ph_, "classifier/normalize_connected_components", __func__).GetImmutable())
+    , normalize_lengths_(ROSHelpers::GetParamRequired<bool>(*ph_, "classifier/normalize_lengths", __func__))
+    , normalize_connected_components_(ROSHelpers::GetParamRequired<bool>(*ph_, "classifier/normalize_connected_components", __func__))
     , transition_mistake_classifier_(Classifier::MakeClassifier(nh_, ph_))
-    , accept_scale_factor_(ROSHelpers::GetParamRequired<double>(*ph_, "classifier/accept_scale_factor", __func__).GetImmutable())
+    , accept_scale_factor_(ROSHelpers::GetParamRequired<double>(*ph_, "classifier/accept_scale_factor", __func__))
     #warning "Voxnet classifier hack addition to classification framework"
 //    , accept_mistake_rate_(std::exp(-accept_scale_factor_ * transition_mistake_classifier_->accuracy_))
     , accept_transition_distribution_(0.0, 1.0)
@@ -543,7 +543,7 @@ TransitionEstimation::TransitionEstimation(
     }
 
     // Right now this is hard coded, so lets make sure this is true in the launch files
-    const std::string slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__).GetImmutable();
+    const std::string slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__);
     assert(slice_type == "basic");
 
     int calced_feature_dim = 4;
@@ -1466,23 +1466,36 @@ void TransitionEstimation::addExperienceToClassifier(
     for (size_t idx = 1; idx < trajectory.size(); ++idx)
     {
         const auto& start_state = trajectory[idx - 1].first;
-        const auto& end_state = trajectory[idx].first;
-        const bool start_foh = checkFirstOrderHomotopy(
+        const auto start_foh = checkFirstOrderHomotopy(
                     *start_state.planned_rubber_band_,
                     *start_state.rubber_band_);
-        const bool end_foh = checkFirstOrderHomotopy(
+        const auto start_dist = start_state.planned_rubber_band_->distance(*start_state.rubber_band_);
+        const auto start_close = start_foh && (start_dist <= mistake_dist_thresh_);
+
+        const auto& end_state = trajectory[idx].first;
+        const auto end_dist = end_state.planned_rubber_band_->distance(*end_state.rubber_band_);
+        const auto end_foh = checkFirstOrderHomotopy(
                     *end_state.planned_rubber_band_,
                     *end_state.rubber_band_);
-        const auto start_dist = start_state.planned_rubber_band_->distance(*start_state.rubber_band_);
-        const auto end_dist = end_state.planned_rubber_band_->distance(*end_state.rubber_band_);
-        const auto start_close = start_foh && (start_dist <= mistake_dist_thresh_);
         const auto end_close = end_foh && (end_dist <= mistake_dist_thresh_);
-        const bool label_is_mistake = (start_close && end_close) ? -1.0 : 1.0;
+
+        const auto is_mistake = start_close && end_close;
 
         raw_dists.col(idx - 1) << start_dist, (double)start_foh, end_dist, (double)end_foh;
         features.col(idx - 1) = transitionFeatures(*start_state.planned_rubber_band_,
                                                    *end_state.planned_rubber_band_);
-        labels[idx - 1] = label_is_mistake;
+        labels[idx - 1] = is_mistake ? -1.0 : 1.0;
+
+//        std::cout << std::boolalpha << std::setprecision(6) << std::fixed
+//                  << "start dist: " << start_dist
+//                  << "  start foh: " << start_foh
+//                  << "  start close: " << start_close
+//                  << "    \t end dist: " << end_dist
+//                  << "  end foh: " << end_foh
+//                  << "  end close: " << end_close
+//                  << "    \t is mistake: " << is_mistake
+//                  << "  label: " << labels[idx - 1]
+//                  << std::endl;
     }
 
     const auto data_folder = GetDataFolder(*nh_);
@@ -1650,7 +1663,7 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::loadAdapt
 
 bool TransitionEstimation::useStoredTransitions() const
 {
-    return ROSHelpers::GetParamRequired<bool>(*ph_, "transition_estimation/use_stored_transitions", __func__).GetImmutable();
+    return ROSHelpers::GetParamRequired<bool>(*ph_, "transition_estimation/use_stored_transitions", __func__);
 }
 
 void TransitionEstimation::storeTransitions() const
@@ -1658,19 +1671,15 @@ void TransitionEstimation::storeTransitions() const
     try
     {
         const auto log_folder = GetLogFolder(*nh_);
-        CreateDirectory(log_folder);
         const auto file_name_prefix = ROSHelpers::GetParamRequired<std::string>(*ph_, "transition_estimation/file_name_prefix", __func__);
-        if (!file_name_prefix.Valid())
-        {
-            throw_arc_exception(std::invalid_argument, "Unable to load file_name_prefix from parameter server");
-        }
         const std::string file_name_suffix = GetCurrentTimeAsString();
-        const std::string file_name = file_name_prefix.GetImmutable() + "__" + file_name_suffix + ".compressed";
+        const std::string file_name = file_name_prefix + "__" + file_name_suffix + ".compressed";
         const std::string full_path = log_folder + file_name;
         ROS_INFO_STREAM_NAMED("transitions", "Saving learned_transitions to " << full_path);
 
         std::vector<uint8_t> buffer;
         SerializeVector<StateTransition>(learned_transitions_, buffer, &StateTransition::Serialize);
+        CreateDirectory(boost::filesystem::path(full_path).parent_path());
         ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
     }
     catch (const std::exception& e)
@@ -1684,26 +1693,14 @@ void TransitionEstimation::loadSavedTransitions()
     try
     {
         const auto log_folder = GetLogFolder(*nh_);
-        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "transition_estimation/file_name_prefix", __func__);
-        if (!file_name_prefix.Valid())
-        {
-            throw_arc_exception(std::invalid_argument, "Unable to load file_name_prefix from parameter server");
-        }
-
-        std::vector<std::string> suffixes_files_to_load;
-        if (!ph_->getParam("transition_estimation/file_name_suffixes_to_load", suffixes_files_to_load))
-        {
-            ROS_ERROR_STREAM_NAMED("transitions", "Cannot find "
-                                   << ph_->getNamespace() << "/transition_estimation"
-                                   << "/file_name_suffixes_to_load on parameter server for "
-                                   << __func__
-                                   << ": Value must be on paramter sever");
-            throw_arc_exception(std::runtime_error, "Unable to find parameter on server");
-        }
+        const auto file_name_prefix =
+                ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "transition_estimation/file_name_prefix", __func__);
+        const auto suffixes_files_to_load =
+                ROSHelpers::GetVectorRequired<std::string>(*ph_, "transition_estimation/file_name_suffixes_to_load", __func__);
 
         for (const auto& suffix : suffixes_files_to_load)
         {
-            const auto full_path = log_folder + "/" + file_name_prefix.GetImmutable() + "__" + suffix + ".compressed";
+            const auto full_path = log_folder + "/" + file_name_prefix + "__" + suffix + ".compressed";
             ROS_INFO_STREAM_NAMED("transitions", "Loading transitions from " << full_path);
             const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(full_path);
             const auto deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t current)

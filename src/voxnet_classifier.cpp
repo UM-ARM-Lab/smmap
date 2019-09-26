@@ -7,7 +7,7 @@ namespace smmap
 {
     inline static std::string getModelFilename(ros::NodeHandle& nh)
     {
-        return ROSHelpers::GetParamRequired<std::string>(nh, "voxnet/model_file", __func__).GetImmutable();
+        return ROSHelpers::GetParamRequired<std::string>(nh, "voxnet/model_file", __func__);
     }
 
     VoxnetClassifier::VoxnetClassifier(std::shared_ptr<ros::NodeHandle> nh,
@@ -17,9 +17,9 @@ namespace smmap
         , ph_(ph)
         , sdf_(sdf)
         , name_("voxnet")
-        , accuracy_(ROSHelpers::GetParamRequired<double>(*ph_, "voxnet/accuracy", __func__).GetImmutable())
+        , accuracy_(ROSHelpers::GetParamRequired<double>(*ph_, "voxnet/accuracy", __func__))
         , model_(torch::jit::load(getModelFilename(*ph_)))
-        , threshold_(ROSHelpers::GetParamRequired<double>(*ph_, "voxnet/threshold", __func__).GetImmutable())
+        , threshold_(ROSHelpers::GetParamRequired<double>(*ph_, "voxnet/threshold", __func__))
         , n_cells_(32)
     {}
 

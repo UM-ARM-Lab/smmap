@@ -29,8 +29,8 @@ namespace smmap
             : nh_(nh)
             , ph_(ph)
             , name_(name)
-            , num_features_(ROSHelpers::GetParamRequired<int>(*ph_, "classifier/dim", __func__).GetImmutable())
-            , accuracy_(ROSHelpers::GetParamRequired<double>(*ph_, name + "/accuracy", __func__).GetImmutable())
+            , num_features_(ROSHelpers::GetParamRequired<int>(*ph_, "classifier/dim", __func__))
+            , accuracy_(ROSHelpers::GetParamRequired<double>(*ph_, name + "/accuracy", __func__))
         {}
 
         double predict(Eigen::VectorXd const& vec) const
