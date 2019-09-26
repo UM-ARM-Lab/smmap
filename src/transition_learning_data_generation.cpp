@@ -985,7 +985,7 @@ namespace smmap
                                 filenames.push_back(test_results_filename);
 
                                 // Execute the tests if there are enough to run
-                                if (tests.size() == num_threads)
+                                if (tests.size() > 100)
                                 {
                                     // Ignore the feedback as the action sever saves the results to file anyway
                                     robot_->generateTransitionData(tests, filenames, nullptr, false);
@@ -1074,7 +1074,7 @@ namespace smmap
                                 filenames.push_back(test_results_filename);
 
                                 // Execute the tests if tehre are enough to run
-                                if (tests.size() == num_threads)
+                                if (tests.size() > 100)
                                 {
                                     // Ignore the feedback as the action sever saves the results to file anyway
                                     robot_->generateTransitionData(tests, filenames, nullptr, false);
@@ -2643,40 +2643,25 @@ namespace smmap
         tests.reserve(num_threads);
         test_result_filenames.reserve(num_threads);
 
-        const auto num_trials = GetRRTNumTrials(*ph_);
 
-        const auto num_digits = [&]
-        {
-            assert(num_trials < 10000000000);
-            return (num_trials < 10 ? 1 :
-                   (num_trials < 100 ? 2 :
-                   (num_trials < 1000 ? 3 :
-                   (num_trials < 10000 ? 4 :
-                   (num_trials < 100000 ? 5 :
-                   (num_trials < 1000000 ? 6 :
-                   (num_trials < 10000000 ? 7 :
-                   (num_trials < 100000000 ? 8 :
-                   (num_trials < 1000000000 ? 9 :
-                   10)))))))));
-        }();
-        const auto to_str = [&] (const size_t idx)
-        {
-            std::stringstream ss;
-            ss << std::setw(num_digits) << std::setfill('0') << idx;
-            return ss.str();
-        };
+
 
         assert(false && "Replace this code with stuff from TaskFramework()");
 
+
+
+
+
+        const auto num_trials = GetRRTNumTrials(*ph_);
         std::atomic<int> num_failed_plans = 0;
         const auto omp_planning_threads = std::max(1, GetNumOMPThreads() / 2);
         #pragma omp parallel for num_threads(omp_planning_threads)
-        for (size_t trial_idx = 30; trial_idx < num_trials; ++trial_idx)
+        for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
         {
             try
             {
-                const auto path_to_start_file = folder + "trial_idx_" + to_str(trial_idx) + "__path_to_start.compressed";
-                const auto test_result_file = folder + "trial_idx_" + to_str(trial_idx) + "__test_results.compressed";
+                const auto path_to_start_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__path_to_start.compressed";
+                const auto test_result_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__test_results.compressed";
 
                 const auto rrt_path = generateTestPath(target_grippers_poses, trial_idx * 0xFFFF);
                 band_rrt_vis_->savePath(rrt_path, path_to_start_file);
@@ -2694,7 +2679,7 @@ namespace smmap
                     test_result_filenames.push_back(test_result_file);
 
                     // Execute the tests if there are enough to run
-                    if (tests.size() == num_threads)
+                    if (tests.size() > 100)
                     {
                         assert(false && "Replace this call with a call to robot_->testRobotPaths(...)");
                         robot_->generateTransitionData(tests, test_result_filenames, nullptr, false);
@@ -2731,9 +2716,9 @@ namespace smmap
         {
             try
             {
-                const auto path_to_start_file = folder + "trial_idx_" + to_str(trial_idx) + "__path_to_start.compressed";
-                const auto test_result_file = folder + "trial_idx_" + to_str(trial_idx) + "__test_results.compressed";
-                const auto trajectory_file = folder + "trial_idx_" + to_str(trial_idx) + "__trajectory.compressed";
+                const auto path_to_start_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__path_to_start.compressed";
+                const auto test_result_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__test_results.compressed";
+                const auto trajectory_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__trajectory.compressed";
 
                 const auto path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
                 const auto test_result = loadTestResult(test_result_file);

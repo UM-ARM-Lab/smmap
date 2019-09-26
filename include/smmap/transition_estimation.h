@@ -179,6 +179,10 @@ namespace smmap
                 const RubberBand& test_band_start,
                 const PairGripperPositions& ending_gripper_positions) const;
 
+        std::string classifierName() const;
+        // Returns a string representation of slice_type, normalize_lengths, etc.
+        std::string featuresUsed() const;
+
         Eigen::VectorXd transitionFeatures(const RubberBand& initial_band,
                                            const RubberBand& default_prediction,
                                            const bool verbose = false) const;

@@ -542,6 +542,10 @@ TransitionEstimation::TransitionEstimation(
         accept_mistake_rate_ = std::exp(-accept_scale_factor_ * transition_mistake_classifier_->accuracy_);
     }
 
+    // Right now this is hard coded, so lets make sure this is true in the launch files
+    const std::string slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__).GetImmutable();
+    assert(slice_type == "basic");
+
     int calced_feature_dim = 4;
     calced_feature_dim += normalize_connected_components_ ? 3 : 9;
     #warning "Voxnet classifier hack addition to classification framework"
@@ -973,6 +977,27 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
     };
 }
 
+std::string TransitionEstimation::classifierName() const
+{
+    if (transition_mistake_classifier_ != nullptr)
+    {
+        return transition_mistake_classifier_->name_;
+    }
+    else
+    {
+        return voxnet_classifier_->name_;
+    }
+}
+
+// Returns a string representation of slice_type, normalize_lengths, etc.
+std::string TransitionEstimation::featuresUsed() const
+{
+    const std::string slice_type = "basic";
+    const std::string length_features = normalize_lengths_ ? "normalized_lengths" : "raw_lengths";
+    const std::string components_features = normalize_connected_components_ ? "normalized_components" : "raw_components";
+    return slice_type + "  " + length_features + "  " + components_features;
+}
+
 VectorXd TransitionEstimation::transitionFeatures(
         const RubberBand& initial_band,
         const RubberBand& default_prediction,
@@ -1020,19 +1045,19 @@ VectorXd TransitionEstimation::transitionFeatures(
     const double default_band_length_post = default_prediction.totalLength();
     // Length based features
     {
-        if (!normalize_lengths_)
+        if (normalize_lengths_)
+        {
+            features[NORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_RATIO_PRE]  = (grippers_pre.first - grippers_pre.second).norm() / template_band_.maxSafeLength();
+            features[NORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_RATIO_POST] = (grippers_post.first - grippers_post.second).norm() / template_band_.maxSafeLength();
+            features[NORMALIZED_FEATURES::BAND_LENGTH_RATIO_PRE]           = band_length_pre / template_band_.maxSafeLength();
+            features[NORMALIZED_FEATURES::BAND_LENGTH_RATIO_POST]          = default_band_length_post / template_band_.maxSafeLength();
+        }
+        else
         {
             features[UNNORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_PRE]  = (grippers_pre.first - grippers_pre.second).norm();
             features[UNNORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_POST] = (grippers_post.first - grippers_post.second).norm();
             features[UNNORMALIZED_FEATURES::BAND_LENGTH_PRE]           = band_length_pre;
             features[UNNORMALIZED_FEATURES::BAND_LENGTH_POST]          = default_band_length_post;
-        }
-        else
-        {
-            features[NORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_RATIO_PRE]  = (grippers_pre.first - grippers_pre.second).norm() / template_band_.maxSafeLength();
-            features[NORMALIZED_FEATURES::GRIPPER_DELTA_LENGTH_RATIO_POST] = (grippers_post.first - grippers_post.second).norm() / template_band_.maxSafeLength();;
-            features[NORMALIZED_FEATURES::BAND_LENGTH_RATIO_PRE]           = band_length_pre / template_band_.maxSafeLength();;
-            features[NORMALIZED_FEATURES::BAND_LENGTH_RATIO_POST]          = default_band_length_post / template_band_.maxSafeLength();;
         }
     }
 
@@ -1462,9 +1487,9 @@ void TransitionEstimation::addExperienceToClassifier(
 
     const auto data_folder = GetDataFolder(*nh_);
     CreateDirectory(data_folder);
-    const auto timestamp = GetCurrentTimeAsString();
-    WriteToCSVFile(data_folder + "/transition_features__" + timestamp + ".csv", features);
-    WriteToCSVFile(data_folder + "/transition_distances__" + timestamp + ".csv", raw_dists);
+    const auto timestamp = GetCurrentTimeAsStringWithMilliseconds();
+    WriteToCSVFile(data_folder + "/transition_features__" + timestamp + ".csv", features.transpose());
+    WriteToCSVFile(data_folder + "/transition_distances__" + timestamp + ".csv", raw_dists.transpose());
     saveTrajectory(trajectory, data_folder + "/state_trajectory__" + timestamp + ".compressed");
 
     ROS_INFO_STREAM_NAMED("transition_estimation", "Adding " << labels.size() << " examples to classifier");

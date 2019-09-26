@@ -218,6 +218,10 @@ namespace smmap
                     const std::vector<double>& model_prediction_errors_weighted,
                     const std::vector<double>& model_prediction_errors_unweighted);
 
+            static void LogPlanningPerformanceData(
+                    Log::Log& log,
+                    const std::vector<std::vector<BandRRT::PlanningSmoothingStatistics>>& statistics);
+
             void storeWorldState(const WorldState& world_state, const RubberBand::Ptr band);
             std::pair<WorldState, RubberBand::Ptr> loadStoredWorldState();
             bool useStoredWorldState() const;

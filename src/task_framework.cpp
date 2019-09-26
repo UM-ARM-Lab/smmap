@@ -434,6 +434,7 @@ std::pair<WorldState, bool> TaskFramework::sendNextCommand(
             vis_->purgeMarkerList();
 
             transition_estimator_->addExperienceToClassifier(rrt_executed_path_);
+            rrt_executed_path_.clear();
 
             // TODO: HACK: force a restart of the scenario after learning rather than continuing
             return {world_state, true};
@@ -1752,10 +1753,11 @@ void TaskFramework::testPlanningPerformance(
     const auto omp_default_threads = arc_helpers::GetNumOMPThreads();
     const auto data_folder = GetDataFolder(*nh_);
     arc_utilities::CreateDirectory(data_folder);
-    Log::Log planning_tests_log(GetLogFolder(*nh_) + "seed_" + IntToHex(base_seed)
-                                + "__batch_test_" + std::to_string(num_batch_tests)
-                                + "__" + arc_helpers::GetCurrentTimeAsString()
-                                + "__planning_statistics.log", true);
+    const std::string batch_name =
+            "seed_" + IntToHex(base_seed) +
+            "__batch_test_" + std::to_string(num_batch_tests) +
+            "__" + arc_helpers::GetCurrentTimeAsString();
+    Log::Log planning_tests_log(GetLogFolder(*nh_) + batch_name + "__planning_statistics.log", true);
 
     vis_->purgeMarkerList();
     visualization_msgs::Marker marker;
@@ -1780,20 +1782,20 @@ void TaskFramework::testPlanningPerformance(
 
     const int omp_planning_threads = parallel_planning ? omp_default_threads : 1;
     #pragma omp parallel for num_threads(omp_planning_threads) schedule(guided)
-    for (size_t idx = 0; idx < num_trials; ++idx)
+    for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
     {
-        ROS_INFO_STREAM_NAMED("task_framework", "Planning performance trial idx: " << idx);
+        ROS_INFO_STREAM_NAMED("task_framework", "Planning performance trial idx: " << trial_idx);
 
         // Update the seed for this particular trial
         // When done in parallel, resetting the robot makes no sense, so omit it
         if (!parallel_planning)
         {
-            robot_->resetRandomSeeds(base_seed, idx * 0xFFFF);
+            robot_->resetRandomSeeds(base_seed, trial_idx * 0xFFFF);
         }
         BandRRT::WorldParams world_params = *world_params_;
         world_params.generator_ = std::make_shared<std::mt19937_64>(*generator_);
         world_params.generator_->seed(base_seed);
-        world_params.generator_->discard(idx * 0xFFFF);
+        world_params.generator_->discard(trial_idx * 0xFFFF);
         world_params.transition_estimator_ =
                 std::make_shared<TransitionEstimation>(
                     nh_, ph_, world_params.generator_, dijkstras_task_->sdf_, dijkstras_task_->work_space_grid_, vis_, *rubber_band_);
@@ -1821,7 +1823,7 @@ void TaskFramework::testPlanningPerformance(
                         start_config,
                         target_grippers_poses,
                         time_limit);
-            statistics[idx].push_back(band_rrt.getStatistics());
+            statistics[trial_idx].push_back(band_rrt.getStatistics());
         }
         while (policy.size() == 0);
 
@@ -1833,15 +1835,15 @@ void TaskFramework::testPlanningPerformance(
         }
 
         assert(policy.size() == 1);
-        const auto basename = data_folder + "seed_" + IntToHex(base_seed) + "__trial_idx_" + std::to_string(idx);
+        const auto basename = data_folder + batch_name + "__trial_idx_" + ToStrFill0(num_trials, trial_idx);
         const auto path_to_start_file = basename + "__path_to_start.compressed";
         ROS_INFO_STREAM_NAMED("task_framework", "Saving path to prefix: " << basename);
         band_rrt.savePath(policy[0].first, path_to_start_file);
 
-        file_basenames[idx] = basename;
-        planned_paths[idx] = policy[0].first;
+        file_basenames[trial_idx] = basename;
+        planned_paths[trial_idx] = policy[0].first;
     }
-    ARC_LOG(planning_tests_log, PrettyPrint::PrettyPrint(statistics, true, "\n"));
+    LogPlanningPerformanceData(planning_tests_log, statistics);
 
     if (test_paths_in_bullet)
     {
@@ -1903,18 +1905,13 @@ void TaskFramework::testPlanningPerformance(
             }
         }
 
-        const int classifier_dim = ROSHelpers::GetParamRequiredDebugLog<int>(*ph_, "classifier/dim", __func__).GetImmutable();
-        const std::string classifier_slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__).GetImmutable();
-        const std::string classifier_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/type", __func__).GetImmutable();
-        ROS_INFO_STREAM_NAMED("task_framework",
-                              classifier_dim << " " <<
-                              classifier_slice_type << " " <<
-                              classifier_type << " " <<
-                              "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
-        ARC_LOG_STREAM(planning_tests_log, classifier_dim << " " <<
-                                           classifier_slice_type << " " <<
-                                           classifier_type << " " <<
-                                           "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
+        std::stringstream classifier_success_rate;
+        classifier_success_rate << transition_estimator_->classifierName() << "  "
+                                << transition_estimator_->featuresUsed() << "  "
+                                << "Total successful paths: " << num_succesful_paths << "  "
+                                << "Total unsuccessful paths: " << num_unsuccesful_paths;
+        ROS_INFO_STREAM_NAMED("task_framework", classifier_success_rate.str());
+        ARC_LOG_STREAM(planning_tests_log, classifier_success_rate.str());
 
 //        ROS_INFO_NAMED("task_framwork", "Terminating.");
 //        throw_arc_exception(std::runtime_error, "Bullet tests done, terminating.");
@@ -2754,6 +2751,23 @@ void TaskFramework::controllerLogData(
 
         ARC_LOG(controller_loggers_.at("model_prediction_error_unweighted"),
             PrettyPrint::PrettyPrint(model_prediction_errors_unweighted, false, " "));
+    }
+}
+
+void TaskFramework::LogPlanningPerformanceData(
+        Log::Log& log,
+        const std::vector<std::vector<BandRRT::PlanningSmoothingStatistics>>& statistics)
+{
+    for (size_t trial_idx = 0; trial_idx < statistics.size(); ++trial_idx)
+    {
+        const auto& trial_stats = statistics[trial_idx];
+        ARC_LOG_STREAM(log, "Trial idx " << trial_idx << " planning iterations: " << trial_stats.size());
+        for (size_t idx = 0; idx < trial_stats.size(); ++idx)
+        {
+            ARC_LOG(log, PrettyPrint::PrettyPrint(trial_stats[idx].first, false, "\n"));
+            ARC_LOG(log, PrettyPrint::PrettyPrint(trial_stats[idx].second, false, "\n"));
+        }
+        ARC_LOG(log, "\n");
     }
 }
 
