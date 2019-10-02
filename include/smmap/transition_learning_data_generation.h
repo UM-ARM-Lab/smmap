@@ -106,21 +106,24 @@ namespace smmap
                 Eigen::Ref<Eigen::Vector3d> a_delta,
                 Eigen::Ref<Eigen::Vector3d> b_delta) const;
         // Generates file name stubs: "/path/to/file/experiment" without the "__type_of_data.compressed" suffix
-        std::vector<std::string> getDataFileList();
-        std::vector<std::string> data_files_;
+        std::vector<std::string> getLastStepDataFileList();
+        std::vector<std::string> getPathTestDataFileList();
+        std::vector<std::string> last_step_data_files_;
+        std::vector<std::string> path_test_data_files_;
 
     public:
         void runTests(const bool generate_test_data,
                       const bool generate_last_step_transition_approximations,
                       const bool generate_trajectories,
-                      const bool visualize_incomplete_trajectories,
+                      const bool visualize_trajectories,
                       const bool generate_meaningful_mistake_examples,
                       const bool generate_features,
                       const bool test_classifiers);
-        void generateTestData();
+        void generateLastStepTestData();
         void generateLastStepTransitionApproximations();
-        void generateTrajectories();
-        void visualizeIncompleteTrajectories();
+        void generateLastStepTrajectories();
+        void visualizeLastStepDataTrajectories();
+        void visualizePathTestTrajectories();
         void generateMeaningfulMistakeExamples();
 
         void generateFeatures(const std::string& parabola_slice_option);

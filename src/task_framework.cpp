@@ -209,11 +209,15 @@ void TaskFramework::execute()
         initializeBandRRT(world_state.robot_configuration_valid_);
     }
 
+    ROS_INFO_STREAM_NAMED("task_framework", "-------------- Robot and frameowrk    initialized with start_time: " << start_time << " --------------");
+
     while (robot_->ok())
     {
-        // Evaluate the performance of the planner at the initial state
-        if (start_time == world_state.sim_time_)
+        static const bool first_iteration_always_requires_plan =
+                ROSHelpers::GetParamRequired<bool>(*ph_, "task/first_control_loop_triggers_plan", __func__);
+        if (first_iteration_always_requires_plan && !plan_triggered_once_)
         {
+            // Evaluate the performance of the planner at the initial state
             const RRTNode start_config = [&]
             {
                 const RRTGrippersRepresentation gripper_config(
@@ -236,15 +240,13 @@ void TaskFramework::execute()
             }();
             const RRTGrippersRepresentation target_grippers_poses = ToGripperPosePair(getGripperTargets(world_state));
 
-            const auto parallel = ROSHelpers::GetParam<bool>(*ph_, "test_planning_performance_parallel", false);
+            const auto parallel = ROSHelpers::GetParam<bool>(*ph_, "test_planning_performance_parallel", true);
             testPlanningPerformance(world_state, seed_, start_config, target_grippers_poses, parallel);
-        }
 
-        static const bool first_iteration_always_requires_plan =
-                ROSHelpers::GetParamRequired<bool>(*ph_, "task/first_control_loop_triggers_plan", __func__);
-        if (first_iteration_always_requires_plan && !plan_triggered_once_)
-        {
             ROS_WARN_NAMED("task_framework", "Triggering global planner regardless of local controller on first iteration");
+            ROS_WARN_STREAM_NAMED("task_framework", "   Planner/Task sim time at planner evaluation " << world_state.sim_time_);
+
+            // Plan a trajectory actually generate data to learn from
             planGlobalGripperTrajectory(world_state);
             plan_triggered_once_ = true;
         }
@@ -266,13 +268,7 @@ void TaskFramework::execute()
             const double current_error = task_specification_->calculateError(world_feedback);
             ROS_INFO_STREAM_NAMED("task_framework", "   Planner/Task sim time " << world_feedback.sim_time_ << "\t Error: " << current_error);
 
-            vis_->purgeMarkerList();
-            visualization_msgs::Marker marker;
-            marker.ns = "delete_markers";
-            marker.action = visualization_msgs::Marker::DELETEALL;
-            vis_->publish(marker);
-            vis_->forcePublishNow();
-            vis_->purgeMarkerList();
+            vis_->purgeAndPublishDeleteAllAction();
 
             ROS_INFO_COND(force_restart, "Terminating task as a restart has been forced");
             ROS_INFO_COND(time_ellapsed >= task_specification_->maxTime(), "Terminating task as time has run out");
@@ -283,13 +279,17 @@ void TaskFramework::execute()
             if (ROSHelpers::GetParam<bool>(*ph_, "rerun_forever", false))
             {
                 ROS_INFO_NAMED("task_framework", "------------------------------- RESETING RESETING -------------------------------------");
+                if (enable_stuck_detection_)
+                {
+                    ROS_INFO_NAMED("task_framework", "Adding experience to classifier if possible");
+                    transition_estimator_->addExperienceToClassifier(rrt_executed_path_);
+                }
+
                 robot_->reset();
                 world_state = robot_->start();
                 start_time = world_state.sim_time_;
                 if (enable_stuck_detection_)
                 {
-                    transition_estimator_->addExperienceToClassifier(rrt_executed_path_);
-
                     initializeBand(world_state);
                     initializeBandRRT(world_state.robot_configuration_valid_);
 
@@ -303,7 +303,10 @@ void TaskFramework::execute()
                     grippers_pose_history_.clear();
                     error_history_.clear();
                     microstep_history_buffer_.clear();
+
+                    vis_->purgeAndPublishDeleteAllAction();
                 }
+                ROS_INFO_STREAM_NAMED("task_framework", "-------------- Robot and frameowrk re-initialized with start_time: " << start_time << " --------------");
             }
             else
             {
@@ -355,11 +358,10 @@ std::pair<WorldState, bool> TaskFramework::sendNextCommand(
             {
                 arc_helpers::Sleep(1.0);
 
-                vis_->purgeMarkerList();
-                vis_->forcePublishNow(0.01);
+                vis_->purgeAndPublishDeleteAllAction();
                 vis_->clearVisualizationsBullet();
                 band_rrt_->visualizePolicy(rrt_planned_policy_);
-                vis_->forcePublishNow(0.01);
+                vis_->forcePublishNow();
 
 //                vis_->deleteObjects(BandRRT::RRT_SOLUTION_RUBBER_BAND_NS, 1, 40);
 //                vis_->deleteObjects(PROJECTED_BAND_NS, 2, 11);
@@ -395,6 +397,12 @@ std::pair<WorldState, bool> TaskFramework::sendNextCommand(
         // Check if the local controller will be stuck
         else
         {
+            // TODO: HACK: force a restart of the scenario after learning rather than continuing
+            ROS_INFO_NAMED("task_framework", "Local controller taking over in main loop; stopping task and resetting");
+            return {world_state, true};
+
+
+
             Stopwatch stopwatch;
             arc_helpers::DoNotOptimize(world_state);
             const bool global_planner_needed_due_to_overstretch = globalPlannerNeededDueToOverstretch(world_state);
@@ -422,33 +430,12 @@ std::pair<WorldState, bool> TaskFramework::sendNextCommand(
         // If we need to (re)plan due to the local controller getting stuck, or the gobal plan failing, then do so
         if (planning_needed)
         {
-//            PressAnyKeyToContinue("pausing before planning ...");
-
-            vis_->purgeMarkerList();
-            visualization_msgs::Marker marker;
-            marker.ns = "delete_markers";
-            marker.action = visualization_msgs::Marker::DELETEALL;
-            marker.header.frame_id = "world_origin";
-            marker.header.stamp = ros::Time::now();
-            vis_->publish(marker);
-            vis_->forcePublishNow(0.5);
-            vis_->purgeMarkerList();
-
-            transition_estimator_->addExperienceToClassifier(rrt_executed_path_);
-            rrt_executed_path_.clear();
-
-
-
-
-
             // TODO: HACK: force a restart of the scenario after learning rather than continuing
+            ROS_INFO_NAMED("task_framework", "Global planning triggered in main loop; stopping task and resetting");
             return {world_state, true};
 
-
-
-
-
-
+//            PressAnyKeyToContinue("pausing before planning ...");
+            vis_->purgeAndPublishDeleteAllAction();
             planGlobalGripperTrajectory(world_state);
 
 //            if (task_specification_->task_type_ == TaskType::ROPE_ENGINE_ASSEMBLY_LIVE)
@@ -852,15 +839,7 @@ WorldState TaskFramework::sendNextCommandUsingGlobalPlannerResults(
         error_history_.clear();
         assert(microstep_history_buffer_.size() == 0);
 
-        vis_->purgeMarkerList();
-        visualization_msgs::Marker marker;
-        marker.ns = "delete_markers";
-        marker.action = visualization_msgs::Marker::DELETEALL;
-        marker.header.frame_id = "world_origin";
-        marker.header.stamp = ros::Time::now();
-        vis_->publish(marker);
-        vis_->forcePublishNow();
-        vis_->purgeMarkerList();
+        vis_->purgeAndPublishDeleteAllAction();
     }
 
     const std::vector<WorldState> fake_all_models_results(num_models_, world_feedback);
@@ -1630,16 +1609,7 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
 {
     num_times_planner_invoked_++;
     ROS_INFO_STREAM_NAMED("task_framework", "!!!!!!!!!!!!!!!!!! Planner Invoked " << num_times_planner_invoked_ << " times!!!!!!!!!!!");
-
-    vis_->purgeMarkerList();
-    visualization_msgs::Marker marker;
-    marker.ns = "delete_markers";
-    marker.action = visualization_msgs::Marker::DELETEALL;
-    marker.header.frame_id = "world_origin";
-    marker.header.stamp = ros::Time::now();
-    vis_->publish(marker);
-    vis_->forcePublishNow();
-    vis_->purgeMarkerList();
+    vis_->purgeAndPublishDeleteAllAction();
 
     const RRTNode start_config = [&]
     {
@@ -1766,19 +1736,12 @@ void TaskFramework::testPlanningPerformance(
             "seed_" + IntToHex(base_seed) +
             "__batch_test_" + std::to_string(num_batch_tests) +
             "__" + arc_helpers::GetCurrentTimeAsString();
+    storeWorldState(world_state, rubber_band_, batch_name + "__starting_world_state.compressed");
 
     const auto enable_rrt_visualizations = !parallel_planning && GetVisualizeRRT(*ph_);
     if (enable_rrt_visualizations)
     {
-        vis_->purgeMarkerList();
-        visualization_msgs::Marker marker;
-        marker.ns = "delete_markers";
-        marker.action = visualization_msgs::Marker::DELETEALL;
-        marker.header.frame_id = "world_origin";
-        marker.header.stamp = ros::Time::now();
-        vis_->publish(marker);
-        vis_->forcePublishNow();
-        vis_->purgeMarkerList();
+        vis_->purgeAndPublishDeleteAllAction();
     }
 
     const std::chrono::duration<double> time_limit(GetRRTTimeout(*ph_));
@@ -1848,9 +1811,9 @@ void TaskFramework::testPlanningPerformance(
 
         assert(policy.size() == 1);
         const auto basename = data_folder + batch_name + "__trial_idx_" + ToStrFill0(num_trials, trial_idx);
-        const auto path_to_start_file = basename + "__path_to_start.compressed";
+        const auto rrt_path_file = basename + "__rrt_path.compressed";
         ROS_INFO_STREAM_NAMED("task_framework", "Saving path to prefix: " << basename);
-        band_rrt.savePath(policy[0].first, path_to_start_file);
+        band_rrt.savePath(policy[0].first, rrt_path_file);
 
         file_basenames[trial_idx] = basename;
         planned_paths[trial_idx] = policy[0].first;
@@ -1885,13 +1848,13 @@ void TaskFramework::testPlanningPerformance(
         for (size_t idx = 0; idx < num_trials; ++idx)
         {
             const auto& basename = file_basenames[idx];
-            const auto path_to_start_file = basename + "__path_to_start.compressed";
+            const auto rrt_path_file = basename + "__rrt_path.compressed";
             const auto test_result_file = basename + "__path_test_results.compressed";
             const auto trajectory_file = basename + "__trajectory.compressed";
 
             try
             {
-                const auto rrt_path = band_rrt_->loadPath(path_to_start_file);
+                const auto rrt_path = band_rrt_->loadPath(rrt_path_file);
                 const auto test_result = [&]
                 {
                     const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
@@ -1901,8 +1864,9 @@ void TaskFramework::testPlanningPerformance(
 
                 const auto traj_gen_result = ToTrajectory(world_state, rrt_path, test_result, test_waypoint_indices);
                 const auto& trajectory = traj_gen_result.first;
+                const auto parsed_cleanly = traj_gen_result.second;
                 transition_estimator_->saveTrajectory(trajectory, trajectory_file);
-                if (traj_gen_result.second)
+                if (parsed_cleanly)
                 {
                     ++num_succesful_paths;
                 }
@@ -2788,23 +2752,26 @@ void TaskFramework::LogPlanningPerformanceData(
 // Debugging
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void TaskFramework::storeWorldState(const WorldState& world_state, const RubberBand::Ptr band)
+void TaskFramework::storeWorldState(const WorldState& world_state, const RubberBand::Ptr band, std::string filename)
 {
     try
     {
-        const auto log_folder = GetLogFolder(*nh_);
-        arc_utilities::CreateDirectory(log_folder);
-        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state/file_name_prefix", __func__);
-        const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsStringWithMilliseconds();
-        const std::string file_name = file_name_prefix + "__" + file_name_suffix + ".compressed";
-        const std::string full_path = log_folder + file_name;
-        ROS_DEBUG_STREAM_NAMED("task_framework", "Saving world_state to " << full_path);
+        if (filename.empty())
+        {
+            const auto log_folder = GetLogFolder(*nh_);
+            arc_utilities::CreateDirectory(log_folder);
+            const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state/file_name_prefix", __func__);
+            const std::string file_name_suffix = arc_helpers::GetCurrentTimeAsStringWithMilliseconds();
+            const std::string file_name = file_name_prefix + "__" + file_name_suffix + ".compressed";
+            filename = log_folder + file_name;
+        }
+        ROS_DEBUG_STREAM_NAMED("task_framework", "Saving world_state to " << filename);
 
         std::vector<uint8_t> buffer;
         world_state.serializeSelf(buffer);
         band->serialize(buffer);
-        arc_utilities::CreateDirectory(boost::filesystem::path(full_path).parent_path());
-        ZlibHelpers::CompressAndWriteToFile(buffer, full_path);
+        arc_utilities::CreateDirectory(boost::filesystem::path(filename).parent_path());
+        ZlibHelpers::CompressAndWriteToFile(buffer, filename);
 
         const auto deserialized_results = WorldState::Deserialize(buffer, 0);
         assert(deserialized_results.first == world_state);
@@ -2815,20 +2782,23 @@ void TaskFramework::storeWorldState(const WorldState& world_state, const RubberB
     }
 }
 
-std::pair<WorldState, RubberBand::Ptr> TaskFramework::loadStoredWorldState()
+std::pair<WorldState, RubberBand::Ptr> TaskFramework::loadStoredWorldState(std::string filename)
 {
     std::pair<WorldState, RubberBand::Ptr> deserialized_result;
 
     try
     {
-        const auto log_folder = GetLogFolder(*nh_);
-        const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state/file_name_prefix", __func__);
-        const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state/file_name_suffix_to_load", __func__);
-        const std::string file_name = file_name_prefix + "__" + file_name_suffix + ".compressed";
-        const std::string full_path = log_folder + file_name;
-        ROS_INFO_STREAM_NAMED("task_framework", "Loading world state from " << full_path);
+        if (filename.empty())
+        {
+            const auto log_folder = GetLogFolder(*nh_);
+            const auto file_name_prefix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state/file_name_prefix", __func__);
+            const auto file_name_suffix = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "world_state/file_name_suffix_to_load", __func__);
+            const std::string file_name = file_name_prefix + "__" + file_name_suffix + ".compressed";
+            filename = log_folder + file_name;
+        }
+        ROS_INFO_STREAM_NAMED("task_framework", "Loading world state from " << filename);
 
-        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(full_path);
+        const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
         const auto deserialized_world_state = WorldState::Deserialize(buffer, 0);
         deserialized_result.first = deserialized_world_state.first;
 

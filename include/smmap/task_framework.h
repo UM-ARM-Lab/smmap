@@ -222,8 +222,8 @@ namespace smmap
                     Log::Log& log,
                     const std::vector<std::vector<BandRRT::PlanningSmoothingStatistics>>& statistics);
 
-            void storeWorldState(const WorldState& world_state, const RubberBand::Ptr band);
-            std::pair<WorldState, RubberBand::Ptr> loadStoredWorldState();
+            void storeWorldState(const WorldState& world_state, const RubberBand::Ptr band, std::string filename = "");
+            std::pair<WorldState, RubberBand::Ptr> loadStoredWorldState(std::string filename = "");
             bool useStoredWorldState() const;
 
             const bool bandits_logging_enabled_;

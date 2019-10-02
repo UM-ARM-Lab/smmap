@@ -1505,7 +1505,8 @@ void TransitionEstimation::addExperienceToClassifier(
     WriteToCSVFile(data_folder + "/transition_distances__" + timestamp + ".csv", raw_dists.transpose());
     saveTrajectory(trajectory, data_folder + "/state_trajectory__" + timestamp + ".compressed");
 
-    ROS_INFO_STREAM_NAMED("transition_estimation", "Adding " << labels.size() << " examples to classifier");
+    ROS_INFO_STREAM_NAMED("transition_estimation",
+                          "Adding " << labels.size() << " examples to classifier with stamp " << timestamp);
 
     transition_mistake_classifier_->addData(features, labels);
 }

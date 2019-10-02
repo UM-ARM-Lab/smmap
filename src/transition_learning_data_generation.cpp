@@ -709,7 +709,7 @@ namespace smmap
         }
     }
 
-    std::vector<std::string> TransitionTesting::getDataFileList()
+    std::vector<std::string> TransitionTesting::getLastStepDataFileList()
     {
         ROS_INFO_STREAM("Finding data files in folder: " << data_folder_);
 
@@ -732,7 +732,48 @@ namespace smmap
                     {
                         ROS_WARN_STREAM("Ignoring file: " << filename);
                     }
-                    const auto pos = filename.find("__test_results.compressed");
+                    const auto pos = filename.find("__last_step_test_results.compressed");
+                    if (pos != std::string::npos)
+                    {
+                        // Strip off the extra string for simpler use later
+                        files.push_back(filename.substr(0, pos));
+                    }
+                }
+            }
+            std::sort(files.begin(), files.end());
+            ROS_INFO_STREAM("Found " << files.size() << " possible data files in " << data_folder_);
+        }
+        catch (const fs::filesystem_error& ex)
+        {
+            ROS_WARN_STREAM("Error loading file list: " << ex.what());
+        }
+        return files;
+    }
+
+    std::vector<std::string> TransitionTesting::getPathTestDataFileList()
+    {
+        ROS_INFO_STREAM("Finding data files in folder: " << data_folder_);
+
+        std::vector<std::string> files;
+        try
+        {
+            const fs::path p(data_folder_);
+            const fs::recursive_directory_iterator start(p);
+            const fs::recursive_directory_iterator end;
+            for (auto itr = start; itr != end; ++itr)
+            {
+                if (fs::is_regular_file(itr->status()))
+                {
+                    const auto filename = itr->path().string();
+                    // Only warn about file types that are not expected
+                    if (filename.find("compressed") == std::string::npos &&
+                        filename.find("failed") == std::string::npos &&
+                        filename.find("classification_features") == std::string::npos &&
+                        filename.find("npz") == std::string::npos)
+                    {
+                        ROS_WARN_STREAM("Ignoring file: " << filename);
+                    }
+                    const auto pos = filename.find("__path_test_results.compressed");
                     if (pos != std::string::npos)
                     {
                         // Strip off the extra string for simpler use later
@@ -753,7 +794,7 @@ namespace smmap
     void TransitionTesting::runTests(const bool generate_test_data,
                                      const bool generate_last_step_transition_approximations,
                                      const bool generate_trajectories,
-                                     const bool visualize_incomplete_trajectories,
+                                     const bool visualize_trajectories,
                                      const bool generate_meaningful_mistake_examples,
                                      const bool generate_features,
                                      const bool test_classifiers)
@@ -762,11 +803,12 @@ namespace smmap
         {
             Stopwatch stopwatch;
             ROS_INFO("Generating test data via Bullet");
-            generateTestData();
+            generateLastStepTestData();
             ROS_INFO_STREAM("Data generation time taken: " << stopwatch(READ));
         }
 
-        data_files_ = getDataFileList();
+        last_step_data_files_ = getLastStepDataFileList();
+        path_test_data_files_ = getPathTestDataFileList();
 
         if (generate_last_step_transition_approximations)
         {
@@ -780,15 +822,16 @@ namespace smmap
         {
             ROS_INFO("Generating trajectories");
             Stopwatch stopwatch;
-            generateTrajectories();
+            generateLastStepTrajectories();
             ROS_INFO_STREAM("Generate trajectories time taken: " << stopwatch(READ));
         }
 
-        if (visualize_incomplete_trajectories)
+        if (visualize_trajectories)
         {
             if (vis_->visualizationsEnabled())
             {
-                visualizeIncompleteTrajectories();
+                visualizeLastStepDataTrajectories();
+                visualizePathTestTrajectories();
             }
             else
             {
@@ -880,7 +923,7 @@ namespace smmap
         return perturbations;
     }
 
-    void TransitionTesting::generateTestData()
+    void TransitionTesting::generateLastStepTestData()
     {
         gripper_a_starting_pose_ = GetPoseFromParamServer(*ph_, "gripper_a_test_start", true);
         gripper_b_starting_pose_ = GetPoseFromParamServer(*ph_, "gripper_b_test_start", true);
@@ -898,7 +941,7 @@ namespace smmap
         {
             const std::string folder(data_folder_);
             const std::string test_id("/unmodified");
-            const std::string test_results_filename = folder + test_id + "__test_results.compressed";
+            const std::string test_results_filename = folder + test_id + "__last_step_test_results.compressed";
             const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
             arc_utilities::CreateDirectory(fs::path(test_results_filename).parent_path());
 
@@ -952,7 +995,7 @@ namespace smmap
                     const Isometry3d gripper_b_ending_pose = Translation3d(gripper_b_action_vector_) * gripper_b_starting_pose;
 
                     const std::string test_id("/gripper_b_" + ToString(perturbations[b_idx]));
-                    const std::string test_results_filename = folder + test_id + "__test_results.compressed";
+                    const std::string test_results_filename = folder + test_id + "__last_step_test_results.compressed";
                     const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
                     const std::string failure_file = folder + test_id + "__path_to_start.failure";
 
@@ -1041,7 +1084,7 @@ namespace smmap
                     const Isometry3d gripper_b_ending_pose = Translation3d(gripper_b_action_vector_normalized) * gripper_b_starting_pose_;
 
                     const std::string test_id("/gripper_b_" + ToString(perturbations[b_idx]));
-                    const std::string test_results_filename = folder + test_id + "__test_results.compressed";
+                    const std::string test_results_filename = folder + test_id + "__last_step_test_results.compressed";
                     const std::string path_to_start_filename = folder + test_id + "__path_to_start.compressed";
                     const std::string failure_file = folder + test_id + "__path_to_start.failure";
 
@@ -1194,7 +1237,7 @@ namespace smmap
     {
         // Setup the transition data source to generate transition approximations from
         dmm::TransitionTestingVisualizationRequest req;
-        req.data = "unmodified__test_results.compressed";
+        req.data = "unmodified__last_step_test_results.compressed";
         dmm::TransitionTestingVisualizationResponse res;
         setTransitionAdaptationSourceCallback(req, res);
         assert(source_valid_);
@@ -1233,10 +1276,10 @@ namespace smmap
                     "PLANNED_VS_ACTUAL_START_FOH, "
                     "PLANNED_VS_ACTUAL_START_EUCLIDEAN");
         #pragma omp parallel for
-        for (size_t idx = 0; idx < data_files_.size(); ++idx)
+        for (size_t idx = 0; idx < last_step_data_files_.size(); ++idx)
         {
-            const auto& experiment = data_files_[idx];
-            const auto test_result_file =       experiment + "__test_results.compressed";
+            const auto& experiment = last_step_data_files_[idx];
+            const auto test_result_file =       experiment + "__last_step_test_results.compressed";
             const auto path_to_start_file =     experiment + "__path_to_start.compressed";
             const auto test_transition_file =   experiment + "__test_transition.compressed";
             const auto adaptation_result_file = experiment + "__adaptation_record.compressed";
@@ -1335,11 +1378,11 @@ namespace smmap
 
         source_valid_ = false;
 
-        const std::string delimiter = "__test_results.compressed";
+        const std::string delimiter = "__last_step_test_results.compressed";
         const auto pos = req.data.find(delimiter);
         const auto experiment = data_folder_ + "/" + req.data.substr(0, pos);
 
-        const auto test_result_file =       experiment + "__test_results.compressed";
+        const auto test_result_file =       experiment + "__last_step_test_results.compressed";
         const auto path_to_start_file =     experiment + "__path_to_start.compressed";
         const auto test_transition_file =   experiment + "__test_transition.compressed";
 
@@ -1405,11 +1448,11 @@ namespace smmap
             return false;
         }
 
-        const std::string delimiter = "__test_results.compressed";
+        const std::string delimiter = "__last_step_test_results.compressed";
         const auto pos = req.data.find(delimiter);
         const auto experiment = data_folder_ + "/" + req.data.substr(0, pos);
 
-        const auto test_result_file =       experiment + "__test_results.compressed";
+        const auto test_result_file =       experiment + "__last_step_test_results.compressed";
         const auto path_to_start_file =     experiment + "__path_to_start.compressed";
         const auto test_transition_file =   experiment + "__test_transition.compressed";
 
@@ -1486,17 +1529,17 @@ namespace smmap
 
 namespace smmap
 {
-    void TransitionTesting::generateTrajectories()
+    void TransitionTesting::generateLastStepTrajectories()
     {
         std::atomic<int> num_succesful_paths = 0;
         std::atomic<int> num_unsuccesful_paths = 0;
 
         const auto omp_threads = (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 2;
         #pragma omp parallel for num_threads(omp_threads)
-        for (size_t idx = 0; idx < data_files_.size(); ++idx)
+        for (size_t idx = 0; idx < last_step_data_files_.size(); ++idx)
         {
-            const auto& experiment = data_files_[idx];
-            const auto test_result_file =       experiment + "__test_results.compressed";
+            const auto& experiment = last_step_data_files_[idx];
+            const auto test_result_file =       experiment + "__last_step_test_results.compressed";
             const auto path_to_start_file =     experiment + "__path_to_start.compressed";
             const auto trajectory_file =        experiment + "__trajectory.compressed";
 
@@ -1539,20 +1582,15 @@ namespace smmap
                     "Total successful paths: " << num_succesful_paths << "    Total unsuccessful paths: " << num_unsuccesful_paths);
     }
 
-    void TransitionTesting::visualizeIncompleteTrajectories()
+    void TransitionTesting::visualizeLastStepDataTrajectories()
     {
         const auto omp_threads = (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 2;
         #pragma omp parallel for num_threads(omp_threads)
-        for (size_t idx = 0; idx < data_files_.size(); ++idx)
+        for (size_t idx = 0; idx < last_step_data_files_.size(); ++idx)
         {
-            const auto& experiment = data_files_[idx];
-            const auto test_result_file =       experiment + "__test_results.compressed";
+            const auto& experiment = last_step_data_files_[idx];
+            const auto test_result_file =       experiment + "__last_step_test_results.compressed";
             const auto path_to_start_file =     experiment + "__path_to_start.compressed";
-
-//            if (experiment.substr(data_folder_.length() + 1) != "none_classifier_a8710913d2b5df6c/trial_idx_014")
-//            {
-//                continue;
-//            }
 
             try
             {
@@ -1562,7 +1600,7 @@ namespace smmap
                 const auto& trajectory = traj_gen_result.first;
                 const auto parsed_cleanly = traj_gen_result.second;
 
-                if (!parsed_cleanly)
+//                if (!parsed_cleanly)
                 #pragma omp critical
                 {
                     // Original Visualizations
@@ -1589,11 +1627,6 @@ namespace smmap
                         assert(trajectory.size() > 0);
                         for (size_t traj_step = 1; traj_step < trajectory.size(); ++traj_step)
                         {
-//                            if (traj_step != 34)
-//                            {
-//                                continue;
-//                            }
-
                             const auto& start_state = trajectory[traj_step - 1].first;
                             const auto& end_state = trajectory[traj_step].first;
                             const bool start_foh = transition_estimator_->checkFirstOrderHomotopy(
@@ -1690,7 +1723,84 @@ namespace smmap
             }
             catch (const std::exception& ex)
             {
-                ROS_ERROR_STREAM_NAMED("generate_trajectories", "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
+                ROS_ERROR_STREAM_NAMED("visualizeLastStepDataTrajectories", "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
+            }
+        }
+    }
+
+    void TransitionTesting::visualizePathTestTrajectories()
+    {
+        const auto omp_threads = (deformable_type_ == ROPE) ? arc_helpers::GetNumOMPThreads() : 2;
+        #pragma omp parallel for num_threads(omp_threads)
+        for (size_t idx = 0; idx < path_test_data_files_.size(); ++idx)
+        {
+            const auto& experiment = path_test_data_files_[idx];
+            const auto rrt_path_file = experiment + "__rrt_path.compressed";
+            const auto test_result_file = experiment + "__path_test_results.compressed";
+
+            try
+            {
+                const WorldState starting_world_state = [&]
+                {
+                    // First look for a world state stored with this specific trial's name
+                    std::string world_state_file = experiment + "__starting_world_state.compressed";
+                    if (!fs::is_regular_file(world_state_file))
+                    {
+                        // Otherwise, look for an initial state trimming off the __trial_idx_### tag
+                        const auto pos = experiment.find("__trial_idx_");
+                        world_state_file = experiment.substr(0, pos) + "__starting_world_state.compressed";
+                    }
+
+                    std::pair<WorldState, RubberBand::Ptr> deserialized_result;
+                    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(world_state_file);
+                    const auto deserialized_world_state = WorldState::Deserialize(buffer, 0);
+                    deserialized_result.first = deserialized_world_state.first;
+                    // We don't need to deserialize the band state
+//                        deserialized_result.second = std::make_shared<RubberBand>(*rubber_band_);
+//                        deserialized_result.second->deserialize(buffer, deserialized_world_state.second);
+                    return deserialized_world_state.first;
+                }();
+
+                const RRTPath rrt_path = band_rrt_vis_->loadPath(rrt_path_file);
+                const auto test_waypoint_indices = [&]
+                {
+                    // It is assumed that the robot starts where the path is at idx 0, so trim that element from the planned path
+                    const RRTPath commanded_path(rrt_path.begin() + 1, rrt_path.end());
+                    assert(commanded_path.size() > 0 && "If this is false, it probably means that plan_start == plan_goal");
+                    const auto robot_path = RRTPathToGrippersPoseTrajectory(commanded_path);
+                    const auto interp_result = robot_->interpolateGrippersTrajectory(robot_path);
+                    return interp_result.second;
+                }();
+
+                const auto test_result = [&]
+                {
+                    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
+                    return arc_utilities::RosMessageDeserializationWrapper<deformable_manipulation_msgs::TestRobotPathsFeedback>(buffer, 0).first.test_result;
+                }();
+
+                const auto traj_gen_result = ToTrajectory(starting_world_state, rrt_path, test_result, test_waypoint_indices);
+                const auto& trajectory = traj_gen_result.first;
+                const auto parsed_cleanly = traj_gen_result.second;
+
+//                if (!parsed_cleanly)
+                #pragma omp critical
+                {
+                    // Visualize and then pause, waiting for the user to move to the next trajectory
+                    const std::string ns_prefix = std::to_string(next_vis_prefix_) + "__";
+                    const auto marker_ids = visualizePathAndTrajectory(rrt_path, trajectory, ns_prefix);
+                    std::cout << "Experiment: " << experiment.substr(data_folder_.length() + 1) << "    ";
+                    PressAnyKeyToContinue();
+
+                    // Rmove any visualizations added to make a clean slate for the next set of visualizations
+                    for (const auto& nsid : marker_ids)
+                    {
+                        vis_->deleteObject(nsid.first, nsid.second);
+                    }
+                }
+            }
+            catch (const std::exception& ex)
+            {
+                ROS_ERROR_STREAM_NAMED("visualizePathTestTrajectories", "Error parsing idx: " << idx << " file: " << test_result_file << ": " << ex.what());
             }
         }
     }
@@ -1729,10 +1839,10 @@ namespace smmap
                     "NUM_FOH_CHANGES");
 
         #pragma omp parallel for
-        for (size_t idx = 0; idx < data_files_.size(); ++idx)
+        for (size_t idx = 0; idx < last_step_data_files_.size(); ++idx)
         {
-            const auto& experiment = data_files_[idx];
-            const auto test_result_file =       experiment + "__test_results.compressed";
+            const auto& experiment = last_step_data_files_[idx];
+            const auto test_result_file =       experiment + "__last_step_test_results.compressed";
             const auto path_to_start_file =     experiment + "__path_to_start.compressed";
             const auto trajectory_file =        experiment + "__trajectory.compressed";
             const auto example_mistake_file =   experiment + "__example_mistake.compressed";
@@ -1828,11 +1938,11 @@ namespace smmap
             dmm::TransitionTestingVisualizationRequest& req,
             dmm::TransitionTestingVisualizationResponse& res)
     {
-        const std::string delimiter = "__test_results.compressed";
+        const std::string delimiter = "__last_step_test_results.compressed";
         const auto pos = req.data.find(delimiter);
         const auto experiment = data_folder_ + "/" + req.data.substr(0, pos);
 
-        const auto test_result_file =       experiment + "__test_results.compressed";
+        const auto test_result_file =       experiment + "__last_step_test_results.compressed";
         const auto path_to_start_file =     experiment + "__path_to_start.compressed";
         const auto example_mistake_file =   experiment + "__example_mistake.compressed";
         const auto trajectory_file =        experiment + "__trajectory.compressed";
@@ -2041,10 +2151,10 @@ namespace smmap
 //        "seed15bd52f1e32b1391__stamp2019-08-22__22-01-19"
 
         #pragma omp parallel for
-        for (size_t file_idx = 0; file_idx < data_files_.size(); ++file_idx)
+        for (size_t file_idx = 0; file_idx < last_step_data_files_.size(); ++file_idx)
         {
-            const auto& experiment = data_files_[file_idx];
-            const auto test_result_file =            experiment + "__test_results.compressed";
+            const auto& experiment = last_step_data_files_[file_idx];
+            const auto test_result_file =            experiment + "__last_step_test_results.compressed";
             const auto path_to_start_file =          experiment + "__path_to_start.compressed";
             const auto trajectory_file =             experiment + "__trajectory.compressed";
             const auto features_file =               experiment + "__classification_features__" + parabola_slice_option + "__start_and_end_dists.csv";
@@ -2503,7 +2613,7 @@ namespace smmap
         const auto traj_idx = std::stoi(req.data.substr(pos + delimiter.size()));
         assert(traj_idx > 0);
 
-        const auto test_result_file =   experiment + "__test_results.compressed";
+        const auto test_result_file =   experiment + "__last_step_test_results.compressed";
         const auto path_to_start_file = experiment + "__path_to_start.compressed";
         const auto trajectory_file =    experiment + "__trajectory.compressed";
 
@@ -2661,7 +2771,7 @@ namespace smmap
             try
             {
                 const auto path_to_start_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__path_to_start.compressed";
-                const auto test_result_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__test_results.compressed";
+                const auto test_result_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__last_step_test_results.compressed";
 
                 const auto rrt_path = generateTestPath(target_grippers_poses, trial_idx * 0xFFFF);
                 band_rrt_vis_->savePath(rrt_path, path_to_start_file);
@@ -2717,7 +2827,7 @@ namespace smmap
             try
             {
                 const auto path_to_start_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__path_to_start.compressed";
-                const auto test_result_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__test_results.compressed";
+                const auto test_result_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__last_step_test_results.compressed";
                 const auto trajectory_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__trajectory.compressed";
 
                 const auto path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
