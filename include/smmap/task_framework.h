@@ -222,7 +222,7 @@ namespace smmap
                     Log::Log& log,
                     const std::vector<std::vector<BandRRT::PlanningSmoothingStatistics>>& statistics);
 
-            void storeWorldState(const WorldState& world_state, const RubberBand::Ptr band, std::string filename = "");
+            void storeWorldState(const WorldState& world_state, const RubberBand::ConstPtr band, std::string filename = "");
             std::pair<WorldState, RubberBand::Ptr> loadStoredWorldState(std::string filename = "");
             bool useStoredWorldState() const;
 

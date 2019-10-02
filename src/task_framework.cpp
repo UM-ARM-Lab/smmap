@@ -1633,13 +1633,6 @@ void TaskFramework::planGlobalGripperTrajectory(const WorldState& world_state)
     }();
     const RRTGrippersRepresentation target_grippers_poses = ToGripperPosePair(getGripperTargets(world_state));
 
-    // Run a batch of planning jobs if needed
-    if (ROSHelpers::GetParam<bool>(*ph_, "test_planning_performance", false))
-    {
-        const auto parallel = ROSHelpers::GetParam<bool>(*ph_, "test_planning_performance_parallel", false);
-        testPlanningPerformance(world_state, seed_, start_config, target_grippers_poses, parallel);
-    }
-
     rrt_planned_policy_.clear();
     if (GetRRTReuseOldResults(*ph_))
     {
@@ -1736,7 +1729,7 @@ void TaskFramework::testPlanningPerformance(
             "seed_" + IntToHex(base_seed) +
             "__batch_test_" + std::to_string(num_batch_tests) +
             "__" + arc_helpers::GetCurrentTimeAsString();
-    storeWorldState(world_state, rubber_band_, batch_name + "__starting_world_state.compressed");
+    storeWorldState(world_state, rubber_band_, data_folder + batch_name + "__starting_world_state.compressed");
 
     const auto enable_rrt_visualizations = !parallel_planning && GetVisualizeRRT(*ph_);
     if (enable_rrt_visualizations)
@@ -2752,7 +2745,7 @@ void TaskFramework::LogPlanningPerformanceData(
 // Debugging
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void TaskFramework::storeWorldState(const WorldState& world_state, const RubberBand::Ptr band, std::string filename)
+void TaskFramework::storeWorldState(const WorldState& world_state, const RubberBand::ConstPtr band, std::string filename)
 {
     try
     {
@@ -2765,7 +2758,7 @@ void TaskFramework::storeWorldState(const WorldState& world_state, const RubberB
             const std::string file_name = file_name_prefix + "__" + file_name_suffix + ".compressed";
             filename = log_folder + file_name;
         }
-        ROS_DEBUG_STREAM_NAMED("task_framework", "Saving world_state to " << filename);
+        ROS_INFO_STREAM_NAMED("task_framework", "Saving world_state to " << filename);
 
         std::vector<uint8_t> buffer;
         world_state.serializeSelf(buffer);
@@ -2778,7 +2771,7 @@ void TaskFramework::storeWorldState(const WorldState& world_state, const RubberB
     }
     catch (const std::exception& e)
     {
-        ROS_ERROR_STREAM_NAMED("task_framework", "Failed to store world_state: "  <<  e.what());
+        ROS_ERROR_STREAM_NAMED("task_framework", "Failed to store world_state to file: "  <<  e.what());
     }
 }
 
