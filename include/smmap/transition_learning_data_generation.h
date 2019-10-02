@@ -106,8 +106,7 @@ namespace smmap
                 Eigen::Ref<Eigen::Vector3d> a_delta,
                 Eigen::Ref<Eigen::Vector3d> b_delta) const;
         // Generates file name stubs: "/path/to/file/experiment" without the "__type_of_data.compressed" suffix
-        std::vector<std::string> getLastStepDataFileList();
-        std::vector<std::string> getPathTestDataFileList();
+        void getDataFileLists();
         std::vector<std::string> last_step_data_files_;
         std::vector<std::string> path_test_data_files_;
 

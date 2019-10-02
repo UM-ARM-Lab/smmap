@@ -709,11 +709,12 @@ namespace smmap
         }
     }
 
-    std::vector<std::string> TransitionTesting::getLastStepDataFileList()
+    void TransitionTesting::getDataFileLists()
     {
         ROS_INFO_STREAM("Finding data files in folder: " << data_folder_);
 
-        std::vector<std::string> files;
+        last_step_data_files_.clear();
+        path_test_data_files_.clear();
         try
         {
             const fs::path p(data_folder_);
@@ -728,67 +729,36 @@ namespace smmap
                     if (filename.find("compressed") == std::string::npos &&
                         filename.find("failed") == std::string::npos &&
                         filename.find("classification_features") == std::string::npos &&
-                        filename.find("npz") == std::string::npos)
+                        filename.find("npz") == std::string::npos &&
+                        filename.find("csv") == std::string::npos)
                     {
                         ROS_WARN_STREAM("Ignoring file: " << filename);
                     }
-                    const auto pos = filename.find("__last_step_test_results.compressed");
-                    if (pos != std::string::npos)
+
+                    const auto last_step_pos = filename.find("__last_step_test_results.compressed");
+                    if (last_step_pos != std::string::npos)
                     {
                         // Strip off the extra string for simpler use later
-                        files.push_back(filename.substr(0, pos));
+                        last_step_data_files_.push_back(filename.substr(0, last_step_pos));
+                    }
+
+                    const auto path_test_pos = filename.find("__path_test_results.compressed");
+                    if (path_test_pos != std::string::npos)
+                    {
+                        // Strip off the extra string for simpler use later
+                        path_test_data_files_.push_back(filename.substr(0, path_test_pos));
                     }
                 }
             }
-            std::sort(files.begin(), files.end());
-            ROS_INFO_STREAM("Found " << files.size() << " possible data files in " << data_folder_);
+            std::sort(last_step_data_files_.begin(), last_step_data_files_.end());
+            std::sort(path_test_data_files_.begin(), path_test_data_files_.end());
+            ROS_INFO_STREAM("Found " << last_step_data_files_.size() << " possible last step data files in " << data_folder_);
+            ROS_INFO_STREAM("Found " << path_test_data_files_.size() << " possible path test data files in " << data_folder_);
         }
         catch (const fs::filesystem_error& ex)
         {
             ROS_WARN_STREAM("Error loading file list: " << ex.what());
         }
-        return files;
-    }
-
-    std::vector<std::string> TransitionTesting::getPathTestDataFileList()
-    {
-        ROS_INFO_STREAM("Finding data files in folder: " << data_folder_);
-
-        std::vector<std::string> files;
-        try
-        {
-            const fs::path p(data_folder_);
-            const fs::recursive_directory_iterator start(p);
-            const fs::recursive_directory_iterator end;
-            for (auto itr = start; itr != end; ++itr)
-            {
-                if (fs::is_regular_file(itr->status()))
-                {
-                    const auto filename = itr->path().string();
-                    // Only warn about file types that are not expected
-                    if (filename.find("compressed") == std::string::npos &&
-                        filename.find("failed") == std::string::npos &&
-                        filename.find("classification_features") == std::string::npos &&
-                        filename.find("npz") == std::string::npos)
-                    {
-                        ROS_WARN_STREAM("Ignoring file: " << filename);
-                    }
-                    const auto pos = filename.find("__path_test_results.compressed");
-                    if (pos != std::string::npos)
-                    {
-                        // Strip off the extra string for simpler use later
-                        files.push_back(filename.substr(0, pos));
-                    }
-                }
-            }
-            std::sort(files.begin(), files.end());
-            ROS_INFO_STREAM("Found " << files.size() << " possible data files in " << data_folder_);
-        }
-        catch (const fs::filesystem_error& ex)
-        {
-            ROS_WARN_STREAM("Error loading file list: " << ex.what());
-        }
-        return files;
     }
 
     void TransitionTesting::runTests(const bool generate_test_data,
@@ -807,8 +777,7 @@ namespace smmap
             ROS_INFO_STREAM("Data generation time taken: " << stopwatch(READ));
         }
 
-        last_step_data_files_ = getLastStepDataFileList();
-        path_test_data_files_ = getPathTestDataFileList();
+        getDataFileLists();
 
         if (generate_last_step_transition_approximations)
         {
