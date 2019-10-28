@@ -1753,6 +1753,9 @@ void TaskFramework::testPlanningPerformance(
     for (size_t trial_idx = 0; trial_idx < num_trials; ++trial_idx)
     {
         ROS_INFO_STREAM_NAMED("task_framework", "Planning performance trial idx: " << trial_idx);
+        const auto basename = data_folder + batch_name + "__trial_idx_" + ToStrFill0(num_trials, trial_idx);
+        const auto rrt_path_file = basename + "__rrt_path.compressed";
+        file_basenames[trial_idx] = basename;
 
         // Update the seed for this particular trial
         // When done in parallel, resetting the robot makes no sense, so omit it
@@ -1784,16 +1787,8 @@ void TaskFramework::testPlanningPerformance(
             band_rrt.addBandToBlacklist(*band);
         }
 
-        RRTPolicy policy;
-        do
-        {
-            policy = band_rrt.plan(
-                        start_config,
-                        target_grippers_poses,
-                        time_limit);
-            statistics[trial_idx].push_back(band_rrt.getStatistics());
-        }
-        while (policy.size() == 0);
+        const RRTPolicy policy = band_rrt.plan(start_config, target_grippers_poses, time_limit);
+        statistics[trial_idx].push_back(band_rrt.getStatistics());
 
         if (enable_rrt_visualizations)
         {
@@ -1802,38 +1797,49 @@ void TaskFramework::testPlanningPerformance(
             vis_->forcePublishNow(0.5);
         }
 
-        assert(policy.size() == 1);
-        const auto basename = data_folder + batch_name + "__trial_idx_" + ToStrFill0(num_trials, trial_idx);
-        const auto rrt_path_file = basename + "__rrt_path.compressed";
-        ROS_INFO_STREAM_NAMED("task_framework", "Saving path to prefix: " << basename);
-        band_rrt.savePath(policy[0].first, rrt_path_file);
-
-        file_basenames[trial_idx] = basename;
-        planned_paths[trial_idx] = policy[0].first;
+        if (policy.size() == 0)
+        {
+            ROS_INFO_STREAM_NAMED("task_framework", "Planning failure, saving empty path to prefix: " << basename);
+            band_rrt.savePath({}, rrt_path_file);
+        }
+        else if (policy.size() == 1)
+        {
+            ROS_INFO_STREAM_NAMED("task_framework", "Saving path to prefix: " << basename);
+            planned_paths[trial_idx] = policy[0].first;
+            band_rrt.savePath(policy[0].first, rrt_path_file);
+        }
+        else
+        {
+            ROS_FATAL_NAMED("task_framework", "This ought to not be possible");
+            assert(policy.size() <= 1);
+        }
     }
     Log::Log planning_tests_log(GetLogFolder(*nh_) + batch_name + "__planning_statistics.log", true);
     LogPlanningPerformanceData(planning_tests_log, statistics);
 
     if (test_paths_in_bullet)
     {
-        std::vector<AllGrippersPoseTrajectory> test_paths(num_trials);
-        std::vector<std::string> test_filenames(num_trials);
-        std::vector<std::vector<size_t>> waypoint_indices(num_trials);
-        #pragma omp parallel for
+        std::vector<AllGrippersPoseTrajectory> test_paths;
+        std::vector<std::string> test_filenames;
+        std::vector<std::vector<size_t>> waypoint_indices;
         for (size_t idx = 0; idx < num_trials; ++idx)
         {
             // It is assumed that the robot starts where the path is at idx 0, so trim that element from the planned path
             const auto& planned_path = planned_paths[idx];
-            const RRTPath commanded_path(planned_path.begin() + 1, planned_path.end());
-            assert(commanded_path.size() > 0 && "If this is false, it probably means that plan_start == plan_goal");
-            const auto robot_path = RRTPathToGrippersPoseTrajectory(commanded_path);
-            const auto interp_result = robot_->interpolateGrippersTrajectory(robot_path);
-            test_paths[idx] = interp_result.first;
-            waypoint_indices[idx] = interp_result.second;
-            test_filenames[idx] = file_basenames[idx] + "__path_test_results.compressed";
+            if (planned_path.size() > 0)
+            {
+                const RRTPath commanded_path(planned_path.begin() + 1, planned_path.end());
+                assert(commanded_path.size() > 0 && "If this is false, it probably means that plan_start == plan_goal");
+                const auto robot_path = RRTPathToGrippersPoseTrajectory(commanded_path);
+                const auto interp_result = robot_->interpolateGrippersTrajectory(robot_path);
+                test_paths.push_back(interp_result.first);
+                waypoint_indices.push_back(interp_result.second);
+                test_filenames.push_back(file_basenames[idx] + "__path_test_results.compressed");
+            }
         }
         robot_->testRobotPaths(test_paths, test_filenames, nullptr, false, false);
 
+        std::atomic<int> num_planning_failures = 0;
         std::atomic<int> num_succesful_paths = 0;
         std::atomic<int> num_unsuccesful_paths = 0;
         const auto omp_evaluation_threads = (task_specification_->deformable_type_ == ROPE) ? omp_default_threads : 1;
@@ -1848,6 +1854,12 @@ void TaskFramework::testPlanningPerformance(
             try
             {
                 const auto rrt_path = band_rrt_->loadPath(rrt_path_file);
+                if (rrt_path.empty())
+                {
+                    ++num_planning_failures;
+                    continue;
+                }
+
                 const auto test_result = [&]
                 {
                     const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
@@ -1879,7 +1891,8 @@ void TaskFramework::testPlanningPerformance(
         classifier_success_rate << transition_estimator_->classifierName() << "  "
                                 << transition_estimator_->featuresUsed() << "  "
                                 << "Total successful paths: " << num_succesful_paths << "  "
-                                << "Total unsuccessful paths: " << num_unsuccesful_paths;
+                                << "Total unsuccessful paths: " << num_unsuccesful_paths << "  "
+                                << "Total planning failures: " << num_planning_failures;
         ROS_INFO_STREAM_NAMED("task_framework", classifier_success_rate.str());
         ARC_LOG_STREAM(planning_tests_log, classifier_success_rate.str());
 
