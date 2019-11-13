@@ -1130,12 +1130,12 @@ namespace smmap
     {
         if (fs::is_regular_file(filename))
         {
-            return band_rrt_vis_->loadPath(filename);
+            return BandRRT::LoadPath(filename, *initial_band_);
         }
         else
         {
             const auto path = generateTestPath(gripper_target_poses, num_discards);
-            band_rrt_vis_->savePath(path, filename);
+            BandRRT::SavePath(path, filename);
             return path;
         }
     }
@@ -1273,7 +1273,7 @@ namespace smmap
                     if (!fs::is_regular_file(test_transition_file))
                     {
                         // Load the path that generated the test
-                        const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+                        const RRTPath path_to_start = BandRRT::LoadPath(path_to_start_file, *initial_band_);
                         // Generate the transition at the end of the path
                         const auto transition = ToStateTransition(test_result, path_to_start);
                         transition_estimator_->saveStateTransition(transition, test_transition_file);
@@ -1361,7 +1361,7 @@ namespace smmap
         {
             if (!fs::is_regular_file(test_transition_file))
             {
-                const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+                const RRTPath path_to_start =BandRRT::LoadPath(path_to_start_file, *initial_band_);
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
 
                 const auto transition = ToStateTransition(test_result, path_to_start);
@@ -1434,7 +1434,7 @@ namespace smmap
             if (!fs::is_regular_file(test_transition_file))
             {
                 // Load the path that generated the test
-                const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+                const RRTPath path_to_start = BandRRT::LoadPath(path_to_start_file, *initial_band_);
                 // Generate the transition at the end of the path
                 const auto transition = ToStateTransition(test_result, path_to_start);
                 transition_estimator_->saveStateTransition(transition, test_transition_file);
@@ -1516,7 +1516,7 @@ namespace smmap
             {
 //                if (!fs::is_regular_file(trajectory_file))
                 {
-                    const auto path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+                    const auto path_to_start = BandRRT::LoadPath(path_to_start_file, *initial_band_);
                     const auto test_result = loadTestResult(test_result_file);
 
                     const auto traj_gen_result = toTrajectory(test_result, path_to_start, test_result_file);
@@ -1563,7 +1563,7 @@ namespace smmap
 
             try
             {
-                const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+                const RRTPath path_to_start = BandRRT::LoadPath(path_to_start_file, *initial_band_);;
                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
                 const auto traj_gen_result = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1));
                 const auto& trajectory = traj_gen_result.first;
@@ -1730,7 +1730,7 @@ namespace smmap
                     return deserialized_world_state.first;
                 }();
 
-                const RRTPath rrt_path = band_rrt_vis_->loadPath(rrt_path_file);
+                const RRTPath rrt_path = BandRRT::LoadPath(rrt_path_file, *initial_band_);
                 const auto test_waypoint_indices = [&]
                 {
                     // It is assumed that the robot starts where the path is at idx 0, so trim that element from the planned path
@@ -1837,7 +1837,7 @@ namespace smmap
                         {
                             if (!fs::is_regular_file(trajectory_file))
                             {
-                                const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+                                const RRTPath path_to_start = BandRRT::LoadPath(path_to_start_file, *initial_band_);
                                 const dmm::TransitionTestResult test_result = loadTestResult(test_result_file);
                                 const auto traj = toTrajectory(test_result, path_to_start, experiment.substr(data_folder_.length() + 1)).first;
                                 transition_estimator_->saveTrajectory(traj, trajectory_file);
@@ -1917,7 +1917,7 @@ namespace smmap
         const auto trajectory_file =        experiment + "__trajectory.compressed";
 
         // Load the path that generated the test
-        const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+        const RRTPath path_to_start = BandRRT::LoadPath(path_to_start_file, *initial_band_);
 
         // Load the trajectory if possible, otherwise generate it
         const auto trajectory = [&]
@@ -2133,7 +2133,7 @@ namespace smmap
             {
                 if (!fs::is_regular_file(features_complete_flag_file))
                 {
-                    const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+                    const RRTPath path_to_start = BandRRT::LoadPath(path_to_start_file, *initial_band_);
 
                     // Load the trajectory if possible, otherwise generate it
                     const auto trajectory = [&]
@@ -2586,7 +2586,7 @@ namespace smmap
         const auto path_to_start_file = experiment + "__path_to_start.compressed";
         const auto trajectory_file =    experiment + "__trajectory.compressed";
 
-        const RRTPath path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+        const RRTPath path_to_start = BandRRT::LoadPath(path_to_start_file, *initial_band_);
 
         // Load the trajectory if possible, otherwise generate it
         const auto trajectory = [&]
@@ -2743,7 +2743,7 @@ namespace smmap
                 const auto test_result_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__last_step_test_results.compressed";
 
                 const auto rrt_path = generateTestPath(target_grippers_poses, trial_idx * 0xFFFF);
-                band_rrt_vis_->savePath(rrt_path, path_to_start_file);
+                BandRRT::SavePath(rrt_path, path_to_start_file);
 
                 const auto test = robot_->toRosTransitionTest(
                             initial_world_state_.rope_node_transforms_,
@@ -2799,7 +2799,7 @@ namespace smmap
                 const auto test_result_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__last_step_test_results.compressed";
                 const auto trajectory_file = folder + "trial_idx_" + ToStrFill0(num_trials, trial_idx) + "__trajectory.compressed";
 
-                const auto path_to_start = band_rrt_vis_->loadPath(path_to_start_file);
+                const auto path_to_start = BandRRT::LoadPath(path_to_start_file, *initial_band_);
                 const auto test_result = loadTestResult(test_result_file);
 
                 const auto traj_gen_result = toTrajectory(test_result, path_to_start, test_result_file);

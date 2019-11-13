@@ -1800,13 +1800,13 @@ void TaskFramework::testPlanningPerformance(
         if (policy.size() == 0)
         {
             ROS_INFO_STREAM_NAMED("task_framework", "Planning failure, saving empty path to prefix: " << basename);
-            band_rrt.savePath({}, rrt_path_file);
+            BandRRT::SavePath({}, rrt_path_file);
         }
         else if (policy.size() == 1)
         {
             ROS_INFO_STREAM_NAMED("task_framework", "Saving path to prefix: " << basename);
             planned_paths[trial_idx] = policy[0].first;
-            band_rrt.savePath(policy[0].first, rrt_path_file);
+            BandRRT::SavePath(policy[0].first, rrt_path_file);
         }
         else
         {
@@ -1853,7 +1853,7 @@ void TaskFramework::testPlanningPerformance(
 
             try
             {
-                const auto rrt_path = band_rrt_->loadPath(rrt_path_file);
+                const auto rrt_path = BandRRT::LoadPath(rrt_path_file, *rubber_band_);
                 if (rrt_path.empty())
                 {
                     ++num_planning_failures;

@@ -346,8 +346,8 @@ namespace smmap
         RRTTree loadStoredTree(std::string file_path = "") const;
         bool useStoredTree() const;
 
-        void savePath(const RRTPath& path, const std::string& filename) const;
-        RRTPath loadPath(const std::string& filename) const;
+        static void SavePath(const RRTPath& path, const std::string& filename);
+        static RRTPath LoadPath(const std::string& filename, const RubberBand& template_band);
 
         void storePolicy(const RRTPolicy& policy, const std::string& file_path) const;
         RRTPolicy loadPolicy(const std::string& file_path) const;

@@ -1678,19 +1678,19 @@ bool BandRRT::useStoredTree() const
     return ROSHelpers::GetParamRequired<bool>(*ph_, "use_stored_path", __func__);
 }
 
-void BandRRT::savePath(const RRTPath& path, const std::string& filename) const
+void BandRRT::SavePath(const RRTPath& path, const std::string& filename)
 {
     std::vector<uint8_t> buffer;
     SerializeVector<RRTNode>(path, buffer, &RRTNode::Serialize);
     ZlibHelpers::CompressAndWriteToFile(buffer, filename);
 }
 
-RRTPath BandRRT::loadPath(const std::string& filename) const
+RRTPath BandRRT::LoadPath(const std::string& filename, const RubberBand& template_band)
 {
     const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(filename);
     const auto deserializer = [&] (const std::vector<uint8_t>& buf, const uint64_t cur)
     {
-        return RRTNode::Deserialize(buf, cur, template_band_);
+        return RRTNode::Deserialize(buf, cur, template_band);
     };
     const auto path_deserialized = DeserializeVector<RRTNode, Eigen::aligned_allocator<RRTNode>>(buffer, 0, deserializer);
     return path_deserialized.first;

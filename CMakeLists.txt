@@ -228,6 +228,7 @@ target_link_libraries(smmap_svm_tester ${PROJECT_NAME}_transitions ${catkin_LIBR
 set_property(TARGET smmap_svm_tester PROPERTY CXX_STANDARD 11)
 
 ############# Torch Testing #################################################
+
 add_executable(smmap_torch_tester nodes/torch_tester.cpp)
 target_link_libraries(smmap_torch_tester
     ${TORCH_LIBRARIES}
@@ -239,3 +240,10 @@ target_link_libraries(voxnet_tester
     ${TORCH_LIBRARIES}
     ${catkin_LIBRARIES}
 )
+
+############# Other "Unit" Tests #################################################
+
+add_executable(smmap_to_trajectory_tester nodes/to_trajectory_tester.cpp)
+target_link_libraries(smmap_to_trajectory_tester
+    ${catkin_libraries}
+    ${PROJECT_NAME}_planning)
