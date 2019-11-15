@@ -37,6 +37,7 @@ using namespace Eigen;
 using namespace EigenHelpers;
 using namespace EigenHelpersConversions;
 using ColorBuilder = arc_helpers::RGBAColorBuilder<std_msgs::ColorRGBA>;
+namespace dmm = deformable_manipulation_msgs;
 
 const static std_msgs::ColorRGBA PREDICTION_GRIPPER_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.6f, 0.5f);
 const static std_msgs::ColorRGBA PREDICTION_RUBBER_BAND_SAFE_COLOR = ColorBuilder::MakeFromFloatColors(0.0f, 0.0f, 0.0f, 1.0f);
@@ -1819,85 +1820,95 @@ void TaskFramework::testPlanningPerformance(
 
     if (test_paths_in_bullet)
     {
-        std::vector<AllGrippersPoseTrajectory> test_paths;
-        std::vector<std::string> test_filenames;
-        std::vector<std::vector<size_t>> waypoint_indices;
-        for (size_t idx = 0; idx < num_trials; ++idx)
+        // Execute the paths in bullet
         {
-            // It is assumed that the robot starts where the path is at idx 0, so trim that element from the planned path
-            const auto& planned_path = planned_paths[idx];
-            if (planned_path.size() > 0)
+            std::vector<AllGrippersPoseTrajectory> test_paths;
+            std::vector<std::string> test_filenames;
+            for (size_t idx = 0; idx < num_trials; ++idx)
             {
-                const RRTPath commanded_path(planned_path.begin() + 1, planned_path.end());
-                assert(commanded_path.size() > 0 && "If this is false, it probably means that plan_start == plan_goal");
-                const auto robot_path = RRTPathToGrippersPoseTrajectory(commanded_path);
-                const auto interp_result = robot_->interpolateGrippersTrajectory(robot_path);
-                test_paths.push_back(interp_result.first);
-                waypoint_indices.push_back(interp_result.second);
-                test_filenames.push_back(file_basenames[idx] + "__path_test_results.compressed");
+                // It is assumed that the robot starts where the path is at idx 0, so trim that element from the planned path
+                const auto& planned_path = planned_paths[idx];
+                if (planned_path.size() > 0)
+                {
+                    const RRTPath commanded_path(planned_path.begin() + 1, planned_path.end());
+                    assert(commanded_path.size() > 0 && "If this is false, it probably means that plan_start == plan_goal");
+                    const auto robot_path = RRTPathToGrippersPoseTrajectory(commanded_path);
+                    const auto interp_result = robot_->interpolateGrippersTrajectory(robot_path);
+                    test_paths.push_back(interp_result.first);
+                    test_filenames.push_back(file_basenames[idx] + "__path_test_results.compressed");
+                }
             }
+            robot_->testRobotPaths(test_paths, test_filenames, nullptr, false, false);
         }
-        robot_->testRobotPaths(test_paths, test_filenames, nullptr, false, false);
 
-        std::atomic<int> num_planning_failures = 0;
-        std::atomic<int> num_succesful_paths = 0;
-        std::atomic<int> num_unsuccesful_paths = 0;
-        const auto omp_evaluation_threads = (task_specification_->deformable_type_ == ROPE) ? omp_default_threads : 1;
-        #pragma omp parallel for num_threads(omp_evaluation_threads)
-        for (size_t idx = 0; idx < num_trials; ++idx)
+        // Parse the results
         {
-            const auto& basename = file_basenames[idx];
-            const auto rrt_path_file = basename + "__rrt_path.compressed";
-            const auto test_result_file = basename + "__path_test_results.compressed";
-            const auto trajectory_file = basename + "__trajectory.compressed";
-
-            try
+            std::atomic<int> num_planning_failures = 0;
+            std::atomic<int> num_succesful_paths = 0;
+            std::atomic<int> num_unsuccesful_paths = 0;
+            const auto omp_evaluation_threads = (task_specification_->deformable_type_ == ROPE) ? omp_default_threads : 1;
+            #pragma omp parallel for num_threads(omp_evaluation_threads)
+            for (size_t idx = 0; idx < num_trials; ++idx)
             {
-                const auto rrt_path = BandRRT::LoadPath(rrt_path_file, *rubber_band_);
-                if (rrt_path.empty())
-                {
-                    ++num_planning_failures;
-                    continue;
-                }
+                const auto& basename = file_basenames[idx];
+                const auto rrt_path_file = basename + "__rrt_path.compressed";
+                const auto test_result_file = basename + "__path_test_results.compressed";
+                const auto trajectory_file = basename + "__trajectory.compressed";
 
-                const auto test_result = [&]
+                try
                 {
-                    const auto buffer = ZlibHelpers::LoadFromFileAndDecompress(test_result_file);
-                    return arc_utilities::RosMessageDeserializationWrapper<deformable_manipulation_msgs::TestRobotPathsFeedback>(buffer, 0).first.test_result;
-                }();
-                const auto& test_waypoint_indices = waypoint_indices[idx];
+                    const auto rrt_path = BandRRT::LoadPath(rrt_path_file, *rubber_band_);
+                    if (rrt_path.empty())
+                    {
+                        ++num_planning_failures;
+                        continue;
+                    }
 
-                const auto traj_gen_result = ToTrajectory(world_state, rrt_path, test_result, test_waypoint_indices);
-                const auto& trajectory = traj_gen_result.first;
-                const auto parsed_cleanly = traj_gen_result.second;
-                transition_estimator_->saveTrajectory(trajectory, trajectory_file);
-                if (parsed_cleanly)
-                {
-                    ++num_succesful_paths;
+                    const auto test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::TestRobotPathsFeedback>(
+                                ZlibHelpers::LoadFromFileAndDecompress(test_result_file), 0).first.test_result;
+                    // This redoes work in the above for loop, but oh well.
+                    const auto test_waypoint_indices = [&] ()
+                    {
+                        // It is assumed that the robot starts where the path is at idx 0, so trim that element from the planned path
+                        RRTPath const commanded_path(rrt_path.begin() + 1, rrt_path.end());
+                        assert(commanded_path.size() > 0 && "If this is false, it probably means that plan_start == plan_goal");
+                        auto const robot_path = RRTPathToGrippersPoseTrajectory(commanded_path);
+                        auto const interp_result = robot_->interpolateGrippersTrajectory(robot_path);
+                        return interp_result.second;
+                    }();
+
+                    const auto traj_gen_result = ToTrajectory(world_state, rrt_path, test_result, test_waypoint_indices);
+                    const auto& trajectory = traj_gen_result.first;
+                    const auto parsed_cleanly = traj_gen_result.second;
+                    transition_estimator_->saveTrajectory(trajectory, trajectory_file);
+                    if (parsed_cleanly)
+                    {
+                        ++num_succesful_paths;
+                    }
+                    else
+                    {
+                        ++num_unsuccesful_paths;
+                    }
                 }
-                else
+                catch (const std::runtime_error& ex)
                 {
+                    ROS_ERROR_STREAM_NAMED("task_framework", "Error evalutating trajectory: " << basename << ": " << ex.what());
                     ++num_unsuccesful_paths;
                 }
             }
-            catch (const std::runtime_error& ex)
-            {
-                ROS_ERROR_STREAM_NAMED("task_framework", "Error evalutating trajectory: " << basename << ": " << ex.what());
-                ++num_unsuccesful_paths;
-            }
+
+            std::stringstream classifier_success_rate;
+            classifier_success_rate << transition_estimator_->classifierName() << "  "
+                                    << transition_estimator_->featuresUsed() << "  "
+                                    << "Total successful paths: " << num_succesful_paths << "  "
+                                    << "Total unsuccessful paths: " << num_unsuccesful_paths << "  "
+                                    << "Total planning failures: " << num_planning_failures;
+            ROS_INFO_STREAM_NAMED("task_framework", classifier_success_rate.str());
+            ARC_LOG_STREAM(planning_tests_log, classifier_success_rate.str());
+
+//            ROS_INFO_NAMED("task_framwork", "Terminating.");
+//            throw_arc_exception(std::runtime_error, "Bullet tests done, terminating.");
         }
-
-        std::stringstream classifier_success_rate;
-        classifier_success_rate << transition_estimator_->classifierName() << "  "
-                                << transition_estimator_->featuresUsed() << "  "
-                                << "Total successful paths: " << num_succesful_paths << "  "
-                                << "Total unsuccessful paths: " << num_unsuccesful_paths << "  "
-                                << "Total planning failures: " << num_planning_failures;
-        ROS_INFO_STREAM_NAMED("task_framework", classifier_success_rate.str());
-        ARC_LOG_STREAM(planning_tests_log, classifier_success_rate.str());
-
-//        ROS_INFO_NAMED("task_framwork", "Terminating.");
-//        throw_arc_exception(std::runtime_error, "Bullet tests done, terminating.");
     }
 }
 

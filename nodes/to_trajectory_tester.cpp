@@ -3,6 +3,7 @@
 #include <arc_utilities/math_helpers.hpp>
 #include <arc_utilities/serialization_ros.hpp>
 #include <smmap_utilities/visualization_tools.h>
+#include <deformable_manipulation_msgs/TestRobotPathsFeedback.h>
 #include "smmap/robot_interface.h"
 #include "smmap/band_rrt.h"
 #include "smmap/conversions.h"
@@ -10,6 +11,7 @@
 
 using namespace EigenHelpers;
 using namespace smmap;
+namespace dmm = deformable_manipulation_msgs;
 
 std::vector<Eigen::VectorXd> getJointInfo()
 {
@@ -104,9 +106,11 @@ public:
     {
         auto const world_state = WorldState::Deserialize(ZlibHelpers::LoadFromFileAndDecompress(world_state_file), 0).first;
         auto const rrt_path = BandRRT::LoadPath(rrt_path_file, *initial_band_);
-        auto const test_result = arc_utilities::RosMessageDeserializationWrapper<deformable_manipulation_msgs::TestRobotPathsFeedback>(ZlibHelpers::LoadFromFileAndDecompress(test_result_file), 0).first.test_result;;
+        auto const test_result = arc_utilities::RosMessageDeserializationWrapper<dmm::TestRobotPathsFeedback>(
+                    ZlibHelpers::LoadFromFileAndDecompress(test_result_file), 0).first.test_result;
         auto const test_waypoint_indices = [&] ()
         {
+            // It is assumed that the robot starts where the path is at idx 0, so trim that element from the planned path
             RRTPath const commanded_path(rrt_path.begin() + 1, rrt_path.end());
             assert(commanded_path.size() > 0 && "If this is false, it probably means that plan_start == plan_goal");
             auto const robot_path = RRTPathToGrippersPoseTrajectory(commanded_path);
