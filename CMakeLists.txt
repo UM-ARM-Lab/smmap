@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.1)
 project(smmap)
 
 set(CATKIN_PACKAGES
+    roscpp
+    rospy
+    std_msgs
     actionlib
     arc_utilities
     smmap_utilities

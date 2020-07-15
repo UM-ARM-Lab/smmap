@@ -889,7 +889,7 @@ ObjectDeltaAndWeight DijkstrasCoverageTask::calculateErrorCorrectionDeltaFixedCo
                 const ssize_t target_idx_in_free_space_graph    = dijkstras_individual_result.first[deformable_point_idx_in_free_space_graph];
                 const double dijkstras_distance                 = dijkstras_individual_result.second[deformable_point_idx_in_free_space_graph];
 
-                target_point = free_space_graph_.GetNodeImmutable(target_idx_in_free_space_graph).GetValueImmutable();
+                target_point = free_space_graph_.getNode(target_idx_in_free_space_graph).getValue();
                 distance_to_cover_point = dijkstras_distance;
             }
 
@@ -939,17 +939,17 @@ void DijkstrasCoverageTask::visualizeFreeSpaceGraph() const
     EigenHelpers::VectorVector3d start_points;
     EigenHelpers::VectorVector3d end_points;
 
-    const auto& nodes = free_space_graph_.GetNodesImmutable();
+    const auto& nodes = free_space_graph_.getNodes();
     for (const auto& node : nodes)
     {
-        const auto& node_center = node.GetValueImmutable();
+        const auto& node_center = node.getValue();
         node_centers.push_back(node_center);
 
-        const auto& out_edges = node.GetOutEdgesImmutable();
+        const auto& out_edges = node.getOutEdges();
         for (const auto& edge : out_edges)
         {
-            start_points.push_back(nodes[edge.GetFromIndex()].GetValueImmutable()); // Should be the same as start_points, but not verified
-            end_points.push_back(nodes[edge.GetToIndex()].GetValueImmutable());
+            start_points.push_back(nodes[edge.getFromIndex()].getValue()); // Should be the same as start_points, but not verified
+            end_points.push_back(nodes[edge.getToIndex()].getValue());
         }
     }
 
@@ -979,7 +979,7 @@ void DijkstrasCoverageTask::visualizeIndividualDijkstrasResult(
                 const ssize_t next_idx_in_free_space_graph = dijkstras_next_target[(size_t)point_idx_in_free_space_graph];
                 if (next_idx_in_free_space_graph >= 0)
                 {
-                    const Eigen::Vector3d next_in_world = free_space_graph_.GetNodeImmutable(next_idx_in_free_space_graph).GetValueImmutable();
+                    const Eigen::Vector3d next_in_world = free_space_graph_.getNode(next_idx_in_free_space_graph).getValue();
                     start_points.push_back(point_in_world);
                     end_points.push_back(next_in_world);
                 }
@@ -1051,7 +1051,7 @@ bool DijkstrasCoverageTask::saveDijkstrasResults()
         std::vector<uint8_t> buffer;
         // First serialize the graph that created the results
         ROS_INFO_NAMED("coverage_task", "Serializing the data");
-        free_space_graph_.SerializeSelf(buffer, &arc_utilities::SerializeEigen<double, 3, 1>);
+        free_space_graph_.serializeSelf(buffer, &arc_utilities::SerializeEigen<double, 3, 1>);
 
         // Next serialize the results themselves
         const auto first_serializer = [] (const std::vector<int64_t>& vec_to_serialize, std::vector<uint8_t>& buf)
@@ -1092,7 +1092,7 @@ bool DijkstrasCoverageTask::loadDijkstrasResults()
 
         // First check that the graph we have matches the graph that is stored
         std::vector<uint8_t> temp_buffer;
-        const uint64_t serialzed_graph_size = free_space_graph_.SerializeSelf(temp_buffer, &arc_utilities::SerializeEigen<double, 3, 1>);
+        const uint64_t serialzed_graph_size = free_space_graph_.serializeSelf(temp_buffer, &arc_utilities::SerializeEigen<double, 3, 1>);
         const auto mismatch_results = std::mismatch(temp_buffer.begin(), temp_buffer.end(), decompressed_dijkstras_results.begin());
         if (mismatch_results.first != temp_buffer.end())
         {
@@ -1139,7 +1139,7 @@ Eigen::Vector3d DijkstrasCoverageTask::sumVectorFields(
     Eigen::Vector3d summed_dijkstras_deltas(0, 0, 0);
 
     const ssize_t graph_aligned_querry_ind = work_space_grid_.worldPosToGridIndexClamped(querry_loc);
-    const Eigen::Vector3d& graph_aligned_querry_point = free_space_graph_.GetNodeImmutable(graph_aligned_querry_ind).GetValueImmutable();
+    const Eigen::Vector3d& graph_aligned_querry_point = free_space_graph_.getNode(graph_aligned_querry_ind).getValue();
 
     // Combine the vector fields from each assignment
     for (size_t assignment_ind = 0; assignment_ind < cover_point_assignments.size(); ++assignment_ind)
@@ -1149,7 +1149,7 @@ Eigen::Vector3d DijkstrasCoverageTask::sumVectorFields(
         const auto& vector_field = dijkstras_results_[(size_t)cover_ind].first;
         const ssize_t target_ind_in_work_space_graph = vector_field[(size_t)graph_aligned_querry_ind];
 
-        const Eigen::Vector3d& target_point = free_space_graph_.GetNodeImmutable(target_ind_in_work_space_graph).GetValueImmutable();
+        const Eigen::Vector3d& target_point = free_space_graph_.getNode(target_ind_in_work_space_graph).getValue();
         summed_dijkstras_deltas += (target_point - graph_aligned_querry_point);
     }
 
@@ -1251,7 +1251,7 @@ DijkstrasCoverageTask::Correspondences DistanceBasedCorrespondencesTask::getCove
         // Record the results in the data structure
         correspondences.correspondences_[closest_deformable_idx].push_back(cover_idx);
         correspondences.correspondences_next_step_[closest_deformable_idx].push_back(
-                    free_space_graph_.GetNodeImmutable(best_target_idx_in_free_space_graph).GetValueImmutable());
+                    free_space_graph_.getNode(best_target_idx_in_free_space_graph).getValue());
         correspondences.correspondences_distances_[closest_deformable_idx].push_back(min_dist_to_deformable_object);
 
         // Record the "coveredness" of this correspondence
@@ -1409,7 +1409,7 @@ DijkstrasCoverageTask::Correspondences FixedCorrespondencesTask::getCoverPointCo
 //                std::cerr << "Target ind in free space graph: " << target_ind_in_free_space_graph << std::endl;
 //                std::cerr << "Dijkstras_distance: " << dijkstras_distance << std::endl;
 
-                current_correspondences_next_step.push_back(free_space_graph_.GetNodeImmutable(target_ind_in_free_space_graph).GetValueImmutable());
+                current_correspondences_next_step.push_back(free_space_graph_.getNode(target_ind_in_free_space_graph).getValue());
                 current_correspondences_distances.push_back(dijkstras_distance);
             }
             const double final_distance = current_correspondences_distances.back();

@@ -213,10 +213,10 @@ namespace smmap
             };
 
             uint64_t current_position = 0;
-            current_position += free_space_graph.DeserializeSelf(srv_data.response.graph_data_buffer, current_position, value_deserializer_fn);
+            current_position += free_space_graph.deserializeSelf(srv_data.response.graph_data_buffer, current_position, value_deserializer_fn);
             assert(current_position == srv_data.response.graph_data_buffer.size());
-            assert(free_space_graph.CheckGraphLinkage());
-            ROS_INFO_STREAM_NAMED("ros_comms_helpers", "Recieved " << free_space_graph.GetNodesImmutable().size() << " graph nodes");
+            assert(free_space_graph.checkGraphLinkage());
+            ROS_INFO_STREAM_NAMED("ros_comms_helpers", "Recieved " << free_space_graph.getNodes().size() << " graph nodes");
         }
 
         // Last we copy the map between cover point indices and graph indices
