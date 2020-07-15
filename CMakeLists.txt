@@ -200,53 +200,53 @@ set_target_properties(${PROJECT_NAME}_planning PROPERTIES COMPILE_FLAGS "${CMAKE
 
 ############# Interleaving framework ###########################################
 
-add_custom_target(${PROJECT_NAME}_framework_headers SOURCES
-    include/${PROJECT_NAME}/task_framework.h
-)
-add_executable(planner_test_node
-    src/task_framework.cpp
-    nodes/planner_test_node.cpp
-)
-add_dependencies(planner_test_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(planner_test_node ${PROJECT_NAME}_planning ${catkin_LIBRARIES})
+# add_custom_target(${PROJECT_NAME}_framework_headers SOURCES
+#    include/${PROJECT_NAME}/task_framework.h
+# )
+# add_executable(planner_test_node
+#    src/task_framework.cpp
+#    nodes/planner_test_node.cpp
+# )
+# add_dependencies(planner_test_node ${catkin_EXPORTED_TARGETS})
+# target_link_libraries(planner_test_node ${PROJECT_NAME}_planning ${catkin_LIBRARIES})
 
 ############# Learning Testing #################################################
 
-add_custom_target(transition_learning_data_generation_node_headers SOURCES
-    include/${PROJECT_NAME}/transition_learning_data_generation.h
-)
+# add_custom_target(transition_learning_data_generation_node_headers SOURCES
+#     include/${PROJECT_NAME}/transition_learning_data_generation.h
+# )
 
-add_executable(transition_learning_data_generation_node
-    src/transition_learning_data_generation.cpp
-    nodes/transition_learning_data_generation_node.cpp)
-add_dependencies(transition_learning_data_generation_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(transition_learning_data_generation_node
-    ${catkin_LIBRARIES}
-    ${PROJECT_NAME}_planning
-)
+# add_executable(transition_learning_data_generation_node
+#     src/transition_learning_data_generation.cpp
+#     nodes/transition_learning_data_generation_node.cpp)
+# add_dependencies(transition_learning_data_generation_node ${catkin_EXPORTED_TARGETS})
+# target_link_libraries(transition_learning_data_generation_node
+#     ${catkin_LIBRARIES}
+#     ${PROJECT_NAME}_planning
+# )
 
-add_executable(smmap_svm_tester nodes/svm_tester.cpp)
-add_dependencies(smmap_svm_tester ${catkin_EXPORTED_TARGETS})
-target_link_libraries(smmap_svm_tester ${PROJECT_NAME}_transitions ${catkin_LIBRARIES})
-set_property(TARGET smmap_svm_tester PROPERTY CXX_STANDARD 11)
+# add_executable(smmap_svm_tester nodes/svm_tester.cpp)
+# add_dependencies(smmap_svm_tester ${catkin_EXPORTED_TARGETS})
+# target_link_libraries(smmap_svm_tester
+#     ${PROJECT_NAME}_transitions
+#     ${catkin_LIBRARIES})
+# set_property(TARGET smmap_svm_tester PROPERTY CXX_STANDARD 11)
 
 ############# Torch Testing #################################################
 
-add_executable(smmap_torch_tester nodes/torch_tester.cpp)
-target_link_libraries(smmap_torch_tester
-    ${TORCH_LIBRARIES}
-    ${catkin_LIBRARIES}
-)
+# add_executable(smmap_torch_tester nodes/torch_tester.cpp)
+# target_link_libraries(smmap_torch_tester
+#     ${TORCH_LIBRARIES}
+#     ${catkin_LIBRARIES})
 
-add_executable(voxnet_tester nodes/voxnet_tester.cpp)
-target_link_libraries(voxnet_tester
-    ${TORCH_LIBRARIES}
-    ${catkin_LIBRARIES}
-)
+# add_executable(voxnet_tester nodes/voxnet_tester.cpp)
+# target_link_libraries(voxnet_tester
+#     ${TORCH_LIBRARIES}
+#     ${catkin_LIBRARIES})
 
 ############# Other "Unit" Tests #################################################
 
-add_executable(smmap_to_trajectory_tester nodes/to_trajectory_tester.cpp)
-target_link_libraries(smmap_to_trajectory_tester
-    ${catkin_libraries}
-    ${PROJECT_NAME}_planning)
+# add_executable(smmap_to_trajectory_tester nodes/to_trajectory_tester.cpp)
+# target_link_libraries(smmap_to_trajectory_tester
+#    ${catkin_libraries}
+#    ${PROJECT_NAME}_planning)
