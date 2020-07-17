@@ -21,6 +21,10 @@ namespace smmap
                     const double rotation_deformability,
                     const sdf_tools::SignedDistanceField::ConstPtr& environment_sdf);
 
+            virtual ObjectPointSet getObjectDelta_impl(
+                    const WorldState& world_state,
+                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const final override;
+
             ////////////////////////////////////////////////////////////////////
             // Static functions to set data for all models
             ////////////////////////////////////////////////////////////////////
@@ -37,10 +41,6 @@ namespace smmap
             virtual void updateModel_impl(
                     const WorldState& previous,
                     const WorldState& next) final override;
-
-            virtual ObjectPointSet getObjectDelta_impl(
-                    const WorldState& world_state,
-                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const final override;
 
             ////////////////////////////////////////////////////////////////////
             // Static helpers
