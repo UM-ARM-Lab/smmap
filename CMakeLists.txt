@@ -46,7 +46,7 @@ find_package(Torch REQUIRED)
 
 catkin_package(
     INCLUDE_DIRS    include
-    LIBRARIES       ${PROJECT_NAME}_models
+    LIBRARIES       ${PROJECT_NAME}_models ${PROJECT_NAME}_infrastructure ${PROJECT_NAME}_controllers ${PROJECT_NAME}_transitions ${PROJECT_NAME}_planning
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
     DEPENDS         EIGEN3 FLANN SVM
 )
