@@ -139,6 +139,7 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
             EigenHelpers::VectorEigenVectorToEigenVectorX(grippers_pose_delta);
 
     // Move the object based on the movement of each gripper
+    std::ofstream("/home/deformtrack/catkin_ws/src/cdcpd_test_blender/result/J.txt") << J << std::endl << std::endl;
     MatrixXd object_delta = J * grippers_delta;
 
     #pragma omp parallel for
@@ -214,6 +215,16 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
         // In the future, it should be the translational motion of end effector.
         const Vector3d& gripper_translation = grippers_next_poses[gripper_ind].translation()
                 - grippers_current_poses[gripper_ind].translation();
+        std::cout << "gripper current pose:" << std::endl;
+        std::cout << grippers_current_poses[0].rotation() << std::endl << std::endl;
+        std::cout << grippers_current_poses[0].translation() << std::endl << std::endl;
+        std::cout << "gripper pose delta:" << std::endl;
+        std::cout << grippers_pose_delta[0] << std::endl << std::endl;
+        std::cout << "gripper next pose:" << std::endl;
+        std::cout << grippers_next_poses[0].rotation() << std::endl << std::endl;
+        std::cout << grippers_next_poses[0].translation() << std::endl << std::endl;
+        std::cout << "gripper translation:" << std::endl;
+        std::cout << gripper_translation << std::endl << std::endl;
 
         for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
         {
@@ -231,10 +242,11 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
 
             // Unscaled direction of movement (in world frame)
             // when moving the gripper along its local (x, y, z) axes
-            const Matrix3d& J_trans = gripper_rot;
+            // const Matrix3d& J_trans = gripper_rot;
+            const Matrix3d& J_trans = Eigen::MatrixXd::Identity(3, 3);
 
-            const double direction_based_rigidity = dirPropotionalModel(node_to_gripper, gripper_translation, geodesic_distance_to_gripper);
-            const double distance_ratio_rigidity = disLinearModel(euclidean_dist_to_gripper, geodesic_distance_to_gripper);
+            const double direction_based_rigidity = dirPropotionalModel(node_to_gripper, gripper_translation, geodesic_distance_to_gripper); // alpha
+            const double distance_ratio_rigidity = disLinearModel(euclidean_dist_to_gripper, geodesic_distance_to_gripper); // beta
             const double rigidity_translation =
                     gripper_influence_per_node_(gripper_ind, node_ind) *
                     distance_ratio_rigidity *
@@ -284,6 +296,8 @@ double ConstraintJacobianModel::dirPropotionalModel(
     {
         cos_angle = 1.0;
     }
+    std::cout << "cos_angle: " << cos_angle << std::endl;
+    std::cout << "distance: " << dist_rest << std::endl;
     return std::exp(translation_dir_deformability_ * (cos_angle - 1.0) * dist_rest);
 }
 
