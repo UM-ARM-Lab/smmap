@@ -194,9 +194,9 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
     const AllGrippersSinglePose& grippers_current_poses = world_state.all_grippers_single_pose_;
     const ObjectPointSet& current_configuration = world_state.object_configuration_;
 
-    const kinematics::VectorIsometry3d grippers_next_poses = kinematics::applyTwist(
-                grippers_current_poses,
-                grippers_pose_delta);
+    // const kinematics::VectorIsometry3d grippers_next_poses = kinematics::applyTwist(
+    //             grippers_current_poses,
+    //             grippers_pose_delta);
 
     const ssize_t num_grippers = (ssize_t)grippers_current_poses.size();
     const ssize_t num_Jcols = num_grippers * 6;
@@ -213,16 +213,17 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
         // P dot of the node on object, grasped gripper
         // Due to the assumption of free-flying grippers, I simply take it as the xyz motion of grippers
         // In the future, it should be the translational motion of end effector.
-        const Vector3d& gripper_translation = grippers_next_poses[gripper_ind].translation()
-                - grippers_current_poses[gripper_ind].translation();
+        // const Vector3d& gripper_translation = grippers_next_poses[gripper_ind].translation()
+        //         - grippers_current_poses[gripper_ind].translation();
+        const Vector3d& gripper_translation = grippers_pose_delta[gripper_ind].head(3);
         std::cout << "gripper current pose:" << std::endl;
         std::cout << grippers_current_poses[0].rotation() << std::endl << std::endl;
         std::cout << grippers_current_poses[0].translation() << std::endl << std::endl;
         std::cout << "gripper pose delta:" << std::endl;
         std::cout << grippers_pose_delta[0] << std::endl << std::endl;
-        std::cout << "gripper next pose:" << std::endl;
-        std::cout << grippers_next_poses[0].rotation() << std::endl << std::endl;
-        std::cout << grippers_next_poses[0].translation() << std::endl << std::endl;
+        // std::cout << "gripper next pose:" << std::endl;
+        // std::cout << grippers_next_poses[0].rotation() << std::endl << std::endl;
+        // std::cout << grippers_next_poses[0].translation() << std::endl << std::endl;
         std::cout << "gripper translation:" << std::endl;
         std::cout << gripper_translation << std::endl << std::endl;
 
