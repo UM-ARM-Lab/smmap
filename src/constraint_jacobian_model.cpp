@@ -216,16 +216,16 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
         // const Vector3d& gripper_translation = grippers_next_poses[gripper_ind].translation()
         //         - grippers_current_poses[gripper_ind].translation();
         const Vector3d& gripper_translation = grippers_pose_delta[gripper_ind].head(3);
-        std::cout << "gripper current pose:" << std::endl;
-        std::cout << grippers_current_poses[0].rotation() << std::endl << std::endl;
-        std::cout << grippers_current_poses[0].translation() << std::endl << std::endl;
-        std::cout << "gripper pose delta:" << std::endl;
-        std::cout << grippers_pose_delta[0] << std::endl << std::endl;
+        // std::cout << "gripper current pose:" << std::endl;
+        // std::cout << grippers_current_poses[0].rotation() << std::endl << std::endl;
+        // std::cout << grippers_current_poses[0].translation() << std::endl << std::endl;
+        // std::cout << "gripper pose delta:" << std::endl;
+        // std::cout << grippers_pose_delta[0] << std::endl << std::endl;
         // std::cout << "gripper next pose:" << std::endl;
         // std::cout << grippers_next_poses[0].rotation() << std::endl << std::endl;
         // std::cout << grippers_next_poses[0].translation() << std::endl << std::endl;
-        std::cout << "gripper translation:" << std::endl;
-        std::cout << gripper_translation << std::endl << std::endl;
+        // std::cout << "gripper translation:" << std::endl;
+        // std::cout << gripper_translation << std::endl << std::endl;
 
         for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++)
         {
@@ -297,8 +297,9 @@ double ConstraintJacobianModel::dirPropotionalModel(
     {
         cos_angle = 1.0;
     }
-    std::cout << "cos_angle: " << cos_angle << std::endl;
-    std::cout << "distance: " << dist_rest << std::endl;
+    // std::cout << "translation_dir_deformability_: " << translation_dir_deformability_ << std::endl;
+    // std::cout << "cos_angle: " << cos_angle << std::endl;
+    // std::cout << "distance: " << dist_rest << std::endl;
     return std::exp(translation_dir_deformability_ * (cos_angle - 1.0) * dist_rest);
 }
 
