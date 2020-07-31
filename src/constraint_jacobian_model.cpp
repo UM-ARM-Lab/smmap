@@ -1,5 +1,6 @@
 #include "smmap/constraint_jacobian_model.h"
 
+#include <chrono>
 #include <cmath>
 #include <arc_utilities/arc_exceptions.hpp>
 #include <arc_utilities/eigen_helpers.hpp>
@@ -132,14 +133,17 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
         const WorldState& world_state,
         const AllGrippersSinglePoseDelta& grippers_pose_delta) const
 {
+    // std::chrono::time_point<std::chrono::system_clock> start, end;
+    // start = std::chrono::system_clock::now(); 
     const MatrixXd J = computeGrippersToDeformableObjectJacobian(world_state, grippers_pose_delta);
+    // end = std::chrono::system_clock::now(); std::cout << "139: " <<  std::chrono::duration<double>(end - start).count() << std::endl;
     const ObjectPointSet& current_configuration = world_state.object_configuration_;
 
     const Eigen::VectorXd grippers_delta =
             EigenHelpers::VectorEigenVectorToEigenVectorX(grippers_pose_delta);
 
     // Move the object based on the movement of each gripper
-    std::ofstream("/home/deformtrack/catkin_ws/src/cdcpd_test_blender/result/J.txt") << J << std::endl << std::endl;
+    // std::ofstream("/home/deformtrack/catkin_ws/src/cdcpd_test_blender/result/J.txt") << J << std::endl << std::endl;
     MatrixXd object_delta = J * grippers_delta;
 
     #pragma omp parallel for
