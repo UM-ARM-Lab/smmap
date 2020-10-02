@@ -210,6 +210,8 @@ DeformableController::OutputData StretchingConstraintController::solvedByRandomS
 
         return suggested_robot_command;
     }
+	DeformableController::OutputData pass;
+	return pass;
 }
 
 //#undef USE_MULTITHREADED_EVALUATION_FOR_SAMPLING_CONTROLLER
@@ -2052,6 +2054,8 @@ std::vector<std::pair<Vector3d, Vector3d>> StretchingConstraintController::stret
             assert(false && "deformable_type is neither rope nor cloth");
         }
     }
+	std::vector<std::pair<Vector3d, Vector3d>> pass;
+	return pass;
 }
 
 std::vector<std::pair<Vector3d, Vector3d>> StretchingConstraintController::ropeTwoGrippersStretchingCorrectionVectorsAndPoints(const InputData& input_data) const

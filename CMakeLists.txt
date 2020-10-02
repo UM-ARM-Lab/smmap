@@ -68,7 +68,7 @@ include_directories(include
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Og")# -fsanitize=address -fno-omit-frame-pointer")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=return-type -Werror=missing-field-initializers -DEIGEN_DONT_PARALLELIZE")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=missing-field-initializers -DEIGEN_DONT_PARALLELIZE")
 
 unset(USE_OPEN_MP CACHE)
 option(USE_OPEN_MP "Set to ON if we want to use OpenMP" ON)

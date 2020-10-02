@@ -111,7 +111,7 @@ Eigen::MatrixXd DiminishingRigidityModel::computeGrippersToDeformableObjectJacob
                         grippers_data_[(size_t)gripper_ind].node_indices_,
                         node_ind, object_initial_node_distance_);
 
-            const Matrix3d& J_trans = gripper_rot;
+            const Matrix3d& J_trans = Eigen::MatrixXd::Identity(3, 3); // gripper_rot;
 
             J.block<3, 3>(node_ind * 3, gripper_ind * 6) =
                     std::exp(-translation_deformability_ * dist_to_gripper) * J_trans;

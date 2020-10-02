@@ -489,6 +489,8 @@ std::vector<Visualizer::NamespaceId> TaskSpecification::visualizeDeformableObjec
         default:
             assert(false && "Imposibru!");
     }
+	std::vector<Visualizer::NamespaceId> pass;
+	return pass;
 }
 
 std::vector<Visualizer::NamespaceId> TaskSpecification::visualizeDeformableObject_impl(
@@ -508,6 +510,8 @@ std::vector<Visualizer::NamespaceId> TaskSpecification::visualizeDeformableObjec
         default:
             assert(false && "Imposibru!");
     }
+	std::vector<Visualizer::NamespaceId> pass;
+	return pass;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
