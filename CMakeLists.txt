@@ -23,18 +23,6 @@ find_package(cmake_modules REQUIRED)
 find_package(Eigen3 REQUIRED)
 set(EIGEN3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
-
-################################################
-## Declare ROS messages, services and actions ##
-################################################
-
-## Messages defined in deformable_manipulation_msgs package
-
-###################################
-## catkin specific configuration ##
-###################################
-
 catkin_package(
     INCLUDE_DIRS    include
     LIBRARIES       ${PROJECT_NAME}_planning
@@ -42,12 +30,6 @@ catkin_package(
     DEPENDS         EIGEN3
 )
 
-###########
-## Build ##
-###########
-
-## Specify additional locations of header files
-## Your package locations should be listed before other locations
 include_directories(include
     SYSTEM
     ${Boost_INCLUDE_DIRS}
@@ -56,9 +38,7 @@ include_directories(include
     ${TORCH_INCLUDE_DIRS}
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Og")# -fsanitize=address -fno-omit-frame-pointer")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=return-type -Werror=missing-field-initializers -DEIGEN_DONT_PARALLELIZE")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -std=c++17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=return-type -Werror=missing-field-initializers")
 
 unset(USE_OPEN_MP CACHE)
 option(USE_OPEN_MP "Set to ON if we want to use OpenMP" ON)

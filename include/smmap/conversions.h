@@ -7,13 +7,11 @@
 #include "smmap/band_rrt.h"
 #include "smmap/transition_estimation.h"
 
-namespace smmap
-{
-    std::pair<std::vector<TransitionEstimation::StateMicrostepsPair>, bool> ToTrajectory(
-            const WorldState& initial_world_state,
-            const RRTPath& path,
-            const deformable_manipulation_msgs::TransitionTest& test,
-            const deformable_manipulation_msgs::TransitionTestResult& test_result);
+namespace smmap {
+std::pair<std::vector<TransitionEstimation::StateMicrostepsPair>, bool> ToTrajectory(
+    const WorldState& initial_world_state, const RRTPath& path,
+    const deformable_manipulation_msgs::TransitionTest& test,
+    const deformable_manipulation_msgs::TransitionTestResult& test_result);
 }
 
 #endif

@@ -5,24 +5,15 @@
 
 #include "smmap/trajectory.hpp"
 
-namespace smmap
-{
-    typedef std::function<std::vector<CollisionData>(
-            const AllGrippersSinglePose& gripper_poses
-            )>
+namespace smmap {
+typedef std::function<std::vector<CollisionData>(const AllGrippersSinglePose& gripper_poses)>
     GripperCollisionCheckFunction;
 
-    typedef std::function<void(
-            const size_t test_id,
-            const WorldState& resulting_world_state
-            )>
+typedef std::function<void(const size_t test_id, const WorldState& resulting_world_state)>
     TestRobotMotionFeedbackCallback;
 
-    typedef std::function<void(
-            const size_t test_id,
-            const deformable_manipulation_msgs::TransitionTestResult& test_result
-            )>
+typedef std::function<void(const size_t test_id, const deformable_manipulation_msgs::TransitionTestResult& test_result)>
     GenerateTransitionDataFeedbackCallback;
-}
+}  // namespace smmap
 
-#endif // TASK_FUNCTION_POINTER_TYPES_H
+#endif  // TASK_FUNCTION_POINTER_TYPES_H

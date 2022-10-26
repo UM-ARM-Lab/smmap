@@ -1,76 +1,69 @@
 #ifndef DEFORMABLE_MODEL_H
 #define DEFORMABLE_MODEL_H
 
-#include <atomic>
-#include <arc_utilities/log.hpp>
 #include <smmap_utilities/grippers.h>
+
+#include <arc_utilities/log.hpp>
+#include <atomic>
 
 #include "smmap/task_function_pointer_types.h"
 
-namespace smmap
-{
-    class DeformableModel
-    {
-        public:
-            typedef std::shared_ptr<DeformableModel> Ptr;
-            typedef std::shared_ptr<const DeformableModel> ConstPtr;
+namespace smmap {
+class DeformableModel {
+ public:
+  typedef std::shared_ptr<DeformableModel> Ptr;
+  typedef std::shared_ptr<const DeformableModel> ConstPtr;
 
-            DeformableModel(std::shared_ptr<ros::NodeHandle> nh);
+  DeformableModel(std::shared_ptr<ros::NodeHandle> nh);
 
-            ////////////////////////////////////////////////////////////////////
-            // Virtual functions that define the interface
-            ////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////
+  // Virtual functions that define the interface
+  ////////////////////////////////////////////////////////////////////
 
-            void updateModel(const WorldState& previous, const WorldState& next);
+  void updateModel(const WorldState& previous, const WorldState& next);
 
-            ObjectPointSet getObjectDelta(
-                    const WorldState& world_state,
-                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const;
+  ObjectPointSet getObjectDelta(const WorldState& world_state,
+                                const AllGrippersSinglePoseDelta& grippers_pose_delta) const;
 
-            ////////////////////////////////////////////////////////////////////
-            // Update/Set function for static members
-            ////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////
+  // Update/Set function for static members
+  ////////////////////////////////////////////////////////////////////
 
-            static void SetGrippersData(
-                    const std::vector<GripperData>& grippers_data);
+  static void SetGrippersData(const std::vector<GripperData>& grippers_data);
 
-            static const std::vector<GripperData>& GetGrippersData();
+  static const std::vector<GripperData>& GetGrippersData();
 
-            static void SetCallbackFunctions(
-                    const GripperCollisionCheckFunction& gripper_collision_check_fn);
+  static void SetCallbackFunctions(const GripperCollisionCheckFunction& gripper_collision_check_fn);
 
+ protected:
+  ////////////////////////////////////////////////////////////////////
+  // Destructor that prevents "delete pointer to base object"
+  ////////////////////////////////////////////////////////////////////
 
-        protected:
+  ~DeformableModel() {}
 
-            ////////////////////////////////////////////////////////////////////
-            // Destructor that prevents "delete pointer to base object"
-            ////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////
+  // Static data
+  ////////////////////////////////////////////////////////////////////
 
-            ~DeformableModel() {}
+  static std::atomic<bool> grippers_data_initialized_;
+  static std::vector<GripperData> grippers_data_;
 
-            ////////////////////////////////////////////////////////////////////
-            // Static data
-            ////////////////////////////////////////////////////////////////////
+  static std::atomic_bool function_pointers_initialized_;
+  static GripperCollisionCheckFunction gripper_collision_check_fn_;
 
-            static std::atomic<bool> grippers_data_initialized_;
-            static std::vector<GripperData> grippers_data_;
+ private:
+  virtual void updateModel_impl(const WorldState& previous, const WorldState& next) = 0;
 
-            static std::atomic_bool function_pointers_initialized_;
-            static GripperCollisionCheckFunction gripper_collision_check_fn_;
+  virtual ObjectPointSet getObjectDelta_impl(const WorldState& world_state,
+                                             const AllGrippersSinglePoseDelta& grippers_pose_delta) const = 0;
 
-        private:
-            virtual void updateModel_impl(const WorldState& previous, const WorldState& next) = 0;
+  ////////////////////////////////////////////////////////////////////
+  // Logging
+  ////////////////////////////////////////////////////////////////////
 
-            virtual ObjectPointSet getObjectDelta_impl(
-                    const WorldState& world_state,
-                    const AllGrippersSinglePoseDelta& grippers_pose_delta) const = 0;
+  //            const std::shared_ptr<Log::Log> computation_time_log_;
+};
+}  // namespace smmap
 
-            ////////////////////////////////////////////////////////////////////
-            // Logging
-            ////////////////////////////////////////////////////////////////////
-
-//            const std::shared_ptr<Log::Log> computation_time_log_;
-    };
-}
-
-#endif // DEFORMABLE_MODEL_H
+#endif  // DEFORMABLE_MODEL_H
