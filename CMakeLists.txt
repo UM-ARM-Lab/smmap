@@ -71,3 +71,6 @@ add_library(${PROJECT_NAME}_models
 )
 add_dependencies(${PROJECT_NAME}_models ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_models ${catkin_LIBRARIES})
+
+add_executable(test_constraint_jacobian scripts/test_constraint_jacobian.cpp)
+target_link_libraries(test_constraint_jacobian ${PROJECT_NAME}_models)
