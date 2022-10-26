@@ -2,7 +2,6 @@
 #include <smmap_utilities/gurobi_solvers.h>
 
 #include "smmap/least_squares_stretching_constraint_controller.h"
-#include "smmap/ros_communication_helpers.h"
 #include "smmap/jacobian_model.h"
 
 using namespace smmap;
