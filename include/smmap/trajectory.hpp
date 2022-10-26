@@ -38,12 +38,8 @@ namespace smmap
     struct WorldState
     {
         ObjectPointSet object_configuration_;
-        EigenHelpers::VectorIsometry3d rope_node_transforms_;
         AllGrippersSinglePose all_grippers_single_pose_;
-        Eigen::VectorXd robot_configuration_;
-        bool robot_configuration_valid_;
         std::vector<CollisionData> gripper_collision_data_;
-        double sim_time_;
 
         uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
 

@@ -10,7 +10,7 @@ namespace smmap {
 uint64_t WorldState::serializeSelf(std::vector<uint8_t>& buffer) const {
   const size_t starting_bytes = buffer.size();
   arc_utilities::SerializeEigen(object_configuration_, buffer);
-  arc_utilities::SerializeVector(rope_node_transforms_, buffer, arc_utilities::SerializeEigen<Eigen::Isometry3d>);
+  arc_utilities::SerializeVector(buffer, arc_utilities::SerializeEigen<Eigen::Isometry3d>);
   SerializeAllGrippersSinglePose(all_grippers_single_pose_, buffer);
   arc_utilities::SerializeEigen(robot_configuration_, buffer);
   arc_utilities::SerializeFixedSizePOD(robot_configuration_valid_, buffer);
@@ -70,15 +70,6 @@ bool WorldState::operator==(const WorldState& other) const {
     return false;
   }
 
-  if (rope_node_transforms_.size() != other.rope_node_transforms_.size()) {
-    return false;
-  }
-  for (size_t idx = 0; idx < rope_node_transforms_.size(); ++idx) {
-    if (rope_node_transforms_[idx].matrix().cwiseNotEqual(other.rope_node_transforms_[idx].matrix()).any()) {
-      return false;
-    }
-  }
-
   if (all_grippers_single_pose_.size() != other.all_grippers_single_pose_.size()) {
     return false;
   }
@@ -124,9 +115,6 @@ WorldState ConvertToEigenFeedback(const deformable_manipulation_msgs::WorldState
   WorldState feedback_eigen;
 
   feedback_eigen.object_configuration_ = SensorPointCloud2ToEigenMatrix3Xd(feedback_ros.object_configuration);
-
-  feedback_eigen.rope_node_transforms_ =
-      EigenHelpersConversions::VectorGeometryPoseToVectorIsometry3d(feedback_ros.rope_node_transforms);
 
   feedback_eigen.all_grippers_single_pose_ =
       EigenHelpersConversions::VectorGeometryPoseToVectorIsometry3d(feedback_ros.gripper_poses);

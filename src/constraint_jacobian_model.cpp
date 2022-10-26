@@ -124,7 +124,6 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
   // Move the object based on the movement of each gripper
   MatrixXd object_delta = J * grippers_delta;
 
-#pragma omp parallel for
   for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++) {
     const auto node = current_configuration.col(node_ind);
     // Do nothing if we are not in collision
