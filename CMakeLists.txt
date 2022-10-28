@@ -13,6 +13,7 @@ set(CATKIN_PACKAGES
 #    pcl_ros
     tf2_ros
     tf2_eigen
+    pybind11_catkin
 )
 
 ## Find catkin macros and libraries
@@ -38,7 +39,7 @@ include_directories(include
     ${TORCH_INCLUDE_DIRS}
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -std=c++17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=return-type -Werror=missing-field-initializers")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -std=c++17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=return-type -Werror=missing-field-initializers")
 
 unset(USE_OPEN_MP CACHE)
 option(USE_OPEN_MP "Set to ON if we want to use OpenMP" ON)
@@ -74,3 +75,7 @@ target_link_libraries(${PROJECT_NAME}_models ${catkin_LIBRARIES})
 
 add_executable(test_constraint_jacobian scripts/test_constraint_jacobian.cpp)
 target_link_libraries(test_constraint_jacobian ${PROJECT_NAME}_models)
+
+# PYTHON BINDINGS
+pybind_add_module(pysmmap_models src/models_bindings.cpp)
+target_link_libraries(pysmmap_models PUBLIC  ${PROJECT_NAME}_models)

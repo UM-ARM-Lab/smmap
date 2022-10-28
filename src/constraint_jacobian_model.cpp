@@ -166,7 +166,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
   const AllGrippersSinglePose &grippers_current_poses = world_state.all_grippers_single_pose_;
   const ObjectPointSet &current_configuration = world_state.object_configuration_;
 
-  const kinematics::VectorIsometry3d grippers_next_poses =
+  const AllGrippersSinglePose grippers_next_poses =
       kinematics::applyTwist(grippers_current_poses, grippers_pose_delta);
 
   const ssize_t num_grippers = (ssize_t)grippers_current_poses.size();

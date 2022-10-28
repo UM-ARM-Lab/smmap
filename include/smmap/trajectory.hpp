@@ -39,7 +39,6 @@ namespace smmap
     {
         ObjectPointSet object_configuration_;
         AllGrippersSinglePose all_grippers_single_pose_;
-        std::vector<CollisionData> gripper_collision_data_;
 
         uint64_t serializeSelf(std::vector<uint8_t>& buffer) const;
 

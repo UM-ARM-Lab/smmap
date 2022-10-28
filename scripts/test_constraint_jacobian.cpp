@@ -13,8 +13,6 @@ int main(int argc, char* argv[]) {
   std::vector<GripperData> grippers;
   grippers.emplace_back("left_tool", std::vector<long>{0});
   ConstraintJacobianModel::SetGrippersData(grippers);
-  ObjectPointSet previous_object_state(3, 4);
-  previous_object_state << -0.01, 0.01, 0.03, 0.05, 0, 0, 0, 0, 0, 0, 0, 0;
   ObjectPointSet current_object_state(3, 4);
   current_object_state << 0, 0.02, 0.04, 0.06, 0, 0, 0, 0, 0, 0, 0, 0;
   ConstraintJacobianModel::SetInitialObjectConfiguration(current_object_state);
@@ -24,13 +22,10 @@ int main(int argc, char* argv[]) {
 
   ConstraintJacobianModel model(nh, 0.1, 0.1, 0.1, sdf);
 
-  Eigen::VectorXd robot_configuration(1);
-  robot_configuration(0) = 0;
   AllGrippersSinglePose gripper_poses;
   Eigen::Isometry3d left_gripper_pose = Eigen::Isometry3d::Identity();
   gripper_poses.emplace_back(left_gripper_pose);
-  WorldState current_state{current_object_state, gripper_poses, no_collisions};
-  WorldState previous_state{previous_object_state, gripper_poses, no_collisions};
+  WorldState current_state{current_object_state, gripper_poses};
 
   kinematics::Vector6d left_gripper_delta;
   left_gripper_delta << 0.01, 0, 0, 0, 0, 0;
