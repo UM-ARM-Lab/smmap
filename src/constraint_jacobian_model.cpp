@@ -62,10 +62,17 @@ void ConstraintJacobianModel::SetInitialObjectConfiguration(const ObjectPointSet
         assert(min_dist == 0.0);
         gripper_influence_per_node_(gripper_ind, node_ind) = 1.0;
       } else {
-        gripper_influence_per_node_(gripper_ind, node_ind) = min_dist / gripper_dist;
+        auto const influence = min_dist / gripper_dist;
+        if (gripper_dist < 1e-3) {
+          std::cerr << "numerical issue in division 1!!!" << influence << "\n";
+        }
+        gripper_influence_per_node_(gripper_ind, node_ind) = influence;
       }
     }
     const double normalizer = gripper_influence_per_node_.col(node_ind).sum();
+    if (normalizer < 1e-3) {
+      std::cerr << "numerical issue in division 2!!!\n";
+    }
     gripper_influence_per_node_.col(node_ind) /= normalizer;
   }
 
@@ -124,23 +131,23 @@ ObjectPointSet ConstraintJacobianModel::getObjectDelta_impl(
   // Move the object based on the movement of each gripper
   MatrixXd object_delta = J * grippers_delta;
 
-  for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++) {
-    const auto node = current_configuration.col(node_ind);
-    // Do nothing if we are not in collision
-    // Changed from legacy to new projection here
-    if (sdf_->EstimateDistance3d(node).first > obstacle_threshold_) {
-      continue;
-    } else {
-      const Vector3d &node_p_dot = object_delta.block<3, 1>(node_ind * 3, 0);
-      std::vector<double> sur_n = sdf_->GetGradient3d(node);
-      if (sur_n.size() > 1) {
-        const Vector3d surface_normal = Vector3d::Map(sur_n.data(), sur_n.size()).normalized();
+  if (sdf_) {
+    for (ssize_t node_ind = 0; node_ind < num_nodes_; node_ind++) {
+      const auto node = current_configuration.col(node_ind);
+      // Do nothing if we are not in collision
+      // Changed from legacy to new projection here
+      if (sdf_->EstimateDistance3d(node).first <= obstacle_threshold_) {
+        const Vector3d &node_p_dot = object_delta.block<3, 1>(node_ind * 3, 0);
+        std::vector<double> sur_n = sdf_->GetGradient3d(node);
+        if (sur_n.size() > 1) {
+          const Vector3d surface_normal = Vector3d::Map(sur_n.data(), sur_n.size()).normalized();
 
-        // if node is moving outward from obstacle, unmask.
-        const double dot_result = node_p_dot.dot(surface_normal);
-        if (dot_result < 0.0) {
-          const auto projected_node_p_dot = node_p_dot - dot_result * surface_normal;
-          object_delta.block<3, 1>(node_ind * 3, 0) = projected_node_p_dot;
+          // if node is moving outward from obstacle, unmask.
+          const double dot_result = node_p_dot.dot(surface_normal);
+          if (dot_result < 0.0) {
+            const auto projected_node_p_dot = node_p_dot - dot_result * surface_normal;
+            object_delta.block<3, 1>(node_ind * 3, 0) = projected_node_p_dot;
+          }
         }
       }
     }
@@ -166,8 +173,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
   const AllGrippersSinglePose &grippers_current_poses = world_state.all_grippers_single_pose_;
   const ObjectPointSet &current_configuration = world_state.object_configuration_;
 
-  const AllGrippersSinglePose grippers_next_poses =
-      kinematics::applyTwist(grippers_current_poses, grippers_pose_delta);
+  const AllGrippersSinglePose grippers_next_poses = kinematics::applyTwist(grippers_current_poses, grippers_pose_delta);
 
   const ssize_t num_grippers = (ssize_t)grippers_current_poses.size();
   const ssize_t num_Jcols = num_grippers * 6;
@@ -228,6 +234,7 @@ Eigen::MatrixXd ConstraintJacobianModel::computeGrippersToDeformableObjectJacobi
     }
   }
 
+  J = J.cwiseMin(0.5).cwiseMax(-0.5);
   return J;
 }
 
@@ -249,7 +256,7 @@ double ConstraintJacobianModel::dirPropotionalModel(const Eigen::Vector3d node_t
 
 double ConstraintJacobianModel::disLinearModel(const double dist_to_gripper, const double dist_rest) const {
   double ratio;
-  if (std::fabs(dist_rest) < 0.00001) {
+  if (std::fabs(dist_rest) < 1e-4) {
     ratio = 1;
   } else {
     ratio = dist_to_gripper / dist_rest;
