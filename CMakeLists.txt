@@ -27,7 +27,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Mo
 find_package(Flann REQUIRED)
 set(FLANN_INCLUDE_DIRS ${FLANN_INCLUDE_DIR})
 set(FLANN_LIBRARIES ${FLANN_LIBRARY})
-find_package(SVM REQUIRED)
+#find_package(SVM REQUIRED)
 
 #find_package(Torch REQUIRED)
 
@@ -45,7 +45,7 @@ catkin_package(
     INCLUDE_DIRS    include
     LIBRARIES       ${PROJECT_NAME}_planning
     CATKIN_DEPENDS  ${CATKIN_PACKAGES}
-    DEPENDS         EIGEN3 FLANN SVM
+    DEPENDS         EIGEN3 FLANN
 )
 
 ###########
@@ -59,7 +59,7 @@ include_directories(include
     ${Boost_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
-    ${SVM_INCLUDE_DIRS}
+#    ${SVM_INCLUDE_DIRS}
 #    ${TORCH_INCLUDE_DIRS}
 )
 
@@ -145,7 +145,7 @@ add_custom_target(${PROJECT_NAME}_transitions_headers SOURCES
     include/${PROJECT_NAME}/classifier.h
     include/${PROJECT_NAME}/no_classifier.h
     include/${PROJECT_NAME}/knn_classifier.h
-    include/${PROJECT_NAME}/svm_classifier.h
+#    include/${PROJECT_NAME}/svm_classifier.h
 #    include/${PROJECT_NAME}/mlp_classifier.h
 #    include/${PROJECT_NAME}/voxnet_classifier.h
 )
@@ -156,7 +156,7 @@ add_library(${PROJECT_NAME}_transitions
     src/quinlan_rubber_band.cpp
     src/classifier.cpp
     src/knn_classifier.cpp
-    src/svm_classifier.cpp
+#    src/svm_classifier.cpp
 #    src/mlp_classifier.cpp
 #    src/voxnet_classifier.cpp
 )
@@ -164,7 +164,7 @@ add_dependencies(${PROJECT_NAME}_transitions ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_transitions
     ${catkin_LIBRARIES}
     ${PROJECT_NAME}_infrastructure
-    ${SVM_LIBRARIES}
+#    ${SVM_LIBRARIES}
 #    ${TORCH_LIBRARIES}
     FLANN::FLANN
 )
@@ -222,10 +222,10 @@ target_link_libraries(transition_learning_data_generation_node
     ${PROJECT_NAME}_planning
 )
 
-add_executable(smmap_svm_tester nodes/svm_tester.cpp)
-add_dependencies(smmap_svm_tester ${catkin_EXPORTED_TARGETS})
-target_link_libraries(smmap_svm_tester ${PROJECT_NAME}_transitions ${catkin_LIBRARIES})
-set_property(TARGET smmap_svm_tester PROPERTY CXX_STANDARD 11)
+#add_executable(smmap_svm_tester nodes/svm_tester.cpp)
+#add_dependencies(smmap_svm_tester ${catkin_EXPORTED_TARGETS})
+#target_link_libraries(smmap_svm_tester ${PROJECT_NAME}_transitions ${catkin_LIBRARIES})
+#set_property(TARGET smmap_svm_tester PROPERTY CXX_STANDARD 11)
 
 ############# Torch Testing #################################################
 

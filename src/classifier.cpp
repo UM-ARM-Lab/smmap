@@ -1,7 +1,7 @@
 #include "smmap/classifier.h"
 #include "smmap/no_classifier.h"
 #include "smmap/knn_classifier.h"
-#include "smmap/svm_classifier.h"
+//#include "smmap/svm_classifier.h"
 //#include "smmap/mlp_classifier.h"
 #include <deformable_manipulation_experiment_params/ros_params.hpp>
 
@@ -20,8 +20,8 @@ Classifier::Ptr Classifier::MakeClassifier(
         case kNN:
             return std::make_shared<kNNClassifier>(nh, ph);
 
-        case SVM:
-            return std::make_shared<SVMClassifier>(nh, ph);
+//        case SVM:
+//            return std::make_shared<SVMClassifier>(nh, ph);
 
 //        case MLP:
 //            return std::make_shared<MLPClassifier>(nh, ph);
