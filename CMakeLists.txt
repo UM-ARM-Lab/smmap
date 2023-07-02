@@ -29,7 +29,7 @@ set(FLANN_INCLUDE_DIRS ${FLANN_INCLUDE_DIR})
 set(FLANN_LIBRARIES ${FLANN_LIBRARY})
 find_package(SVM REQUIRED)
 
-find_package(Torch REQUIRED)
+#find_package(Torch REQUIRED)
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -60,7 +60,7 @@ include_directories(include
     ${EIGEN3_INCLUDE_DIRS}
     ${catkin_INCLUDE_DIRS}
     ${SVM_INCLUDE_DIRS}
-    ${TORCH_INCLUDE_DIRS}
+#    ${TORCH_INCLUDE_DIRS}
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
@@ -146,8 +146,8 @@ add_custom_target(${PROJECT_NAME}_transitions_headers SOURCES
     include/${PROJECT_NAME}/no_classifier.h
     include/${PROJECT_NAME}/knn_classifier.h
     include/${PROJECT_NAME}/svm_classifier.h
-    include/${PROJECT_NAME}/mlp_classifier.h
-    include/${PROJECT_NAME}/voxnet_classifier.h
+#    include/${PROJECT_NAME}/mlp_classifier.h
+#    include/${PROJECT_NAME}/voxnet_classifier.h
 )
 
 add_library(${PROJECT_NAME}_transitions
@@ -157,15 +157,15 @@ add_library(${PROJECT_NAME}_transitions
     src/classifier.cpp
     src/knn_classifier.cpp
     src/svm_classifier.cpp
-    src/mlp_classifier.cpp
-    src/voxnet_classifier.cpp
+#    src/mlp_classifier.cpp
+#    src/voxnet_classifier.cpp
 )
 add_dependencies(${PROJECT_NAME}_transitions ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_transitions
     ${catkin_LIBRARIES}
     ${PROJECT_NAME}_infrastructure
     ${SVM_LIBRARIES}
-    ${TORCH_LIBRARIES}
+#    ${TORCH_LIBRARIES}
     FLANN::FLANN
 )
 target_compile_definitions(${PROJECT_NAME}_transitions PUBLIC "-D _DENSE_REP")
@@ -229,17 +229,17 @@ set_property(TARGET smmap_svm_tester PROPERTY CXX_STANDARD 11)
 
 ############# Torch Testing #################################################
 
-add_executable(smmap_torch_tester nodes/torch_tester.cpp)
-target_link_libraries(smmap_torch_tester
-    ${TORCH_LIBRARIES}
-    ${catkin_LIBRARIES}
-)
+#add_executable(smmap_torch_tester nodes/torch_tester.cpp)
+#target_link_libraries(smmap_torch_tester
+#    ${TORCH_LIBRARIES}
+#    ${catkin_LIBRARIES}
+#)
 
-add_executable(voxnet_tester nodes/voxnet_tester.cpp)
-target_link_libraries(voxnet_tester
-    ${TORCH_LIBRARIES}
-    ${catkin_LIBRARIES}
-)
+#add_executable(voxnet_tester nodes/voxnet_tester.cpp)
+#target_link_libraries(voxnet_tester
+#    ${TORCH_LIBRARIES}
+#    ${catkin_LIBRARIES}
+#)
 
 ############# Other "Unit" Tests #################################################
 

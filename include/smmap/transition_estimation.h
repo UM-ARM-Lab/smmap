@@ -7,7 +7,7 @@
 #include "smmap/quinlan_rubber_band.h"
 #include "smmap/task_specification.h"
 #include "smmap/classifier.h"
-#include "smmap/voxnet_classifier.h"
+//#include "smmap/voxnet_classifier.h"
 
 namespace smmap
 {
@@ -275,12 +275,12 @@ namespace smmap
         const bool normalize_lengths_;
         const bool normalize_connected_components_;
 
-        #warning "Voxnet classifier hack addition to classification framework"
-        std::shared_ptr<VoxnetClassifier> voxnet_classifier_;
+//        #warning "Voxnet classifier hack addition to classification framework"
+//        std::shared_ptr<VoxnetClassifier> voxnet_classifier_;
 
         Classifier::Ptr const transition_mistake_classifier_;
         double const accept_scale_factor_;
-        #warning "Voxnet classifier hack addition to classification framework"
+//        #warning "Voxnet classifier hack addition to classification framework"
         double accept_mistake_rate_;
         std::uniform_real_distribution<double> accept_transition_distribution_;
         std::shared_ptr<std::mt19937_64> generator_;

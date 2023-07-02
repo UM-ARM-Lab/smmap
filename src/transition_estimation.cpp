@@ -532,15 +532,15 @@ TransitionEstimation::TransitionEstimation(
     , template_band_(template_band)
 {
     #warning "Voxnet classifier hack addition to classification framework"
-    if (transition_mistake_classifier_ == nullptr)
+/*    if (transition_mistake_classifier_ == nullptr)
     {
         voxnet_classifier_ = std::make_shared<VoxnetClassifier>(nh_, ph_, sdf_);
         accept_mistake_rate_ = std::exp(-accept_scale_factor_ * voxnet_classifier_->accuracy_);
     }
     else
     {
-        accept_mistake_rate_ = std::exp(-accept_scale_factor_ * transition_mistake_classifier_->accuracy_);
-    }
+*/        accept_mistake_rate_ = std::exp(-accept_scale_factor_ * transition_mistake_classifier_->accuracy_);
+//    }
 
     // Right now this is hard coded, so lets make sure this is true in the launch files
     const std::string slice_type = ROSHelpers::GetParamRequiredDebugLog<std::string>(*ph_, "classifier/slice_type", __func__);
@@ -979,14 +979,14 @@ TransitionEstimation::TransitionAdaptationResult TransitionEstimation::generateT
 
 std::string TransitionEstimation::classifierName() const
 {
-    if (transition_mistake_classifier_ != nullptr)
-    {
+//    if (transition_mistake_classifier_ != nullptr)
+//    {
         return transition_mistake_classifier_->name_;
-    }
-    else
-    {
-        return voxnet_classifier_->name_;
-    }
+//    }
+//    else
+//    {
+//        return voxnet_classifier_->name_;
+//    }
 }
 
 // Returns a string representation of slice_type, normalize_lengths, etc.
@@ -1221,7 +1221,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
     //            PressAnyKeyToContinue("NN vs SVM Prediction mismatch");
     //        }
         }
-        #warning "Voxnet classifier hack addition to classification framework"
+/*        #warning "Voxnet classifier hack addition to classification framework"
         else if (voxnet_classifier_ != nullptr)
         {
             ++num_band_safe_;
@@ -1259,7 +1259,7 @@ std::vector<std::pair<RubberBand::Ptr, double>> TransitionEstimation::estimateTr
             ++num_band_safe_;
             transitions.push_back({default_next_band, default_propogation_confidence_});
         }
-    }
+*/    }
     catch (const std::runtime_error& /* ex */)
     {
         ++num_band_weirdness_;
